@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="fr" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BONVIN - Collection Privée</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Glassmorphisme */
+        .glass {
+            background: rgba(139, 69, 19, 0.15);
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(218, 165, 32, 0.2);
+        }
+
+        .glass-dark {
+            background: rgba(101, 67, 33, 0.25);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(218, 165, 32, 0.3);
+        }
+
+        /* Couleurs glassmorphiques pour les statuts */
+        .status-available {
+            background: rgba(34, 197, 94, 0.2);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(34, 197, 94, 0.4);
+            color: rgb(74, 222, 128);
+        }
+
+        .status-sold {
+            background: rgba(234, 88, 12, 0.2);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(234, 88, 12, 0.4);
+            color: rgb(251, 146, 60);
+        }
+
+        /* Gradient de fond marron/or inspiré de l'image BONVIN */
+        body {
+            background: linear-gradient(135deg, #3c2415 0%, #5d4037 25%, #8d6e63 50%, #a1887f 75%, #d7ccc8 100%);
+            min-height: 100vh;
+        }
+
+        /* Cartes flottantes */
+        .floating-card {
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4);
+            transition: all 0.3s ease;
+        }
+
+        .floating-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 35px 60px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Modal glassmorphique */
+        .modal-backdrop {
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(5px);
+        }
+
+        .modal-content {
+            background: rgba(60, 36, 21, 0.9);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(218, 165, 32, 0.3);
+        }
+
+        /* Modal simple pour estimation IA */
+        .estimation-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .estimation-content {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            color: black;
+            font-family: Arial, sans-serif;
+        }
+    </style>
+</head>
+<body class="h-full text-white">
+    <div class="min-h-screen p-4 md:p-8">
+        <!-- En-tête avec image BONVIN -->
+        <div class="text-center mb-12">
+            <div class="flex justify-center mb-6">
+                <img src="/static/bonvin-logo.png" alt="BONVIN" class="w-80 h-auto md:w-96">
+            </div>
+            <h1 class="text-5xl md:text-7xl font-bold bg-gradient-to-r from-yellow-400 to-yellow-600 bg-clip-text text-transparent mb-4">
+                Collection Privée
+            </h1>
+        </div>
+
+        <!-- Statistiques Dashboard -->
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+            <div class="glass rounded-xl p-4 text-center">
+                <div class="text-sm text-gray-300 mb-1">TOTAL</div>
+                <div id="stat-total" class="text-2xl font-bold text-yellow-400">-</div>
+            </div>
+            <div class="glass rounded-xl p-4 text-center">
+                <div class="text-sm text-gray-300 mb-1">VENDUS</div>
+                <div id="stat-vendus" class="text-2xl font-bold text-orange-400">-</div>
+            </div>
+            <div class="glass rounded-xl p-4 text-center">
+                <div class="text-sm text-gray-300 mb-1">DISPONIBLE</div>
+                <div id="stat-disponibles" class="text-2xl font-bold text-green-400">-</div>
+            </div>
+            <div class="glass rounded-xl p-4 text-center">
+                <div class="text-sm text-gray-300 mb-1">VALEUR VENTE</div>
+                <div id="stat-valeur-vente" class="text-2xl font-bold text-purple-400">-</div>
+            </div>
+            <div class="glass rounded-xl p-4 text-center">
+                <div class="text-sm text-gray-300 mb-1">VALEUR DISPO</div>
+                <div id="stat-valeur-dispo" class="text-2xl font-bold text-blue-400">-</div>
+            </div>
+            <div class="glass rounded-xl p-4 text-center">
+                <div class="text-sm text-gray-300 mb-1">ÂGE MOYEN</div>
+                <div id="stat-age-moyen" class="text-2xl font-bold text-pink-400">-</div>
+            </div>
+        </div>
+
+        <!-- Filtres et Actions -->
+        <div class="glass-dark rounded-2xl p-6 mb-8">
+            <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
+                <button onclick="openCreateModal()" class="status-available px-6 py-3 rounded-xl font-semibold hover:scale-105 transition-transform">
+                    + Nouvel objet
+                </button>
+            </div>
+
+            <!-- Mode d'affichage -->
+            <div class="mb-6">
+                <h3 class="text-lg font-semibold mb-3 text-yellow-400">Affichage</h3>
+                <div class="flex gap-3">
+                    <button onclick="setViewMode('cards')" class="view-btn glass px-4 py-2 rounded-lg hover:scale-105 transition-transform ring-2 ring-yellow-400" data-mode="cards">
+                        Cartes
+                    </button>
+                    <button onclick="setViewMode('list')" class="view-btn glass px-4 py-2 rounded-lg hover:scale-105 transition-transform" data-mode="list">
+                        Liste
+                    </button>
+                </div>
+            </div>
+
+            <!-- Barre de recherche -->
+            <div class="mb-6">
+                <h3 class="text-lg font-semibold mb-3 text-yellow-400">Recherche</h3>
+                <div class="relative">
+                    <input
+                        type="text"
+                        id="search-input"
+                        placeholder="Rechercher par nom, catégorie, description..."
+                        class="w-full glass rounded-xl px-4 py-3 pl-12 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-yellow-400 transition-all"
+                        oninput="handleSearch()"
+                    >
+                    <svg class="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
+                </div>
+            </div>
+
+            <!-- Filtres -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Filtres par catégorie -->
+                <div>
+                    <h3 class="text-lg font-semibold mb-3 text-yellow-400">Catégories</h3>
+                    <div class="flex flex-wrap gap-2">
+                        <button onclick="filterByCategory('all')" class="category-btn glass px-3 py-2 rounded-lg text-sm hover:scale-105 transition-transform ring-2 ring-yellow-400" data-category="all">
+                            Toutes
+                        </button>
+                        <button onclick="filterByCategory('Voitures')" class="category-btn glass px-3 py-2 rounded-lg text-sm hover:scale-105 transition-transform" data-category="Voitures">
+                            Voitures
+                        </button>
+                        <button onclick="filterByCategory('Bateaux')" class="category-btn glass px-3 py-2 rounded-lg text-sm hover:scale-105 transition-transform" data-category="Bateaux">
+                            Bateaux
+                        </button>
+                        <button onclick="filterByCategory('Appartements / maison')" class="category-btn glass px-3 py-2 rounded-lg text-sm hover:scale-105 transition-transform" data-category="Appartements / maison">
+                            Immobilier
+                        </button>
+                        <button onclick="filterByCategory('Be Capital')" class="category-btn glass px-3 py-2 rounded-lg text-sm hover:scale-105 transition-transform" data-category="Be Capital">
+                            Be Capital
+                        </button>
+                        <button onclick="filterByCategory('Start ups')" class="category-btn glass px-3 py-2 rounded-lg text-sm hover:scale-105 transition-transform" data-category="Start ups">
+                            Start-ups
+                        </button>
+                        <button onclick="filterByCategory('Avions')" class="category-btn glass px-3 py-2 rounded-lg text-sm hover:scale-105 transition-transform" data-category="Avions">
+                            Avions
+                        </button>
+                        <button onclick="filterByCategory('Montres')" class="category-btn glass px-3 py-2 rounded-lg text-sm hover:scale-105 transition-transform" data-category="Montres">
+                            Montres
+                        </button>
+                        <button onclick="filterByCategory('Art')" class="category-btn glass px-3 py-2 rounded-lg text-sm hover:scale-105 transition-transform" data-category="Art">
+                            Art
+                        </button>
+                        <button onclick="filterByCategory('Bijoux')" class="category-btn glass px-3 py-2 rounded-lg text-sm hover:scale-105 transition-transform" data-category="Bijoux">
+                            Bijoux
+                        </button>
+                        <button onclick="filterByCategory('Vins')" class="category-btn glass px-3 py-2 rounded-lg text-sm hover:scale-105 transition-transform" data-category="Vins">
+                            Vins
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Stat                <!-- Statut et État -->
+                <div>
+                    <h3 class="text-lg font-semibold mb-3 text-yellow-400">Filtres</h3>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <!-- Catégories -->
+                        <div>
+                            <h4 class="text-sm font-medium text-gray-400 mb-3">Catégories</h4>
+                            <div class="flex flex-wrap gap-2">
+                                <button onclick="filterByCategory('all')" class="category-btn glass px-3 py-2 rounded-lg text-sm hover:scale-105 transition-transform ring-2 ring-yellow-400" data-category="all">
+                                    Toutes
+                                </button>
+                                <button onclick="filterByCategory('Voitures')" class="category-btn glass px-3 py-2 rounded-lg text-sm hover:scale-105 transition-transform" data-category="Voitures">
+                                    Voitures
+                                </button>
+                                <button onclick="filterByCategory('Bateaux')" class="category-btn glass px-3 py-2 rounded-lg text-sm hover:scale-105 transition-transform" data-category="Bateaux">
+                                    Bateaux
+                                </button>
+                                <button onclick="filterByCategory('Appartements / maison')" class="category-btn glass px-3 py-2 rounded-lg text-sm hover:scale-105 transition-transform" data-category="Appartements / maison">
+                                    Immobilier
+                                </button>
+                                <button onclick="filterByCategory('Be Capital')" class="category-btn glass px-3 py-2 rounded-lg text-sm hover:scale-105 transition-transform" data-category="Be Capital">
+                                    Be Capital
+                                </button>
+                                <button onclick="filterByCategory('Start ups')" class="category-btn glass px-3 py-2 rounded-lg text-sm hover:scale-105 transition-transform" data-category="Start ups">
+                                    Start-ups
+                                </button>
+                                <button onclick="filterByCategory('Avions')" class="category-btn glass px-3 py-2 rounded-lg text-sm hover:scale-105 transition-transform" data-category="Avions">
+                                    Avions
+                                </button>
+                                <button onclick="filterByCategory('Montres')" class="category-btn glass px-3 py-2 rounded-lg text-sm hover:scale-105 transition-transform" data-category="Montres">
+                                    Montres
+                                </button>
+                                <button onclick="filterByCategory('Art')" class="category-btn glass px-3 py-2 rounded-lg text-sm hover:scale-105 transition-transform" data-category="Art">
+                                    Art
+                                </button>
+                                <button onclick="filterByCategory('Bijoux')" class="category-btn glass px-3 py-2 rounded-lg text-sm hover:scale-105 transition-transform" data-category="Bijoux">
+                                    Bijoux
+                                </button>
+                                <button onclick="filterByCategory('Vins')" class="category-btn glass px-3 py-2 rounded-lg text-sm hover:scale-105 transition-transform" data-category="Vins">
+                                    Vins
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Statut -->
+                        <div>
+                            <h4 class="text-sm font-medium text-gray-400 mb-3">Statut</h4>
+                            <div class="flex flex-wrap gap-2">
+                                <button onclick="filterByStatus('all')" class="filter-btn glass px-3 py-2 rounded-lg text-sm hover:scale-105 transition-transform ring-2 ring-yellow-400" data-status="all">
+                                    Tous <span id="count-all" class="ml-1 text-yellow-400">-</span>
+                                </button>
+                                <button onclick="filterByStatus('Available')" class="filter-btn status-available px-3 py-2 rounded-lg text-sm hover:scale-105 transition-transform" data-status="Available">
+                                    Disponible <span id="count-available" class="ml-1">-</span>
+                                </button>
+                                <button onclick="filterByStatus('Sold')" class="filter-btn status-sold px-3 py-2 rounded-lg text-sm hover:scale-105 transition-transform" data-status="Sold">
+                                    Vendu <span id="count-sold" class="ml-1">-</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Zone d'affichage des objets -->
+        <div id="items-container" class="space-y-6">
+            <div class="text-center text-gray-300 py-8">
+                <div class="animate-spin w-8 h-8 border-4 border-yellow-400 border-t-transparent rounded-full mx-auto mb-4"></div>
+                Chargement des objets...
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de création/modification glassmorphique -->
+    <div id="item-modal" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-50 p-4">
+        <div class="modal-content rounded-3xl p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-6">
+                <h2 id="modal-title" class="text-3xl font-bold text-yellow-400">Nouvel Objet</h2>
+                <button onclick="closeModal()" class="text-gray-400 hover:text-white text-3xl">&times;</button>
+            </div>
+
+            <form id="item-form" class="space-y-6">
+                <input type="hidden" id="item-id">
+
+                <!-- Nom -->
+                <div>
+                    <label class="block text-sm font-semibold text-gray-300 mb-2">Nom de l'objet</label>
+                    <input type="text" id="item-name" class="w-full glass rounded-xl px-4 py-3 text-white placeholder-gray-400" placeholder="Ex: Lamborghini Urus SE" required>
+                </div>
+
+                <!-- Catégorie -->
+                <div>
+                    <label class="block text-sm font-semibold text-gray-300 mb-2">Catégorie</label>
+                    <select id="item-category" class="w-full glass rounded-xl px-4 py-3 text-white" required>
+                        <option value="">Sélectionner une catégorie</option>
+                        <option value="Voitures">Voitures</option>
+                        <option value="Bateaux">Bateaux</option>
+                        <option value="Avions">Avions</option>
+                        <option value="Appartements">Appartements</option>
+                        <option value="Maisons">Maisons</option>
+                        <option value="Be Capital">Be Capital</option>
+                        <option value="Montres">Montres</option>
+                        <option value="Bijoux">Bijoux</option>
+                        <option value="Art">Art</option>
+                        <option value="Vins">Vins</option>
+                        <option value="Autres">Autres</option>
+                    </select>
+                </div>
+
+                <!-- Statut -->
+                <div>
+                    <label class="block text-sm font-semibold text-gray-300 mb-2">Statut</label>
+                    <select id="item-status" class="w-full glass rounded-xl px-4 py-3 text-white" required>
+                        <option value="Available">Disponible</option>
+                        <option value="Sold">Vendu</option>
+                    </select>
+                </div>
+
+                <!-- Condition -->
+                <div>
+                    <label class="block text-sm font-semibold text-gray-300 mb-2">État</label>
+                    <select id="item-condition" class="w-full glass rounded-xl px-4 py-3 text-white">
+                        <option value="Excellent">Excellent</option>
+                        <option value="Très bon">Très bon</option>
+                        <option value="Bon">Bon</option>
+                        <option value="Correct">Correct</option>
+                    </select>
+                </div>
+
+                <!-- Année de construction -->
+                <div>
+                    <label class="block text-sm font-semibold text-gray-300 mb-2">Année de construction</label>
+                    <input type="number" id="item-year" class="w-full glass rounded-xl px-4 py-3 text-white placeholder-gray-400" placeholder="Ex: 2023" min="1900" max="2030">
+                </div>
+
+                <!-- Prix d'acquisition -->
+                <div>
+                    <label class="block text-sm font-semibold text-gray-300 mb-2">Prix d'acquisition (CHF)</label>
+                    <input type="number" id="item-acquisition-price" class="w-full glass rounded-xl px-4 py-3 text-white placeholder-gray-400" placeholder="Ex: 250000" min="0" step="0.01">
+                </div>
+
+                <!-- Prix demandé -->
+                <div>
+                    <label class="block text-sm font-semibold text-gray-300 mb-2">Prix demandé (CHF)</label>
+                    <input type="number" id="item-asking-price" class="w-full glass rounded-xl px-4 py-3 text-white placeholder-gray-400" placeholder="Ex: 280000" min="0" step="0.01">
+                </div>
+
+                <!-- Prix de vente -->
+                <div>
+                    <label class="block text-sm font-semibold text-gray-300 mb-2">Prix de vente (CHF)</label>
+                    <input type="number" id="item-sold-price" class="w-full glass rounded-xl px-4 py-3 text-white placeholder-gray-400" placeholder="Ex: 275000" min="0" step="0.01">
+                </div>
+
+                <!-- Description -->
+                <div>
+                    <label class="block text-sm font-semibold text-gray-300 mb-2">Description</label>
+                    <textarea id="item-description" class="w-full glass rounded-xl px-4 py-3 text-white placeholder-gray-400 h-24" placeholder="Description détaillée de l'objet..."></textarea>
+                </div>
+
+                <!-- Boutons -->
+                <div class="flex gap-4 pt-4">
+                    <button type="submit" class="status-available px-8 py-3 rounded-xl font-semibold hover:scale-105 transition-transform flex-1">
+                        Sauvegarder
+                    </button>
+                    <button type="button" onclick="closeModal()" class="glass px-8 py-3 rounded-xl font-semibold hover:scale-105 transition-transform">
+                        Annuler
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal simple pour estimation IA -->
+    <div id="estimation-modal" class="estimation-modal">
+        <div class="estimation-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 style="margin: 0; color: #333; font-size: 24px;">Estimation IA</h2>
+                <button onclick="closeEstimationModal()" style="background: none; border: none; font-size: 24px; cursor: pointer;">&times;</button>
+            </div>
+            <div id="estimation-content"></div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
