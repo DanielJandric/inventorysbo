@@ -1098,14 +1098,26 @@ class SemanticSearchRAG:
         """Recherche sémantique dans les items"""
         query_embedding = self.get_query_embedding(query)
         if not query_embedding:
+            logger.warning("Impossible de générer l'embedding pour la requête")
+            return []
+        
+        # Vérifier combien d'items ont des embeddings
+        items_with_embeddings = [item for item in items if item.embedding]
+        logger.info(f"Items avec embeddings: {len(items_with_embeddings)}/{len(items)}")
+        
+        if not items_with_embeddings:
+            logger.error("Aucun item n'a d'embedding ! La recherche sémantique ne peut pas fonctionner.")
             return []
         
         # Calculer les similarités cosinus
         similarities = []
-        for item in items:
-            if item.embedding:
+        for item in items_with_embeddings:
+            try:
                 similarity = self._cosine_similarity(query_embedding, item.embedding)
                 similarities.append((item, similarity))
+            except Exception as e:
+                logger.warning(f"Erreur calcul similarité pour {item.name}: {e}")
+                continue
         
         # Trier par similarité décroissante
         similarities.sort(key=lambda x: x[1], reverse=True)
@@ -1176,15 +1188,24 @@ class PureOpenAIEngineWithRAG:
         """Détecte l'intention de la requête"""
         query_lower = query.lower()
         
-        # Mots-clés pour la recherche sémantique
+        # Mots-clés pour la recherche sémantique - ÉLARGI
         semantic_keywords = [
             'trouve', 'cherche', 'montre', 'affiche', 'liste',
             'combien', 'quel', 'quels', 'quelle', 'quelles',
-            'où', 'qui', 'avec', 'comme', 'similaire'
+            'où', 'qui', 'avec', 'comme', 'similaire',
+            'ai-je', 'j\'ai', 'mes', 'ma', 'mon',
+            'allemande', 'italienne', 'française', 'japonaise',
+            'porsche', 'ferrari', 'lamborghini', 'bmw', 'mercedes'
         ]
+        
+        # Forcer la recherche sémantique pour les questions sur les quantités et marques
+        if 'combien' in query_lower or any(word in query_lower for word in ['porsche', 'allemande', 'italienne']):
+            logger.info(f"Intent détecté: SEMANTIC_SEARCH pour '{query}'")
+            return QueryIntent.SEMANTIC_SEARCH
         
         # Vérifier si c'est une recherche sémantique
         if any(keyword in query_lower for keyword in semantic_keywords):
+            logger.info(f"Intent détecté: SEMANTIC_SEARCH pour '{query}'")
             return QueryIntent.SEMANTIC_SEARCH
         
         # Autres intentions existantes
@@ -1270,10 +1291,19 @@ Sois créatif dans ton analyse tout en restant factuel."""
     def _generate_semantic_response(self, query: str, items: List[CollectionItem], analytics: Dict[str, Any]) -> str:
         """Génère une réponse en utilisant la recherche sémantique RAG"""
         try:
+            # Vérifier d'abord si nous avons des embeddings
+            items_with_embeddings = sum(1 for item in items if item.embedding)
+            logger.info(f"Recherche sémantique - Items avec embeddings: {items_with_embeddings}/{len(items)}")
+            
+            if items_with_embeddings == 0:
+                logger.warning("Aucun embedding disponible, bascule sur recherche par mots-clés")
+                return self._fallback_to_keyword_search(query, items)
+            
             # Recherche sémantique
             semantic_results = self.semantic_search.semantic_search(query, items, top_k=15)
             
             if not semantic_results:
+                logger.warning("Pas de résultats sémantiques, bascule sur recherche par mots-clés")
                 return self._fallback_to_keyword_search(query, items)
             
             # Filtrer les résultats pertinents (score > 0.7)
@@ -1282,6 +1312,8 @@ Sois créatif dans ton analyse tout en restant factuel."""
             if not relevant_results:
                 # Si pas de résultats très pertinents, prendre les 5 meilleurs
                 relevant_results = semantic_results[:5]
+            
+            logger.info(f"Résultats sémantiques trouvés: {len(relevant_results)} items pertinents")
             
             # Construire le contexte RAG
             rag_context = self._build_rag_context(relevant_results, query)
@@ -1296,7 +1328,8 @@ RÈGLES IMPORTANTES:
 3. Structure ta réponse de manière claire
 4. Sois précis et factuel
 5. Si peu de résultats, mentionne-le
-6. Utilise des émojis pour rendre la réponse plus visuelle"""
+6. Utilise des émojis pour rendre la réponse plus visuelle
+7. Pour les questions sur les marques de voitures, utilise ton intelligence pour identifier les marques (ex: Porsche, BMW, Mercedes sont allemandes)"""
 
             user_prompt = f"""RECHERCHE DEMANDÉE: {query}
 
@@ -1378,14 +1411,46 @@ Si la recherche concerne des caractéristiques spécifiques (ex: "voitures 4 pla
     def _fallback_to_keyword_search(self, query: str, items: List[CollectionItem]) -> str:
         """Recherche par mots-clés si la recherche sémantique échoue"""
         query_lower = query.lower()
-        keywords = query_lower.split()
         
-        # Filtrer les items par mots-clés
+        # Détecter les intentions spécifiques pour les voitures
+        car_brands = {
+            'allemandes': ['porsche', 'bmw', 'mercedes', 'audi', 'volkswagen'],
+            'italiennes': ['ferrari', 'lamborghini', 'maserati', 'alfa romeo'],
+            'françaises': ['peugeot', 'renault', 'citroën', 'bugatti'],
+            'japonaises': ['toyota', 'honda', 'nissan', 'mazda', 'lexus'],
+            'anglaises': ['rolls', 'bentley', 'aston martin', 'jaguar', 'mini']
+        }
+        
+        # Vérifier si la question concerne une origine de voiture
+        origin_requested = None
+        for origin, brands in car_brands.items():
+            if origin in query_lower:
+                origin_requested = (origin, brands)
+                break
+        
+        # Recherche intelligente selon le contexte
         matching_items = []
-        for item in items:
-            item_text = f"{item.name} {item.category} {item.description or ''} {item.status}".lower()
-            if any(keyword in item_text for keyword in keywords):
-                matching_items.append(item)
+        
+        if origin_requested:
+            # Recherche par origine de marque
+            origin_name, brands = origin_requested
+            for item in items:
+                if item.category == "Voitures":
+                    item_name_lower = item.name.lower()
+                    for brand in brands:
+                        if brand in item_name_lower:
+                            matching_items.append(item)
+                            break
+        elif 'porsche' in query_lower:
+            # Recherche spécifique Porsche
+            matching_items = [item for item in items if item.category == "Voitures" and 'porsche' in item.name.lower()]
+        else:
+            # Recherche par mots-clés standard
+            keywords = query_lower.split()
+            for item in items:
+                item_text = f"{item.name} {item.category} {item.description or ''} {item.status}".lower()
+                if any(keyword in item_text for keyword in keywords):
+                    matching_items.append(item)
         
         if not matching_items:
             return f"""
@@ -1393,45 +1458,86 @@ Si la recherche concerne des caractéristiques spécifiques (ex: "voitures 4 pla
 
 Je n'ai trouvé aucun objet correspondant à votre recherche "{query}".
 
-💡 **Suggestions:**
-- Essayez avec des termes plus généraux
-- Vérifiez l'orthographe
-- Utilisez des catégories connues: Voitures, Montres, Bateaux, etc.
+💡 **Note importante:** Il semble que les embeddings ne soient pas correctement configurés. 
+Pour une recherche intelligente optimale, assurez-vous que tous les objets ont des embeddings générés.
 
 📊 **Statistiques rapides:**
 - Total objets: {len(items)}
 - Catégories disponibles: {', '.join(set(i.category for i in items if i.category))}
+
+🚗 **Pour les voitures, j'ai dans la collection:**
+{self._get_car_summary(items)}
 """
         
-        # Construire la réponse
-        response_parts = [f"🔍 **Résultats de recherche pour:** {query}\n"]
-        response_parts.append(f"J'ai trouvé **{len(matching_items)} objets** correspondants:\n")
-        
-        # Grouper par catégorie
-        by_category = {}
-        for item in matching_items:
-            cat = item.category or "Autre"
-            if cat not in by_category:
-                by_category[cat] = []
-            by_category[cat].append(item)
-        
-        for category, cat_items in by_category.items():
-            response_parts.append(f"\n**{category}** ({len(cat_items)} objets):")
-            for item in cat_items[:5]:  # Limiter à 5 par catégorie
-                status = "✅ Disponible" if item.status == "Available" else "🏷️ Vendu"
+        # Construire la réponse appropriée selon le type de recherche
+        if origin_requested:
+            origin_name, _ = origin_requested
+            response_parts = [f"🚗 **Voitures {origin_name} dans votre collection:**\n"]
+            response_parts.append(f"J'ai trouvé **{len(matching_items)} voiture(s) {origin_name}**:\n")
+            
+            for item in matching_items:
+                status = "✅ Disponible" if item.status == "Available" else "🏷️ Vendue"
                 price = ""
                 if item.asking_price:
                     price = f" - {item.asking_price:,.0f} CHF"
                 elif item.sold_price:
-                    price = f" - Vendu: {item.sold_price:,.0f} CHF"
+                    price = f" - Vendue: {item.sold_price:,.0f} CHF"
                 
                 for_sale = " 🔥 EN VENTE" if item.for_sale else ""
-                response_parts.append(f"- {item.name} ({item.construction_year or 'N/A'}) {status}{price}{for_sale}")
+                year_info = f" ({item.construction_year})" if item.construction_year else ""
+                response_parts.append(f"• **{item.name}**{year_info} {status}{price}{for_sale}")
+        else:
+            # Réponse standard
+            response_parts = [f"🔍 **Résultats pour:** {query}\n"]
+            response_parts.append(f"J'ai trouvé **{len(matching_items)} objets**:\n")
             
-            if len(cat_items) > 5:
-                response_parts.append(f"  ... et {len(cat_items) - 5} autres")
+            # Grouper par catégorie
+            by_category = {}
+            for item in matching_items:
+                cat = item.category or "Autre"
+                if cat not in by_category:
+                    by_category[cat] = []
+                by_category[cat].append(item)
+            
+            for category, cat_items in by_category.items():
+                response_parts.append(f"\n**{category}** ({len(cat_items)} objets):")
+                for item in cat_items[:5]:
+                    status = "✅ Disponible" if item.status == "Available" else "🏷️ Vendu"
+                    price = ""
+                    if item.asking_price:
+                        price = f" - {item.asking_price:,.0f} CHF"
+                    elif item.sold_price:
+                        price = f" - Vendu: {item.sold_price:,.0f} CHF"
+                    
+                    for_sale = " 🔥 EN VENTE" if item.for_sale else ""
+                    response_parts.append(f"- {item.name} ({item.construction_year or 'N/A'}) {status}{price}{for_sale}")
+                
+                if len(cat_items) > 5:
+                    response_parts.append(f"  ... et {len(cat_items) - 5} autres")
         
         return "\n".join(response_parts)
+    
+    def _get_car_summary(self, items: List[CollectionItem]) -> str:
+        """Résumé des voitures dans la collection"""
+        cars = [item for item in items if item.category == "Voitures"]
+        if not cars:
+            return "Aucune voiture dans la collection"
+        
+        brands = {}
+        for car in cars:
+            # Extraire la marque du nom
+            name_parts = car.name.lower().split()
+            if name_parts:
+                brand = name_parts[0]
+                if brand not in brands:
+                    brands[brand] = 0
+                brands[brand] += 1
+        
+        summary = []
+        for brand, count in sorted(brands.items(), key=lambda x: x[1], reverse=True):
+            summary.append(f"- {brand.capitalize()}: {count}")
+        
+        return "\n".join(summary[:10])  # Top 10 marques
     
     def _build_complete_context(self, items: List[CollectionItem], analytics: Dict[str, Any]) -> str:
         """Construit un contexte complet pour l'IA"""
