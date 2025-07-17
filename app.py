@@ -14,6 +14,8 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from flask import Flask, jsonify, render_template, request
 from flask_cors import CORS
+import numpy as np
+from sklearn.metrics.pairwise import cosine_similarity
 
 # Configuration logging sophistiquée
 logging.basicConfig(
@@ -48,6 +50,7 @@ class CollectionItem:
     rental_income_chf: Optional[float] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+    embedding: Optional[List[float]] = None
     
     def to_dict(self) -> Dict[str, Any]:
         """Convertit en dictionnaire"""
@@ -70,6 +73,7 @@ class QueryIntent(Enum):
     PERFORMANCE_METRICS = "performance_metrics"
     PORTFOLIO_OPTIMIZATION = "portfolio_optimization"
     TECHNICAL_SPECS = "technical_specs"
+    SEMANTIC_SEARCH = "semantic_search"
     UNKNOWN = "unknown"
 
 # Variables d'environnement avec validation
@@ -788,7 +792,8 @@ class SmartCache:
         self._caches = {
             'items': {'data': None, 'timestamp': None, 'ttl': 60},
             'analytics': {'data': None, 'timestamp': None, 'ttl': 300},
-            'ai_responses': {'data': {}, 'timestamp': None, 'ttl': 900}
+            'ai_responses': {'data': {}, 'timestamp': None, 'ttl': 900},
+            'embeddings': {'data': {}, 'timestamp': None, 'ttl': 3600}
         }
     
     def get(self, cache_name: str, key: str = 'default'):
@@ -800,7 +805,7 @@ class SmartCache:
         now = datetime.now()
         
         if cache_info['timestamp'] and (now - cache_info['timestamp']).seconds < cache_info['ttl']:
-            if cache_name == 'ai_responses':
+            if cache_name in ['ai_responses', 'embeddings']:
                 return cache_info['data'].get(key)
             return cache_info['data']
         
@@ -811,7 +816,7 @@ class SmartCache:
         if cache_name not in self._caches:
             return
         
-        if cache_name == 'ai_responses':
+        if cache_name in ['ai_responses', 'embeddings']:
             if not isinstance(self._caches[cache_name]['data'], dict):
                 self._caches[cache_name]['data'] = {}
             self._caches[cache_name]['data'][key] = data
@@ -824,7 +829,7 @@ class SmartCache:
         """Invalide le cache"""
         if cache_name:
             if cache_name in self._caches:
-                self._caches[cache_name]['data'] = None if cache_name != 'ai_responses' else {}
+                self._caches[cache_name]['data'] = None if cache_name not in ['ai_responses', 'embeddings'] else {}
                 self._caches[cache_name]['timestamp'] = None
         else:
             for cache_info in self._caches.values():
@@ -1066,20 +1071,148 @@ class AdvancedDataManager:
             'market_temperature': 'hot' if max(category_activity.values(), default=0) > 10 else 'warm' if max(category_activity.values(), default=0) > 5 else 'cool'
         }
 
-# Moteur d'IA OpenAI Pure
-class PureOpenAIEngine:
-    """Moteur d'IA utilisant exclusivement OpenAI GPT-4.1"""
+# Classe pour la recherche sémantique RAG
+class SemanticSearchRAG:
+    """Moteur de recherche sémantique avec RAG"""
+    
+    def __init__(self, openai_client):
+        self.client = openai_client
+        self.embedding_model = "text-embedding-3-small"
+    
+    def get_query_embedding(self, query: str) -> Optional[List[float]]:
+        """Génère l'embedding pour une requête"""
+        if not self.client:
+            return None
+        
+        try:
+            response = self.client.embeddings.create(
+                input=query,
+                model=self.embedding_model
+            )
+            return response.data[0].embedding
+        except Exception as e:
+            logger.error(f"Erreur génération embedding: {e}")
+            return None
+    
+    def semantic_search(self, query: str, items: List[CollectionItem], top_k: int = 10) -> List[Tuple[CollectionItem, float]]:
+        """Recherche sémantique dans les items"""
+        query_embedding = self.get_query_embedding(query)
+        if not query_embedding:
+            return []
+        
+        # Calculer les similarités cosinus
+        similarities = []
+        for item in items:
+            if item.embedding:
+                similarity = self._cosine_similarity(query_embedding, item.embedding)
+                similarities.append((item, similarity))
+        
+        # Trier par similarité décroissante
+        similarities.sort(key=lambda x: x[1], reverse=True)
+        
+        # Retourner top_k résultats
+        return similarities[:top_k]
+    
+    def _cosine_similarity(self, vec1: List[float], vec2: List[float]) -> float:
+        """Calcule la similarité cosinus entre deux vecteurs"""
+        vec1_np = np.array(vec1).reshape(1, -1)
+        vec2_np = np.array(vec2).reshape(1, -1)
+        return cosine_similarity(vec1_np, vec2_np)[0][0]
+    
+    def generate_embedding_for_item(self, item: CollectionItem) -> Optional[List[float]]:
+        """Génère l'embedding pour un item"""
+        if not self.client:
+            return None
+        
+        # Créer le texte à encoder
+        text_parts = [
+            f"Nom: {item.name}",
+            f"Catégorie: {item.category}",
+            f"Statut: {item.status}",
+        ]
+        
+        if item.construction_year:
+            text_parts.append(f"Année: {item.construction_year}")
+        
+        if item.condition:
+            text_parts.append(f"État: {item.condition}")
+        
+        if item.description:
+            text_parts.append(f"Description: {item.description}")
+        
+        if item.for_sale:
+            text_parts.append("En vente actuellement")
+        
+        if item.sale_status:
+            text_parts.append(f"Statut de vente: {item.sale_status}")
+        
+        if item.asking_price:
+            text_parts.append(f"Prix demandé: {item.asking_price} CHF")
+        
+        if item.sold_price:
+            text_parts.append(f"Prix de vente: {item.sold_price} CHF")
+        
+        text = ". ".join(text_parts)
+        
+        try:
+            response = self.client.embeddings.create(
+                input=text,
+                model=self.embedding_model
+            )
+            return response.data[0].embedding
+        except Exception as e:
+            logger.error(f"Erreur génération embedding item: {e}")
+            return None
+
+# Moteur d'IA OpenAI Pure avec RAG
+class PureOpenAIEngineWithRAG:
+    """Moteur d'IA utilisant OpenAI GPT-4.1 avec recherche sémantique RAG"""
     
     def __init__(self, client):
         self.client = client
+        self.semantic_search = SemanticSearchRAG(client) if client else None
+    
+    def detect_query_intent(self, query: str) -> QueryIntent:
+        """Détecte l'intention de la requête"""
+        query_lower = query.lower()
+        
+        # Mots-clés pour la recherche sémantique
+        semantic_keywords = [
+            'trouve', 'cherche', 'montre', 'affiche', 'liste',
+            'combien', 'quel', 'quels', 'quelle', 'quelles',
+            'où', 'qui', 'avec', 'comme', 'similaire'
+        ]
+        
+        # Vérifier si c'est une recherche sémantique
+        if any(keyword in query_lower for keyword in semantic_keywords):
+            return QueryIntent.SEMANTIC_SEARCH
+        
+        # Autres intentions existantes
+        if any(word in query_lower for word in ['vente', 'négociation', 'offre', 'pipeline']):
+            return QueryIntent.SALE_PROGRESS_TRACKING
+        
+        if any(word in query_lower for word in ['financ', 'roi', 'profit', 'rentab']):
+            return QueryIntent.FINANCIAL_ANALYSIS
+        
+        if any(word in query_lower for word in ['voiture', 'montre', 'bateau', 'avion']):
+            return QueryIntent.VEHICLE_ANALYSIS
+        
+        return QueryIntent.UNKNOWN
     
     def generate_response(self, query: str, items: List[CollectionItem], analytics: Dict[str, Any]) -> str:
-        """Génère une réponse via OpenAI GPT-4.1"""
+        """Génère une réponse via OpenAI GPT-4.1 avec RAG"""
         
         if not self.client:
             return "❌ Moteur IA Indisponible"
         
-        # Vérifier le cache
+        # Détecter l'intention
+        intent = self.detect_query_intent(query)
+        
+        # Si recherche sémantique, utiliser RAG
+        if intent == QueryIntent.SEMANTIC_SEARCH and self.semantic_search:
+            return self._generate_semantic_response(query, items, analytics)
+        
+        # Sinon, utiliser la méthode classique avec cache
         cache_key = hashlib.md5(f"{query}{len(items)}{json.dumps(analytics.get('basic_metrics', {}), sort_keys=True)}".encode()).hexdigest()[:12]
         cached_response = smart_cache.get('ai_responses', cache_key)
         if cached_response:
@@ -1113,7 +1246,7 @@ Si la question concerne des véhicules, utilise ton intelligence pour détermine
 Sois créatif dans ton analyse tout en restant factuel."""
 
             response = self.client.chat.completions.create(
-                model="gpt-4.1",
+                model="gpt-4o",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
@@ -1133,6 +1266,172 @@ Sois créatif dans ton analyse tout en restant factuel."""
         except Exception as e:
             logger.error(f"Erreur OpenAI: {e}")
             return "❌ Moteur IA Indisponible"
+    
+    def _generate_semantic_response(self, query: str, items: List[CollectionItem], analytics: Dict[str, Any]) -> str:
+        """Génère une réponse en utilisant la recherche sémantique RAG"""
+        try:
+            # Recherche sémantique
+            semantic_results = self.semantic_search.semantic_search(query, items, top_k=15)
+            
+            if not semantic_results:
+                return self._fallback_to_keyword_search(query, items)
+            
+            # Filtrer les résultats pertinents (score > 0.7)
+            relevant_results = [(item, score) for item, score in semantic_results if score > 0.7]
+            
+            if not relevant_results:
+                # Si pas de résultats très pertinents, prendre les 5 meilleurs
+                relevant_results = semantic_results[:5]
+            
+            # Construire le contexte RAG
+            rag_context = self._build_rag_context(relevant_results, query)
+            
+            # Prompt pour GPT avec contexte RAG
+            system_prompt = """Tu es l'assistant IA expert de la collection BONVIN avec capacités de recherche sémantique avancée.
+Tu utilises les résultats de recherche sémantique pour fournir des réponses précises et contextualisées.
+
+RÈGLES IMPORTANTES:
+1. Base-toi UNIQUEMENT sur les objets trouvés par la recherche sémantique
+2. Indique le score de pertinence quand c'est utile
+3. Structure ta réponse de manière claire
+4. Sois précis et factuel
+5. Si peu de résultats, mentionne-le
+6. Utilise des émojis pour rendre la réponse plus visuelle"""
+
+            user_prompt = f"""RECHERCHE DEMANDÉE: {query}
+
+RÉSULTATS DE LA RECHERCHE SÉMANTIQUE (Triés par pertinence):
+{rag_context}
+
+STATISTIQUES GLOBALES:
+- Total objets dans la collection: {len(items)}
+- Objets trouvés par la recherche: {len(relevant_results)}
+- Score de pertinence moyen: {sum(score for _, score in relevant_results) / len(relevant_results):.2f}
+
+Analyse ces résultats et réponds à la recherche de l'utilisateur de manière complète et structurée.
+Si la recherche concerne des caractéristiques spécifiques (ex: "voitures 4 places"), utilise ton intelligence pour identifier ces caractéristiques."""
+
+            response = self.client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=0.3,
+                max_tokens=1200,
+                timeout=30
+            )
+            
+            ai_response = response.choices[0].message.content.strip()
+            
+            # Ajouter un indicateur de recherche sémantique
+            ai_response = f"🔍 **Recherche intelligente activée**\n\n{ai_response}"
+            
+            return ai_response
+            
+        except Exception as e:
+            logger.error(f"Erreur recherche sémantique: {e}")
+            return self._fallback_to_keyword_search(query, items)
+    
+    def _build_rag_context(self, results: List[Tuple[CollectionItem, float]], query: str) -> str:
+        """Construit le contexte pour RAG"""
+        context_parts = []
+        
+        for i, (item, score) in enumerate(results, 1):
+            context_parts.append(f"\n{i}. **{item.name}** (Pertinence: {score:.2%})")
+            context_parts.append(f"   - Catégorie: {item.category}")
+            context_parts.append(f"   - Statut: {'Disponible' if item.status == 'Available' else 'Vendu'}")
+            
+            if item.for_sale:
+                context_parts.append(f"   - 🔥 EN VENTE")
+                if item.sale_status:
+                    context_parts.append(f"   - Progression vente: {item.sale_status}")
+            
+            if item.construction_year:
+                context_parts.append(f"   - Année: {item.construction_year}")
+            
+            if item.condition:
+                context_parts.append(f"   - État: {item.condition}")
+            
+            if item.asking_price:
+                context_parts.append(f"   - Prix demandé: {item.asking_price:,.0f} CHF")
+            
+            if item.sold_price:
+                context_parts.append(f"   - Prix de vente: {item.sold_price:,.0f} CHF")
+            
+            if item.current_offer:
+                context_parts.append(f"   - Offre actuelle: {item.current_offer:,.0f} CHF")
+            
+            if item.description:
+                # Extraire les parties pertinentes de la description
+                desc_preview = item.description[:150] + "..." if len(item.description) > 150 else item.description
+                context_parts.append(f"   - Description: {desc_preview}")
+            
+            # Informations spécifiques selon la catégorie
+            if item.category == "Appartements / maison" and item.surface_m2:
+                context_parts.append(f"   - Surface: {item.surface_m2} m²")
+                if item.rental_income_chf:
+                    context_parts.append(f"   - Revenus locatifs: {item.rental_income_chf:,.0f} CHF/mois")
+        
+        return "\n".join(context_parts)
+    
+    def _fallback_to_keyword_search(self, query: str, items: List[CollectionItem]) -> str:
+        """Recherche par mots-clés si la recherche sémantique échoue"""
+        query_lower = query.lower()
+        keywords = query_lower.split()
+        
+        # Filtrer les items par mots-clés
+        matching_items = []
+        for item in items:
+            item_text = f"{item.name} {item.category} {item.description or ''} {item.status}".lower()
+            if any(keyword in item_text for keyword in keywords):
+                matching_items.append(item)
+        
+        if not matching_items:
+            return f"""
+🔍 **Aucun résultat trouvé**
+
+Je n'ai trouvé aucun objet correspondant à votre recherche "{query}".
+
+💡 **Suggestions:**
+- Essayez avec des termes plus généraux
+- Vérifiez l'orthographe
+- Utilisez des catégories connues: Voitures, Montres, Bateaux, etc.
+
+📊 **Statistiques rapides:**
+- Total objets: {len(items)}
+- Catégories disponibles: {', '.join(set(i.category for i in items if i.category))}
+"""
+        
+        # Construire la réponse
+        response_parts = [f"🔍 **Résultats de recherche pour:** {query}\n"]
+        response_parts.append(f"J'ai trouvé **{len(matching_items)} objets** correspondants:\n")
+        
+        # Grouper par catégorie
+        by_category = {}
+        for item in matching_items:
+            cat = item.category or "Autre"
+            if cat not in by_category:
+                by_category[cat] = []
+            by_category[cat].append(item)
+        
+        for category, cat_items in by_category.items():
+            response_parts.append(f"\n**{category}** ({len(cat_items)} objets):")
+            for item in cat_items[:5]:  # Limiter à 5 par catégorie
+                status = "✅ Disponible" if item.status == "Available" else "🏷️ Vendu"
+                price = ""
+                if item.asking_price:
+                    price = f" - {item.asking_price:,.0f} CHF"
+                elif item.sold_price:
+                    price = f" - Vendu: {item.sold_price:,.0f} CHF"
+                
+                for_sale = " 🔥 EN VENTE" if item.for_sale else ""
+                response_parts.append(f"- {item.name} ({item.construction_year or 'N/A'}) {status}{price}{for_sale}")
+            
+            if len(cat_items) > 5:
+                response_parts.append(f"  ... et {len(cat_items) - 5} autres")
+        
+        return "\n".join(response_parts)
     
     def _build_complete_context(self, items: List[CollectionItem], analytics: Dict[str, Any]) -> str:
         """Construit un contexte complet pour l'IA"""
@@ -1212,8 +1511,8 @@ Sois créatif dans ton analyse tout en restant factuel."""
         
         return "\n".join(context_parts)
 
-# Instance du moteur IA
-ai_engine = PureOpenAIEngine(openai_client) if openai_client else None
+# Instance du moteur IA avec RAG
+ai_engine = PureOpenAIEngineWithRAG(openai_client) if openai_client else None
 
 # Routes
 @app.route("/")
@@ -1238,15 +1537,16 @@ def health():
             "services": {
                 "supabase": "connected" if supabase else "disconnected",
                 "openai": "connected" if openai_client else "disconnected",
-                "ai_engine": "active" if ai_engine else "inactive",
+                "ai_engine": "active_with_rag" if ai_engine else "inactive",
                 "gmail_notifications": "enabled" if gmail_manager.enabled else "disabled"
             },
             "data_status": {
                 "items_count": len(items),
                 "cache_active": smart_cache._caches['items']['data'] is not None,
-                "last_update": items[0].updated_at if items else None
+                "last_update": items[0].updated_at if items else None,
+                "embeddings_ready": sum(1 for item in items if item.embedding) if items else 0
             },
-            "ai_mode": "openai_pure_gpt4.1"
+            "ai_mode": "openai_gpt4_with_semantic_rag"
         }
         
         return jsonify(health_data)
@@ -1291,7 +1591,7 @@ def get_items():
 
 @app.route("/api/items", methods=["POST"])
 def create_item():
-    """Crée un objet avec notification Gmail"""
+    """Crée un objet avec notification Gmail et génération d'embedding"""
     if not supabase:
         return jsonify({"error": "Supabase non connecté"}), 500
     
@@ -1303,6 +1603,14 @@ def create_item():
         # Enrichissement
         data['created_at'] = datetime.now().isoformat()
         data['updated_at'] = datetime.now().isoformat()
+        
+        # Générer l'embedding si OpenAI disponible
+        if ai_engine and ai_engine.semantic_search:
+            temp_item = CollectionItem.from_dict(data)
+            embedding = ai_engine.semantic_search.generate_embedding_for_item(temp_item)
+            if embedding:
+                data['embedding'] = embedding
+                logger.info("✅ Embedding généré pour le nouvel objet")
         
         response = supabase.table("items").insert(data).execute()
         if response.data:
@@ -1322,7 +1630,7 @@ def create_item():
 
 @app.route("/api/items/<int:item_id>", methods=["PUT"])
 def update_item(item_id):
-    """Met à jour un objet avec notifications Gmail"""
+    """Met à jour un objet avec notifications Gmail et mise à jour de l'embedding"""
     if not supabase:
         return jsonify({"error": "Supabase non connecté"}), 500
     
@@ -1338,6 +1646,25 @@ def update_item(item_id):
         # Nettoyage sophistiqué des données
         cleaned_data = clean_update_data(data)
         cleaned_data['updated_at'] = datetime.now().isoformat()
+        
+        # Vérifier si l'embedding doit être mis à jour
+        should_update_embedding = False
+        embedding_fields = ['name', 'category', 'description', 'status', 'construction_year', 'condition', 'for_sale', 'sale_status']
+        
+        for field in embedding_fields:
+            if field in cleaned_data and old_data.get(field) != cleaned_data.get(field):
+                should_update_embedding = True
+                break
+        
+        # Mettre à jour l'embedding si nécessaire
+        if should_update_embedding and ai_engine and ai_engine.semantic_search:
+            # Créer un item temporaire avec les nouvelles données
+            temp_data = {**old_data, **cleaned_data}
+            temp_item = CollectionItem.from_dict(temp_data)
+            new_embedding = ai_engine.semantic_search.generate_embedding_for_item(temp_item)
+            if new_embedding:
+                cleaned_data['embedding'] = new_embedding
+                logger.info(f"✅ Embedding mis à jour pour l'objet {item_id}")
         
         response = supabase.table("items").update(cleaned_data).eq("id", item_id).execute()
         
@@ -1463,7 +1790,7 @@ Réponds en JSON avec:
 - price_range (objet avec min et max pour donner une fourchette)"""
 
         response = openai_client.chat.completions.create(
-            model="gpt-4.1",
+            model="gpt-4o",
             messages=[
                 {"role": "system", "content": "Tu es un expert en évaluation d'objets de luxe avec une connaissance approfondie du marché. Tu dois OBLIGATOIREMENT inclure exactement 3 objets comparables de la collection fournie dans ta réponse. Réponds en JSON."},
                 {"role": "user", "content": prompt}
@@ -1512,7 +1839,7 @@ Réponds en JSON avec:
 
 @app.route("/api/chatbot", methods=["POST"])
 def chatbot():
-    """Chatbot utilisant exclusivement OpenAI GPT-4.1"""
+    """Chatbot utilisant OpenAI GPT-4 avec recherche sémantique RAG"""
     try:
         data = request.get_json()
         if not data:
@@ -1529,15 +1856,20 @@ def chatbot():
         logger.info(f"🎯 Requête: '{query}'")
         
         if ai_engine:
-            # Génération de réponse via OpenAI
+            # Génération de réponse via OpenAI avec RAG
             response = ai_engine.generate_response(query, items, analytics)
+            
+            # Détecter si la recherche sémantique a été utilisée
+            search_type = "semantic" if "🔍 **Recherche intelligente activée**" in response else "standard"
             
             return jsonify({
                 "reply": response,
                 "metadata": {
                     "items_analyzed": len(items),
-                    "ai_engine": "openai_gpt4.1",
-                    "mode": "pure"
+                    "ai_engine": "openai_gpt4_with_rag",
+                    "mode": "pure_with_semantic_search",
+                    "search_type": search_type,
+                    "embeddings_available": sum(1 for item in items if item.embedding)
                 }
             })
         else:
@@ -1554,6 +1886,58 @@ def chatbot():
             "reply": "❌ Moteur IA Indisponible",
             "error": str(e)
         }), 500
+
+@app.route("/api/embeddings/generate", methods=["POST"])
+def generate_embeddings():
+    """Génère les embeddings pour tous les objets qui n'en ont pas"""
+    if not ai_engine or not ai_engine.semantic_search:
+        return jsonify({"error": "Moteur de recherche sémantique non disponible"}), 503
+    
+    try:
+        items = AdvancedDataManager.fetch_all_items()
+        items_without_embedding = [item for item in items if not item.embedding]
+        
+        if not items_without_embedding:
+            return jsonify({
+                "message": "Tous les objets ont déjà un embedding",
+                "total_items": len(items),
+                "items_with_embedding": len(items)
+            })
+        
+        success_count = 0
+        errors = []
+        
+        for item in items_without_embedding:
+            try:
+                # Générer l'embedding
+                embedding = ai_engine.semantic_search.generate_embedding_for_item(item)
+                
+                if embedding:
+                    # Sauvegarder dans Supabase
+                    supabase.table("items").update({"embedding": embedding}).eq("id", item.id).execute()
+                    success_count += 1
+                    logger.info(f"✅ Embedding généré pour: {item.name}")
+                else:
+                    errors.append(f"Échec génération pour: {item.name}")
+                    
+            except Exception as e:
+                errors.append(f"Erreur pour {item.name}: {str(e)}")
+                logger.error(f"Erreur génération embedding: {e}")
+        
+        # Invalider le cache
+        smart_cache.invalidate('items')
+        
+        return jsonify({
+            "message": f"Génération d'embeddings terminée",
+            "total_processed": len(items_without_embedding),
+            "success": success_count,
+            "errors": len(errors),
+            "error_details": errors[:10]  # Limiter les détails d'erreur
+        })
+        
+    except Exception as e:
+        logger.error(f"Erreur génération embeddings: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/test-email", methods=["POST"])
 def test_email():
@@ -1647,8 +2031,14 @@ def list_endpoints():
         "available_endpoints": sorted(endpoints, key=lambda x: x['endpoint']),
         "total_count": len(endpoints),
         "chatbot_endpoint": "/api/chatbot",
-        "ai_mode": "openai_pure_gpt4.1",
-        "app_url": APP_URL
+        "ai_mode": "openai_gpt4_with_semantic_rag",
+        "app_url": APP_URL,
+        "new_features": [
+            "Recherche sémantique RAG",
+            "Génération automatique d'embeddings",
+            "Recherche intelligente par similarité",
+            "Détection d'intention de requête"
+        ]
     })
 
 # Fonctions utilitaires
@@ -1711,23 +2101,25 @@ if __name__ == "__main__":
     host = "0.0.0.0"
     
     logger.info("=" * 60)
-    logger.info("🚀 BONVIN COLLECTION - VERSION OPENAI PURE")
+    logger.info("🚀 BONVIN COLLECTION - VERSION OPENAI AVEC RAG")
     logger.info("=" * 60)
     logger.info(f"🌐 Host: {host}:{port}")
     logger.info(f"🔗 App URL: {APP_URL}")
     logger.info(f"🗄️ Supabase: {'✅' if supabase else '❌'}")
     logger.info(f"🤖 OpenAI: {'✅' if openai_client else '❌'}")
-    logger.info(f"🧠 IA Engine: {'✅ GPT-4.1' if ai_engine else '❌'}")
+    logger.info(f"🧠 IA Engine: {'✅ GPT-4 avec RAG' if ai_engine else '❌'}")
     logger.info(f"📧 Gmail: {'✅' if gmail_manager.enabled else '❌'}")
     if gmail_manager.enabled:
         logger.info(f"📬 Destinataires: {len(gmail_manager.recipients)}")
-    logger.info(f"💾 Cache: ✅ Multi-niveaux")
+    logger.info(f"💾 Cache: ✅ Multi-niveaux avec embeddings")
     logger.info("=" * 60)
-    logger.info("MODE: OpenAI Pure - GPT-4.1")
-    logger.info("✅ Pas de fallback - OpenAI uniquement")
-    logger.info("✅ Intelligence contextuelle complète")
-    logger.info("✅ Analyse en temps réel")
-    logger.info("✅ Estimation prix avec 3 objets similaires")
+    logger.info("MODE: OpenAI Pure avec Recherche Sémantique RAG")
+    logger.info("✅ GPT-4 avec recherche intelligente")
+    logger.info("✅ Embeddings OpenAI text-embedding-3-small")
+    logger.info("✅ Recherche sémantique par similarité cosinus")
+    logger.info("✅ Détection d'intention de requête")
+    logger.info("✅ Génération automatique d'embeddings")
+    logger.info("✅ Cache intelligent pour les embeddings")
     logger.info("=" * 60)
     
     try:
