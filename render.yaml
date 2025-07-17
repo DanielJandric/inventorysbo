@@ -1,0 +1,21 @@
+# render.yaml - Configuration Render pour BONVIN Collection
+
+services:
+  - type: web
+    name: bonvin-collection
+    env: python
+    plan: starter  # Changez en 'standard' si besoin de plus de ressources
+    buildCommand: "./build.sh"
+    startCommand: "./start.sh"
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.4
+      - key: FLASK_ENV
+        value: production
+      - key: SUPABASE_URL
+        sync: false  # À définir dans les variables d'environnement Render
+      - key: SUPABASE_KEY
+        sync: false  # À définir dans les variables d'environnement Render
+      - key: OPENAI_API_KEY
+        sync: false  # À définir dans les variables d'environnement Render
