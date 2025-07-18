@@ -903,6 +903,48 @@
         </div>
     </div>
 
+   <!-- Champs pour les actions -->
+<div id="stock-fields" style="display: none;" class="space-y-4 p-4 glass-subtle rounded-xl">
+    <h3 class="text-lg font-semibold text-cyan-300">Informations Boursières</h3>
+    
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+            <label class="block text-sm font-semibold mb-2">Symbole boursier *</label>
+            <input type="text" id="item-stock-symbol" class="w-full glass rounded-xl px-4 py-3 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400" 
+                   placeholder="Ex: AAPL, MSFT, NESN.SW">
+        </div>
+        
+        <div>
+            <label class="block text-sm font-semibold mb-2">Nombre d'actions</label>
+            <input type="number" id="item-stock-quantity" class="w-full glass rounded-xl px-4 py-3 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400" 
+                   step="1" min="1">
+        </div>
+    </div>
+    
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+            <label class="block text-sm font-semibold mb-2">Prix d'achat par action (CHF)</label>
+            <input type="number" id="item-stock-purchase-price" class="w-full glass rounded-xl px-4 py-3 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400" 
+                   step="0.01">
+        </div>
+        
+        <div>
+            <label class="block text-sm font-semibold mb-2">Bourse</label>
+            <select id="item-stock-exchange" class="w-full glass rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cyan-400">
+                <option value="">Sélectionner...</option>
+                <option value="US">US (NYSE/NASDAQ)</option>
+                <option value="SIX">Suisse (SIX)</option>
+                <option value="XETRA">Allemagne (XETRA)</option>
+                <option value="EPA">France (Euronext Paris)</option>
+            </select>
+        </div>
+    </div>
+    
+    <div class="p-3 bg-blue-500/10 border border-blue-400/30 rounded-lg">
+        <p class="text-sm text-blue-300">💡 Le prix actuel sera automatiquement mis à jour via l'API boursière</p>
+    </div>
+</div> 
+
     <!-- Modal for Price Estimation -->
     <div id="estimation-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 backdrop-blur-sm flex items-center justify-center z-50">
         <div class="modal-content rounded-3xl p-8 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
