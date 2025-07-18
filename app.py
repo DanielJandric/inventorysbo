@@ -1898,8 +1898,10 @@ def market_price(item_id):
                 similar_context += f"\n{i}. {similar_item.name} ({similar_item.construction_year or 'N/A'}) - {status}: {price:,.0f} CHF"
                 if similar_item.description:
                     similar_context += f" - {similar_item.description[:80]}..."
-                    
-prompt = f"""Estime le prix de marché actuel de cet objet en CHF en te basant sur le marché réel :
+        
+        # NOTEZ L'INDENTATION : 2 niveaux (8 espaces) depuis le début
+        prompt = f"""Estime le prix de marché actuel de cet objet en CHF en te basant sur le marché réel :
+
 OBJET À ÉVALUER:
 - Nom: {target_item.name}
 - Catégorie: {target_item.category}
