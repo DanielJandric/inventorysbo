@@ -1169,22 +1169,6 @@ function toggleChatbot() {
     }
 }
 
-function addWelcomeMessage() {
-    // Message de bienvenue simple et professionnel
-    const welcomeMessage = `Bonjour, c'est l'assistant de la gestion d'inventaires de la famille Bonvin.
-
-Nouvelles fonctionnalités :
-• Recherche intelligente : "combien j'ai de voitures 4 places"
-• Suivi des ventes : "où en sont mes ventes ?"
-• Analyse IA : Trouve les caractéristiques techniques automatiquement
-
-Que puis-je vous aider à analyser ?`;
-    
-    setTimeout(() => {
-        addChatMessage(welcomeMessage, 'bot', true);
-    }, 500);
-}
-
 async function handleChatSubmit(event) {
     event.preventDefault();
     if (isTyping) return;
