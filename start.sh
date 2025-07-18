@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# start.sh - Script de démarrage pour Render
+set -o errexit
 
 echo "🎯 Démarrage de l'application BONVIN..."
 
-# Démarrer avec Gunicorn
-exec gunicorn --bind 0.0.0.0:$PORT --workers 1 --timeout 30 --preload --max-requests 1000 --max-requests-jitter 50 app:app
+# On lance Gunicorn en lui indiquant de chercher la variable 'app' dans le fichier 'app.py'
+exec gunicorn --bind 0.0.0.0:$PORT app:app
