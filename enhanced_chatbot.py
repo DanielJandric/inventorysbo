@@ -55,10 +55,8 @@ class EnhancedChatbot:
         AMÉLIORATION: Utilise l'historique pour mieux comprendre l'intention.
         Détecte l'intention principale, les entités et si la question est une suite de la conversation.
         """
-        # (Dans une version encore plus avancée, cette partie pourrait elle-même utiliser un petit modèle IA)
         message_lower = message.lower()
         
-        # Détection d'intention (similaire à avant, mais nous prioriserons)
         patterns = {
             'search': [r'trouve', r'cherche', r'liste', r'montre', r'affiche', r'quels sont', r'y a-t-il'],
             'sales_tracking': [r'vente', r'négociation', r'offre', r'acheteur', r'pipeline', r'où en sont'],
@@ -75,15 +73,14 @@ class EnhancedChatbot:
                 primary_intent = intent
                 break
         
-        # AMÉLIORATION: Détection de question de suivi
-        follow_up_keywords = ['et pour', 'peux-tu préciser', 'dis-m'en plus', 'pourquoi', 'lesquels']
+        # CORRECTION ICI: Utilisation de guillemets doubles pour la chaîne contenant une apostrophe
+        follow_up_keywords = ['et pour', 'peux-tu préciser', "dis-m'en plus", 'pourquoi', 'lesquels']
         is_follow_up = any(keyword in message_lower for keyword in follow_up_keywords) or (len(message.split()) <= 3)
 
         return {
             'original_message': message,
             'primary_intent': primary_intent,
             'is_follow_up': is_follow_up,
-            # L'extraction d'entités peut être affinée ici
         }
 
     def _get_semantic_context(self, intent_data: Dict) -> Dict:
@@ -97,13 +94,11 @@ class EnhancedChatbot:
         if not self.ai_engine or not hasattr(self.ai_engine, 'semantic_search'):
             return {'error': "Le moteur de recherche sémantique n'est pas disponible."}
             
-        # Appel à la recherche sémantique de app.py
         search_results = self.ai_engine.semantic_search.semantic_search(query, all_items, top_k=10)
         
-        # Formatter les résultats pour l'IA
         relevant_items = []
         for item, score in search_results:
-            if score > 0.6: # Seuil de pertinence
+            if score > 0.6: 
                 relevant_items.append({
                     'name': item.name,
                     'category': item.category,
@@ -150,7 +145,7 @@ class EnhancedChatbot:
                 'market_insights': analytics.get('market_insights')
             }
              context['summary'] = "Analyse de la valeur et des tendances du marché."
-        else: # recommendation ou general
+        else:
             context['data'] = analytics
             context['summary'] = "Vue d'ensemble complète de la collection."
             
@@ -163,7 +158,6 @@ class EnhancedChatbot:
         if not self.ai_engine:
             return "Le moteur d'intelligence artificielle n'est pas configuré. Je ne peux pas générer de réponse."
             
-        # Construction du prompt système
         system_prompt = """
         Tu es l'assistant IA expert de la collection privée BONVIN. Tu es analytique, proactif et tu communiques de manière claire et professionnelle.
         - Ta mission est de transformer les données brutes fournies en une réponse naturelle, pertinente et utile.
@@ -172,7 +166,6 @@ class EnhancedChatbot:
         - Utilise l'historique de la conversation pour comprendre les questions de suivi.
         """
         
-        # Construction du prompt utilisateur basé sur le contexte
         user_prompt = f"""
         Historique de la conversation (les derniers échanges):
         {history[-3:] if history else "Aucun historique."}
@@ -192,20 +185,14 @@ class EnhancedChatbot:
         4. Termine ta réponse par une ou deux suggestions de questions de suivi pertinentes.
         """
         
-        # Appel au modèle IA de app.py
         try:
-            # Note: la méthode s'appelle 'generate_response' dans votre app.py
-            # On passe un seul prompt utilisateur combiné pour plus de simplicité
-            full_prompt = f"{system_prompt}\n\n{user_prompt}"
-            
-            # Utilisation de la méthode de complétion de chat standard de l'API OpenAI
             response = self.ai_engine.client.chat.completions.create(
                 model="gpt-4o",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                temperature=0.5, # Un peu de créativité pour une réponse plus naturelle
+                temperature=0.5,
                 max_tokens=1000
             )
             return response.choices[0].message.content.strip()
