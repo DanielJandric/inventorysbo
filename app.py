@@ -48,6 +48,13 @@ class CollectionItem:
     last_action_date: Optional[str] = None
     surface_m2: Optional[float] = None
     rental_income_chf: Optional[float] = None
+    # Champs spécifiques aux actions
+    stock_symbol: Optional[str] = None
+    stock_quantity: Optional[int] = None
+    stock_purchase_price: Optional[float] = None
+    stock_exchange: Optional[str] = None
+    current_price: Optional[float] = None
+    last_price_update: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
     embedding: Optional[List[float]] = None
@@ -510,6 +517,15 @@ class GmailNotificationManager:
         if item_data.get('construction_year'):
             details_rows.append(f'<tr><td>Année:</td><td>{item_data["construction_year"]}</td></tr>')
         
+        # Informations spécifiques aux actions
+        if item_data.get('category') == 'Actions':
+            if item_data.get('stock_symbol'):
+                details_rows.append(f'<tr><td>Symbole:</td><td>{item_data["stock_symbol"]}</td></tr>')
+            if item_data.get('stock_quantity'):
+                details_rows.append(f'<tr><td>Quantité:</td><td>{item_data["stock_quantity"]} actions</td></tr>')
+            if item_data.get('stock_exchange'):
+                details_rows.append(f'<tr><td>Bourse:</td><td>{item_data["stock_exchange"]}</td></tr>')
+        
         # Intermédiaire
         if item_data.get('intermediary'):
             details_rows.append(f'<tr><td>Intermédiaire:</td><td>{item_data["intermediary"]}</td></tr>')
@@ -588,6 +604,11 @@ Statut: {item_data.get('status', 'N/A')}
                 text_content += f"Vendu: {item_data.get('sold_price', 0):,.0f} CHF\n"
             if item_data.get('construction_year'):
                 text_content += f"Année: {item_data.get('construction_year')}\n"
+            if item_data.get('category') == 'Actions':
+                if item_data.get('stock_symbol'):
+                    text_content += f"Symbole boursier: {item_data.get('stock_symbol')}\n"
+                if item_data.get('stock_quantity'):
+                    text_content += f"Quantité: {item_data.get('stock_quantity')} actions\n"
             if item_data.get('sale_progress'):
                 text_content += f"Détails du progrès: {item_data.get('sale_progress')[:100]}{'...' if len(item_data.get('sale_progress', '')) > 100 else ''}\n"
             if item_data.get('description'):
@@ -740,25 +761,12 @@ L'objet "<strong>{item_data.get('name', 'N/A')}</strong>" de la catégorie "<str
             if new_data.get('sold_price'):
                 changes.append(f"🎉 <strong>Vendu pour:</strong> {new_data.get('sold_price', 0):,.0f} CHF")
         
-        # Changement de description
-        old_description = (old_data.get('description') or '').strip()
-        new_description = (new_data.get('description') or '').strip()
-        
-        if old_description != new_description:
-            if not old_description and new_description:
-                changes.append(f"📝 <strong>Description ajoutée:</strong> {new_description[:100]}{'...' if len(new_description) > 100 else ''}")
-            elif old_description and not new_description:
-                changes.append(f"🗑️ <strong>Description supprimée</strong>")
-            elif old_description and new_description:
-                changes.append(f"📝 <strong>Description modifiée:</strong> {new_description[:100]}{'...' if len(new_description) > 100 else ''}")
-        
-        # Changement de nom
-        if old_data.get('name') != new_data.get('name'):
-            changes.append(f"🏷️ <strong>Nom modifié:</strong> {old_data.get('name', 'N/A')} → {new_data.get('name', 'N/A')}")
-        
-        # Changement de catégorie
-        if old_data.get('category') != new_data.get('category'):
-            changes.append(f"📂 <strong>Catégorie modifiée:</strong> {old_data.get('category', 'N/A')} → {new_data.get('category', 'N/A')}")
+        # Changements spécifiques aux actions
+        if new_data.get('category') == 'Actions':
+            if old_data.get('stock_quantity') != new_data.get('stock_quantity'):
+                changes.append(f"<strong>Quantité d'actions:</strong> {old_data.get('stock_quantity', 0)} → {new_data.get('stock_quantity', 0)}")
+            if old_data.get('stock_symbol') != new_data.get('stock_symbol'):
+                changes.append(f"<strong>Symbole boursier:</strong> {old_data.get('stock_symbol', 'N/A')} → {new_data.get('stock_symbol', 'N/A')}")
         
         return changes
     
@@ -927,7 +935,8 @@ class AdvancedDataManager:
             'category_analytics': AdvancedDataManager._category_analytics(items),
             'sales_pipeline': AdvancedDataManager._sales_pipeline(items),
             'performance_kpis': AdvancedDataManager._performance_kpis(items),
-            'market_insights': AdvancedDataManager._market_insights(items)
+            'market_insights': AdvancedDataManager._market_insights(items),
+            'stock_analytics': AdvancedDataManager._stock_analytics(items)  # NOUVEAU
         }
         
         smart_cache.set('analytics', analytics)
@@ -1098,6 +1107,56 @@ class AdvancedDataManager:
             'most_active_category': max(category_activity.items(), key=lambda x: x[1])[0] if category_activity else None,
             'market_temperature': 'hot' if max(category_activity.values(), default=0) > 10 else 'warm' if max(category_activity.values(), default=0) > 5 else 'cool'
         }
+    
+    @staticmethod
+    def _stock_analytics(items: List[CollectionItem]) -> Dict[str, Any]:
+        """Analytics spécifiques aux actions"""
+        stock_items = [i for i in items if i.category == 'Actions']
+        
+        if not stock_items:
+            return {
+                'total_stocks': 0,
+                'total_shares': 0,
+                'total_value': 0,
+                'by_exchange': {},
+                'top_holdings': []
+            }
+        
+        total_shares = sum(i.stock_quantity or 0 for i in stock_items)
+        total_value = sum(i.asking_price or 0 for i in stock_items)
+        
+        # Grouper par bourse
+        by_exchange = {}
+        for item in stock_items:
+            exchange = item.stock_exchange or 'Unknown'
+            if exchange not in by_exchange:
+                by_exchange[exchange] = {'count': 0, 'value': 0}
+            by_exchange[exchange]['count'] += 1
+            by_exchange[exchange]['value'] += item.asking_price or 0
+        
+        # Top holdings par valeur
+        top_holdings = sorted(
+            stock_items,
+            key=lambda x: x.asking_price or 0,
+            reverse=True
+        )[:5]
+        
+        return {
+            'total_stocks': len(stock_items),
+            'total_shares': total_shares,
+            'total_value': total_value,
+            'average_holding_value': total_value / len(stock_items) if stock_items else 0,
+            'by_exchange': by_exchange,
+            'top_holdings': [
+                {
+                    'symbol': h.stock_symbol,
+                    'name': h.name,
+                    'quantity': h.stock_quantity,
+                    'value': h.asking_price
+                }
+                for h in top_holdings
+            ]
+        }
 
 # Classe pour la recherche sémantique RAG
 class SemanticSearchRAG:
@@ -1164,7 +1223,7 @@ class SemanticSearchRAG:
         if not self.client:
             return None
         
-        # Créer le texte à encoder
+        # Créer le texte à encoder - INCLURE LES INFOS ACTIONS
         text_parts = [
             f"Nom: {item.name}",
             f"Catégorie: {item.category}",
@@ -1192,6 +1251,15 @@ class SemanticSearchRAG:
         if item.sold_price:
             text_parts.append(f"Prix de vente: {item.sold_price} CHF")
         
+        # Informations spécifiques aux actions
+        if item.category == 'Actions':
+            if item.stock_symbol:
+                text_parts.append(f"Symbole boursier: {item.stock_symbol}")
+            if item.stock_quantity:
+                text_parts.append(f"Quantité: {item.stock_quantity} actions")
+            if item.stock_exchange:
+                text_parts.append(f"Bourse: {item.stock_exchange}")
+        
         text = ". ".join(text_parts)
         
         try:
@@ -1206,7 +1274,7 @@ class SemanticSearchRAG:
 
 # Moteur d'IA OpenAI Pure avec RAG
 class PureOpenAIEngineWithRAG:
-    """Moteur d'IA utilisant OpenAI GPT-4.1 avec recherche sémantique RAG"""
+    """Moteur d'IA utilisant OpenAI GPT-4 avec recherche sémantique RAG"""
     
     def __init__(self, client):
         self.client = client
@@ -1223,11 +1291,12 @@ class PureOpenAIEngineWithRAG:
             'où', 'qui', 'avec', 'comme', 'similaire',
             'ai-je', 'j\'ai', 'mes', 'ma', 'mon',
             'allemande', 'italienne', 'française', 'japonaise',
-            'porsche', 'ferrari', 'lamborghini', 'bmw', 'mercedes'
+            'porsche', 'ferrari', 'lamborghini', 'bmw', 'mercedes',
+            'actions', 'bourse', 'portefeuille', 'symbole'
         ]
         
         # Forcer la recherche sémantique pour les questions sur les quantités et marques
-        if 'combien' in query_lower or any(word in query_lower for word in ['porsche', 'allemande', 'italienne']):
+        if 'combien' in query_lower or any(word in query_lower for word in ['porsche', 'allemande', 'italienne', 'actions', 'bourse']):
             logger.info(f"Intent détecté: SEMANTIC_SEARCH pour '{query}'")
             return QueryIntent.SEMANTIC_SEARCH
         
@@ -1249,7 +1318,7 @@ class PureOpenAIEngineWithRAG:
         return QueryIntent.UNKNOWN
     
     def generate_response(self, query: str, items: List[CollectionItem], analytics: Dict[str, Any]) -> str:
-        """Génère une réponse via OpenAI GPT-4.1 avec RAG"""
+        """Génère une réponse via OpenAI GPT-4 avec RAG"""
         
         if not self.client:
             return "❌ Moteur IA Indisponible"
@@ -1361,10 +1430,13 @@ RÈGLES IMPORTANTES:
    - "en vente" = objets avec for_sale = true
    - "chers" = objets avec prix élevé
    - Noms de marques = chercher ces marques spécifiquement
+   - "actions" = chercher dans la catégorie Actions
+   - "portefeuille" = analyser les actions et investissements
 5. Utilise ton bon sens pour comprendre l'intention de l'utilisateur
 6. Si peu de résultats pertinents, élargis ta recherche
 7. Toujours donner le nombre exact trouvé
-8. Pour les questions de prix/valeur, additionne et calcule les totaux"""
+8. Pour les questions de prix/valeur, additionne et calcule les totaux
+9. Pour les actions, mentionne le symbole boursier et la quantité si disponibles"""
 
             user_prompt = f"""RECHERCHE DEMANDÉE: {query}
 
@@ -1430,6 +1502,17 @@ Si la recherche concerne des caractéristiques spécifiques (ex: "voitures 4 pla
             if item.current_offer:
                 context_parts.append(f"   - Offre actuelle: {item.current_offer:,.0f} CHF")
             
+            # Informations spécifiques aux actions
+            if item.category == 'Actions':
+                if item.stock_symbol:
+                    context_parts.append(f"   - Symbole boursier: {item.stock_symbol}")
+                if item.stock_quantity:
+                    context_parts.append(f"   - Quantité: {item.stock_quantity} actions")
+                if item.stock_exchange:
+                    context_parts.append(f"   - Bourse: {item.stock_exchange}")
+                if item.stock_purchase_price:
+                    context_parts.append(f"   - Prix d'achat unitaire: {item.stock_purchase_price:,.0f} CHF")
+            
             if item.description:
                 # Extraire les parties pertinentes de la description
                 desc_preview = item.description[:150] + "..." if len(item.description) > 150 else item.description
@@ -1447,7 +1530,7 @@ Si la recherche concerne des caractéristiques spécifiques (ex: "voitures 4 pla
         """Recherche par mots-clés si la recherche sémantique échoue"""
         query_lower = query.lower()
         
-        # Détecter les intentions spécifiques pour les voitures
+        # Détecter les intentions spécifiques
         car_brands = {
             'allemandes': ['porsche', 'bmw', 'mercedes', 'audi', 'volkswagen'],
             'italiennes': ['ferrari', 'lamborghini', 'maserati', 'alfa romeo'],
@@ -1456,34 +1539,19 @@ Si la recherche concerne des caractéristiques spécifiques (ex: "voitures 4 pla
             'anglaises': ['rolls', 'bentley', 'aston martin', 'jaguar', 'mini']
         }
         
-        # Vérifier si la question concerne une origine de voiture
-        origin_requested = None
-        for origin, brands in car_brands.items():
-            if origin in query_lower:
-                origin_requested = (origin, brands)
-                break
-        
         # Recherche intelligente selon le contexte
         matching_items = []
         
-        if origin_requested:
-            # Recherche par origine de marque
-            origin_name, brands = origin_requested
-            for item in items:
-                if item.category == "Voitures":
-                    item_name_lower = item.name.lower()
-                    for brand in brands:
-                        if brand in item_name_lower:
-                            matching_items.append(item)
-                            break
-        elif 'porsche' in query_lower:
-            # Recherche spécifique Porsche
-            matching_items = [item for item in items if item.category == "Voitures" and 'porsche' in item.name.lower()]
+        # Recherche spécifique pour les actions
+        if 'action' in query_lower or 'bourse' in query_lower or 'portefeuille' in query_lower:
+            matching_items = [item for item in items if item.category == "Actions"]
         else:
             # Recherche par mots-clés standard
             keywords = query_lower.split()
             for item in items:
                 item_text = f"{item.name} {item.category} {item.description or ''} {item.status}".lower()
+                if item.stock_symbol:
+                    item_text += f" {item.stock_symbol}".lower()
                 if any(keyword in item_text for keyword in keywords):
                     matching_items.append(item)
         
@@ -1499,72 +1567,41 @@ Pour une recherche intelligente optimale, assurez-vous que tous les objets ont d
 📊 **Statistiques rapides:**
 - Total objets: {len(items)}
 - Catégories disponibles: {', '.join(set(i.category for i in items if i.category))}
-
-🚗 **Pour les voitures, j'ai dans la collection:**
-{self._get_car_summary(items)}
 """
         
-        # Construire la réponse appropriée selon le type de recherche
-        if origin_requested:
-            origin_name, _ = origin_requested
-            response_parts = [f"🚗 **Voitures {origin_name} dans votre collection:**\n"]
-            response_parts.append(f"J'ai trouvé **{len(matching_items)} voiture(s) {origin_name}**:\n")
-            
-            for item in matching_items:
-                status = "✅ Disponible" if item.status == "Available" else "🏷️ Vendue"
+        # Construire la réponse
+        response_parts = [f"🔍 **Résultats pour:** {query}\n"]
+        response_parts.append(f"J'ai trouvé **{len(matching_items)} objets**:\n")
+        
+        # Grouper par catégorie
+        by_category = {}
+        for item in matching_items:
+            cat = item.category or "Autre"
+            if cat not in by_category:
+                by_category[cat] = []
+            by_category[cat].append(item)
+        
+        for category, cat_items in by_category.items():
+            response_parts.append(f"\n**{category}** ({len(cat_items)} objets):")
+            for item in cat_items[:5]:
+                status = "✅ Disponible" if item.status == "Available" else "🏷️ Vendu"
                 price = ""
                 if item.asking_price:
                     price = f" - {item.asking_price:,.0f} CHF"
                 elif item.sold_price:
-                    price = f" - Vendue: {item.sold_price:,.0f} CHF"
+                    price = f" - Vendu: {item.sold_price:,.0f} CHF"
                 
                 for_sale = " 🔥 EN VENTE" if item.for_sale else ""
-                year_info = f" ({item.construction_year})" if item.construction_year else ""
-                response_parts.append(f"• **{item.name}**{year_info} {status}{price}{for_sale}")
-        else:
-            # Réponse standard
-            response_parts = [f"🔍 **Résultats pour:** {query}\n"]
-            response_parts.append(f"J'ai trouvé **{len(matching_items)} objets**:\n")
-            
-            # Grouper par catégorie
-            by_category = {}
-            for item in matching_items:
-                cat = item.category or "Autre"
-                if cat not in by_category:
-                    by_category[cat] = []
-                by_category[cat].append(item)
-            
-            for category, cat_items in by_category.items():
-                response_parts.append(f"\n**{category}** ({len(cat_items)} objets):")
-                for item in cat_items[:5]:
-                    status = "✅ Disponible" if item.status == "Available" else "🏷️ Vendu"
-                    price = ""
-                    if item.asking_price:
-                        price = f" - {item.asking_price:,.0f} CHF"
-                    elif item.sold_price:
-                        price = f" - Vendu: {item.sold_price:,.0f} CHF"
-                    
-                    for_sale = " 🔥 EN VENTE" if item.for_sale else ""
-                    response_parts.append(f"- {item.name} ({item.construction_year or 'N/A'}) {status}{price}{for_sale}")
+                response_parts.append(f"- {item.name} ({item.construction_year or 'N/A'}) {status}{price}{for_sale}")
                 
-                if len(cat_items) > 5:
-                    response_parts.append(f"  ... et {len(cat_items) - 5} autres")
+                # Détails spécifiques aux actions
+                if item.category == "Actions" and item.stock_symbol:
+                    response_parts.append(f"  → Symbole: {item.stock_symbol}, Quantité: {item.stock_quantity or 'N/A'}")
+            
+            if len(cat_items) > 5:
+                response_parts.append(f"  ... et {len(cat_items) - 5} autres")
         
         return "\n".join(response_parts)
-    
-    def _get_all_vehicles_summary(self, items: List[CollectionItem]) -> str:
-        """Retourne un résumé de tous les véhicules pour l'analyse"""
-        vehicles = [item for item in items if item.category == "Voitures"]
-        if not vehicles:
-            return "Aucune voiture dans la collection"
-        
-        summary = []
-        for vehicle in vehicles:
-            status = "Disponible" if vehicle.status == "Available" else "Vendu"
-            year = f"({vehicle.construction_year})" if vehicle.construction_year else ""
-            summary.append(f"- {vehicle.name} {year} - {status}")
-        
-        return "\n".join(summary)
     
     def _build_complete_context(self, items: List[CollectionItem], analytics: Dict[str, Any]) -> str:
         """Construit un contexte complet pour l'IA"""
@@ -1585,6 +1622,14 @@ Pour une recherche intelligente optimale, assurez-vous que tous les objets ont d
         context_parts.append(f"CA réalisé: {financial.get('realized_sales', 0):,.0f} CHF")
         context_parts.append(f"ROI: {financial.get('roi_percentage', 0):.1f}%")
         context_parts.append(f"Profit total: {financial.get('total_profit', 0):,.0f} CHF")
+        
+        # Analytics actions si disponibles
+        stock_analytics = analytics.get('stock_analytics', {})
+        if stock_analytics.get('total_stocks', 0) > 0:
+            context_parts.append(f"\n=== PORTEFEUILLE ACTIONS ===")
+            context_parts.append(f"Nombre d'actions différentes: {stock_analytics.get('total_stocks', 0)}")
+            context_parts.append(f"Total actions détenues: {stock_analytics.get('total_shares', 0)}")
+            context_parts.append(f"Valeur totale: {stock_analytics.get('total_value', 0):,.0f} CHF")
         
         # Liste détaillée des objets
         context_parts.append(f"\n=== INVENTAIRE DÉTAILLÉ ===")
@@ -1615,13 +1660,17 @@ Pour une recherche intelligente optimale, assurez-vous que tous les objets ont d
                         context_parts.append(f"  Statut: {item.sale_status}")
                     if item.current_offer:
                         context_parts.append(f"  Offre actuelle: {item.current_offer:,.0f} CHF")
-                    if item.description:
-                        context_parts.append(f"  Description: {item.description[:100]}...")
+                    # Détails spécifiques aux actions
+                    if item.category == 'Actions' and item.stock_symbol:
+                        context_parts.append(f"  Symbole: {item.stock_symbol}")
+                        context_parts.append(f"  Quantité: {item.stock_quantity} actions")
             
             if available:
                 context_parts.append("DISPONIBLES:")
                 for item in available[:5]:  # Limiter pour ne pas surcharger
                     context_parts.append(f"- {item.name} ({item.construction_year or 'N/A'})")
+                    if item.category == 'Actions' and item.stock_symbol:
+                        context_parts.append(f"  → {item.stock_symbol}: {item.stock_quantity} actions")
                 if len(available) > 5:
                     context_parts.append(f"... et {len(available) - 5} autres")
             
@@ -1677,7 +1726,8 @@ def health():
                 "items_count": len(items),
                 "cache_active": smart_cache._caches['items']['data'] is not None,
                 "last_update": items[0].updated_at if items else None,
-                "embeddings_ready": sum(1 for item in items if item.embedding) if items else 0
+                "embeddings_ready": sum(1 for item in items if item.embedding) if items else 0,
+                "stocks_count": len([i for i in items if i.category == "Actions"])
             },
             "ai_mode": "openai_gpt4_with_semantic_rag"
         }
@@ -1732,6 +1782,11 @@ def create_item():
         data = request.get_json()
         if not data:
             return jsonify({"error": "Données manquantes"}), 400
+        
+        # Validation spécifique pour les actions
+        if data.get('category') == 'Actions':
+            if not data.get('stock_symbol'):
+                return jsonify({"error": "Le symbole boursier est requis pour les actions"}), 400
         
         # Enrichissement
         data['created_at'] = datetime.now().isoformat()
@@ -1789,7 +1844,8 @@ def update_item(item_id):
         
         # Vérifier si l'embedding doit être mis à jour
         should_update_embedding = False
-        embedding_fields = ['name', 'category', 'description', 'status', 'construction_year', 'condition', 'for_sale', 'sale_status']
+        embedding_fields = ['name', 'category', 'description', 'status', 'construction_year', 
+                          'condition', 'for_sale', 'sale_status', 'stock_symbol', 'stock_quantity']
         
         for field in embedding_fields:
             if field in cleaned_data and old_data.get(field) != cleaned_data.get(field):
@@ -1859,15 +1915,21 @@ def delete_item(item_id):
 def get_stock_price(symbol):
     """Récupère le prix actuel d'une action"""
     try:
-        # Option 1: Utiliser yfinance (gratuit)
-        import yfinance as yf
+        # Importer yfinance localement si disponible
+        try:
+            import yfinance as yf
+        except ImportError:
+            logger.error("yfinance non installé")
+            return jsonify({"error": "Module yfinance non disponible"}), 503
+        
         ticker = yf.Ticker(symbol)
         info = ticker.info
         
+        # Récupérer le prix actuel
         current_price = info.get('currentPrice') or info.get('regularMarketPrice', 0)
         currency = info.get('currency', 'USD')
         
-        # Convertir en CHF si nécessaire (taux fixe pour l'exemple)
+        # Convertir en CHF si nécessaire
         exchange_rates = {
             'USD': 0.92,
             'EUR': 0.98,
@@ -1875,7 +1937,7 @@ def get_stock_price(symbol):
         }
         
         price_chf = current_price
-        if currency in exchange_rates:
+        if currency in exchange_rates and currency != 'CHF':
             price_chf = current_price * exchange_rates[currency]
         
         return jsonify({
@@ -1890,7 +1952,7 @@ def get_stock_price(symbol):
         
     except Exception as e:
         logger.error(f"Erreur récupération prix action {symbol}: {e}")
-        return jsonify({"error": "Prix non disponible"}), 500
+        return jsonify({"error": "Prix non disponible", "details": str(e)}), 500
 
 @app.route("/api/market-price/<int:item_id>")
 def market_price(item_id):
@@ -1943,8 +2005,32 @@ def market_price(item_id):
                 if similar_item.description:
                     similar_context += f" - {similar_item.description[:80]}..."
         
-        # NOTEZ L'INDENTATION : 2 niveaux (8 espaces) depuis le début
-        prompt = f"""Estime le prix de marché actuel de cet objet en CHF en te basant sur le marché réel :
+        # Prompt adapté selon la catégorie
+        if target_item.category == 'Actions':
+            prompt = f"""Estime la valeur actuelle de cette position boursière en CHF :
+
+POSITION À ÉVALUER:
+- Nom: {target_item.name}
+- Symbole: {target_item.stock_symbol or 'N/A'}
+- Quantité: {target_item.stock_quantity or 1} actions
+- Bourse: {target_item.stock_exchange or 'Non spécifiée'}
+- Prix d'achat unitaire: {target_item.stock_purchase_price or 'N/A'} CHF
+- Description: {target_item.description or 'N/A'}
+
+INSTRUCTIONS:
+1. Recherche le cours actuel de l'action {target_item.stock_symbol}
+2. Calcule la valeur totale de la position (cours actuel × quantité)
+3. Compare avec le prix d'achat pour calculer la plus/moins-value
+4. Analyse les perspectives du titre
+
+Réponds en JSON avec:
+- estimated_price (valeur totale actuelle de la position en CHF)
+- reasoning (analyse détaillée)
+- comparable_items (3 actions similaires du marché)
+- confidence_score (0.1-0.9)
+- market_trend (hausse/stable/baisse)"""
+        else:
+            prompt = f"""Estime le prix de marché actuel de cet objet en CHF en te basant sur le marché réel :
 
 OBJET À ÉVALUER:
 - Nom: {target_item.name}
@@ -1975,15 +2061,12 @@ Réponds en JSON avec:
 )
 - confidence_score (0.1-0.9)
 - market_trend (hausse/stable/baisse)
-- price_range (objet avec min et max basés sur le marché)
-
-IMPORTANT: Les comparable_items doivent être des références de marché EXTERNES, pas des objets de ma collection."""
-        
+- price_range (objet avec min et max basés sur le marché)"""
 
         response = openai_client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "Tu es un expert en évaluation d'objets de luxe avec une connaissance approfondie du marché. Tu dois OBLIGATOIREMENT inclure exactement 3 objets comparables de la collection fournie dans ta réponse. Réponds en JSON."},
+                {"role": "system", "content": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."},
                 {"role": "user", "content": prompt}
             ],
             response_format={"type": "json_object"},
@@ -2008,19 +2091,6 @@ IMPORTANT: Les comparable_items doivent être des références de marché EXTERN
                 for item in top_3_similar
             ]
         }
-        
-        # S'assurer qu'on a bien 3 objets comparables dans la réponse
-        if 'comparable_items' not in result or len(result.get('comparable_items', [])) < 3:
-            # Fallback avec les vraies données si l'IA n'a pas fourni 3 objets
-            result['comparable_items'] = [
-                {
-                    'name': item.name,
-                    'year': item.construction_year or 'N/A',
-                    'price': item.sold_price or item.asking_price,
-                    'comparison_reason': f"Même catégorie ({item.category}), année proche"
-                }
-                for item in top_3_similar
-            ]
         
         return jsonify(result)
         
@@ -2060,7 +2130,8 @@ def chatbot():
                     "ai_engine": "openai_gpt4_with_rag",
                     "mode": "pure_with_semantic_search",
                     "search_type": search_type,
-                    "embeddings_available": sum(1 for item in items if item.embedding)
+                    "embeddings_available": sum(1 for item in items if item.embedding),
+                    "stocks_count": len([i for i in items if i.category == "Actions"])
                 }
             })
         else:
@@ -2228,23 +2299,33 @@ def list_endpoints():
             "Recherche sémantique RAG",
             "Génération automatique d'embeddings",
             "Recherche intelligente par similarité",
-            "Détection d'intention de requête"
+            "Détection d'intention de requête",
+            "Support complet des actions boursières",
+            "Mise à jour automatique des prix"
         ]
     })
 
 # Fonctions utilitaires
 def clean_update_data(data: Dict[str, Any]) -> Dict[str, Any]:
-    """Nettoie les données de mise à jour"""
+    """Nettoie les données de mise à jour - CORRIGÉ POUR INCLURE LES ACTIONS"""
     cleaned = {}
     
-    # Champs texte
-    text_fields = ['name', 'category', 'description', 'sale_progress', 'buyer_contact', 'intermediary', 'status', 'condition', 'sale_status']
+    # Champs texte (INCLUT LES CHAMPS ACTIONS)
+    text_fields = [
+        'name', 'category', 'description', 'sale_progress', 
+        'buyer_contact', 'intermediary', 'status', 'condition', 
+        'sale_status', 'stock_symbol', 'stock_exchange'
+    ]
     for field in text_fields:
         if field in data:
             cleaned[field] = data[field].strip() if data[field] else None
     
-    # Champs numériques
-    numeric_fields = ['asking_price', 'sold_price', 'acquisition_price', 'current_offer', 'commission_rate', 'surface_m2', 'rental_income_chf']
+    # Champs numériques (INCLUT stock_purchase_price)
+    numeric_fields = [
+        'asking_price', 'sold_price', 'acquisition_price', 
+        'current_offer', 'commission_rate', 'surface_m2', 
+        'rental_income_chf', 'stock_purchase_price'
+    ]
     for field in numeric_fields:
         if field in data:
             try:
@@ -2252,20 +2333,34 @@ def clean_update_data(data: Dict[str, Any]) -> Dict[str, Any]:
             except:
                 cleaned[field] = None
     
-    # Autres champs
+    # Champs entiers
     if 'construction_year' in data:
         try:
             cleaned['construction_year'] = int(data['construction_year']) if data['construction_year'] else None
         except:
             cleaned['construction_year'] = None
     
+    if 'stock_quantity' in data:
+        try:
+            cleaned['stock_quantity'] = int(data['stock_quantity']) if data['stock_quantity'] else None
+        except:
+            cleaned['stock_quantity'] = None
+    
+    # Booléen
     if 'for_sale' in data:
         cleaned['for_sale'] = bool(data['for_sale'])
     
     if 'last_action_date' in data:
         cleaned['last_action_date'] = data['last_action_date']
     
-    # Logique métier
+    # Logique métier : nettoyer les champs actions si pas une action
+    if cleaned.get('category') != 'Actions':
+        cleaned['stock_symbol'] = None
+        cleaned['stock_quantity'] = None
+        cleaned['stock_purchase_price'] = None
+        cleaned['stock_exchange'] = None
+    
+    # Logique métier existante pour les ventes
     if cleaned.get('for_sale') == False:
         cleaned['sale_status'] = 'initial'
         cleaned['sale_progress'] = None
@@ -2303,6 +2398,7 @@ if __name__ == "__main__":
     if gmail_manager.enabled:
         logger.info(f"📬 Destinataires: {len(gmail_manager.recipients)}")
     logger.info(f"💾 Cache: ✅ Multi-niveaux avec embeddings")
+    logger.info(f"📈 Support Actions: ✅ Complet avec prix temps réel")
     logger.info("=" * 60)
     logger.info("MODE: OpenAI Pure avec Recherche Sémantique RAG")
     logger.info("✅ GPT-4 avec recherche intelligente")
@@ -2311,6 +2407,7 @@ if __name__ == "__main__":
     logger.info("✅ Détection d'intention de requête")
     logger.info("✅ Génération automatique d'embeddings")
     logger.info("✅ Cache intelligent pour les embeddings")
+    logger.info("✅ Support complet des actions boursières")
     logger.info("=" * 60)
     
     try:
