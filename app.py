@@ -1942,49 +1942,54 @@ def delete_item(item_id):
 @app.route("/api/stock-price/<symbol>")
 def get_live_exchange_rate(from_currency: str, to_currency: str = 'CHF') -> float:
     """
-    Récupère le taux de change en temps réel.
-    NOTE : Utilise une API externe. Pour cet exemple, les valeurs sont simulées
-    mais la structure avec cache est prête pour une véritable intégration API.
-    Remplacez les "rates" par un appel à une API comme https://www.exchangerate-api.com/
+    Récupère le taux de change en direct en utilisant l'API Finnhub.
+    Convertit une valeur de 'from_currency' vers 'to_currency'.
     """
     if from_currency == to_currency:
         return 1.0
+    if not FINNHUB_API_KEY:
+        logger.error("Impossible de récupérer les taux de change : Clé API Finnhub manquante.")
+        return 1.0 # Retourne 1.0 pour ne pas causer d'erreur de calcul
 
-    cache_key = f"{from_currency}_{to_currency}"
     now = time.time()
+    # Le cache est basé sur la devise de destination (notre référence)
+    cache_key = f"forex_{to_currency}"
 
-    # 1. Vérifier le cache
-    if cache_key in exchange_rate_cache and now - exchange_rate_cache[cache_key]['timestamp'] < EXCHANGE_RATE_CACHE_DURATION:
-        return exchange_rate_cache[cache_key]['rate']
+    # 1. Vérifier si les taux sont en cache et valides
+    if cache_key in forex_cache and now - forex_cache[cache_key]['timestamp'] < FOREX_CACHE_DURATION:
+        rates = forex_cache[cache_key]['rates']
+    else:
+        # 2. Appel API pour récupérer tous les taux par rapport à notre devise de référence
+        logger.info(f"💰 Appel API Finnhub pour les taux de change (Base: {to_currency})")
+        try:
+            import requests
+            forex_url = f"https://finnhub.io/api/v1/forex/rates?base={to_currency}&token={FINNHUB_API_KEY}"
+            response = requests.get(forex_url, timeout=10)
+            response.raise_for_status()
+            rates = response.json().get('quote', {})
+            # Mettre à jour le cache
+            forex_cache[cache_key] = {'rates': rates, 'timestamp': now}
+        except Exception as e:
+            logger.error(f"Erreur API taux de change Finnhub: {e}. Utilisation d'un taux de 1.0")
+            # En cas d'erreur, on retourne un dictionnaire vide pour éviter de mettre en cache des données erronées
+            rates = {}
 
-    # 2. Appel API (simulé ici)
-    # À REMPLACER PAR UN VRAI APPEL API
-    logger.info(f"💰 Appel API de taux de change pour {from_currency} -> {to_currency}")
-    try:
-        # Exemple avec une API réelle (nécessite la librairie 'requests')
-        # response = requests.get(f"https://api.exchangerate-api.com/v4/latest/{from_currency}")
-        # response.raise_for_status()
-        # rate = response.json()['rates'][to_currency]
-        
-        # --- SIMULATION ---
-        simulated_rates = {
-            'USD': {'CHF': 0.91},
-            'EUR': {'CHF': 0.98},
-            'GBP': {'CHF': 1.15}
-        }
-        rate = simulated_rates.get(from_currency, {}).get(to_currency, 1.0)
-        if rate == 1.0:
-             logger.warning(f"Taux de change non trouvé pour {from_currency}, utilisation de 1.0")
-        # --- FIN SIMULATION ---
+    # 3. Calculer le taux de conversion
+    # L'API Finnhub avec base=CHF nous donne la valeur de 1 CHF en autres devises (ex: {'USD': 1.10})
+    # Pour convertir un prix USD en CHF, il faut donc diviser par ce taux.
+    rate = rates.get(from_currency.upper())
 
-    except Exception as e:
-        logger.error(f"Erreur API taux de change: {e}. Utilisation du taux de 1.0")
-        rate = 1.0
+    if rate:
+        try:
+            # Le multiplicateur pour convertir from_currency -> to_currency est 1 / rate
+            return 1.0 / rate
+        except ZeroDivisionError:
+            logger.error(f"Le taux de change pour {from_currency} est zéro, conversion impossible.")
+            return 1.0
+    else:
+        logger.warning(f"Taux de change non trouvé pour {from_currency} -> {to_currency}. Utilisation d'un taux de 1.0")
+        return 1.0
 
-    # 3. Mettre en cache le nouveau taux
-    exchange_rate_cache[cache_key] = {'rate': rate, 'timestamp': now}
-    
-    return rate
 
 @app.route("/api/stock-price/<symbol>")
 def get_stock_price(symbol):
@@ -1992,7 +1997,6 @@ def get_stock_price(symbol):
     Récupère le prix actuel d'une action, avec Yahoo Finance en priorité
     et Finnhub comme alternative robuste.
     """
-    # Chercher l'item correspondant au symbole pour obtenir le suffixe de la bourse
     items = AdvancedDataManager.fetch_all_items()
     item = next((i for i in items if i.stock_symbol == symbol), None)
 
@@ -2006,10 +2010,9 @@ def get_stock_price(symbol):
             logger.info(f"Prix depuis le cache pour {symbol}")
             return jsonify(cached_data['data'])
 
-    # Essai avec Yahoo Finance (rapide et souvent suffisant)
     try:
         import yfinance as yf
-        time.sleep(1) # Pour éviter le rate limiting
+        time.sleep(1)
         ticker = yf.Ticker(symbol)
         info = ticker.info
         
@@ -2023,7 +2026,9 @@ def get_stock_price(symbol):
             raise Exception("Prix non trouvé sur Yahoo Finance, essai avec Finnhub")
 
         currency = info.get('currency', 'USD')
-        price_chf = current_price * get_live_exchange_rate(currency, 'CHF')
+        # La conversion utilise maintenant la fonction basée sur Finnhub
+        conversion_rate = get_live_exchange_rate(currency, 'CHF')
+        price_chf = current_price * conversion_rate
 
         result = {
             "symbol": symbol,
@@ -2032,15 +2037,15 @@ def get_stock_price(symbol):
             "currency": currency,
             "company_name": info.get('longName', symbol),
             "last_update": datetime.now().isoformat(),
-            "source": "Yahoo Finance"
+            "source": "Yahoo Finance (Taux de change via Finnhub)"
         }
         stock_price_cache[cache_key] = {'data': result, 'timestamp': time.time()}
         return jsonify(result)
 
     except Exception as e:
         logger.warning(f"Yahoo Finance a échoué pour {symbol} ({e}), bascule sur Finnhub.")
-        # En cas d'échec, utiliser Finnhub qui est plus robuste
         return get_stock_price_finnhub(symbol, item, cache_key)
+
 
 def get_stock_price_finnhub(symbol: str, item: Optional[CollectionItem], cache_key: str):
     """
@@ -2050,10 +2055,8 @@ def get_stock_price_finnhub(symbol: str, item: Optional[CollectionItem], cache_k
         return jsonify({"error": "Clé API Finnhub non configurée"}), 500
 
     try:
-        # Construire le symbole pour Finnhub en utilisant le champ 'stock_exchange' de l'item
         finnhub_symbol = symbol
         if item and item.stock_exchange and not symbol.endswith(item.stock_exchange):
-            # ex: 'NESN' + '.SW' -> 'NESN.SW'
             finnhub_symbol = f"{symbol}{item.stock_exchange}"
         
         logger.info(f"Interrogation de Finnhub avec le symbole : {finnhub_symbol}")
@@ -2063,7 +2066,6 @@ def get_stock_price_finnhub(symbol: str, item: Optional[CollectionItem], cache_k
         response = requests.get(quote_url, timeout=10)
         
         if response.status_code == 429:
-            logger.warning(f"Rate limit Finnhub atteint pour {symbol}")
             raise Exception("Rate limit Finnhub")
         response.raise_for_status()
         
@@ -2073,20 +2075,19 @@ def get_stock_price_finnhub(symbol: str, item: Optional[CollectionItem], cache_k
         if current_price is None or (current_price == 0 and quote_data.get('pc') == 0):
             raise Exception(f"Symbole '{finnhub_symbol}' invalide ou pas de données sur Finnhub.")
 
-        # Récupérer les infos de la société pour la devise
         profile_url = f"https://finnhub.io/api/v1/stock/profile2?symbol={finnhub_symbol}&token={FINNHUB_API_KEY}"
         profile_response = requests.get(profile_url, timeout=10)
         
-        currency = 'USD' # Par défaut
+        currency = 'USD'
         company_name = symbol
-        if profile_response.ok:
+        if profile_response.ok and profile_response.json():
             profile_data = profile_response.json()
-            if profile_data: # S'assurer que la réponse n'est pas vide
-                currency = profile_data.get('currency', 'USD')
-                company_name = profile_data.get('name', symbol)
+            currency = profile_data.get('currency', 'USD')
+            company_name = profile_data.get('name', symbol)
         
-        # Conversion en CHF avec le taux de change en direct
-        price_chf = current_price * get_live_exchange_rate(currency, 'CHF')
+        # Conversion en CHF avec le taux de change Finnhub
+        conversion_rate = get_live_exchange_rate(currency, 'CHF')
+        price_chf = current_price * conversion_rate
 
         result = {
             "symbol": symbol,
@@ -2103,7 +2104,6 @@ def get_stock_price_finnhub(symbol: str, item: Optional[CollectionItem], cache_k
 
     except Exception as e:
         logger.error(f"Erreur Finnhub pour {symbol}: {e}")
-        # Si même Finnhub échoue, retourner l'ancienne valeur du cache si elle existe
         if cache_key in stock_price_cache:
             logger.info(f"Erreur API, retour des données en cache pour {symbol}")
             return jsonify(stock_price_cache[cache_key]['data'])
@@ -2113,7 +2113,6 @@ def get_stock_price_finnhub(symbol: str, item: Optional[CollectionItem], cache_k
             "details": str(e),
             "message": "Veuillez mettre à jour le prix manuellement."
         }), 500
-
 
 
 
