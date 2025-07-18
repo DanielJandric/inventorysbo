@@ -151,6 +151,16 @@ function getFilteredItems() {
         );
     }
     
+    // Appliquer le filtre principal (status)
+    if (currentMainFilter === 'Available') {
+        filteredItems = filteredItems.filter(item => item.status === 'Available' && !item.for_sale);
+    } else if (currentMainFilter === 'ForSale') {
+        filteredItems = filteredItems.filter(item => item.status === 'Available' && item.for_sale === true);
+    } else if (currentMainFilter === 'Sold') {
+        filteredItems = filteredItems.filter(item => item.status === 'Sold');
+    }
+    // 'all' n'applique aucun filtre supplémentaire
+    
     return filteredItems;
 }
 
