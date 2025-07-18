@@ -1898,9 +1898,8 @@ def market_price(item_id):
                 similar_context += f"\n{i}. {similar_item.name} ({similar_item.construction_year or 'N/A'}) - {status}: {price:,.0f} CHF"
                 if similar_item.description:
                     similar_context += f" - {similar_item.description[:80]}..."
-
-        prompt = f"""Estime le prix de marché de cet objet en CHF:
-
+                    
+prompt = f"""Estime le prix de marché actuel de cet objet en CHF en te basant sur le marché réel :
 OBJET À ÉVALUER:
 - Nom: {target_item.name}
 - Catégorie: {target_item.category}
@@ -1908,19 +1907,32 @@ OBJET À ÉVALUER:
 - État: {target_item.condition or 'N/A'}
 - Description: {target_item.description or 'N/A'}
 
-CONTEXTE MARCHÉ:
-{market_context}
-{similar_context}
+INSTRUCTIONS IMPORTANTES:
+1. Recherche les prix actuels du marché pour ce modèle exact ou des modèles très similaires
+2. Utilise tes connaissances du marché automobile/horloger/immobilier actuel
+3. Compare avec des ventes récentes d'objets similaires sur le marché (pas dans ma collection)
+4. Prends en compte l'année, l'état et les spécificités du modèle
 
-Analyse les tendances actuelles du marché pour ce type d'objet et donne une estimation précise en te basant sur les 3 objets similaires de la collection.
+Pour les voitures : considère les sites comme AutoScout24, Comparis, annonces spécialisées
+Pour les montres : marché des montres d'occasion, chrono24, enchères récentes
+Pour l'immobilier : prix au m² dans la région, transactions récentes
 
-Réponds en JSON avec: 
-- estimated_price (nombre)
-- reasoning (explication détaillée en français)
-- comparable_items (array avec exactement 3 objets comparables de la collection avec nom, année, prix et raison de la comparaison)
+Réponds en JSON avec:
+- estimated_price (nombre en CHF basé sur le marché actuel)
+- reasoning (explication détaillée en français avec références de marché)
+- comparable_items (array avec EXACTEMENT 3 objets comparables du MARCHÉ EXTERNE avec:
+  - name: nom exact du modèle comparable
+  - year: année
+  - price: prix de marché actuel ou de vente récente
+  - source: source de l'information (ex: "AutoScout24", "Vente aux enchères Christie's", "Marché suisse de l'occasion")
+  - comparison_reason: pourquoi cet objet est comparable
+)
 - confidence_score (0.1-0.9)
 - market_trend (hausse/stable/baisse)
-- price_range (objet avec min et max pour donner une fourchette)"""
+- price_range (objet avec min et max basés sur le marché)
+
+IMPORTANT: Les comparable_items doivent être des références de marché EXTERNES, pas des objets de ma collection."""
+        
 
         response = openai_client.chat.completions.create(
             model="gpt-4o",
