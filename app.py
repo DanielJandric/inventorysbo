@@ -854,6 +854,29 @@ CORS(app)
 
 # Gestionnaire de données sophistiqué
 class AdvancedDataManager:
+    def fetch_all_items(self):
+        # Votre vraie logique pour récupérer les données de Supabase
+        return []
+class PureOpenAIEngineWithRAG:
+    def __init__(self, client):
+        self.client = client
+
+from openai import OpenAI
+openai_api_key = os.environ.get("OPENAI_API_KEY")
+if not openai_api_key:
+    logging.warning("Clé API OpenAI non trouvée. Le moteur IA sera désactivé.")
+    openai_client = None
+else:
+    openai_client = OpenAI(api_key=openai_api_key)
+
+# Création des instances dont l'application a besoin
+data_manager = AdvancedDataManager()
+ai_engine = PureOpenAIEngineWithRAG(openai_client)
+toolbox = ToolBox(data_manager=data_manager)
+
+# --- Création de l'Application Flask ---
+app = Flask(__name__)
+CORS(app)
     """Gestionnaire de données avec logique métier avancée"""
     
     @staticmethod
@@ -1995,34 +2018,28 @@ IMPORTANT: Les comparable_items doivent être des références de marché EXTERN
 
 @app.route('/api/chatbot', methods=['POST'])
 def chatbot():
-    """Endpoint du chatbot qui utilise l'architecture Agent et la ToolBox."""
+    """Endpoint du chatbot qui utilise l'architecture Agent."""
     try:
         data = request.get_json()
         message = data.get('message', '')
         history = data.get('history', [])
         
-        # Maintenant, la variable 'toolbox' existe et a été initialisée plus haut.
-        # On peut l'utiliser en toute sécurité.
         available_tools_schema = toolbox.get_available_tools()
         
-        # On initialise l'agent en lui passant le moteur IA et la boîte à outils
-        agent = BonvinAgent(ai_engine=ai_engine, tools_schema=available_tools_schema, toolbox=toolbox)
+        agent = BonvinAgent(
+            ai_engine=ai_engine, 
+            tools_schema=available_tools_schema, 
+            toolbox=toolbox
+        )
         
-        # L'Agent gère toute la conversation et retourne la réponse finale
         response = agent.run(message, history)
         
-        return jsonify({
-            'reply': response,
-            'timestamp': datetime.now().isoformat()
-        })
+        return jsonify({'reply': response})
         
     except Exception as e:
-        # Cette ligne est cruciale pour voir l'erreur complète dans vos logs
-        logger.error(f"Erreur dans la route chatbot: {e}", exc_info=True)
-        return jsonify({
-            'error': 'Erreur lors du traitement',
-            'reply': 'Désolé, une erreur interne est survenue.'
-        }), 500
+        logging.error(f"Erreur dans la route chatbot: {e}", exc_info=True)
+        return jsonify({'reply': 'Désolé, une erreur interne critique est survenue.'}), 500
+
         
     except Exception as e:
         logger.error(f"Erreur chatbot: {e}")
