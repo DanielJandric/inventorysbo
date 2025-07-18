@@ -2257,9 +2257,8 @@ def internal_error(error):
     return jsonify({"error": "Erreur interne du serveur"}), 500
 
 # Point d'entrée
-if __name__ == "__main__":
-    port = int(os.getenv("PORT", 5000))
-    host = "0.0.0.0"
+if __name__ == '__main__':
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
     
     logger.info("=" * 60)
     logger.info("🚀 BONVIN COLLECTION - VERSION OPENAI AVEC RAG")
