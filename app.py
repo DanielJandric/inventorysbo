@@ -1733,12 +1733,18 @@ def create_item():
         if not data:
             return jsonify({"error": "Données manquantes"}), 400
         
+        # Générer un ID unique
+        import uuid
+        new_id = str(uuid.uuid4())
+        data['id'] = new_id
+        
         # Enrichissement
         data['created_at'] = datetime.now().isoformat()
         data['updated_at'] = datetime.now().isoformat()
         
         # Générer l'embedding si OpenAI disponible
         if ai_engine and ai_engine.semantic_search:
+            # Ajouter l'ID au dictionnaire avant de créer l'objet
             temp_item = CollectionItem.from_dict(data)
             embedding = ai_engine.semantic_search.generate_embedding_for_item(temp_item)
             if embedding:
