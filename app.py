@@ -18,6 +18,7 @@ import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 from enhanced_chatbot import BonvinAgent
 from tools import ToolBox
+from app import AdvancedDataManager, PureOpenAIEngineWithRAG, openai_client
 
 # Configuration logging sophistiquée
 logging.basicConfig(
@@ -1995,16 +1996,17 @@ IMPORTANT: Les comparable_items doivent être des références de marché EXTERN
 
 @app.route('/api/chatbot', methods=['POST'])
 def chatbot():
-    """Endpoint du chatbot qui utilise l'architecture Agent et la ToolBox externe."""
+    """Endpoint du chatbot qui utilise l'architecture Agent et la ToolBox."""
     try:
         data = request.get_json()
         message = data.get('message', '')
         history = data.get('history', [])
         
-        # On récupère la description des outils directement depuis votre classe ToolBox
+        # Maintenant, la variable 'toolbox' existe et a été initialisée plus haut.
+        # On peut l'utiliser en toute sécurité.
         available_tools_schema = toolbox.get_available_tools()
         
-        # Initialisation de l'Agent avec le moteur IA et la boîte à outils
+        # On initialise l'agent en lui passant le moteur IA et la boîte à outils
         agent = BonvinAgent(ai_engine=ai_engine, tools_schema=available_tools_schema, toolbox=toolbox)
         
         # L'Agent gère toute la conversation et retourne la réponse finale
@@ -2016,10 +2018,11 @@ def chatbot():
         })
         
     except Exception as e:
+        # Cette ligne est cruciale pour voir l'erreur complète dans vos logs
         logger.error(f"Erreur dans la route chatbot: {e}", exc_info=True)
         return jsonify({
             'error': 'Erreur lors du traitement',
-            'reply': 'Désolé, je ne peux pas traiter votre demande pour le moment.'
+            'reply': 'Désolé, une erreur interne est survenue.'
         }), 500
         
     except Exception as e:
