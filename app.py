@@ -29,6 +29,10 @@ logger = logging.getLogger(__name__)
 stock_price_cache = {}
 STOCK_PRICE_CACHE_DURATION = 3600  # 1 heure
 
+# Cache pour les taux de change avec expiration
+forex_cache = {}
+FOREX_CACHE_DURATION = 3600  # 1 heure
+
 # Classes de données sophistiquées
 @dataclass
 class CollectionItem:
@@ -1939,7 +1943,6 @@ def delete_item(item_id):
         logger.error(f"Erreur delete_item: {e}")
         return jsonify({"error": str(e)}), 500
 
-@app.route("/api/stock-price/<symbol>")
 def get_live_exchange_rate(from_currency: str, to_currency: str = 'CHF') -> float:
     """
     Récupère le taux de change en direct en utilisant l'API Finnhub.
@@ -1989,6 +1992,22 @@ def get_live_exchange_rate(from_currency: str, to_currency: str = 'CHF') -> floa
     else:
         logger.warning(f"Taux de change non trouvé pour {from_currency} -> {to_currency}. Utilisation d'un taux de 1.0")
         return 1.0
+
+
+@app.route("/api/exchange-rate/<from_currency>/<to_currency>")
+def get_exchange_rate_route(from_currency: str, to_currency: str = 'CHF'):
+    """Route pour récupérer le taux de change"""
+    try:
+        rate = get_live_exchange_rate(from_currency.upper(), to_currency.upper())
+        return jsonify({
+            "from_currency": from_currency.upper(),
+            "to_currency": to_currency.upper(),
+            "rate": rate,
+            "last_update": datetime.now().isoformat()
+        })
+    except Exception as e:
+        logger.error(f"Erreur taux de change: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/stock-price/<symbol>")
