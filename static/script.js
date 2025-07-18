@@ -422,6 +422,67 @@ function displayItems() {
     }
 }
 
+// Mise à jour automatique des prix des actions
+async function updateStockPrices() {
+    const stockItems = allItems.filter(item => item.category === 'Actions' && item.stock_symbol);
+    
+    for (const item of stockItems) {
+        try {
+            const response = await fetch(`/api/stock-price/${item.stock_symbol}`);
+            if (response.ok) {
+                const data = await response.json();
+                
+                // Calculer la valeur totale
+                const totalValue = data.price_chf * (item.stock_quantity || 1);
+                
+                // Mettre à jour l'objet en mémoire
+                item.current_price = data.price_chf;
+                item.asking_price = totalValue;
+                item.last_price_update = data.last_update;
+                
+                // Mettre à jour l'affichage si l'objet est visible
+                updateStockCardDisplay(item.id, data);
+            }
+        } catch (error) {
+            console.error(`Erreur mise à jour ${item.stock_symbol}:`, error);
+        }
+    }
+    
+    // Rafraîchir les statistiques
+    updateStatistics();
+}
+
+// Fonction pour mettre à jour l'affichage d'une carte action
+function updateStockCardDisplay(itemId, stockData) {
+    const card = document.querySelector(`[data-item-id="${itemId}"]`);
+    if (!card) return;
+    
+    // Ajouter un indicateur de prix en temps réel
+    const priceElement = card.querySelector('.stock-price-live');
+    if (priceElement) {
+        const changeClass = stockData.change_percent > 0 ? 'text-green-400' : 'text-red-400';
+        const arrow = stockData.change_percent > 0 ? '↑' : '↓';
+        
+        priceElement.innerHTML = `
+            <div class="flex items-center gap-2">
+                <span class="text-lg font-bold">${formatPrice(stockData.price_chf)}</span>
+                <span class="${changeClass} text-sm">
+                    ${arrow} ${Math.abs(stockData.change_percent).toFixed(2)}%
+                </span>
+            </div>
+            <div class="text-xs text-gray-500">Mis à jour: ${new Date(stockData.last_update).toLocaleTimeString()}</div>
+        `;
+    }
+}
+
+// Lancer la mise à jour toutes les 30 secondes
+setInterval(updateStockPrices, 30000);
+
+// Mise à jour initiale après chargement
+document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(updateStockPrices, 2000);
+});
+
 function displaySkeletonCards() {
     const container = document.getElementById('items-container');
     if (!container) return;
@@ -517,6 +578,15 @@ function createItemCardHTML(item) {
                     ${item.sale_progress ? `<div class="text-xs text-cyan-300">${item.sale_progress.substring(0, 50)}${item.sale_progress.length > 50 ? '...' : ''}</div>` : ''}
                     ${item.intermediary ? `<div class="text-xs text-purple-300">Agent: ${item.intermediary}</div>` : ''}
                 </div>
+                
+                ${item.category === 'Actions' && item.stock_symbol ? `
+                    <div class="stock-price-live mt-3 p-2 bg-black/20 rounded-lg">
+                        <div class="flex items-center gap-2">
+                            <span class="text-lg font-bold animate-pulse">⏳</span>
+                            <span class="text-sm">Chargement du cours...</span>
+                        </div>
+                    </div>
+                ` : ''}
             </div>
             <div class="flex gap-2 mt-4">
                 <button onclick="event.stopPropagation(); getMarketPrice(this, ${item.id})" class="glowing-element glass px-3 py-2 rounded-lg text-xs hover:scale-105 transition-transform flex-1">IA Prix</button>
