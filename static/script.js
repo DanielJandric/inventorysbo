@@ -1,4 +1,4 @@
-// script.js - Version avec filtres de catégories multiples et statistiques dynamiques
+// script.js - Version complète avec toutes les corrections
 // --- Variables globales ---
 let allItems = [];
 let currentMainFilter = 'all'; // Filtre principal simplifié (all, Available, ForSale, Sold)
@@ -61,19 +61,18 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const categorySelect = document.getElementById('item-category');
         if (categorySelect) {
-        categorySelect.addEventListener('change', function() {
-        toggleRealEstateFields();
-        toggleStockFields(); // NOUVELLE LIGNE
-    });
-}
+            categorySelect.addEventListener('change', function() {
+                toggleRealEstateFields();
+                toggleStockFields();
+            });
+        }
 
         // Event listener pour le checkbox "En vente"
         const forSaleCheckbox = document.getElementById('item-for-sale');
         if (forSaleCheckbox) {
-        forSaleCheckbox.addEventListener('change', toggleSaleProgressFields);
-}
+            forSaleCheckbox.addEventListener('change', toggleSaleProgressFields);
+        }
 
-        
         // Initialiser l'observer seulement si supporté
         if (window.IntersectionObserver) {
             initCardObserver();
@@ -113,7 +112,6 @@ function toggleRealEstateFields() {
     }
 }
 
-// Ajouter après toggleRealEstateFields()
 function toggleStockFields() {
     const categorySelect = document.getElementById('item-category');
     if (!categorySelect) return;
@@ -128,7 +126,6 @@ function toggleStockFields() {
     }
 }
 
-
 function toggleSaleProgressFields() {
     const forSaleCheckbox = document.getElementById('item-for-sale');
     const progressSection = document.getElementById('sale-progress-section');
@@ -138,7 +135,6 @@ function toggleSaleProgressFields() {
     }
 }
 
-// --- Chargement des données ---
 // --- Chargement des données ---
 async function loadItems() {
     displaySkeletonCards();
@@ -687,7 +683,7 @@ function openCreateModal() {
     if (itemId) itemId.value = '';
     
     toggleRealEstateFields();
-    toggleStockFields();  // AJOUTER CETTE LIGNE
+    toggleStockFields();
     toggleSaleProgressFields();
     
     if (modal) {
@@ -715,9 +711,7 @@ function editItem(id) {
         }
     });
 
-    
-
-// Remplir les champs spécifiques aux actions
+    // Remplir les champs spécifiques aux actions
     if (item.category === 'Actions') {
         const stockSymbol = document.getElementById('item-stock-symbol');
         if (stockSymbol) stockSymbol.value = item.stock_symbol || '';
@@ -760,7 +754,7 @@ function editItem(id) {
     if (itemId) itemId.value = item.id;
     
     toggleRealEstateFields();
-    toggleStockFields();  // AJOUTER CETTE LIGNE
+    toggleStockFields();
     toggleSaleProgressFields();
     
     const modal = document.getElementById('item-modal');
@@ -806,6 +800,7 @@ async function handleFormSubmit(e) {
         sold_price: parseFloat(document.getElementById('item-sold-price')?.value) || null,
         description: document.getElementById('item-description')?.value?.trim() || null,
         for_sale: document.getElementById('item-for-sale')?.checked || false,
+        
         // Champs spécifiques aux actions
         stock_symbol: document.getElementById('item-stock-symbol')?.value?.trim() || null,
         stock_quantity: parseInt(document.getElementById('item-stock-quantity')?.value) || null,
@@ -909,20 +904,12 @@ function showEstimationModal(data, itemId) {
     const item = allItems.find(i => i.id === itemId);
     if (!item) return;
     
-    // Debug pour voir ce qu'on reçoit
-    console.log('Estimation data:', data);
-    
     const { estimated_price, reasoning, comparable_items, confidence_score, market_analysis } = data;
     
-    let comparablesHTML = `
-    <div class="glass-subtle p-6 rounded-2xl">
-        <h3 class="text-lg font-semibold mb-4">Debug - Données reçues</h3>
-        <pre class="text-xs overflow-auto">${JSON.stringify(data, null, 2)}</pre>
-    </div>`;
+    let comparablesHTML = '';
     
     // Vérifier si on a des objets comparables valides
     if (comparable_items && comparable_items.length > 0) {
-        // Filtrer les objets invalides (undefined, null, etc.)
         const validComparables = comparable_items.filter(comp => comp && comp.name);
         
         if (validComparables.length > 0) {
@@ -931,7 +918,6 @@ function showEstimationModal(data, itemId) {
                     <h3 class="text-lg font-semibold mb-4">Objets comparables</h3>
                     <div class="space-y-3">
                         ${validComparables.map(comp => {
-                            // Gérer tous les formats possibles de prix
                             const price = comp.reference_price || comp.price || comp.prix || 0;
                             const name = comp.name || 'Objet comparable';
                             const source = comp.source || comp.comparison_reason || 'Marché';
@@ -947,28 +933,6 @@ function showEstimationModal(data, itemId) {
                                 </div>
                             `;
                         }).join('')}
-                    </div>
-                </div>`;
-        }
-    }
-    
-    // Si pas d'objets comparables mais qu'on a market_analysis
-    if (!comparablesHTML && market_analysis && market_analysis.top_3_similar_actual) {
-        const marketItems = market_analysis.top_3_similar_actual;
-        if (marketItems.length > 0) {
-            comparablesHTML = `
-                <div class="glass-subtle p-6 rounded-2xl">
-                    <h3 class="text-lg font-semibold mb-4">Objets similaires dans votre collection</h3>
-                    <div class="space-y-3">
-                        ${marketItems.map(item => `
-                            <div class="flex justify-between items-center p-3 bg-slate-800/50 rounded-xl">
-                                <div>
-                                    <div class="font-medium">${item.name}${item.year ? ` (${item.year})` : ''}</div>
-                                    <div class="text-sm text-slate-500">${item.status === 'sold' ? 'Vendu' : 'En collection'}</div>
-                                </div>
-                                <div class="font-bold text-cyan-400">${formatPrice(item.price)}</div>
-                            </div>
-                        `).join('')}
                     </div>
                 </div>`;
         }
