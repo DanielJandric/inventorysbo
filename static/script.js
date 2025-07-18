@@ -1,8 +1,8 @@
-// script.js - Version finale complète avec filtres simplifiés et recherche IA enrichie
+// script.js - Version avec filtres de catégories multiples et statistiques dynamiques
 // --- Variables globales ---
 let allItems = [];
 let currentMainFilter = 'all'; // Filtre principal simplifié (all, Available, ForSale, Sold)
-let currentCategory = 'all';
+let selectedCategories = new Set(); // Utilisation d'un Set pour les catégories sélectionnées
 let currentSearch = '';
 let currentViewMode = 'cards';
 let conversationHistory = [];
@@ -140,9 +140,24 @@ async function loadItems() {
     }
 }
 
-// --- Statistiques ---
+// --- Fonction pour obtenir les items filtrés actuels ---
+function getFilteredItems() {
+    let filteredItems = allItems;
+    
+    // Appliquer le filtre de catégories si des catégories sont sélectionnées
+    if (selectedCategories.size > 0) {
+        filteredItems = filteredItems.filter(item => 
+            item.category && selectedCategories.has(item.category)
+        );
+    }
+    
+    return filteredItems;
+}
+
+// --- Statistiques avec filtrage ---
 function updateStatistics() {
-    const stats = calculateStats(allItems);
+    const filteredItems = getFilteredItems();
+    const stats = calculateStats(filteredItems);
     
     const elements = {
         'stat-total': stats.total,
@@ -221,15 +236,19 @@ function filterByMainStatus(status) {
         activeButton.classList.add('active');
     }
     
+    // Mettre à jour les compteurs avec le filtre de catégories
+    updateStatusCounts();
     displayItems();
 }
 
 function updateStatusCounts() {
+    const filteredItems = getFilteredItems();
+    
     const counts = {
-        'count-all': allItems.length,
-        'count-available': allItems.filter(item => item.status === 'Available' && !item.for_sale).length,
-        'count-for-sale': allItems.filter(item => item.status === 'Available' && item.for_sale === true).length,
-        'count-sold': allItems.filter(item => item.status === 'Sold').length
+        'count-all': filteredItems.length,
+        'count-available': filteredItems.filter(item => item.status === 'Available' && !item.for_sale).length,
+        'count-for-sale': filteredItems.filter(item => item.status === 'Available' && item.for_sale === true).length,
+        'count-sold': filteredItems.filter(item => item.status === 'Sold').length
     };
     
     for (const [id, count] of Object.entries(counts)) {
@@ -245,32 +264,45 @@ function updateCategoryFilters() {
     const container = document.getElementById('category-filters');
     if (!container) return;
     
-    let html = '<button onclick="filterByCategory(\'all\')" class="category-btn glass glowing-element px-3 py-2 rounded-lg text-sm transition-transform" data-category="all">Toutes</button>';
-    categories.forEach(category => {
-        html += `<button onclick="filterByCategory('${category}')" class="category-btn glass glowing-element px-3 py-2 rounded-lg text-sm transition-transform" data-category="${category}">${category}</button>`;
-    });
-    container.innerHTML = html;
-    
-    // Sélectionner "all" par défaut
-    const allButton = container.querySelector('.category-btn[data-category="all"]');
-    if (allButton) {
-        allButton.classList.add('ring-2', 'ring-cyan-400');
+    // Ajouter un bouton "Effacer les filtres" si des catégories sont sélectionnées
+    let html = '';
+    if (selectedCategories.size > 0) {
+        html += '<button onclick="clearCategoryFilters()" class="category-btn glass glowing-element px-3 py-2 rounded-lg text-sm transition-transform bg-red-500/20 border-red-400/30 text-red-300 hover:bg-red-500/30">Effacer filtres</button>';
     }
+    
+    // Ajouter les boutons de catégories
+    categories.forEach(category => {
+        const isSelected = selectedCategories.has(category);
+        const selectedClass = isSelected ? 'ring-2 ring-cyan-400 bg-cyan-400/20' : '';
+        html += `<button onclick="toggleCategory('${category}')" class="category-btn glass glowing-element px-3 py-2 rounded-lg text-sm transition-transform ${selectedClass}" data-category="${category}">${category}</button>`;
+    });
+    
+    container.innerHTML = html;
 }
 
-function filterByCategory(category) {
-    currentCategory = category;
-    
-    // Mettre à jour les boutons de catégorie
-    document.querySelectorAll('.category-btn').forEach(btn => {
-        btn.classList.remove('ring-2', 'ring-cyan-400');
-    });
-    
-    const activeButton = document.querySelector(`.category-btn[data-category="${category}"]`);
-    if (activeButton) {
-        activeButton.classList.add('ring-2', 'ring-cyan-400');
+function toggleCategory(category) {
+    if (selectedCategories.has(category)) {
+        selectedCategories.delete(category);
+    } else {
+        selectedCategories.add(category);
     }
     
+    // Mettre à jour l'affichage des boutons
+    updateCategoryFilters();
+    
+    // Mettre à jour les statistiques et les compteurs
+    updateStatistics();
+    updateStatusCounts();
+    
+    // Rafraîchir l'affichage
+    displayItems();
+}
+
+function clearCategoryFilters() {
+    selectedCategories.clear();
+    updateCategoryFilters();
+    updateStatistics();
+    updateStatusCounts();
     displayItems();
 }
 
@@ -300,7 +332,7 @@ function handleSearch() {
 
 // --- Affichage avec logique simplifiée ---
 function displayItems() {
-    let filteredItems = allItems;
+    let filteredItems = getFilteredItems();
     
     // Filtrage principal simplifié
     if (currentMainFilter === 'Available') {
@@ -310,11 +342,7 @@ function displayItems() {
     } else if (currentMainFilter === 'Sold') {
         filteredItems = filteredItems.filter(item => item.status === 'Sold');
     }
-    // 'all' n'applique aucun filtre
-    
-    if (currentCategory !== 'all') {
-        filteredItems = filteredItems.filter(item => item.category === currentCategory);
-    }
+    // 'all' n'applique aucun filtre supplémentaire
     
     if (currentSearch) {
         filteredItems = filteredItems.filter(item => 
