@@ -872,6 +872,34 @@ class AdvancedDataManager:
             items = []
             for raw_item in raw_items:
                 try:
+                    # Convertir l'embedding du format pgvector
+                    if 'embedding' in raw_item and raw_item['embedding']:
+                        embedding = raw_item['embedding']
+                        
+                        # Si c'est une string qui ressemble à un array pgvector
+                        if isinstance(embedding, str):
+                            # Format pgvector: "[0.1,0.2,0.3]" ou "(0.1,0.2,0.3)"
+                            embedding = embedding.strip()
+                            if embedding.startswith('[') and embedding.endswith(']'):
+                                # Format JSON array
+                                try:
+                                    raw_item['embedding'] = json.loads(embedding)
+                                except:
+                                    # Fallback: parser manuellement
+                                    raw_item['embedding'] = [float(x) for x in embedding[1:-1].split(',')]
+                            elif embedding.startswith('(') and embedding.endswith(')'):
+                                # Format pgvector tuple
+                                raw_item['embedding'] = [float(x) for x in embedding[1:-1].split(',')]
+                            else:
+                                logger.warning(f"Format d'embedding inconnu pour {raw_item.get('name', 'item')}: {embedding[:50]}")
+                                raw_item['embedding'] = None
+                        elif isinstance(embedding, list):
+                            # Déjà une liste, parfait
+                            pass
+                        else:
+                            logger.warning(f"Type d'embedding invalide pour {raw_item.get('name', 'item')}: {type(embedding)}")
+                            raw_item['embedding'] = None
+                    
                     item = CollectionItem.from_dict(raw_item)
                     items.append(item)
                 except Exception as e:
