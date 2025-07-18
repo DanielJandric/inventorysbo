@@ -61,14 +61,18 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const categorySelect = document.getElementById('item-category');
         if (categorySelect) {
-            categorySelect.addEventListener('change', toggleRealEstateFields);
-        }
+        categorySelect.addEventListener('change', function() {
+        toggleRealEstateFields();
+        toggleStockFields(); // NOUVELLE LIGNE
+    });
+}
 
         // Event listener pour le checkbox "En vente"
         const forSaleCheckbox = document.getElementById('item-for-sale');
         if (forSaleCheckbox) {
-            forSaleCheckbox.addEventListener('change', toggleSaleProgressFields);
-        }
+        forSaleCheckbox.addEventListener('change', toggleSaleProgressFields);
+}
+
         
         // Initialiser l'observer seulement si supporté
         if (window.IntersectionObserver) {
@@ -108,6 +112,22 @@ function toggleRealEstateFields() {
         rentalField.style.display = isRealEstate ? 'block' : 'none';
     }
 }
+
+// Ajouter après toggleRealEstateFields()
+function toggleStockFields() {
+    const categorySelect = document.getElementById('item-category');
+    if (!categorySelect) return;
+    
+    const category = categorySelect.value;
+    const isStock = category === 'Actions';
+    
+    const stockFields = document.getElementById('stock-fields');
+    
+    if (stockFields) {
+        stockFields.style.display = isStock ? 'block' : 'none';
+    }
+}
+
 
 function toggleSaleProgressFields() {
     const forSaleCheckbox = document.getElementById('item-for-sale');
@@ -597,6 +617,7 @@ function openCreateModal() {
     if (itemId) itemId.value = '';
     
     toggleRealEstateFields();
+    toggleStockFields();  // AJOUTER CETTE LIGNE
     toggleSaleProgressFields();
     
     if (modal) {
@@ -623,6 +644,23 @@ function editItem(id) {
             }
         }
     });
+
+    
+
+// Remplir les champs spécifiques aux actions
+    if (item.category === 'Actions') {
+        const stockSymbol = document.getElementById('item-stock-symbol');
+        if (stockSymbol) stockSymbol.value = item.stock_symbol || '';
+        
+        const stockQuantity = document.getElementById('item-stock-quantity');
+        if (stockQuantity) stockQuantity.value = item.stock_quantity || '';
+        
+        const stockPurchasePrice = document.getElementById('item-stock-purchase-price');
+        if (stockPurchasePrice) stockPurchasePrice.value = item.stock_purchase_price || '';
+        
+        const stockExchange = document.getElementById('item-stock-exchange');
+        if (stockExchange) stockExchange.value = item.stock_exchange || '';
+    }
 
     // Remplir les champs de suivi des ventes
     const saleStatus = document.getElementById('item-sale-status');
@@ -652,6 +690,7 @@ function editItem(id) {
     if (itemId) itemId.value = item.id;
     
     toggleRealEstateFields();
+    toggleStockFields();  // AJOUTER CETTE LIGNE
     toggleSaleProgressFields();
     
     const modal = document.getElementById('item-modal');
@@ -697,6 +736,11 @@ async function handleFormSubmit(e) {
         sold_price: parseFloat(document.getElementById('item-sold-price')?.value) || null,
         description: document.getElementById('item-description')?.value?.trim() || null,
         for_sale: document.getElementById('item-for-sale')?.checked || false,
+        // Champs spécifiques aux actions
+        stock_symbol: document.getElementById('item-stock-symbol')?.value?.trim() || null,
+        stock_quantity: parseInt(document.getElementById('item-stock-quantity')?.value) || null,
+        stock_purchase_price: parseFloat(document.getElementById('item-stock-purchase-price')?.value) || null,
+        stock_exchange: document.getElementById('item-stock-exchange')?.value || null,
 
         // Champs de suivi des ventes
         sale_status: document.getElementById('item-sale-status')?.value || 'initial',
