@@ -2054,7 +2054,7 @@ def get_stock_price_finnhub(symbol, cache_key):
         finnhub_symbol = symbol
         if symbol.endswith('.SW'):
             finnhub_symbol = symbol
-        elif symbol in ['NESN', 'NOVN', 'ABBN', 'UBSG', 'CSGN']:
+        elif symbol in ['NESN', 'NOVN', 'ABBN', 'UBSG', 'IREN']:
             # Symboles suisses courants
             finnhub_symbol = f"{symbol}.SW"
         
