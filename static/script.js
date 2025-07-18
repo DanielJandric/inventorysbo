@@ -749,7 +749,11 @@ function showEstimationModal(data, itemId) {
     
     const { estimated_price, reasoning, comparable_items, confidence_score, market_analysis } = data;
     
-    let comparablesHTML = '';
+    let comparablesHTML = `
+    <div class="glass-subtle p-6 rounded-2xl">
+        <h3 class="text-lg font-semibold mb-4">Debug - Données reçues</h3>
+        <pre class="text-xs overflow-auto">${JSON.stringify(data, null, 2)}</pre>
+    </div>`;
     
     // Vérifier si on a des objets comparables valides
     if (comparable_items && comparable_items.length > 0) {
