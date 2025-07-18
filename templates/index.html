@@ -916,6 +916,25 @@
                     </div>
                 </div>
                 
+                <!-- Champ prix actuel manuel pour les actions -->
+                <div id="current-price-field" style="display: none;" class="mt-4 p-4 bg-cyan-900/20 border border-cyan-500/30 rounded-xl">
+                    <h3 class="text-lg font-semibold text-cyan-400 mb-3">Prix actuel (optionnel)</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                        <div>
+                            <label class="block text-sm font-semibold mb-2">Prix actuel (CHF/action)</label>
+                            <input type="number" id="item-current-price" class="w-full glass rounded-xl px-4 py-3 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400" step="0.01" placeholder="Prix manuel si mise à jour auto échoue">
+                        </div>
+                        <div>
+                            <button type="button" id="update-current-price-btn" class="glowing-element glass px-4 py-3 rounded-xl text-sm hover:scale-105 transition-transform w-full">
+                                Calculer la valeur totale
+                            </button>
+                        </div>
+                        <div class="text-sm text-gray-400">
+                            Utilisez ce champ si la mise à jour automatique échoue
+                        </div>
+                    </div>
+                </div>
+                
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                         <label class="block text-sm font-semibold mb-2">Prix d'acquisition (CHF)</label>
