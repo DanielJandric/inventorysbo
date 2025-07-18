@@ -18,7 +18,6 @@ import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 from enhanced_chatbot import BonvinAgent
 from tools import ToolBox
-from app import AdvancedDataManager, PureOpenAIEngineWithRAG, openai_client
 
 # Configuration logging sophistiquée
 logging.basicConfig(
