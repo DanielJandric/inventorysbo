@@ -1991,48 +1991,34 @@ IMPORTANT: Les comparable_items doivent être des références de marché EXTERN
         logger.error(f"Erreur market_price: {e}")
         return jsonify({"error": "Moteur IA Indisponible"}), 500
 
-@app.route("/api/chatbot", methods=["POST"])
+@app.route('/api/chatbot', methods=['POST'])
 def chatbot():
-    """Chatbot utilisant OpenAI GPT-4 avec recherche sémantique RAG"""
+    """Endpoint du chatbot intelligent"""
     try:
         data = request.get_json()
-        if not data:
-            return jsonify({"error": "Données requises"}), 400
+        message = data.get('message', '')
+        history = data.get('history', [])
         
-        query = data.get("message", "").strip()
-        if not query:
-            return jsonify({"error": "Message requis"}), 400
+        # Initialiser le chatbot amélioré
+        enhanced_bot = EnhancedChatbot(
+            data_manager=AdvancedDataManager,
+            ai_engine=ai_engine
+        )
         
-        # Récupération des données
-        items = AdvancedDataManager.fetch_all_items()
-        analytics = AdvancedDataManager.calculate_advanced_analytics(items)
+        # Traiter le message
+        response = enhanced_bot.process_message(message, history)
         
-        logger.info(f"🎯 Requête: '{query}'")
+        return jsonify({
+            'reply': response,
+            'timestamp': datetime.now().isoformat()
+        })
         
-        if ai_engine:
-            # Génération de réponse via OpenAI avec RAG
-            response = ai_engine.generate_response(query, items, analytics)
-            
-            # Détecter si la recherche sémantique a été utilisée
-            search_type = "semantic" if "🔍 **Recherche intelligente activée**" in response else "standard"
-            
-            return jsonify({
-                "reply": response,
-                "metadata": {
-                    "items_analyzed": len(items),
-                    "ai_engine": "openai_gpt4_with_rag",
-                    "mode": "pure_with_semantic_search",
-                    "search_type": search_type,
-                    "embeddings_available": sum(1 for item in items if item.embedding)
-                }
-            })
-        else:
-            return jsonify({
-                "reply": "❌ Moteur IA Indisponible",
-                "metadata": {
-                    "ai_engine": "unavailable"
-                }
-            })
+    except Exception as e:
+        logger.error(f"Erreur chatbot: {e}")
+        return jsonify({
+            'error': 'Erreur lors du traitement',
+            'reply': 'Désolé, je ne peux pas traiter votre demande pour le moment.'
+        }), 500
         
     except Exception as e:
         logger.error(f"Erreur chatbot: {e}")
