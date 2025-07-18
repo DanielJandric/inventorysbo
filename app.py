@@ -1733,22 +1733,24 @@ def create_item():
         if not data:
             return jsonify({"error": "Données manquantes"}), 400
         
-        # NE PAS générer d'ID - laisser Supabase s'en charger
-        # Supprimer l'ID s'il existe dans les données
-        if 'id' in data:
-            del data['id']
-        
         # Enrichissement
         data['created_at'] = datetime.now().isoformat()
         data['updated_at'] = datetime.now().isoformat()
         
         # Générer l'embedding si OpenAI disponible
         if ai_engine and ai_engine.semantic_search:
-            temp_item = CollectionItem.from_dict(data)
+            # Ajouter un ID temporaire pour créer l'objet
+            temp_data = data.copy()
+            temp_data['id'] = 0  # ID temporaire pour la création de l'objet
+            temp_item = CollectionItem.from_dict(temp_data)
             embedding = ai_engine.semantic_search.generate_embedding_for_item(temp_item)
             if embedding:
                 data['embedding'] = embedding
                 logger.info("✅ Embedding généré pour le nouvel objet")
+        
+        # Ne pas inclure l'ID dans l'insertion Supabase
+        if 'id' in data:
+            del data['id']
         
         response = supabase.table("items").insert(data).execute()
         if response.data:
@@ -1764,10 +1766,6 @@ def create_item():
             
     except Exception as e:
         logger.error(f"Erreur création item: {e}")
-        return jsonify({"error": str(e)}), 500
-            
-    except Exception as e:
-        logger.error(f"Erreur create_item: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route("/api/items/<int:item_id>", methods=["PUT"])
