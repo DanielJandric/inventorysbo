@@ -265,10 +265,6 @@ function filterByMainStatus(status) {
 }
     
     // Mettre à jour les compteurs avec le filtre de catégories
-    updateStatusCounts();
-    displayItems();
-}
-
 function updateStatusCounts() {
     const filteredItems = getFilteredItems();
     
