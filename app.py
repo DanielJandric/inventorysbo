@@ -1855,6 +1855,43 @@ def delete_item(item_id):
         logger.error(f"Erreur delete_item: {e}")
         return jsonify({"error": str(e)}), 500
 
+@app.route("/api/stock-price/<symbol>")
+def get_stock_price(symbol):
+    """Récupère le prix actuel d'une action"""
+    try:
+        # Option 1: Utiliser yfinance (gratuit)
+        import yfinance as yf
+        ticker = yf.Ticker(symbol)
+        info = ticker.info
+        
+        current_price = info.get('currentPrice') or info.get('regularMarketPrice', 0)
+        currency = info.get('currency', 'USD')
+        
+        # Convertir en CHF si nécessaire (taux fixe pour l'exemple)
+        exchange_rates = {
+            'USD': 0.92,
+            'EUR': 0.98,
+            'GBP': 1.15
+        }
+        
+        price_chf = current_price
+        if currency in exchange_rates:
+            price_chf = current_price * exchange_rates[currency]
+        
+        return jsonify({
+            "symbol": symbol,
+            "price": current_price,
+            "price_chf": price_chf,
+            "currency": currency,
+            "company_name": info.get('longName', symbol),
+            "change_percent": info.get('regularMarketChangePercent', 0),
+            "last_update": datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        logger.error(f"Erreur récupération prix action {symbol}: {e}")
+        return jsonify({"error": "Prix non disponible"}), 500
+
 @app.route("/api/market-price/<int:item_id>")
 def market_price(item_id):
     """Estimation de prix via IA avec 3 objets similaires"""
