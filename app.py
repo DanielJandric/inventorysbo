@@ -2075,8 +2075,24 @@ def get_stock_price_finnhub(symbol: str, item: Optional[CollectionItem], cache_k
 
     try:
         finnhub_symbol = symbol
-        if item and item.stock_exchange and not symbol.endswith(item.stock_exchange):
-            finnhub_symbol = f"{symbol}{item.stock_exchange}"
+        # Only append exchange suffix if it's a valid exchange code and not already present
+        if item and item.stock_exchange:
+            exchange = item.stock_exchange.upper()
+            # Common exchange mappings for Finnhub
+            exchange_mapping = {
+                'US': '.O',  # US OTC
+                'NASDAQ': '.O',  # NASDAQ
+                'NYSE': '.N',  # NYSE
+                'LSE': '.L',  # London Stock Exchange
+                'SWX': '.SW',  # Swiss Exchange
+                'SIX': '.SW',  # SIX Swiss Exchange
+            }
+            
+            # Use mapping if available, otherwise try the original exchange code
+            if exchange in exchange_mapping:
+                finnhub_symbol = f"{symbol}{exchange_mapping[exchange]}"
+            elif not symbol.endswith(exchange):
+                finnhub_symbol = f"{symbol}.{exchange}"
         
         logger.info(f"Interrogation de Finnhub avec le symbole : {finnhub_symbol}")
         
@@ -2092,7 +2108,24 @@ def get_stock_price_finnhub(symbol: str, item: Optional[CollectionItem], cache_k
         current_price = quote_data.get('c')
         
         if current_price is None or (current_price == 0 and quote_data.get('pc') == 0):
-            raise Exception(f"Symbole '{finnhub_symbol}' invalide ou pas de données sur Finnhub.")
+            # Try with original symbol if exchange-modified symbol failed
+            if finnhub_symbol != symbol:
+                logger.info(f"Symbole '{finnhub_symbol}' invalide, essai avec le symbole original '{symbol}'")
+                quote_url_original = f"https://finnhub.io/api/v1/quote?symbol={symbol}&token={FINNHUB_API_KEY}"
+                response_original = requests.get(quote_url_original, timeout=10)
+                if response_original.ok:
+                    quote_data_original = response_original.json()
+                    current_price = quote_data_original.get('c')
+                    if current_price and current_price > 0:
+                        finnhub_symbol = symbol
+                        quote_data = quote_data_original
+                        logger.info(f"✅ Symbole original '{symbol}' fonctionne")
+                    else:
+                        raise Exception(f"Symbole '{finnhub_symbol}' et '{symbol}' invalides ou pas de données sur Finnhub.")
+                else:
+                    raise Exception(f"Symbole '{finnhub_symbol}' invalide ou pas de données sur Finnhub.")
+            else:
+                raise Exception(f"Symbole '{finnhub_symbol}' invalide ou pas de données sur Finnhub.")
 
         profile_url = f"https://finnhub.io/api/v1/stock/profile2?symbol={finnhub_symbol}&token={FINNHUB_API_KEY}"
         profile_response = requests.get(profile_url, timeout=10)
