@@ -2090,6 +2090,8 @@ def get_stock_price_finnhub(symbol: str, item: Optional[CollectionItem], cache_k
                 'LSE': '.L',  # London Stock Exchange
                 'SWX': '.SW',  # Swiss Exchange
                 'SIX': '.SW',  # SIX Swiss Exchange
+                'SWISS': '.SW',  # Swiss Exchange (alternative)
+                'CH': '.SW',  # Switzerland
             }
             
             # Use mapping if available, otherwise try the original exchange code
@@ -2112,24 +2114,44 @@ def get_stock_price_finnhub(symbol: str, item: Optional[CollectionItem], cache_k
         current_price = quote_data.get('c')
         
         if current_price is None or (current_price == 0 and quote_data.get('pc') == 0):
-            # Try with original symbol if exchange-modified symbol failed
+            # Try multiple symbol formats for Swiss stocks
+            symbol_variants = []
+            
             if finnhub_symbol != symbol:
-                logger.info(f"Symbole '{finnhub_symbol}' invalide, essai avec le symbole original '{symbol}'")
-                quote_url_original = f"https://finnhub.io/api/v1/quote?symbol={symbol}&token={FINNHUB_API_KEY}"
-                response_original = requests.get(quote_url_original, timeout=10)
-                if response_original.ok:
-                    quote_data_original = response_original.json()
-                    current_price = quote_data_original.get('c')
+                symbol_variants.append(symbol)  # Original symbol
+            
+            # For Swiss stocks, try different formats
+            if item and item.stock_exchange and item.stock_exchange.upper() in ['SWX', 'SIX', 'SWISS', 'CH']:
+                symbol_variants.extend([
+                    f"{symbol}.SW",  # Standard Swiss format
+                    f"{symbol}.SWX",  # Alternative Swiss format
+                    f"{symbol}.SIX",  # SIX format
+                    symbol,  # Plain symbol
+                ])
+            
+            # Try each variant
+            for variant in symbol_variants:
+                if variant == finnhub_symbol:
+                    continue  # Already tried
+                    
+                logger.info(f"Essai avec le symbole: '{variant}'")
+                quote_url_variant = f"https://finnhub.io/api/v1/quote?symbol={variant}&token={FINNHUB_API_KEY}"
+                response_variant = requests.get(quote_url_variant, timeout=10)
+                
+                if response_variant.ok:
+                    quote_data_variant = response_variant.json()
+                    current_price = quote_data_variant.get('c')
                     if current_price and current_price > 0:
-                        finnhub_symbol = symbol
-                        quote_data = quote_data_original
-                        logger.info(f"✅ Symbole original '{symbol}' fonctionne")
-                    else:
-                        raise Exception(f"Symbole '{finnhub_symbol}' et '{symbol}' invalides ou pas de données sur Finnhub.")
+                        finnhub_symbol = variant
+                        quote_data = quote_data_variant
+                        logger.info(f"✅ Symbole '{variant}' fonctionne")
+                        break
                 else:
-                    raise Exception(f"Symbole '{finnhub_symbol}' invalide ou pas de données sur Finnhub.")
-            else:
-                raise Exception(f"Symbole '{finnhub_symbol}' invalide ou pas de données sur Finnhub.")
+                    logger.warning(f"Symbole '{variant}' invalide")
+            
+            # If no variant worked
+            if current_price is None or current_price == 0:
+                raise Exception(f"Aucun format de symbole valide trouvé pour '{symbol}' sur Finnhub")
 
         profile_url = f"https://finnhub.io/api/v1/stock/profile2?symbol={finnhub_symbol}&token={FINNHUB_API_KEY}"
         profile_response = requests.get(profile_url, timeout=10)
