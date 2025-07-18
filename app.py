@@ -1552,27 +1552,19 @@ Pour une recherche intelligente optimale, assurez-vous que tous les objets ont d
         
         return "\n".join(response_parts)
     
-    def _get_car_summary(self, items: List[CollectionItem]) -> str:
-        """Résumé des voitures dans la collection"""
-        cars = [item for item in items if item.category == "Voitures"]
-        if not cars:
+    def _get_all_vehicles_summary(self, items: List[CollectionItem]) -> str:
+        """Retourne un résumé de tous les véhicules pour l'analyse"""
+        vehicles = [item for item in items if item.category == "Voitures"]
+        if not vehicles:
             return "Aucune voiture dans la collection"
         
-        brands = {}
-        for car in cars:
-            # Extraire la marque du nom
-            name_parts = car.name.lower().split()
-            if name_parts:
-                brand = name_parts[0]
-                if brand not in brands:
-                    brands[brand] = 0
-                brands[brand] += 1
-        
         summary = []
-        for brand, count in sorted(brands.items(), key=lambda x: x[1], reverse=True):
-            summary.append(f"- {brand.capitalize()}: {count}")
+        for vehicle in vehicles:
+            status = "Disponible" if vehicle.status == "Available" else "Vendu"
+            year = f"({vehicle.construction_year})" if vehicle.construction_year else ""
+            summary.append(f"- {vehicle.name} {year} - {status}")
         
-        return "\n".join(summary[:10])  # Top 10 marques
+        return "\n".join(summary)
     
     def _build_complete_context(self, items: List[CollectionItem], analytics: Dict[str, Any]) -> str:
         """Construit un contexte complet pour l'IA"""
