@@ -28,10 +28,10 @@ logger = logging.getLogger(__name__)
 @dataclass
 class CollectionItem:
     """Modèle de données enrichi pour un objet de collection"""
-    id: Optional[int] = None
     name: str
     category: str
     status: str
+    id: Optional[int] = None
     construction_year: Optional[int] = None
     condition: Optional[str] = None
     description: Optional[str] = None
