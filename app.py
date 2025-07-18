@@ -1994,20 +1994,20 @@ IMPORTANT: Les comparable_items doivent être des références de marché EXTERN
 
 @app.route('/api/chatbot', methods=['POST'])
 def chatbot():
-    """Endpoint du chatbot intelligent"""
+    """Endpoint du chatbot qui utilise l'architecture Agent et la ToolBox externe."""
     try:
         data = request.get_json()
         message = data.get('message', '')
         history = data.get('history', [])
         
-        # Initialiser le chatbot amélioré
-        enhanced_bot = EnhancedChatbot(
-            data_manager=AdvancedDataManager,
-            ai_engine=ai_engine
-        )
+        # On récupère la description des outils directement depuis votre classe ToolBox
+        available_tools_schema = toolbox.get_available_tools()
         
-        # Traiter le message
-        response = enhanced_bot.process_message(message, history)
+        # Initialisation de l'Agent avec le moteur IA et la boîte à outils
+        agent = BonvinAgent(ai_engine=ai_engine, tools_schema=available_tools_schema, toolbox=toolbox)
+        
+        # L'Agent gère toute la conversation et retourne la réponse finale
+        response = agent.run(message, history)
         
         return jsonify({
             'reply': response,
@@ -2015,7 +2015,7 @@ def chatbot():
         })
         
     except Exception as e:
-        logger.error(f"Erreur chatbot: {e}")
+        logger.error(f"Erreur dans la route chatbot: {e}", exc_info=True)
         return jsonify({
             'error': 'Erreur lors du traitement',
             'reply': 'Désolé, je ne peux pas traiter votre demande pour le moment.'
