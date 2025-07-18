@@ -8,6 +8,8 @@ let currentViewMode = 'cards';
 let conversationHistory = [];
 let isTyping = false;
 let cardObserver = null;
+let stockPriceUpdateTimer = null;
+let stockPriceUpdateErrors = {}; // Pour tracker les erreurs par symbole
 
 // --- Notifications ---
 function showNotification(message, isError = false) {
@@ -73,6 +75,12 @@ document.addEventListener('DOMContentLoaded', function() {
             forSaleCheckbox.addEventListener('change', toggleSaleProgressFields);
         }
 
+        // Event listener pour le bouton de mise à jour manuelle du prix
+        const updatePriceBtn = document.getElementById('update-current-price-btn');
+        if (updatePriceBtn) {
+            updatePriceBtn.addEventListener('click', updateCurrentPriceManually);
+        }
+
         // Initialiser l'observer seulement si supporté
         if (window.IntersectionObserver) {
             initCardObserver();
@@ -87,6 +95,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Ajouter les actions rapides du chatbot
         setTimeout(addQuickActions, 1000);
+        
+        // Démarrer la mise à jour automatique des prix (avec gestion d'erreur améliorée)
+        startStockPriceUpdates();
         
     } catch (error) {
         console.error('Erreur lors de l\'initialisation:', error);
@@ -120,9 +131,13 @@ function toggleStockFields() {
     const isStock = category === 'Actions';
     
     const stockFields = document.getElementById('stock-fields');
+    const currentPriceField = document.getElementById('current-price-field');
     
     if (stockFields) {
         stockFields.style.display = isStock ? 'block' : 'none';
+    }
+    if (currentPriceField) {
+        currentPriceField.style.display = isStock ? 'block' : 'none';
     }
 }
 
@@ -132,6 +147,24 @@ function toggleSaleProgressFields() {
     
     if (forSaleCheckbox && progressSection) {
         progressSection.style.display = forSaleCheckbox.checked ? 'block' : 'none';
+    }
+}
+
+// --- Fonction pour mettre à jour manuellement le prix actuel ---
+function updateCurrentPriceManually() {
+    const currentPriceInput = document.getElementById('item-current-price');
+    const askingPriceInput = document.getElementById('item-asking-price');
+    const stockQuantityInput = document.getElementById('item-stock-quantity');
+    
+    if (!currentPriceInput || !askingPriceInput || !stockQuantityInput) return;
+    
+    const currentPrice = parseFloat(currentPriceInput.value);
+    const quantity = parseInt(stockQuantityInput.value) || 1;
+    
+    if (currentPrice && quantity) {
+        const totalValue = currentPrice * quantity;
+        askingPriceInput.value = totalValue.toFixed(2);
+        showSuccess(`Valeur totale mise à jour: ${formatPrice(totalValue)}`);
     }
 }
 
@@ -418,13 +451,46 @@ function displayItems() {
     }
 }
 
-// Mise à jour automatique des prix des actions
+// --- Gestion améliorée de la mise à jour des prix des actions ---
+function startStockPriceUpdates() {
+    // Mise à jour initiale après 2 secondes
+    setTimeout(updateStockPrices, 2000);
+    
+    // Puis toutes les 5 minutes (300000ms) au lieu de 30 secondes
+    if (stockPriceUpdateTimer) {
+        clearInterval(stockPriceUpdateTimer);
+    }
+    stockPriceUpdateTimer = setInterval(updateStockPrices, 300000);
+}
+
 async function updateStockPrices() {
     const stockItems = allItems.filter(item => item.category === 'Actions' && item.stock_symbol);
     
+    if (stockItems.length === 0) return;
+    
+    console.log(`Mise à jour des prix pour ${stockItems.length} actions...`);
+    
     for (const item of stockItems) {
+        // Vérifier si on a déjà eu trop d'erreurs pour ce symbole
+        const errorCount = stockPriceUpdateErrors[item.stock_symbol] || 0;
+        if (errorCount >= 3) {
+            console.log(`Ignorer ${item.stock_symbol} - trop d'erreurs (${errorCount})`);
+            continue;
+        }
+        
         try {
             const response = await fetch(`/api/stock-price/${item.stock_symbol}`);
+            
+            if (response.status === 429) {
+                // Rate limit atteint
+                console.warn(`Rate limit atteint pour ${item.stock_symbol}`);
+                stockPriceUpdateErrors[item.stock_symbol] = (errorCount || 0) + 1;
+                
+                // Attendre plus longtemps avant la prochaine requête
+                await new Promise(resolve => setTimeout(resolve, 5000));
+                continue;
+            }
+            
             if (response.ok) {
                 const data = await response.json();
                 
@@ -436,15 +502,25 @@ async function updateStockPrices() {
                 item.asking_price = totalValue;
                 item.last_price_update = data.last_update;
                 
+                // Réinitialiser le compteur d'erreur pour ce symbole
+                delete stockPriceUpdateErrors[item.stock_symbol];
+                
                 // Mettre à jour l'affichage si l'objet est visible
                 updateStockCardDisplay(item.id, data);
+            } else {
+                console.error(`Erreur ${response.status} pour ${item.stock_symbol}`);
+                stockPriceUpdateErrors[item.stock_symbol] = (errorCount || 0) + 1;
             }
         } catch (error) {
             console.error(`Erreur mise à jour ${item.stock_symbol}:`, error);
+            stockPriceUpdateErrors[item.stock_symbol] = (errorCount || 0) + 1;
         }
+        
+        // Ajouter un délai entre chaque requête pour éviter le rate limiting
+        await new Promise(resolve => setTimeout(resolve, 2000));
     }
     
-    // Rafraîchir les statistiques
+    // Rafraîchir les statistiques si des prix ont été mis à jour
     updateStatistics();
 }
 
@@ -468,16 +544,11 @@ function updateStockCardDisplay(itemId, stockData) {
             </div>
             <div class="text-xs text-gray-500">Mis à jour: ${new Date(stockData.last_update).toLocaleTimeString()}</div>
         `;
+        
+        // Retirer l'animation de chargement
+        priceElement.classList.remove('animate-pulse');
     }
 }
-
-// Lancer la mise à jour toutes les 30 secondes
-setInterval(updateStockPrices, 30000);
-
-// Mise à jour initiale après chargement
-document.addEventListener('DOMContentLoaded', function() {
-    setTimeout(updateStockPrices, 2000);
-});
 
 function displaySkeletonCards() {
     const container = document.getElementById('items-container');
@@ -551,6 +622,45 @@ function createItemCardHTML(item) {
         saleStatusBadge = `<span class="status-sale-progress px-2 py-1 rounded-full text-xs font-semibold mt-1">${statusLabels[item.sale_status] || item.sale_status}</span>`;
     }
     
+    // Section prix pour les actions avec gestion d'erreur
+    let stockPriceSection = '';
+    if (item.category === 'Actions' && item.stock_symbol) {
+        const hasError = stockPriceUpdateErrors[item.stock_symbol] >= 3;
+        
+        if (hasError && item.current_price) {
+            // Si on a des erreurs mais un prix existant, l'afficher avec un avertissement
+            stockPriceSection = `
+                <div class="stock-price-live mt-3 p-2 bg-black/20 rounded-lg">
+                    <div class="flex items-center gap-2">
+                        <span class="text-lg font-bold">${formatPrice(item.current_price)}</span>
+                        <span class="text-orange-400 text-xs">⚠️ Mise à jour indisponible</span>
+                    </div>
+                    <div class="text-xs text-gray-500">Dernier prix connu</div>
+                </div>
+            `;
+        } else if (hasError) {
+            // Si on a des erreurs et pas de prix
+            stockPriceSection = `
+                <div class="stock-price-live mt-3 p-2 bg-red-900/20 rounded-lg">
+                    <div class="flex items-center gap-2">
+                        <span class="text-sm text-red-400">❌ Prix indisponible</span>
+                    </div>
+                    <div class="text-xs text-gray-500">Mise à jour manuelle requise</div>
+                </div>
+            `;
+        } else {
+            // Cas normal - en attente ou avec prix
+            stockPriceSection = `
+                <div class="stock-price-live mt-3 p-2 bg-black/20 rounded-lg">
+                    <div class="flex items-center gap-2">
+                        <span class="text-lg font-bold animate-pulse">⏳</span>
+                        <span class="text-sm">Chargement du cours...</span>
+                    </div>
+                </div>
+            `;
+        }
+    }
+    
     return `
         <div class="glass floating-card glowing-element ${cardClass} p-6 flex flex-col justify-between" data-item-id="${item.id}" onclick="editItem(${item.id})">
             <div>
@@ -573,16 +683,10 @@ function createItemCardHTML(item) {
                     ${item.status === 'Sold' && item.sold_price ? `<div>Vendu: ${formatPrice(item.sold_price)}</div>` : ''}
                     ${item.sale_progress ? `<div class="text-xs text-cyan-300">${item.sale_progress.substring(0, 50)}${item.sale_progress.length > 50 ? '...' : ''}</div>` : ''}
                     ${item.intermediary ? `<div class="text-xs text-purple-300">Agent: ${item.intermediary}</div>` : ''}
+                    ${item.stock_symbol ? `<div class="text-xs text-blue-300">Symbole: ${item.stock_symbol} (${item.stock_quantity || '?'} actions)</div>` : ''}
                 </div>
                 
-                ${item.category === 'Actions' && item.stock_symbol ? `
-                    <div class="stock-price-live mt-3 p-2 bg-black/20 rounded-lg">
-                        <div class="flex items-center gap-2">
-                            <span class="text-lg font-bold animate-pulse">⏳</span>
-                            <span class="text-sm">Chargement du cours...</span>
-                        </div>
-                    </div>
-                ` : ''}
+                ${stockPriceSection}
             </div>
             <div class="flex gap-2 mt-4">
                 <button onclick="event.stopPropagation(); getMarketPrice(this, ${item.id})" class="glowing-element glass px-3 py-2 rounded-lg text-xs hover:scale-105 transition-transform flex-1">IA Prix</button>
@@ -724,6 +828,9 @@ function editItem(id) {
         
         const stockExchange = document.getElementById('item-stock-exchange');
         if (stockExchange) stockExchange.value = item.stock_exchange || '';
+        
+        const currentPrice = document.getElementById('item-current-price');
+        if (currentPrice) currentPrice.value = item.current_price || '';
     }
 
     // Remplir les champs de suivi des ventes
@@ -806,6 +913,7 @@ async function handleFormSubmit(e) {
         stock_quantity: parseInt(document.getElementById('item-stock-quantity')?.value) || null,
         stock_purchase_price: parseFloat(document.getElementById('item-stock-purchase-price')?.value) || null,
         stock_exchange: document.getElementById('item-stock-exchange')?.value || null,
+        current_price: parseFloat(document.getElementById('item-current-price')?.value) || null,
 
         // Champs de suivi des ventes
         sale_status: document.getElementById('item-sale-status')?.value || 'initial',
@@ -1399,5 +1507,12 @@ document.addEventListener('keydown', function(e) {
         if (estimationModal && !estimationModal.classList.contains('hidden')) {
             closeEstimationModal();
         }
+    }
+});
+
+// Nettoyer les timers au déchargement
+window.addEventListener('beforeunload', function() {
+    if (stockPriceUpdateTimer) {
+        clearInterval(stockPriceUpdateTimer);
     }
 });
