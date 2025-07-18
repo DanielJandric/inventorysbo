@@ -119,6 +119,7 @@ function toggleSaleProgressFields() {
 }
 
 // --- Chargement des données ---
+// --- Chargement des données ---
 async function loadItems() {
     displaySkeletonCards();
     try {
@@ -126,6 +127,12 @@ async function loadItems() {
         if (response.ok) {
             allItems = await response.json();
             console.log(`${allItems.length} objets chargés`);
+            
+            // S'assurer que currentMainFilter est initialisé
+            if (!currentMainFilter) {
+                currentMainFilter = 'all';
+            }
+            
             updateStatistics();
             updateStatusCounts();
             updateCategoryFilters();
@@ -143,6 +150,11 @@ async function loadItems() {
 // --- Fonction pour obtenir les items filtrés actuels ---
 function getFilteredItems() {
     let filteredItems = allItems;
+    
+    // S'assurer que currentMainFilter a une valeur par défaut
+    if (!currentMainFilter) {
+        currentMainFilter = 'all';
+    }
     
     // Appliquer le filtre de catégories si des catégories sont sélectionnées
     if (selectedCategories.size > 0) {
