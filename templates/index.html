@@ -215,77 +215,76 @@
         .floating-card.is-visible:hover { transform: perspective(1000px) translateY(-10px) rotateX(2deg); box-shadow: 0 45px 70px -15px rgba(0,0,0,0.6); }
         
         /* STATS */
-        /* STATS */
-.stat-card { 
-    padding: 1.5rem; 
-    display: flex; 
-    align-items: center; 
-    gap: 1rem;
-    position: relative;
-    transform: translateY(0);
-    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-    animation: statFloat 4s ease-in-out infinite;
-    cursor: pointer;
-}
-.stat-card:nth-child(1) { animation-delay: 0s; }
-.stat-card:nth-child(2) { animation-delay: 0.5s; }
-.stat-card:nth-child(3) { animation-delay: 1s; }
-.stat-card:nth-child(4) { animation-delay: 1.5s; }
-.stat-card:nth-child(5) { animation-delay: 2s; }
-.stat-card:nth-child(6) { animation-delay: 2.5s; }
+        .stat-card { 
+            padding: 1.5rem; 
+            display: flex; 
+            align-items: center; 
+            gap: 1rem;
+            position: relative;
+            transform: translateY(0);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            animation: statFloat 4s ease-in-out infinite;
+            cursor: pointer;
+        }
+        .stat-card:nth-child(1) { animation-delay: 0s; }
+        .stat-card:nth-child(2) { animation-delay: 0.5s; }
+        .stat-card:nth-child(3) { animation-delay: 1s; }
+        .stat-card:nth-child(4) { animation-delay: 1.5s; }
+        .stat-card:nth-child(5) { animation-delay: 2s; }
+        .stat-card:nth-child(6) { animation-delay: 2.5s; }
 
-@keyframes statFloat {
-    0%, 100% { 
-        transform: translateY(0) rotateX(0deg) rotateY(0deg);
-        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-    }
-    50% { 
-        transform: translateY(-5px) rotateX(1deg) rotateY(1deg);
-        box-shadow: 0 35px 60px -15px rgba(0, 0, 0, 0.6);
-    }
-}
+        @keyframes statFloat {
+            0%, 100% { 
+                transform: translateY(0) rotateX(0deg) rotateY(0deg);
+                box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            }
+            50% { 
+                transform: translateY(-5px) rotateX(1deg) rotateY(1deg);
+                box-shadow: 0 35px 60px -15px rgba(0, 0, 0, 0.6);
+            }
+        }
 
-.stat-card:hover {
-    transform: translateY(-10px) scale(1.03) rotateX(2deg) rotateY(2deg);
-    box-shadow: 0 45px 70px -15px rgba(0, 0, 0, 0.7);
-    z-index: 10;
-}
+        .stat-card:hover {
+            transform: translateY(-10px) scale(1.03) rotateX(2deg) rotateY(2deg);
+            box-shadow: 0 45px 70px -15px rgba(0, 0, 0, 0.7);
+            z-index: 10;
+        }
 
-.stat-card:hover .stat-icon {
-    transform: scale(1.1) rotate(5deg);
-    background: rgba(0, 220, 255, 0.2);
-}
+        .stat-card:hover .stat-icon {
+            transform: scale(1.1) rotate(5deg);
+            background: rgba(0, 220, 255, 0.2);
+        }
 
-.stat-card:hover .stat-value {
-    transform: scale(1.05);
-}
+        .stat-card:hover .stat-value {
+            transform: scale(1.05);
+        }
 
-.stat-card:active {
-    transform: translateY(-8px) scale(1.02);
-    transition: all 0.1s ease;
-}
+        .stat-card:active {
+            transform: translateY(-8px) scale(1.02);
+            transition: all 0.1s ease;
+        }
 
-.stat-icon { 
-    background: rgba(0, 220, 255, 0.1); 
-    border-radius: 9999px; 
-    padding: 0.75rem; 
-    flex-shrink: 0; 
-    color: #00e5ff;
-    transition: all 0.3s ease;
-}
-.stat-title { 
-    font-size: 0.9rem; 
-    font-weight: 500; 
-    color: var(--text-secondary);
-    transition: all 0.3s ease;
-}
-.stat-value { 
-    font-size: 1.8rem; 
-    font-weight: 800; 
-    line-height: 1.2; 
-    color: var(--text-primary);
-    transition: all 0.3s ease;
-}
+        .stat-icon { 
+            background: rgba(0, 220, 255, 0.1); 
+            border-radius: 9999px; 
+            padding: 0.75rem; 
+            flex-shrink: 0; 
+            color: #00e5ff;
+            transition: all 0.3s ease;
+        }
+        .stat-title { 
+            font-size: 0.9rem; 
+            font-weight: 500; 
+            color: var(--text-secondary);
+            transition: all 0.3s ease;
+        }
+        .stat-value { 
+            font-size: 1.8rem; 
+            font-weight: 800; 
+            line-height: 1.2; 
+            color: var(--text-primary);
+            transition: all 0.3s ease;
+        }
         
         /* MODALS */
         .modal-backdrop{background:rgba(0,0,0,0.7);backdrop-filter:blur(5px)}
@@ -428,16 +427,16 @@
         
         /* RESPONSIVE */
         @media (max-width: 768px) {
-.stat-card { 
-    padding: 1rem; 
-    gap: 0.75rem; 
-    min-height: 80px;
-    justify-content: flex-start;
-    animation: statFloat 4s ease-in-out infinite;
-}
-.stat-card:hover {
-    transform: translateY(-5px) scale(1.02);
-}
+            .stat-card { 
+                padding: 1rem; 
+                gap: 0.75rem; 
+                min-height: 80px;
+                justify-content: flex-start;
+                animation: statFloat 4s ease-in-out infinite;
+            }
+            .stat-card:hover {
+                transform: translateY(-5px) scale(1.02);
+            }
             .stat-icon { 
                 padding: 0.5rem; 
                 width: 2.5rem; 
@@ -558,15 +557,15 @@
         }
         
         @media (max-width: 480px) {
-         .stat-card { 
-    padding: 0.75rem; 
-    gap: 0.5rem; 
-    min-height: 70px;
-    animation: statFloat 4s ease-in-out infinite;
-}
-.stat-card:hover {
-    transform: translateY(-3px) scale(1.01);
-}
+            .stat-card { 
+                padding: 0.75rem; 
+                gap: 0.5rem; 
+                min-height: 70px;
+                animation: statFloat 4s ease-in-out infinite;
+            }
+            .stat-card:hover {
+                transform: translateY(-3px) scale(1.01);
+            }
             .stat-icon { 
                 padding: 0.375rem; 
                 width: 2rem; 
@@ -875,6 +874,48 @@
                     <input type="number" id="item-rental-income" class="w-full glass rounded-xl px-4 py-3 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400" step="0.01">
                 </div>
                 
+                <!-- Champs pour les actions -->
+                <div id="stock-fields" style="display: none;" class="space-y-4 p-4 glass-subtle rounded-xl">
+                    <h3 class="text-lg font-semibold text-cyan-300">Informations Boursières</h3>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-semibold mb-2">Symbole boursier *</label>
+                            <input type="text" id="item-stock-symbol" class="w-full glass rounded-xl px-4 py-3 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400" 
+                                   placeholder="Ex: AAPL, MSFT, NESN.SW">
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-semibold mb-2">Nombre d'actions</label>
+                            <input type="number" id="item-stock-quantity" class="w-full glass rounded-xl px-4 py-3 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400" 
+                                   step="1" min="1">
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-semibold mb-2">Prix d'achat par action (CHF)</label>
+                            <input type="number" id="item-stock-purchase-price" class="w-full glass rounded-xl px-4 py-3 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400" 
+                                   step="0.01">
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-semibold mb-2">Bourse</label>
+                            <select id="item-stock-exchange" class="w-full glass rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cyan-400">
+                                <option value="">Sélectionner...</option>
+                                <option value="US">US (NYSE/NASDAQ)</option>
+                                <option value="SIX">Suisse (SIX)</option>
+                                <option value="XETRA">Allemagne (XETRA)</option>
+                                <option value="EPA">France (Euronext Paris)</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="p-3 bg-blue-500/10 border border-blue-400/30 rounded-lg">
+                        <p class="text-sm text-blue-300">💡 Le prix actuel sera automatiquement mis à jour via l'API boursière</p>
+                    </div>
+                </div>
+                
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                         <label class="block text-sm font-semibold mb-2">Prix d'acquisition (CHF)</label>
@@ -903,90 +944,6 @@
         </div>
     </div>
 
-   <!-- Champs pour les actions -->
-<div id="stock-fields" style="display: none;" class="space-y-4 p-4 glass-subtle rounded-xl">
-    <h3 class="text-lg font-semibold text-cyan-300">Informations Boursières</h3>
-    
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-            <label class="block text-sm font-semibold mb-2">Symbole boursier *</label>
-            <input type="text" id="item-stock-symbol" class="w-full glass rounded-xl px-4 py-3 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400" 
-                   placeholder="Ex: AAPL, MSFT, NESN.SW">
-        </div>
-        
-        <div>
-            <label class="block text-sm font-semibold mb-2">Nombre d'actions</label>
-            <input type="number" id="item-stock-quantity" class="w-full glass rounded-xl px-4 py-3 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400" 
-                   step="1" min="1">
-        </div>
-    </div>
-    
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-            <label class="block text-sm font-semibold mb-2">Prix d'achat par action (CHF)</label>
-            <input type="number" id="item-stock-purchase-price" class="w-full glass rounded-xl px-4 py-3 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400" 
-                   step="0.01">
-        </div>
-        
-        <div>
-            <label class="block text-sm font-semibold mb-2">Bourse</label>
-            <select id="item-stock-exchange" class="w-full glass rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cyan-400">
-                <option value="">Sélectionner...</option>
-                <option value="US">US (NYSE/NASDAQ)</option>
-                <option value="SIX">Suisse (SIX)</option>
-                <option value="XETRA">Allemagne (XETRA)</option>
-                <option value="EPA">France (Euronext Paris)</option>
-            </select>
-        </div>
-    </div>
-    
-    <div class="p-3 bg-blue-500/10 border border-blue-400/30 rounded-lg">
-        <p class="text-sm text-blue-300">💡 Le prix actuel sera automatiquement mis à jour via l'API boursière</p>
-    </div>
-</div> 
-
-    <!-- Champs pour les actions -->
-<div id="stock-fields" style="display: none;" class="space-y-4 p-4 glass-subtle rounded-xl">
-    <h3 class="text-lg font-semibold text-cyan-300">Informations Boursières</h3>
-    
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-            <label class="block text-sm font-semibold mb-2">Symbole boursier *</label>
-            <input type="text" id="item-stock-symbol" class="w-full glass rounded-xl px-4 py-3 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400" 
-                   placeholder="Ex: AAPL, MSFT, NESN.SW">
-        </div>
-        
-        <div>
-            <label class="block text-sm font-semibold mb-2">Nombre d'actions</label>
-            <input type="number" id="item-stock-quantity" class="w-full glass rounded-xl px-4 py-3 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400" 
-                   step="1" min="1">
-        </div>
-    </div>
-    
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-            <label class="block text-sm font-semibold mb-2">Prix d'achat par action (CHF)</label>
-            <input type="number" id="item-stock-purchase-price" class="w-full glass rounded-xl px-4 py-3 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400" 
-                   step="0.01">
-        </div>
-        
-        <div>
-            <label class="block text-sm font-semibold mb-2">Bourse</label>
-            <select id="item-stock-exchange" class="w-full glass rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cyan-400">
-                <option value="">Sélectionner...</option>
-                <option value="US">US (NYSE/NASDAQ)</option>
-                <option value="SIX">Suisse (SIX)</option>
-                <option value="XETRA">Allemagne (XETRA)</option>
-                <option value="EPA">France (Euronext Paris)</option>
-            </select>
-        </div>
-    </div>
-    
-    <div class="p-3 bg-blue-500/10 border border-blue-400/30 rounded-lg">
-        <p class="text-sm text-blue-300">💡 Le prix actuel sera automatiquement mis à jour via l'API boursière</p>
-    </div>
-</div>
-
     <!-- Modal for Price Estimation -->
     <div id="estimation-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 backdrop-blur-sm flex items-center justify-center z-50">
         <div class="modal-content rounded-3xl p-8 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
@@ -999,8 +956,6 @@
             </div>
         </div>
     </div>
-
-    
 
     <button onclick="openCreateModal()" class="fixed bottom-6 left-6 w-14 h-14 glass glowing-element rounded-full flex items-center justify-center hover:scale-110 transition-transform z-50">
         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
