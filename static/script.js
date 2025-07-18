@@ -259,12 +259,11 @@ function filterByMainStatus(status) {
     }
     
     // Mettre à jour les statistiques ET les compteurs
-    updateStatistics();  // <-- AJOUTER CETTE LIGNE
-    updateStatusCounts(); // <-- AJOUTER CETTE LIGNE
-    displayItems();      // <-- AJOUTER CETTE LIGNE
+    updateStatistics();
+    updateStatusCounts();
+    displayItems();
 }
-    
-    // Mettre à jour les compteurs avec le filtre de catégories
+
 function updateStatusCounts() {
     const filteredItems = getFilteredItems();
     
