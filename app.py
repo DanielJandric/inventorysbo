@@ -1733,10 +1733,10 @@ def create_item():
         if not data:
             return jsonify({"error": "Données manquantes"}), 400
         
-        # Générer un ID unique
-        import uuid
-        new_id = str(uuid.uuid4())
-        data['id'] = new_id
+        # NE PAS générer d'ID - laisser Supabase s'en charger
+        # Supprimer l'ID s'il existe dans les données
+        if 'id' in data:
+            del data['id']
         
         # Enrichissement
         data['created_at'] = datetime.now().isoformat()
@@ -1744,7 +1744,6 @@ def create_item():
         
         # Générer l'embedding si OpenAI disponible
         if ai_engine and ai_engine.semantic_search:
-            # Ajouter l'ID au dictionnaire avant de créer l'objet
             temp_item = CollectionItem.from_dict(data)
             embedding = ai_engine.semantic_search.generate_embedding_for_item(temp_item)
             if embedding:
@@ -1761,7 +1760,11 @@ def create_item():
             
             return jsonify(response.data[0]), 201
         else:
-            return jsonify({"error": "Création échouée"}), 500
+            return jsonify({"error": "Erreur lors de la création"}), 500
+            
+    except Exception as e:
+        logger.error(f"Erreur création item: {e}")
+        return jsonify({"error": str(e)}), 500
             
     except Exception as e:
         logger.error(f"Erreur create_item: {e}")
