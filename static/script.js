@@ -743,26 +743,66 @@ async function getMarketPrice(button, id) {
 function showEstimationModal(data, itemId) {
     const item = allItems.find(i => i.id === itemId);
     if (!item) return;
-
-    const { estimated_price, reasoning, comparable_items, confidence_score } = data;
+    
+    // Debug pour voir ce qu'on reçoit
+    console.log('Estimation data:', data);
+    
+    const { estimated_price, reasoning, comparable_items, confidence_score, market_analysis } = data;
     
     let comparablesHTML = '';
+    
+    // Vérifier si on a des objets comparables valides
     if (comparable_items && comparable_items.length > 0) {
-        comparablesHTML = `
-            <div class="glass-subtle p-6 rounded-2xl">
-                <h3 class="text-lg font-semibold mb-4">Objets comparables</h3>
-                <div class="space-y-3">
-                    ${comparable_items.map(comp => `
-                        <div class="flex justify-between items-center p-3 bg-slate-800/50 rounded-xl">
-                            <div>
-                                <div class="font-medium">${comp.name}</div>
-                                <div class="text-sm text-slate-500">${comp.source || 'Marché'}</div>
+        // Filtrer les objets invalides (undefined, null, etc.)
+        const validComparables = comparable_items.filter(comp => comp && comp.name);
+        
+        if (validComparables.length > 0) {
+            comparablesHTML = `
+                <div class="glass-subtle p-6 rounded-2xl">
+                    <h3 class="text-lg font-semibold mb-4">Objets comparables</h3>
+                    <div class="space-y-3">
+                        ${validComparables.map(comp => {
+                            // Gérer tous les formats possibles de prix
+                            const price = comp.reference_price || comp.price || comp.prix || 0;
+                            const name = comp.name || 'Objet comparable';
+                            const source = comp.source || comp.comparison_reason || 'Marché';
+                            const year = comp.year || comp.année || '';
+                            
+                            return `
+                                <div class="flex justify-between items-center p-3 bg-slate-800/50 rounded-xl">
+                                    <div>
+                                        <div class="font-medium">${name}${year ? ` (${year})` : ''}</div>
+                                        <div class="text-sm text-slate-500">${source}</div>
+                                    </div>
+                                    <div class="font-bold text-cyan-400">${formatPrice(price)}</div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>`;
+        }
+    }
+    
+    // Si pas d'objets comparables mais qu'on a market_analysis
+    if (!comparablesHTML && market_analysis && market_analysis.top_3_similar_actual) {
+        const marketItems = market_analysis.top_3_similar_actual;
+        if (marketItems.length > 0) {
+            comparablesHTML = `
+                <div class="glass-subtle p-6 rounded-2xl">
+                    <h3 class="text-lg font-semibold mb-4">Objets similaires dans votre collection</h3>
+                    <div class="space-y-3">
+                        ${marketItems.map(item => `
+                            <div class="flex justify-between items-center p-3 bg-slate-800/50 rounded-xl">
+                                <div>
+                                    <div class="font-medium">${item.name}${item.year ? ` (${item.year})` : ''}</div>
+                                    <div class="text-sm text-slate-500">${item.status === 'sold' ? 'Vendu' : 'En collection'}</div>
+                                </div>
+                                <div class="font-bold text-cyan-400">${formatPrice(item.price)}</div>
                             </div>
-                            <div class="font-bold text-cyan-400">${formatPrice(comp.reference_price)}</div>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>`;
+                        `).join('')}
+                    </div>
+                </div>`;
+        }
     }
     
     const confidenceColor = confidence_score > 0.7 ? 'text-green-400' : confidence_score > 0.4 ? 'text-yellow-400' : 'text-orange-400';
