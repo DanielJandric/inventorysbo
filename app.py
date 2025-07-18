@@ -17,6 +17,7 @@ from flask_cors import CORS
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 from enhanced_chatbot import BonvinAgent
+from tools import ToolBox
 
 # Configuration logging sophistiquée
 logging.basicConfig(
