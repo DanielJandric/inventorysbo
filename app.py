@@ -2094,9 +2094,14 @@ def get_stock_price_finnhub(symbol: str, item: Optional[CollectionItem], cache_k
                 'CH': '.SW',  # Switzerland
             }
             
-            # Use mapping if available, otherwise try the original exchange code
+            # Use mapping if available, but don't add suffix if symbol already contains it
             if exchange in exchange_mapping:
-                finnhub_symbol = f"{symbol}{exchange_mapping[exchange]}"
+                suffix = exchange_mapping[exchange]
+                # Don't add suffix if symbol already ends with it
+                if not symbol.endswith(suffix):
+                    finnhub_symbol = f"{symbol}{suffix}"
+                else:
+                    finnhub_symbol = symbol  # Keep original symbol
             elif not symbol.endswith(exchange):
                 finnhub_symbol = f"{symbol}.{exchange}"
         
