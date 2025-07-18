@@ -246,6 +246,12 @@ function filterByMainStatus(status) {
         activeButton.classList.add('active');
     }
     
+    // Mettre à jour les statistiques ET les compteurs
+    updateStatistics();  // <-- AJOUTER CETTE LIGNE
+    updateStatusCounts(); // <-- AJOUTER CETTE LIGNE
+    displayItems();      // <-- AJOUTER CETTE LIGNE
+}
+    
     // Mettre à jour les compteurs avec le filtre de catégories
     updateStatusCounts();
     displayItems();
