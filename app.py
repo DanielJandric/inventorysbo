@@ -1226,14 +1226,16 @@ class PureOpenAIEngineWithRAG:
         if not self.client:
             return "❌ Moteur IA Indisponible"
         
-        # Détecter l'intention
-        intent = self.detect_query_intent(query)
-        
-        # Si recherche sémantique, utiliser RAG
-        if intent == QueryIntent.SEMANTIC_SEARCH and self.semantic_search:
+        # Toujours utiliser la recherche sémantique si on a des embeddings
+        items_with_embeddings = sum(1 for item in items if item.embedding)
+        if items_with_embeddings > 0:
+            logger.info(f"Utilisation de la recherche sémantique pour: '{query}'")
             return self._generate_semantic_response(query, items, analytics)
         
-        # Sinon, utiliser la méthode classique avec cache
+        # Sinon fallback sur l'ancienne méthode
+        logger.info(f"Pas d'embeddings, utilisation de la méthode classique")
+        
+        # Cache et méthode classique...
         cache_key = hashlib.md5(f"{query}{len(items)}{json.dumps(analytics.get('basic_metrics', {}), sort_keys=True)}".encode()).hexdigest()[:12]
         cached_response = smart_cache.get('ai_responses', cache_key)
         if cached_response:
@@ -1306,12 +1308,12 @@ Sois créatif dans ton analyse tout en restant factuel."""
                 logger.warning("Pas de résultats sémantiques, bascule sur recherche par mots-clés")
                 return self._fallback_to_keyword_search(query, items)
             
-            # Filtrer les résultats pertinents (score > 0.7)
-            relevant_results = [(item, score) for item, score in semantic_results if score > 0.7]
+            # Filtrer les résultats pertinents (score > 0.5 au lieu de 0.7)
+            relevant_results = [(item, score) for item, score in semantic_results if score > 0.5]
             
             if not relevant_results:
-                # Si pas de résultats très pertinents, prendre les 5 meilleurs
-                relevant_results = semantic_results[:5]
+                # Si pas de résultats très pertinents, prendre les 10 meilleurs
+                relevant_results = semantic_results[:10]
             
             logger.info(f"Résultats sémantiques trouvés: {len(relevant_results)} items pertinents")
             
@@ -1323,13 +1325,18 @@ Sois créatif dans ton analyse tout en restant factuel."""
 Tu utilises les résultats de recherche sémantique pour fournir des réponses précises et contextualisées.
 
 RÈGLES IMPORTANTES:
-1. Base-toi UNIQUEMENT sur les objets trouvés par la recherche sémantique
-2. Indique le score de pertinence quand c'est utile
-3. Structure ta réponse de manière claire
-4. Sois précis et factuel
-5. Si peu de résultats, mentionne-le
-6. Utilise des émojis pour rendre la réponse plus visuelle
-7. Pour les questions sur les marques de voitures, utilise ton intelligence pour identifier les marques (ex: Porsche, BMW, Mercedes sont allemandes)"""
+1. Base-toi sur les objets trouvés par la recherche sémantique
+2. Si les scores sont faibles (<0.6), mentionne que la recherche est approximative
+3. Structure ta réponse de manière claire avec des catégories
+4. Sois intelligent dans l'interprétation - par exemple:
+   - "montres" = chercher dans la catégorie Montres
+   - "en vente" = objets avec for_sale = true
+   - "chers" = objets avec prix élevé
+   - Noms de marques = chercher ces marques spécifiquement
+5. Utilise ton bon sens pour comprendre l'intention de l'utilisateur
+6. Si peu de résultats pertinents, élargis ta recherche
+7. Toujours donner le nombre exact trouvé
+8. Pour les questions de prix/valeur, additionne et calcule les totaux"""
 
             user_prompt = f"""RECHERCHE DEMANDÉE: {query}
 
