@@ -1,165 +1,118 @@
-# enhanced_chatbot.py - Version 5.0 (Finale) : Raisonnement Stratégique
+# enhanced_chatbot.py - Version 6.0 : Agent avec Outils
 
 import logging
 import json
 from typing import Dict, List, Any
+from tools import ToolBox # <-- Importer la boîte à outils
 
 logger = logging.getLogger(__name__)
 
 class EnhancedChatbot:
     """
-    Chatbot V5 : combine une connaissance du domaine pour un filtrage de données précis
-    avec un raisonnement IA sur un contexte ciblé. L'objectif est la pertinence et la fiabilité.
+    Agent IA qui raisonne sur les outils à utiliser pour répondre à une question.
     """
 
     def __init__(self, data_manager, ai_engine):
         self.data_manager = data_manager
         self.ai_engine = ai_engine
-        # Connaissance spécifique au domaine pour un filtrage intelligent
-        self.domain_knowledge = {
-            'voitures': {
-                'marques': {
-                    'italiennes': ['ferrari', 'lamborghini', 'maserati', 'alfa romeo', 'pagani'],
-                    'allemandes': ['porsche', 'bmw', 'mercedes', 'audi', 'vw', 'volkswagen'],
-                    'anglaises': ['rolls', 'bentley', 'aston martin', 'mclaren', 'jaguar'],
-                    'françaises': ['bugatti', 'peugeot', 'citroën', 'renault']
-                }
-            }
-            # ... on peut ajouter ici d'autres connaissances (ex: types de montres)
-        }
+        self.toolbox = ToolBox(data_manager) # <-- L'agent possède sa propre boîte à outils
 
     def process_message(self, message: str, history: List[Dict] = None) -> str:
         """
-        Orchestre le flux de traitement en 3 étapes :
-        1. Analyse de la requête pour comprendre l'intention et les entités.
-        2. Récupération stratégique des données : ne chercher QUE ce qui est nécessaire.
-        3. Génération de la réponse par l'IA sur ce contexte précis.
+        Orchestre le raisonnement de l'agent en plusieurs étapes.
         """
         history = history or []
         try:
-            # Étape 1: Analyse de la requête
-            parsed_query = self._parse_query(message)
-
-            # Étape 2: Récupération des données
-            context_data = self._retrieve_strategic_context(parsed_query)
+            # Étape 1: Demander à l'IA de choisir un outil
+            tool_choice_instruction = self._choose_tool(message, history)
             
-            # Gérer le cas où aucune donnée pertinente n'est trouvée
-            if not context_data.get("items"):
-                return "Je n'ai trouvé aucun objet correspondant aux critères de votre demande. Essayez de reformuler."
+            # Si l'IA ne choisit pas d'outil et répond directement
+            if "tool_to_use" not in tool_choice_instruction:
+                return tool_choice_instruction.get("final_answer", "Je ne suis pas sûr de savoir comment répondre à cela.")
 
-            # Étape 3: Génération de la réponse
-            return self._generate_ai_response(parsed_query, context_data, history)
+            # Étape 2: Exécuter l'outil choisi
+            tool_name = tool_choice_instruction["tool_to_use"]
+            tool_parameters = tool_choice_instruction["parameters"]
+            tool_result = self._execute_tool(tool_name, tool_parameters)
+
+            # Étape 3: Fournir le résultat de l'outil à l'IA pour la réponse finale
+            return self._generate_final_response(message, tool_result)
 
         except Exception as e:
-            logger.error(f"Erreur critique dans le traitement du chatbot pour le message: '{message}'", exc_info=True)
-            return "Désolé, une erreur technique m'empêche de traiter votre demande. L'équipe a été notifiée."
+            logger.error(f"Erreur critique dans le traitement de l'agent: {e}", exc_info=True)
+            return "Désolé, une erreur interne m'empêche de traiter votre demande."
 
-    def _parse_query(self, message: str) -> Dict:
-        """Décompose la question de l'utilisateur en une intention et des filtres précis."""
-        message_lower = message.lower()
-        query_info = {'original_message': message, 'intent': 'list', 'filters': {}} # 'list' par défaut
-
-        # Détection d'intention
-        if any(word in message_lower for word in ['combien', 'nombre de']):
-            query_info['intent'] = 'count'
-        
-        # Détection d'entités (les filtres)
-        if 'voiture' in message_lower:
-            query_info['filters']['category'] = 'Voitures'
-            # Utilisation de la connaissance du domaine
-            for origin, brands in self.domain_knowledge['voitures']['marques'].items():
-                if origin in message_lower or any(brand in message_lower for brand in brands):
-                    query_info['filters']['brand_origin'] = origin
-                    query_info['filters']['brands'] = brands
-                    break
-        
-        if 'en vente' in message_lower:
-            query_info['filters']['for_sale'] = True
-        if 'négociation' in message_lower:
-            query_info['filters']['sale_status'] = 'negotiation'
-        if 'vendu' in message_lower:
-            query_info['filters']['status'] = 'Sold'
-
-        return query_info
-
-    def _retrieve_strategic_context(self, parsed_query: Dict) -> Dict:
-        """Filtre la base de données pour ne récupérer que les objets strictement nécessaires."""
-        all_items = self.data_manager.fetch_all_items()
-        
-        # On commence avec tous les objets et on applique les filtres successivement
-        filtered_items = all_items
-        
-        # Filtre par catégorie
-        if 'category' in parsed_query['filters']:
-            filtered_items = [item for item in filtered_items if item.category == parsed_query['filters']['category']]
-        
-        # Filtre par marques de voiture
-        if 'brands' in parsed_query['filters']:
-            brands_to_check = parsed_query['filters']['brands']
-            filtered_items = [item for item in filtered_items if any(brand in item.name.lower() for brand in brands_to_check)]
-            
-        # Filtre par statut "en vente"
-        if parsed_query['filters'].get('for_sale') is True:
-            filtered_items = [item for item in filtered_items if item.for_sale is True]
-            
-        # Filtre par statut de vente (ex: négociation)
-        if 'sale_status' in parsed_query['filters']:
-            status_to_check = parsed_query['filters']['sale_status']
-            filtered_items = [item for item in filtered_items if item.sale_status == status_to_check]
-
-        # Filtre par statut général (ex: vendu)
-        if 'status' in parsed_query['filters']:
-            status_to_check = parsed_query['filters']['status']
-            filtered_items = [item for item in filtered_items if item.status == status_to_check]
-
-        # Formattage du contexte pour l'IA
-        context = {
-            "query_intent": parsed_query['intent'],
-            "item_count": len(filtered_items),
-            # On envoie une version concise des objets pour limiter la taille du prompt
-            "items": [
-                {"name": item.name, "year": item.construction_year, "price": item.asking_price or item.sold_price}
-                for item in filtered_items
-            ]
-        }
-        return context
-
-    def _generate_ai_response(self, parsed_query: Dict, context: Dict, history: List[Dict]) -> str:
-        """Utilise GPT-4.1 pour générer une réponse naturelle à partir du contexte CIBLÉ."""
-        if not self.ai_engine:
-            return "Moteur IA indisponible."
-
+    def _choose_tool(self, message: str, history: List[Dict]) -> Dict:
+        """Première passe : l'IA analyse la question et choisit un outil à utiliser."""
         system_prompt = """
-        Tu es l'assistant expert de la collection BONVIN. Tu es un analyste brillant qui répond de manière directe, précise et professionnelle.
-        Ta mission est de répondre à la question de l'utilisateur en te basant STRICTEMENT sur les données pré-filtrées que l'on te fournit.
-        - Si l'intention est "count", compte les objets et donne le nombre total.
-        - Si l'intention est "list", liste les noms des objets pertinents.
-        - Formule la réponse de manière naturelle et termine par une phrase utile. N'ajoute pas de fioritures inutiles.
+        Tu es un chef de projet expert. Ton rôle est de choisir le bon outil pour répondre à la demande de l'utilisateur.
+        Ne réponds PAS à la question. Ta seule mission est de fournir un JSON décrivant l'outil et les paramètres à utiliser.
+        Si aucun outil ne semble approprié, tu peux répondre directement à la question avec une clé "final_answer".
         """
 
         user_prompt = f"""
-        **Question de l'utilisateur :** "{parsed_query['original_message']}"
-
-        **Données pertinentes que j'ai extraites pour toi :**
+        Historique de la conversation : {history[-3:] if history else "Aucun"}
+        
+        Question de l'utilisateur : "{message}"
+        
+        Outils disponibles :
         ```json
-        {json.dumps(context, indent=2)}
+        {json.dumps(self.toolbox.get_available_tools(), indent=2)}
         ```
-
-        **Ta mission :**
-        En te basant sur l'intention de la requête et les données ci-dessus, formule la réponse la plus claire et directe possible.
+        
+        En te basant sur la question, quel outil dois-je utiliser ? Fournis ta réponse au format JSON avec les clés "tool_to_use" et "parameters".
         """
 
+        response = self.ai_engine.client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.0
+        )
+        
         try:
-            response = self.ai_engine.client.chat.completions.create(
-                model="gpt-4o", # Assurez-vous que c'est le bon identifiant pour GPT-4.1
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=0.1, # On vise la précision, pas la créativité
-                max_tokens=500
-            )
-            return response.choices[0].message.content.strip()
-        except Exception as e:
-            logger.error(f"Erreur lors de l'appel au modèle IA: {e}", exc_info=True)
-            return "Je rencontre un problème pour contacter le service d'analyse. Veuillez réessayer."
+            return json.loads(response.choices[0].message.content)
+        except json.JSONDecodeError:
+            logger.error("L'IA n'a pas retourné un JSON valide pour le choix de l'outil.")
+            return {"final_answer": "Je n'ai pas compris comment traiter votre demande."}
+
+
+    def _execute_tool(self, tool_name: str, parameters: dict) -> Any:
+        """Exécute l'outil demandé par l'IA."""
+        if hasattr(self.toolbox, tool_name):
+            tool_function = getattr(self.toolbox, tool_name)
+            return tool_function(**parameters)
+        else:
+            return f"Erreur : L'outil '{tool_name}' n'existe pas."
+
+    def _generate_final_response(self, original_message: str, tool_result: Any) -> str:
+        """Deuxième passe : l'IA reçoit le résultat de l'outil et formule la réponse finale."""
+        system_prompt = """
+        Tu es l'assistant expert de la collection BONVIN. Tu es un communicant brillant.
+        Ton rôle est de transformer des données brutes (le résultat d'un outil) en une réponse naturelle, claire et professionnelle.
+        """
+
+        user_prompt = f"""
+        La question originale de l'utilisateur était : "{original_message}"
+        
+        Mon assistant a utilisé un outil et a obtenu le résultat suivant :
+        ```json
+        {json.dumps(tool_result, indent=2, default=str)}
+        ```
+        
+        En te basant sur la question originale et ce résultat, formule la réponse finale pour l'utilisateur.
+        Sois concis et direct. Si tu donnes une liste, ne montre que les 5-10 premiers résultats si elle est longue.
+        """
+
+        response = self.ai_engine.client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.3
+        )
+        return response.choices[0].message.content.strip()
