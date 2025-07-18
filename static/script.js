@@ -453,14 +453,14 @@ function displayItems() {
 
 // --- Gestion améliorée de la mise à jour des prix des actions ---
 function startStockPriceUpdates() {
-    // Mise à jour initiale après 2 secondes
-    setTimeout(updateStockPrices, 2000);
+    // Mise à jour initiale après 1 seconde
+    setTimeout(updateStockPrices, 1000);
     
-    // Puis toutes les 5 minutes (300000ms) au lieu de 30 secondes
+    // Puis toutes les 2 minutes (120000ms) pour plus de réactivité
     if (stockPriceUpdateTimer) {
         clearInterval(stockPriceUpdateTimer);
     }
-    stockPriceUpdateTimer = setInterval(updateStockPrices, 300000);
+    stockPriceUpdateTimer = setInterval(updateStockPrices, 120000);
 }
 
 async function updateStockPrices() {
@@ -471,9 +471,9 @@ async function updateStockPrices() {
     console.log(`Mise à jour des prix pour ${stockItems.length} actions...`);
     
     for (const item of stockItems) {
-        // Vérifier si on a déjà eu trop d'erreurs pour ce symbole
+        // Vérifier si on a déjà eu trop d'erreurs pour ce symbole (augmenté à 5)
         const errorCount = stockPriceUpdateErrors[item.stock_symbol] || 0;
-        if (errorCount >= 3) {
+        if (errorCount >= 5) {
             console.log(`Ignorer ${item.stock_symbol} - trop d'erreurs (${errorCount})`);
             continue;
         }
@@ -482,12 +482,12 @@ async function updateStockPrices() {
             const response = await fetch(`/api/stock-price/${item.stock_symbol}`);
             
             if (response.status === 429) {
-                // Rate limit atteint
-                console.warn(`Rate limit atteint pour ${item.stock_symbol}`);
+                // Rate limit atteint - retry intelligent
+                console.warn(`Rate limit atteint pour ${item.stock_symbol}, retry dans 3 secondes...`);
                 stockPriceUpdateErrors[item.stock_symbol] = (errorCount || 0) + 1;
                 
-                // Attendre plus longtemps avant la prochaine requête
-                await new Promise(resolve => setTimeout(resolve, 5000));
+                // Retry après 3 secondes au lieu de 5
+                await new Promise(resolve => setTimeout(resolve, 3000));
                 continue;
             }
             
@@ -516,12 +516,26 @@ async function updateStockPrices() {
             stockPriceUpdateErrors[item.stock_symbol] = (errorCount || 0) + 1;
         }
         
-        // Ajouter un délai entre chaque requête pour éviter le rate limiting
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Délai réduit entre chaque requête (1 seconde au lieu de 2)
+        await new Promise(resolve => setTimeout(resolve, 1000));
     }
     
     // Rafraîchir les statistiques si des prix ont été mis à jour
     updateStatistics();
+}
+
+// Fonction pour forcer la mise à jour immédiate des prix
+async function forceUpdateStockPrices() {
+    console.log('🔄 Mise à jour forcée des prix...');
+    showNotification('Mise à jour des prix en cours...', false);
+    
+    // Réinitialiser les erreurs pour permettre de nouveaux essais
+    stockPriceUpdateErrors = {};
+    
+    // Lancer la mise à jour immédiatement
+    await updateStockPrices();
+    
+    showNotification('Prix mis à jour !', false);
 }
 
 // Fonction pour mettre à jour l'affichage d'une carte action

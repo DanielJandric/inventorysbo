@@ -17,6 +17,10 @@ from flask import Flask, jsonify, render_template, request
 from flask_cors import CORS
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Configuration logging sophistiquée
 logging.basicConfig(
