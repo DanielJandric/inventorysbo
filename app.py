@@ -2494,4 +2494,4 @@ if __name__ == "__main__":
         app.run(debug=False, host=host, port=port)
     except Exception as e:
         logger.error(f"❌ Erreur démarrage: {e}")
-        raise '
+        raise
