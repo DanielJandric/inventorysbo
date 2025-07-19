@@ -1788,31 +1788,15 @@ Si la question fait référence à des éléments mentionnés précédemment, ut
             # Construire le contexte COMPLET avec TOUS les objets
             complete_context = self._build_complete_dataset_context(items, analytics)
             
-            # Prompt système simplifié - faire confiance à l'intelligence naturelle de GPT-4
-            system_prompt = """Tu es l'assistant IA expert de la collection BONVIN avec mémoire conversationnelle.
-Tu as TOUS les objets de la collection et tu peux faire des analyses sophistiquées et détaillées.
-Tu peux te référer à l'historique de la conversation pour contextualiser tes réponses.
+            # Prompt système simplifié
+            system_prompt = """Tu es l'assistant IA expert de la collection BONVIN. Réponds de manière concise et directe.
 
-TON INTELLIGENCE NATURELLE:
-- Tu peux comprendre naturellement les questions en français
-- Tu peux analyser les données et faire des connexions logiques
-- Tu peux compter, filtrer, comparer et analyser selon le contexte
-- Tu peux identifier les objets pertinents selon l'intention de la question
-- Tu peux utiliser ton bon sens et tes connaissances générales
-
-EXEMPLES DE COMPRÉHENSION NATURELLE:
-- "combien de Urus" → Compter les objets contenant "Urus" dans le nom
-- "voitures pas en vente" → Filtrer les voitures avec for_sale = false
-- "objets chers" → Identifier les objets avec des prix élevés
-- "investissements sûrs" → Analyser la stabilité des investissements
-- "voitures rapides" → Identifier les voitures de sport et de luxe
-
-RÈGLES SIMPLES:
-1. **Précision** : Utilise les données exactes de la collection
-2. **Intelligence** : Utilise ton bon sens pour comprendre l'intention
-3. **Contexte** : Utilise l'historique de conversation quand pertinent
-4. **Structure** : Organise tes réponses clairement
-5. **Comptage** : Donne toujours le nombre exact d'objets trouvés"""
+RÈGLES:
+1. Utilise les données exactes de la collection
+2. Comprends naturellement l'intention de la question
+3. Donne le nombre exact d'objets trouvés
+4. Utilise l'historique de conversation si pertinent
+5. Réponses courtes et précises"""
 
             # Construire les messages avec historique
             messages = [{"role": "system", "content": system_prompt}]
@@ -1825,15 +1809,12 @@ RÈGLES SIMPLES:
                         "content": msg['content']
                     })
             
-            # Prompt utilisateur simplifié - faire confiance à l'intelligence naturelle
+            # Prompt utilisateur simplifié
             user_prompt = f"""QUESTION: {query}
 
-DONNÉES COMPLÈTES DE LA COLLECTION BONVIN:
-{complete_context}
+DONNÉES: {complete_context}
 
-Analysez cette question naturellement en utilisant votre intelligence et votre bon sens.
-Comprenez l'intention de l'utilisateur et répondez de manière précise et structurée.
-Utilisez l'historique de conversation si pertinent."""
+Réponds de manière concise et directe."""
 
             messages.append({"role": "user", "content": user_prompt})
 
@@ -1841,7 +1822,7 @@ Utilisez l'historique de conversation si pertinent."""
                 model="gpt-4o",
                 messages=messages,
                 temperature=0.2,
-                max_tokens=2000,  # Plus de tokens pour les analyses complètes
+                max_tokens=800,  # Réponses plus courtes
                 timeout=45
             )
             
@@ -1852,10 +1833,9 @@ Utilisez l'historique de conversation si pertinent."""
             
             # Ajouter un indicateur de mode complet avec recherche par concepts et mémoire conversationnelle
             memory_indicator = "💬 **Mémoire conversationnelle activée**" if conversation_history else ""
-            if is_concept_search:
-                ai_response = f"🧠 **Mode Recherche par Concepts** - IA intelligente activée\n{memory_indicator}\n\n{ai_response}"
-            else:
-                ai_response = f"🧠 **Mode Analyse Complète** - Toutes les données analysées\n{memory_indicator}\n\n{ai_response}"
+            # Ajouter seulement l'indicateur de mémoire si nécessaire
+            if conversation_history:
+                ai_response = f"{memory_indicator}\n\n{ai_response}"
             
             return ai_response
             
@@ -1898,28 +1878,15 @@ Utilisez l'historique de conversation si pertinent."""
             rag_context = self._build_rag_context(relevant_results, query)
             
             # Prompt pour GPT avec contexte RAG et mémoire conversationnelle
-            system_prompt = """Tu es l'assistant IA expert de la collection BONVIN avec capacités de recherche sémantique avancée et mémoire conversationnelle.
-Tu utilises les résultats de recherche sémantique pour fournir des réponses précises et contextualisées.
-Tu peux te référer à l'historique de la conversation pour enrichir tes réponses.
+            system_prompt = """Tu es l'assistant IA expert de la collection BONVIN. Réponds de manière concise et directe.
 
-RÈGLES IMPORTANTES:
-1. Base-toi sur les objets trouvés par la recherche sémantique
-2. Si les scores sont faibles (<0.6), mentionne que la recherche est approximative
-3. Structure ta réponse de manière claire avec des catégories
-4. Sois intelligent dans l'interprétation - par exemple:
-   - "montres" = chercher dans la catégorie Montres
-   - "en vente" = objets avec for_sale = true
-   - "chers" = objets avec prix élevé
-   - Noms de marques = chercher ces marques spécifiquement
-   - "actions" = chercher dans la catégorie Actions
-   - "portefeuille" = analyser les actions et investissements
-5. Utilise ton bon sens pour comprendre l'intention de l'utilisateur
-6. Si peu de résultats pertinents, élargis ta recherche
-7. Toujours donner le nombre exact trouvé
-8. Pour les questions de prix/valeur, additionne et calcule les totaux
-9. Pour les actions, mentionne le symbole boursier et la quantité si disponibles
-10. Utilise l'historique de conversation pour contextualiser tes réponses
-11. Évite de répéter des informations déjà données sauf si demandé"""
+RÈGLES:
+1. Base-toi sur les résultats de recherche sémantique
+2. Sois intelligent dans l'interprétation (marques, catégories, prix, etc.)
+3. Donne le nombre exact trouvé
+4. Pour les prix/valeurs, calcule les totaux
+5. Utilise l'historique pour contextualiser
+6. Réponses courtes et précises"""
 
             # Construire les messages avec historique
             messages = [{"role": "system", "content": system_prompt}]
@@ -1932,19 +1899,12 @@ RÈGLES IMPORTANTES:
                         "content": msg['content']
                     })
 
-            user_prompt = f"""RECHERCHE DEMANDÉE: {query}
+            user_prompt = f"""RECHERCHE: {query}
 
-RÉSULTATS DE LA RECHERCHE SÉMANTIQUE (Triés par pertinence):
+RÉSULTATS ({len(relevant_results)} objets):
 {rag_context}
 
-STATISTIQUES GLOBALES:
-- Total objets dans la collection: {len(items)}
-- Objets trouvés par la recherche: {len(relevant_results)}
-- Score de pertinence moyen: {sum(score for _, score in relevant_results) / len(relevant_results):.2f}
-
-Analyse ces résultats en tenant compte de l'historique de notre conversation et réponds à la recherche de l'utilisateur de manière complète et structurée.
-Si la recherche concerne des caractéristiques spécifiques (ex: "voitures 4 places"), utilise ton intelligence pour identifier ces caractéristiques.
-Utilise l'historique pour enrichir ta réponse et éviter les répétitions."""
+Réponds de manière concise et directe."""
 
             messages.append({"role": "user", "content": user_prompt})
 
@@ -1952,15 +1912,16 @@ Utilise l'historique pour enrichir ta réponse et éviter les répétitions."""
                 model="gpt-4o",
                 messages=messages,
                 temperature=0.3,
-                max_tokens=1200,
+                max_tokens=600,
                 timeout=30
             )
             
             ai_response = response.choices[0].message.content.strip()
             
-            # Ajouter un indicateur de recherche sémantique avec mémoire conversationnelle
+            # Ajouter seulement l'indicateur de mémoire si nécessaire
             memory_indicator = "💬 **Mémoire conversationnelle activée**" if conversation_history else ""
-            ai_response = f"🔍 **Recherche intelligente activée**\n{memory_indicator}\n\n{ai_response}"
+            if conversation_history:
+                ai_response = f"{memory_indicator}\n\n{ai_response}"
             
             return ai_response
             
