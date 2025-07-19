@@ -2894,7 +2894,7 @@ def generate_portfolio_pdf():
         
         # Générer le PDF avec WeasyPrint
         try:
-            from weasyprint import HTML, CSS
+            from weasyprint import HTML
             from weasyprint.text.fonts import FontConfiguration
             
             # Configuration des polices
@@ -2902,7 +2902,6 @@ def generate_portfolio_pdf():
             
             # Créer le PDF
             pdf = HTML(string=html_content).write_pdf(
-                stylesheets=[],
                 font_config=font_config
             )
             
