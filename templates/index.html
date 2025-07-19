@@ -466,7 +466,7 @@
             width: 100%; 
             border: 1px solid rgba(0, 229, 255, 0.3); 
             background: rgba(15, 23, 42, 0.6); 
-            padding: 0.875rem 1.25rem; 
+            padding: 0.875rem 3rem 0.875rem 1.25rem; 
             color: #e0f2fe; 
             border-radius: 1.5rem; 
         }
@@ -475,6 +475,17 @@
             outline: none; 
             border-color: rgba(0, 229, 255, 0.6); 
             box-shadow: 0 0 20px rgba(0, 229, 255, 0.2); 
+        }
+        
+        #chat-send-btn {
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+        }
+        
+        #chat-send-btn:hover {
+            background: rgba(0, 229, 255, 0.2) !important;
+            border-color: rgba(0, 229, 255, 0.5) !important;
+            transform: scale(1.1);
         }
         
         /* MENU HAMBURGER GLASSMORPHIQUE */
@@ -589,9 +600,15 @@
             }
             
             #chatbot-button {
-                bottom: 1rem; right: 1rem;
-                width: 56px; height: 56px;
+                bottom: 1.5rem; right: 1.5rem;
+                width: 60px; height: 60px;
                 z-index: 1001;
+                box-shadow: 0 8px 25px rgba(0, 229, 255, 0.5);
+            }
+            
+            #chatbot-button:hover {
+                transform: scale(1.05);
+                box-shadow: 0 12px 35px rgba(0, 229, 255, 0.7);
             }
             
             #chatbot-window {
@@ -609,6 +626,13 @@
                 max-height: none !important;
                 margin: 0 !important;
                 z-index: 1000;
+            }
+            
+            /* Cacher le bouton chat quand la fenêtre est ouverte */
+            #chatbot-window.is-open ~ #chatbot-button {
+                opacity: 0;
+                pointer-events: none;
+                transform: scale(0.8);
             }
             
             #chatbot-window.is-open {
@@ -647,9 +671,20 @@
             
             #chatbot-input {
                 font-size: 16px !important;
-                padding: 1rem 1.5rem;
+                padding: 1rem 3rem 1rem 1.5rem;
                 background: rgba(15, 23, 42, 0.8);
                 border: 1px solid rgba(0, 229, 255, 0.4);
+            }
+            
+            #chat-send-btn {
+                width: 40px;
+                height: 40px;
+                right: 0.5rem;
+            }
+            
+            #chat-send-btn:hover {
+                background: rgba(0, 229, 255, 0.2) !important;
+                border-color: rgba(0, 229, 255, 0.5) !important;
             }
             
             footer {
@@ -710,7 +745,13 @@
             
             #chatbot-input {
                 font-size: 16px !important;
-                padding: 0.875rem 1.25rem;
+                padding: 0.875rem 3rem 0.875rem 1.25rem;
+            }
+            
+            #chat-send-btn {
+                width: 36px;
+                height: 36px;
+                right: 0.25rem;
             }
         }
         
@@ -924,8 +965,15 @@
             <div class="chat-message bot">Bonjour, c'est l'assistant de la gestion d'inventaires de la famille Bonvin.</div>
         </div>
         <footer class="p-4 border-t border-t-[var(--glass-border)]">
-            <form onsubmit="handleChatSubmit(event)">
-                <input type="text" id="chatbot-input" placeholder="Posez votre question..." autocomplete="off">
+            <form onsubmit="handleChatSubmit(event)" class="flex items-center gap-3">
+                <div class="flex-1 relative">
+                    <input type="text" id="chatbot-input" placeholder="Posez votre question..." autocomplete="off" class="w-full pr-12">
+                    <button type="submit" id="chat-send-btn" class="absolute right-2 top-1/2 transform -translate-y-1/2 glass-subtle hover:glass p-2 rounded-full transition-all duration-300 hover:scale-110">
+                        <svg class="w-5 h-5 text-cyan-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
+                        </svg>
+                    </button>
+                </div>
             </form>
         </footer>
     </div>

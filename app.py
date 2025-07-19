@@ -1831,11 +1831,7 @@ Réponds de manière concise et directe."""
             # Cache la réponse
             smart_cache.set('ai_responses', ai_response, cache_key)
             
-            # Ajouter un indicateur de mode complet avec recherche par concepts et mémoire conversationnelle
-            memory_indicator = "💬 **Mémoire conversationnelle activée**" if conversation_history else ""
-            # Ajouter seulement l'indicateur de mémoire si nécessaire
-            if conversation_history:
-                ai_response = f"{memory_indicator}\n\n{ai_response}"
+            # Pas d'indicateur de mémoire - réponses directes
             
             return ai_response
             
@@ -1918,10 +1914,7 @@ Réponds de manière concise et directe."""
             
             ai_response = response.choices[0].message.content.strip()
             
-            # Ajouter seulement l'indicateur de mémoire si nécessaire
-            memory_indicator = "💬 **Mémoire conversationnelle activée**" if conversation_history else ""
-            if conversation_history:
-                ai_response = f"{memory_indicator}\n\n{ai_response}"
+            # Pas d'indicateur de mémoire - réponses directes
             
             return ai_response
             
