@@ -1667,8 +1667,9 @@ class PureOpenAIEngineWithRAG:
         
         # Forcer la recherche sémantique pour les questions sur les quantités et marques
         car_brands = ['porsche', 'mercedes', 'bmw', 'ferrari', 'lamborghini', 'audi', 'volkswagen', 'allemande', 'italienne']
+        car_models = ['urus', 'cayenne', 'panamera', '911', 'aventador', 'huracan', '488', 'f8']
         complex_questions = ['pas en vente', 'non en vente', 'pas à vendre', 'en vente', 'à vendre', 'disponible', 'vendu']
-        if 'combien' in query_lower or any(word in query_lower for word in car_brands + ['actions', 'bourse'] + complex_questions):
+        if 'combien' in query_lower or any(word in query_lower for word in car_brands + car_models + ['actions', 'bourse'] + complex_questions):
             logger.info(f"Intent détecté: SEMANTIC_SEARCH pour '{query}'")
             return QueryIntent.SEMANTIC_SEARCH
         
@@ -1862,6 +1863,13 @@ POUVOIRS SPÉCIAUX POUR RECHERCHE INTELLIGENTE:
    - "objets disponibles" = objets avec status = "Available"
    - "objets vendus" = objets avec status = "Sold"
    - "combien de X" = compter précisément les objets correspondants
+
+8. **Recherche de modèles spécifiques** : Tu peux identifier des modèles précis
+   - "Urus" → Lamborghini Urus uniquement
+   - "Cayenne" → Porsche Cayenne uniquement
+   - "911" → Porsche 911 uniquement
+   - "Aventador" → Lamborghini Aventador uniquement
+   - "488" → Ferrari 488 uniquement
 
 RÈGLES D'OR:
 1. **Précision absolue** : Utilise les données exactes de la collection
@@ -2126,12 +2134,23 @@ Utilise l'historique pour enrichir ta réponse et éviter les répétitions."""
         
         # Recherche spécifique pour les marques de voitures individuelles
         car_brands_specific = ['porsche', 'mercedes', 'bmw', 'ferrari', 'lamborghini', 'audi', 'volkswagen']
+        car_models_specific = ['urus', 'cayenne', 'panamera', '911', 'aventador', 'huracan', '488', 'f8']
         found_specific_brand = False
-        for brand in car_brands_specific:
-            if brand in query_lower:
-                matching_items = [item for item in items if brand.lower() in item.name.lower()]
+        
+        # Vérifier d'abord les modèles spécifiques
+        for model in car_models_specific:
+            if model in query_lower:
+                matching_items = [item for item in items if model.lower() in item.name.lower()]
                 found_specific_brand = True
                 break
+        
+        # Si pas de modèle trouvé, vérifier les marques
+        if not found_specific_brand:
+            for brand in car_brands_specific:
+                if brand in query_lower:
+                    matching_items = [item for item in items if brand.lower() in item.name.lower()]
+                    found_specific_brand = True
+                    break
         
         # Recherche spécifique pour les questions complexes sur les voitures
         if not found_specific_brand and 'voiture' in query_lower:
