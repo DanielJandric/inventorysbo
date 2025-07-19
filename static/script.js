@@ -456,11 +456,11 @@ function startStockPriceUpdates() {
     // Mise à jour initiale après 1 seconde
     setTimeout(updateStockPrices, 1000);
     
-    // Puis toutes les 2 minutes (120000ms) pour plus de réactivité
-    if (stockPriceUpdateTimer) {
-        clearInterval(stockPriceUpdateTimer);
-    }
-    stockPriceUpdateTimer = setInterval(updateStockPrices, 120000);
+                        // Puis toutes les 15 minutes (900000ms) pour éviter rate limiting
+                    if (stockPriceUpdateTimer) {
+                        clearInterval(stockPriceUpdateTimer);
+                    }
+                    stockPriceUpdateTimer = setInterval(updateStockPrices, 900000);
 }
 
 async function updateStockPrices() {
@@ -516,8 +516,8 @@ async function updateStockPrices() {
             stockPriceUpdateErrors[item.stock_symbol] = (errorCount || 0) + 1;
         }
         
-                        // Délai plus long pour les actions suisses (économie Alpha Vantage)
-                const delay = item.stock_exchange && ['SWX', 'SIX', 'SWISS', 'CH'].includes(item.stock_exchange.toUpperCase()) ? 3000 : 1000;
+                        // Délai plus long pour éviter rate limiting Yahoo Finance
+                const delay = item.stock_exchange && ['SWX', 'SIX', 'SWISS', 'CH'].includes(item.stock_exchange.toUpperCase()) ? 5000 : 2000;
                 await new Promise(resolve => setTimeout(resolve, delay));
     }
     

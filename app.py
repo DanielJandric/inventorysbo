@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 # Cache pour les prix des actions avec expiration
 stock_price_cache = {}
-STOCK_PRICE_CACHE_DURATION = 3600  # 1 heure
+STOCK_PRICE_CACHE_DURATION = 900  # 15 minutes (pour éviter rate limiting Yahoo)
 
 
 
@@ -2040,7 +2040,8 @@ def get_stock_price(symbol):
 
     try:
         import yfinance as yf
-        time.sleep(1)
+        # Délai plus long pour éviter rate limiting Yahoo Finance
+        time.sleep(2)
         ticker = yf.Ticker(symbol)
         info = ticker.info
         
@@ -2071,6 +2072,12 @@ def get_stock_price(symbol):
         return jsonify(result)
 
     except Exception as e:
+        if "429" in str(e) or "rate limit" in str(e).lower():
+            logger.warning(f"Rate limit Yahoo Finance pour {symbol}, utilisation du cache")
+            if cache_key in stock_price_cache:
+                logger.info(f"Retour des données en cache pour {symbol}")
+                return jsonify(stock_price_cache[cache_key]['data'])
+        
         logger.warning(f"Yahoo Finance a échoué pour {symbol} ({e}), bascule sur Finnhub.")
         
 
