@@ -24,15 +24,19 @@ import requests
 # Load environment variables from .env file
 load_dotenv()
 
-# Import configuration seulement si les variables ne sont pas déjà définies
-if not os.getenv("SUPABASE_URL") or not os.getenv("SUPABASE_KEY"):
-    try:
-        import config
-        print("Configuration locale importee")
-    except ImportError:
-        print("⚠️ Fichier config.py non trouvé")
-else:
-    print("Variables d'environnement deja definies (deploiement)")
+# Import configuration locale
+try:
+    import config
+    print("✅ Configuration locale chargée")
+    # Utiliser les variables du fichier config.py
+    SUPABASE_URL = getattr(config, 'SUPABASE_URL', os.getenv("SUPABASE_URL"))
+    SUPABASE_KEY = getattr(config, 'SUPABASE_KEY', os.getenv("SUPABASE_KEY"))
+    OPENAI_API_KEY = getattr(config, 'OPENAI_API_KEY', os.getenv("OPENAI_API_KEY"))
+except ImportError:
+    print("⚠️ Fichier config.py non trouvé, utilisation des variables d'environnement")
+    SUPABASE_URL = os.getenv("SUPABASE_URL")
+    SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 # Configuration logging sophistiquée
 logging.basicConfig(
@@ -119,10 +123,7 @@ class QueryIntent(Enum):
     SEMANTIC_SEARCH = "semantic_search"
     UNKNOWN = "unknown"
 
-# Variables d'environnement avec validation
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY") 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+# Variables d'environnement avec validation (déjà définies ci-dessus)
 APP_URL = os.getenv("APP_URL", "https://inventorysbo.onrender.com")
 
 # Variables d'environnement pour Gmail
@@ -134,14 +135,27 @@ EMAIL_RECIPIENTS = os.getenv("EMAIL_RECIPIENTS", "").split(",")
 
 FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY")
 
-# Configuration EODHD (excellente pour actions suisses)
-EODHD_API_KEY = os.getenv("EODHD_API_KEY", "687ae6e8493e52.65071366")  # Clé par défaut pour test
+# Configuration ChatGPT-4o pour données boursières
+# Remplace les APIs boursières traditionnelles
+
+# Configuration mise à jour automatique des prix (6x/jour)
+AUTO_UPDATE_TIMES = [
+    "09:00",  # Ouverture bourse suisse
+    "11:00",  # Milieu matinée
+    "13:00",  # Début après-midi
+    "15:00",  # Milieu après-midi
+    "17:00",  # Fermeture bourse suisse
+    "21:30"   # Soirée (après les marchés US)
+]
 
 # Configuration FreeCurrency (pour conversion USD/EUR vers CHF)
 FREECURRENCY_API_KEY = os.getenv("FREECURRENCY_API_KEY", "fca_live_MhoTdTd6auvKD1Dr5kVQ7ua9SwgGPApjylr3CrRe")
 
-if not all([SUPABASE_URL, SUPABASE_KEY]):
+# Vérifier que les variables sont définies
+if not SUPABASE_URL or not SUPABASE_KEY:
     logger.error("Variables d'environnement manquantes")
+    logger.error(f"SUPABASE_URL: {'✅' if SUPABASE_URL else '❌'}")
+    logger.error(f"SUPABASE_KEY: {'✅' if SUPABASE_KEY else '❌'}")
     raise EnvironmentError("SUPABASE_URL et SUPABASE_KEY sont requis")
 
 logger.info("Variables d'environnement validees")
@@ -2484,8 +2498,7 @@ def get_exchange_rate_route(from_currency: str, to_currency: str = 'CHF'):
 @app.route("/api/stock-price/<symbol>")
 def get_stock_price(symbol):
     """
-    Récupère le prix actuel d'une action, avec Yahoo Finance en priorité
-    et EODHD/Finnhub comme alternatives robustes.
+    Récupère le prix d'une action via ChatGPT-4o en recherchant sur internet.
     """
     # Vérifier si on force le refresh (ignore le cache)
     force_refresh = request.args.get('force_refresh', 'false').lower() == 'true'
@@ -2519,104 +2532,13 @@ def get_stock_price(symbol):
         logger.info(f"Refresh forcé pour {symbol} - cache ignoré")
 
     try:
-        # Exclure IREN de Yahoo Finance (cause des erreurs 429)
-        if symbol.upper() == 'IREN' or symbol.upper() == 'IREN.SW':
-            logger.info(f"IREN exclu de Yahoo Finance, bascule direct sur EODHD")
-            return get_stock_price_eodhd(formatted_symbol, item, cache_key, force_refresh)
-        
-        import yfinance as yf
-        # Délai plus long pour éviter rate limiting Yahoo Finance
-        time.sleep(3)
-        ticker = yf.Ticker(formatted_symbol)
-        info = ticker.info
-        
-        current_price = info.get('currentPrice') or info.get('regularMarketPrice')
-        if not current_price:
-             hist = ticker.history(period="1d")
-             if not hist.empty:
-                 current_price = hist['Close'].iloc[-1]
-
-        if not current_price:
-            raise Exception("Prix non trouvé sur Yahoo Finance, essai avec EODHD")
-
-        # Récupérer les variations depuis Yahoo Finance
-        previous_close = info.get('previousClose', 0)
-        change = 0
-        change_percent = 0
-        
-        if previous_close and current_price:
-            change = current_price - previous_close
-            change_percent = (change / previous_close) * 100 if previous_close > 0 else 0
-        else:
-            # Essayer de récupérer depuis les champs Yahoo Finance
-            change = info.get('regularMarketChange', 0)
-            change_percent = info.get('regularMarketChangePercent', 0)
-
-        currency = info.get('currency', 'USD')
-        # Pour les cartes, on garde le prix dans la devise originale
-        # La conversion CHF sera utilisée uniquement pour le dashboard total
-        price_chf = current_price
-
-        # Récupérer les données historiques pour 52W plus précises
-        try:
-            hist = ticker.history(period="1y")
-            if not hist.empty:
-                actual_52w_high = hist['High'].max()
-                actual_52w_low = hist['Low'].min()
-                # Utiliser les données historiques si elles sont plus précises
-                yahoo_52w_high = info.get('fiftyTwoWeekHigh')
-                yahoo_52w_low = info.get('fiftyTwoWeekLow')
-                
-                # Comparer et choisir la meilleure valeur
-                if yahoo_52w_high and abs(actual_52w_high - yahoo_52w_high) < 1:
-                    final_52w_high = yahoo_52w_high
-                else:
-                    final_52w_high = actual_52w_high
-                    
-                if yahoo_52w_low and abs(actual_52w_low - yahoo_52w_low) < 1:
-                    final_52w_low = yahoo_52w_low
-                else:
-                    final_52w_low = actual_52w_low
-            else:
-                final_52w_high = info.get('fiftyTwoWeekHigh')
-                final_52w_low = info.get('fiftyTwoWeekLow')
-        except:
-            final_52w_high = info.get('fiftyTwoWeekHigh')
-            final_52w_low = info.get('fiftyTwoWeekLow')
-
-        result = {
-            "symbol": symbol,
-            "price": current_price,
-            "price_chf": price_chf,
-            "currency": currency,
-            "company_name": info.get('longName', symbol),
-            "last_update": datetime.now().isoformat(),
-            "source": "Yahoo Finance (Taux de change via Finnhub)",
-            "change": format_stock_value(change, is_price=True),
-            "change_percent": format_stock_value(change_percent, is_percent=True),
-            "volume": format_stock_value(info.get('volume'), is_volume=True),
-            "average_volume": format_stock_value(info.get('averageVolume'), is_volume=True),
-            "pe_ratio": format_stock_value(info.get('trailingPE'), is_price=True),
-            "fifty_two_week_high": format_stock_value(final_52w_high, is_price=True),
-            "fifty_two_week_low": format_stock_value(final_52w_low, is_price=True)
-        }
-        
-        # Toujours mettre à jour le cache, même en cas de refresh forcé
-        stock_price_cache[cache_key] = {'data': result, 'timestamp': time.time()}
-        return jsonify(result)
+        # Utiliser ChatGPT-4o pour récupérer les données
+        logger.info(f"Récupération des données boursières via ChatGPT-4o pour {formatted_symbol}")
+        return get_stock_price_chatgpt(formatted_symbol, item, cache_key, force_refresh)
 
     except Exception as e:
-        if "429" in str(e) or "rate limit" in str(e).lower():
-            logger.warning(f"Rate limit Yahoo Finance pour {symbol}, utilisation du cache")
-            if cache_key in stock_price_cache:
-                logger.info(f"Retour des données en cache pour {symbol}")
-                return jsonify(stock_price_cache[cache_key]['data'])
-        
-        logger.warning(f"Yahoo Finance a échoué pour {symbol} ({e}), bascule sur EODHD.")
-        
-        # Essayer EODHD comme fallback
-        logger.info(f"Essai avec EODHD pour {formatted_symbol}")
-        return get_stock_price_eodhd(formatted_symbol, item, cache_key, force_refresh)
+        logger.error(f"Erreur get_stock_price pour {symbol}: {e}")
+        return jsonify({"error": "Prix non disponible", "details": str(e)}), 500
 
 
 @app.route("/api/stock-price/cache/clear", methods=["POST"])
@@ -2677,45 +2599,52 @@ def get_stock_price_cache_status():
             "error": str(e)
         }), 500
 
-@app.route("/api/eodhd/quota")
-def check_eodhd_quota():
-    """Vérifie le quota EODHD restant"""
+@app.route("/api/chatgpt/status")
+def check_chatgpt_status():
+    """Vérifie le statut de ChatGPT-4o pour les données boursières"""
     try:
-        import requests
-        # Test avec un symbole simple
-        test_url = f"https://eodhd.com/api/real-time/AAPL?api_token={EODHD_API_KEY}&fmt=json"
-        response = requests.get(test_url, timeout=5)
-        
-        if response.status_code == 402:
+        if not openai_client:
             return jsonify({
-                "quota_exceeded": True,
-                "message": "Quota EODHD dépassé (20 requêtes/jour)",
-                "reset_time": "Minuit (heure locale)",
-                "suggestion": "Utilisez les prix manuels ou attendez le reset"
+                "available": False,
+                "message": "ChatGPT-4o non configuré",
+                "suggestion": "Vérifiez la configuration OpenAI"
             })
-        elif response.status_code == 200:
+        
+        # Test simple avec ChatGPT
+        test_response = openai_client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "user", "content": "Test de connexion - réponds juste 'OK'"}
+            ],
+            max_tokens=10
+        )
+        
+        if test_response.choices[0].message.content:
             return jsonify({
-                "quota_exceeded": False,
-                "message": "Quota EODHD disponible",
-                "remaining_requests": "Inconnu (API ne fournit pas cette info)"
+                "available": True,
+                "message": "ChatGPT-4o opérationnel",
+                "model": "gpt-4o",
+                "source": "Recherche internet pour données boursières"
             })
         else:
             return jsonify({
-                "quota_exceeded": "Unknown",
-                "status_code": response.status_code,
-                "message": f"Statut inattendu: {response.status_code}"
+                "available": False,
+                "message": "Réponse ChatGPT invalide",
+                "error": "Pas de contenu dans la réponse"
             })
             
     except Exception as e:
+        logger.error(f"Erreur vérification ChatGPT: {e}")
         return jsonify({
-            "error": str(e),
-            "message": "Impossible de vérifier le quota"
+            "available": False,
+            "message": "Erreur de connexion ChatGPT",
+            "error": str(e)
         }), 500
 
 
 @app.route("/api/stock-price/update-all", methods=["POST"])
 def update_all_stock_prices():
-    """Met à jour tous les prix d'actions dans la DB"""
+    """Met à jour tous les prix d'actions via ChatGPT-4o et retourne les données mises à jour"""
     try:
         items = AdvancedDataManager.fetch_all_items()
         action_items = [item for item in items if item.category == 'Actions' and item.stock_symbol]
@@ -2724,23 +2653,32 @@ def update_all_stock_prices():
             return jsonify({
                 "success": True,
                 "message": "Aucune action trouvée à mettre à jour",
-                "updated_count": 0
+                "updated_count": 0,
+                "updated_data": []
             })
+        
+        logger.info(f"Mise à jour de {len(action_items)} actions via ChatGPT-4o")
         
         updated_count = 0
         errors = []
+        updated_data = []
         
         for item in action_items:
             try:
-                cache_key = f"stock_{item.stock_symbol}"
-                # Forcer le refresh
-                result = get_stock_price_eodhd(item.stock_symbol, item, cache_key, force_refresh=True)
+                cache_key = f"stock_price_{item.stock_symbol}"
+                # Forcer le refresh via ChatGPT
+                result = get_stock_price_chatgpt(item.stock_symbol, item, cache_key, force_refresh=True)
                 
                 if hasattr(result, 'json'):
                     data = result.json
                     if isinstance(data, dict) and 'price' in data:
                         updated_count += 1
-                        logger.info(f"✅ Prix mis à jour pour {item.name}: {data['price']} CHF")
+                        updated_data.append({
+                            'item_id': item.id,
+                            'symbol': item.stock_symbol,
+                            'data': data
+                        })
+                        logger.info(f"✅ Prix mis à jour pour {item.name} via ChatGPT: {data['price']} CHF")
                     else:
                         errors.append(f"Données invalides pour {item.name}")
                 else:
@@ -2753,10 +2691,11 @@ def update_all_stock_prices():
         
         return jsonify({
             "success": True,
-            "message": f"Mise à jour terminée: {updated_count} actions mises à jour",
+            "message": f"Mise à jour terminée: {updated_count} actions mises à jour via ChatGPT-4o",
             "updated_count": updated_count,
             "total_actions": len(action_items),
-            "errors": errors
+            "errors": errors,
+            "updated_data": updated_data
         })
         
     except Exception as e:
@@ -2767,144 +2706,204 @@ def update_all_stock_prices():
         }), 500
 
 
-def get_stock_price_eodhd(symbol: str, item: Optional[CollectionItem], cache_key: str, force_refresh=False):
+def schedule_auto_stock_updates():
     """
-    Récupère le prix via l'API EODHD. Excellente pour les actions suisses.
-    Limite: 20 requêtes par jour.
+    Planifie les mises à jour automatiques des prix des actions 5 fois par jour
     """
-    if not EODHD_API_KEY:
-        return jsonify({"error": "Clé API EODHD non configurée"}), 500
+    import schedule
+    import time
+    from threading import Thread
+    
+    def auto_update_stock_prices():
+        """Fonction de mise à jour automatique"""
+        try:
+            logger.info("🔄 Début mise à jour automatique des prix via ChatGPT-4o")
+            items = AdvancedDataManager.fetch_all_items()
+            stock_items = [item for item in items if item.category == 'Actions' and item.stock_symbol]
+            
+            if not stock_items:
+                logger.info("Aucune action trouvée pour mise à jour automatique")
+                return
+            
+            updated_count = 0
+            updated_data = []
+            
+            for item in stock_items:
+                try:
+                    cache_key = f"stock_price_{item.stock_symbol}"
+                    result = get_stock_price_chatgpt(item.stock_symbol, item, cache_key, force_refresh=True)
+                    
+                    if result.status_code == 200:
+                        # Récupérer les données pour l'affichage
+                        data = result.json
+                        if isinstance(data, dict) and 'price' in data:
+                            updated_count += 1
+                            updated_data.append({
+                                'item_id': item.id,
+                                'symbol': item.stock_symbol,
+                                'data': data
+                            })
+                            logger.info(f"✅ Mise à jour auto: {item.name} ({item.stock_symbol}) - {data.get('price', 'N/A')} CHF")
+                    else:
+                        logger.warning(f"⚠️ Échec mise à jour auto: {item.name} ({item.stock_symbol})")
+                        
+                except Exception as e:
+                    logger.error(f"❌ Erreur mise à jour auto {item.name}: {e}")
+            
+            logger.info(f"✅ Mise à jour automatique terminée: {updated_count}/{len(stock_items)} actions mises à jour")
+            
+            # Retourner les données mises à jour pour l'affichage
+            return updated_data
+            
+        except Exception as e:
+            logger.error(f"❌ Erreur mise à jour automatique globale: {e}")
+            return []
+    
+    # Planifier les mises à jour aux heures définies
+    for update_time in AUTO_UPDATE_TIMES:
+        schedule.every().day.at(update_time).do(auto_update_stock_prices)
+        logger.info(f"📅 Mise à jour automatique planifiée à {update_time}")
+    
+    # Fonction pour exécuter le scheduler en arrière-plan
+    def run_scheduler():
+        while True:
+            schedule.run_pending()
+            time.sleep(60)  # Vérifier toutes les minutes
+    
+    # Démarrer le scheduler dans un thread séparé
+    scheduler_thread = Thread(target=run_scheduler, daemon=True)
+    scheduler_thread.start()
+    logger.info("🚀 Scheduler de mise à jour automatique démarré")
+
+def get_stock_price_chatgpt(symbol: str, item: Optional[CollectionItem], cache_key: str, force_refresh=False):
+    """
+    Récupère les données boursières via ChatGPT-4o en recherchant sur internet.
+    Remplace les APIs boursières traditionnelles.
+    """
+    if not openai_client:
+        return jsonify({"error": "Moteur IA indisponible"}), 503
 
     try:
-        logger.info(f"Interrogation d'EODHD avec le symbole : {symbol}")
+        logger.info(f"Interrogation ChatGPT-4o pour le symbole : {symbol}")
         
-        import requests
+        # Construire le prompt avec les variables
+        company_name = item.name if item else symbol
+        ticker = symbol
         
-        # Pour les actions suisses, essayer plusieurs variantes de symboles
-        symbol_variants = [symbol]  # Commencer par le symbole fourni
+        prompt = f"""
+Tu es un expert en analyse financière. Je recherche les données boursières actuelles pour {company_name} (ticker {ticker}) cotée sur la bourse suisse.
+
+Récupère et retourne UNIQUEMENT un JSON avec les données suivantes (utilise des valeurs numériques, pas de texte) :
+- current_price: prix actuel en CHF
+- daily_volume: volume d'échange du jour
+- average_volume: volume d'échange moyen (30 jours)
+- fifty_two_week_high: plus haut des 52 semaines en CHF
+- fifty_two_week_low: plus bas des 52 semaines en CHF
+- pe_ratio: ratio P/E (TTM)
+- daily_change: variation du jour en CHF (positif ou négatif)
+- daily_change_percent: variation du jour en pourcentage
+
+Format de réponse JSON uniquement, sans texte supplémentaire :
+{{
+    "current_price": 125.50,
+    "daily_volume": 876,
+    "average_volume": 3150,
+    "fifty_two_week_high": 128.50,
+    "fifty_two_week_low": 103.50,
+    "pe_ratio": 6.5,
+    "daily_change": 2.30,
+    "daily_change_percent": 1.87
+}}
+
+Si une donnée n'est pas disponible, utilise null. Assure-toi que les valeurs sont récentes et précises.
+"""
         
-        if item and item.stock_exchange and item.stock_exchange.upper() in ['SWX', 'SIX', 'SWISS', 'CH']:
-            # Ajouter des variantes pour les actions suisses
-            base_symbol = symbol.replace('.SW', '').replace('.SWX', '').replace('.SIX', '')
-            symbol_variants.extend([
-                f"{base_symbol}.SW",  # Format suisse standard
-                f"{base_symbol}.SWX",  # Format SWX
-                f"{base_symbol}.SIX",  # Format SIX
-                base_symbol,  # Symbole sans suffixe
-            ])
-            # Supprimer les doublons
-            symbol_variants = list(dict.fromkeys(symbol_variants))
+        # Appeler ChatGPT-4o
+        response = openai_client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "Tu es un expert en analyse financière. Tu recherches des données boursières précises et actuelles sur internet. Tu réponds UNIQUEMENT en JSON valide, sans texte supplémentaire."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.1,
+            max_tokens=500
+        )
         
-        data = None
-        working_symbol = symbol
-        
-        # Essayer chaque variante de symbole
-        for variant in symbol_variants:
-            logger.info(f"Essai EODHD avec le symbole: '{variant}'")
-            quote_url = f"https://eodhd.com/api/real-time/{variant}?api_token={EODHD_API_KEY}&fmt=json"
-            response = requests.get(quote_url, timeout=10)
-            
-            if response.status_code == 429:
-                raise Exception("Rate limit EODHD atteint")
-            
-            if response.ok:
-                response_data = response.json()
-                if response_data and len(response_data) > 0:
-                    data = response_data
-                    working_symbol = variant
-                    logger.info(f"✅ Symbole EODHD '{variant}' fonctionne")
-                    break
-            else:
-                logger.warning(f"Symbole EODHD '{variant}' invalide (status: {response.status_code})")
-        
-        # Si aucune variante n'a fonctionné
-        if not data or len(data) == 0:
-            raise Exception(f"Aucune donnée trouvée pour les variantes de '{symbol}' sur EODHD")
-        
-        # EODHD retourne un array, prendre le premier élément
-        quote = data[0] if isinstance(data, list) else data
-        current_price = float(quote.get("close", 0))
-        
-        if current_price <= 0:
-            raise Exception("Prix invalide reçu d'EODHD")
-        
-        # Récupérer la devise
-        currency = quote.get("currency", "USD")
-        # Pour les actions suisses, on suppose CHF
-        if item and item.stock_exchange and item.stock_exchange.upper() in ['SWX', 'SIX', 'SWISS', 'CH']:
-            currency = "CHF"
-        
-        # Pour les cartes, on garde le prix dans la devise originale
-        price_chf = current_price
-        
-        # Récupérer les données fondamentales pour le PE ratio
-        pe_ratio = "N/A"
+        # Parser la réponse JSON
         try:
-            fundamental_url = f"https://eodhd.com/api/fundamentals/{working_symbol}?api_token={EODHD_API_KEY}&fmt=json"
-            fundamental_response = requests.get(fundamental_url, timeout=10)
+            import json
+            response_text = response.choices[0].message.content.strip()
             
-            if fundamental_response.ok:
-                fundamental_data = fundamental_response.json()
-                if fundamental_data and 'General' in fundamental_data:
-                    general_data = fundamental_data['General']
-                    if 'PERatio' in general_data and general_data['PERatio']:
-                        pe_ratio = str(general_data['PERatio'])
-                    logger.info(f"✅ Données fondamentales EODHD récupérées pour {working_symbol}")
-        except Exception as e:
-            logger.warning(f"Impossible de récupérer les données fondamentales EODHD pour {working_symbol}: {e}")
-        
-        result = {
-            "symbol": symbol,  # Garder le symbole original pour l'affichage
-            "price": current_price,
-            "price_chf": price_chf,
-            "currency": currency,
-            "company_name": quote.get("code", symbol),
-            "last_update": datetime.now().isoformat(),
-            "source": f"EODHD (symbole utilisé: {working_symbol})",
-            "change": format_stock_value(quote.get("change"), is_price=True),
-            "change_percent": format_stock_value(quote.get("change_p"), is_percent=True),
-            "volume": format_stock_value(quote.get("volume"), is_volume=True),
-            "average_volume": format_stock_value(quote.get("avg_volume"), is_volume=True),
-            "pe_ratio": pe_ratio,
-            "fifty_two_week_high": format_stock_value(quote.get("high_52_weeks"), is_price=True),
-            "fifty_two_week_low": format_stock_value(quote.get("low_52_weeks"), is_price=True)
-        }
-        
-        logger.info(f"✅ Prix EODHD récupéré pour {symbol}: {current_price} {currency}")
-        
-        # Mettre en cache
-        stock_price_cache[cache_key] = {'data': result, 'timestamp': time.time()}
-        
-        # Mettre à jour le prix dans la DB si c'est une action existante
-        if item and item.id:
-            try:
-                update_data = {
-                    'current_price': current_price,
-                    'last_price_update': datetime.now().isoformat(),
-                    'stock_volume': quote.get("volume"),
-                    'stock_pe_ratio': pe_ratio if pe_ratio != "N/A" else None,
-                    'stock_52_week_high': quote.get("high_52_weeks"),
-                    'stock_52_week_low': quote.get("low_52_weeks"),
-                    'stock_change': quote.get("change"),
-                    'stock_change_percent': quote.get("change_p"),
-                    'stock_average_volume': quote.get("avg_volume")
-                }
-                
-                # Mettre à jour dans Supabase
-                if supabase:
-                    response = supabase.table('items').update(update_data).eq('id', item.id).execute()
-                    if response.data:
-                        logger.info(f"✅ Prix et métriques mis à jour dans DB pour action {item.name} (ID: {item.id}): {current_price} CHF")
-                        logger.info(f"📊 Métriques: Volume={update_data['stock_volume']}, PE={update_data['stock_pe_ratio']}, 52W-H={update_data['stock_52_week_high']}, 52W-L={update_data['stock_52_week_low']}")
-                    else:
-                        logger.warning(f"⚠️ Échec mise à jour DB pour action {item.name} (ID: {item.id})")
-            except Exception as e:
-                logger.error(f"❌ Erreur mise à jour DB pour action {item.name}: {e}")
-        
-        return jsonify(result)
+            # Nettoyer la réponse (enlever les backticks si présents)
+            if response_text.startswith('```json'):
+                response_text = response_text[7:]
+            if response_text.endswith('```'):
+                response_text = response_text[:-3]
+            
+            data = json.loads(response_text)
+            
+            # Validation des données
+            if not data.get('current_price') or data['current_price'] <= 0:
+                raise Exception("Prix invalide reçu de ChatGPT")
+            
+            # Formater les données pour l'affichage
+            result = {
+                "symbol": symbol,
+                "price": float(data.get('current_price', 0)),
+                "price_chf": float(data.get('current_price', 0)),
+                "currency": "CHF",
+                "company_name": company_name,
+                "last_update": datetime.now().isoformat(),
+                "source": "ChatGPT-4o (recherche internet)",
+                "change": format_stock_value(data.get('daily_change', 0), is_price=True),
+                "change_percent": format_stock_value(data.get('daily_change_percent', 0), is_percent=True),
+                "volume": format_stock_value(data.get('daily_volume', 0), is_volume=True),
+                "average_volume": format_stock_value(data.get('average_volume', 0), is_volume=True),
+                "pe_ratio": str(data.get('pe_ratio', 'N/A')) if data.get('pe_ratio') else 'N/A',
+                "fifty_two_week_high": format_stock_value(data.get('fifty_two_week_high', 0), is_price=True),
+                "fifty_two_week_low": format_stock_value(data.get('fifty_two_week_low', 0), is_price=True)
+            }
+            
+            logger.info(f"✅ Données ChatGPT récupérées pour {symbol}: {result['price']} CHF")
+            
+            # Mettre en cache
+            stock_price_cache[cache_key] = {'data': result, 'timestamp': time.time()}
+            
+            # Mettre à jour le prix dans la DB si c'est une action existante
+            if item and item.id:
+                try:
+                    update_data = {
+                        'current_price': result['price'],
+                        'last_price_update': datetime.now().isoformat(),
+                        'stock_volume': data.get('daily_volume'),
+                        'stock_pe_ratio': data.get('pe_ratio'),
+                        'stock_52_week_high': data.get('fifty_two_week_high'),
+                        'stock_52_week_low': data.get('fifty_two_week_low'),
+                        'stock_change': data.get('daily_change'),
+                        'stock_change_percent': data.get('daily_change_percent'),
+                        'stock_average_volume': data.get('average_volume')
+                    }
+                    
+                    # Mettre à jour dans Supabase
+                    if supabase:
+                        response = supabase.table('items').update(update_data).eq('id', item.id).execute()
+                        if response.data:
+                            logger.info(f"✅ Prix et métriques mis à jour dans DB pour action {item.name} (ID: {item.id}): {result['price']} CHF")
+                            logger.info(f"📊 Métriques: Volume={update_data['stock_volume']}, PE={update_data['stock_pe_ratio']}, 52W-H={update_data['stock_52_week_high']}, 52W-L={update_data['stock_52_week_low']}")
+                        else:
+                            logger.warning(f"⚠️ Échec mise à jour DB pour action {item.name} (ID: {item.id})")
+                except Exception as e:
+                    logger.error(f"❌ Erreur mise à jour DB pour action {item.name}: {e}")
+            
+            return jsonify(result)
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"Erreur parsing JSON ChatGPT pour {symbol}: {e}")
+            logger.error(f"Réponse reçue: {response_text}")
+            raise Exception("Réponse ChatGPT invalide")
         
     except Exception as e:
-        logger.error(f"Erreur EODHD pour {symbol}: {e}")
+        logger.error(f"Erreur ChatGPT pour {symbol}: {e}")
         
         # Utiliser le cache si disponible
         if cache_key in stock_price_cache:
@@ -2912,7 +2911,7 @@ def get_stock_price_eodhd(symbol: str, item: Optional[CollectionItem], cache_key
             return jsonify(stock_price_cache[cache_key]['data'])
         
         return jsonify({
-            "error": "Prix non disponible via EODHD", 
+            "error": "Données non disponibles via ChatGPT", 
             "details": str(e),
             "message": "Veuillez mettre à jour le prix manuellement."
         }), 500
@@ -4762,21 +4761,27 @@ if __name__ == "__main__":
     if gmail_manager.enabled:
         logger.info(f"📬 Destinataires: {len(gmail_manager.recipients)}")
     logger.info(f"💾 Cache: ✅ Multi-niveaux avec embeddings")
-    logger.info(f"📈 Support Actions: ✅ Complet avec prix temps réel")
+    logger.info(f"📈 Support Actions: ✅ Complet avec ChatGPT-4o")
     logger.info("=" * 60)
     logger.info("MODE: OpenAI Pure avec Recherche Sémantique RAG")
-    logger.info("✅ GPT-4 avec recherche intelligente")
+    logger.info("✅ GPT-4o avec recherche intelligente")
     logger.info("✅ Embeddings OpenAI text-embedding-3-small")
     logger.info("✅ Recherche sémantique par similarité cosinus")
     logger.info("✅ Détection d'intention de requête")
     logger.info("✅ Génération automatique d'embeddings")
     logger.info("✅ Cache intelligent pour les embeddings")
-    logger.info("✅ Support complet des actions boursières")
-    logger.info("✅ Gestion des erreurs 429 avec cache")
+    logger.info("✅ Données boursières via ChatGPT-4o")
+    logger.info("✅ Mise à jour automatique 6x/jour")
     logger.info("✅ Prix manuel pour les actions")
     logger.info("=" * 60)
     
     try:
+        # Démarrer le scheduler de mise à jour automatique
+        try:
+            schedule_auto_stock_updates()
+        except Exception as e:
+            logger.error(f"Erreur démarrage scheduler: {e}")
+        
         app.run(debug=False, host=host, port=port)
     except Exception as e:
         logger.error(f"❌ Erreur démarrage: {e}")

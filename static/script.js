@@ -95,8 +95,12 @@ document.addEventListener('DOMContentLoaded', function() {
         // Ajouter les actions rapides du chatbot
         setTimeout(addQuickActions, 1000);
         
-        // Aucune mise à jour automatique des prix - uniquement manuelle via le bouton
-        console.log('Mise à jour automatique des prix désactivée - uniquement manuelle');
+        // Charger automatiquement les données boursières au démarrage
+        setTimeout(() => {
+            loadStockPricesOnStartup();
+        }, 2000);
+        
+        console.log('Chargement automatique des données boursières activé');
         
     } catch (error) {
         console.error('Erreur lors de l\'initialisation:', error);
@@ -548,6 +552,33 @@ async function forceUpdateStockPrices() {
     showNotification('Prix mis à jour !', false);
 }
 
+async function updateSingleStockPrice(symbol, itemId) {
+    try {
+        showNotification(`Mise à jour de ${symbol} en cours...`, false);
+        
+        const response = await fetch(`/api/stock-price/${symbol}?force_refresh=true`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            showSuccess(`${symbol} mis à jour: ${formatPrice(data.price)} CHF`);
+            
+            // Mettre à jour l'affichage de la carte
+            updateStockCardDisplay(itemId, data);
+        } else {
+            const error = await response.json();
+            showError(`Erreur ${symbol}: ${error.error || 'Erreur serveur'}`);
+        }
+    } catch (error) {
+        console.error('Erreur:', error);
+        showError(`Impossible de mettre à jour ${symbol}`);
+    }
+}
+
 // Fonction pour ouvrir la modal de sélection de véhicule
 function openVehicleSelectModal() {
     // Filtrer seulement les véhicules (Voitures, Bateaux, Avions, etc.) - pas les Actions
@@ -952,6 +983,10 @@ function updateStockCardDisplay(itemId, stockData) {
                         <span class="text-amber-200/90">${formatVolume(stockData.volume)}</span>
                     </div>
                     <div class="flex justify-between">
+                        <span class="text-amber-300/80 font-medium">Volume moyen:</span>
+                        <span class="text-amber-200/90">${formatVolume(stockData.average_volume)}</span>
+                    </div>
+                    <div class="flex justify-between">
                         <span class="text-amber-300/80 font-medium">P/E Ratio:</span>
                         <span class="text-amber-200/90">${stockData.pe_ratio !== 'N/A' ? parseFloat(stockData.pe_ratio).toFixed(1) : 'N/A'}</span>
                     </div>
@@ -967,7 +1002,15 @@ function updateStockCardDisplay(itemId, stockData) {
                 
                 <!-- Source et timestamp -->
                 <div class="text-xs text-amber-300/60 text-center pt-1 border-t border-amber-300/20">
-                    ${stockData.source} • ${new Date(stockData.last_update).toLocaleTimeString()}
+                    ChatGPT-4o • ${new Date(stockData.last_update).toLocaleTimeString()}
+                </div>
+                
+                <!-- Bouton de mise à jour manuelle -->
+                <div class="mt-2 text-center">
+                    <button onclick="updateSingleStockPrice('${stockData.symbol}', ${itemId})" 
+                            class="text-xs px-3 py-1 glass rounded-lg text-amber-300 hover:text-white hover:scale-105 transition-all">
+                        🔄 Mettre à jour
+                    </button>
                 </div>
             </div>
         `;
@@ -1100,6 +1143,10 @@ function createItemCardHTML(item) {
                                 <span class="text-amber-200/90 animate-pulse">--</span>
                             </div>
                             <div class="flex justify-between">
+                                <span class="text-amber-300/80 font-medium">Volume moyen:</span>
+                                <span class="text-amber-200/90 animate-pulse">--</span>
+                            </div>
+                            <div class="flex justify-between">
                                 <span class="text-amber-300/80 font-medium">P/E Ratio:</span>
                                 <span class="text-amber-200/90 animate-pulse">--</span>
                             </div>
@@ -1115,7 +1162,15 @@ function createItemCardHTML(item) {
                         
                         <!-- Source et timestamp -->
                         <div class="text-xs text-amber-300/60 text-center pt-1 border-t border-amber-300/20">
-                            Chargement en cours...
+                            Chargement via ChatGPT-4o...
+                        </div>
+                        
+                        <!-- Bouton de mise à jour manuelle -->
+                        <div class="mt-2 text-center">
+                            <button onclick="updateSingleStockPrice('${item.stock_symbol}', ${item.id})" 
+                                    class="text-xs px-3 py-1 glass rounded-lg text-amber-300 hover:text-white hover:scale-105 transition-all">
+                                🔄 Mettre à jour
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -2211,6 +2266,55 @@ document.addEventListener('keydown', function(e) {
         }
     }
 });
+
+// Fonction pour charger les données boursières au démarrage
+async function loadStockPricesOnStartup() {
+    console.log('Chargement des données boursières au démarrage...');
+    
+    const stockItems = allItems.filter(item => item.category === 'Actions' && item.stock_symbol);
+    
+    if (stockItems.length === 0) {
+        console.log('Aucune action trouvée pour le chargement initial');
+        return;
+    }
+    
+    console.log(`Chargement des données pour ${stockItems.length} actions...`);
+    
+    for (const item of stockItems) {
+        try {
+            const response = await fetch(`/api/stock-price/${item.stock_symbol}`);
+            
+            if (response.ok) {
+                const data = await response.json();
+                
+                // Calculer la valeur totale
+                const totalValue = data.price_chf * (item.stock_quantity || 1);
+                
+                // Mettre à jour l'objet en mémoire
+                item.current_price = data.price_chf;
+                item.current_value = totalValue;
+                item.last_price_update = data.last_update;
+                
+                // Mettre à jour l'affichage de la carte
+                updateStockCardDisplay(item.id, data);
+                
+                console.log(`${item.stock_symbol}: ${formatPrice(data.price_chf)} CHF`);
+            } else {
+                console.warn(`Impossible de charger ${item.stock_symbol}: ${response.status}`);
+            }
+        } catch (error) {
+            console.error(`Erreur chargement ${item.stock_symbol}:`, error);
+        }
+        
+        // Délai minimal entre les requêtes
+        await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    
+    console.log('Chargement des données boursières terminé');
+    
+    // Rafraîchir les statistiques
+    updateStatistics();
+}
 
 // Nettoyer les timers au déchargement
 window.addEventListener('beforeunload', function() {
