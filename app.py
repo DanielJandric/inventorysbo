@@ -3405,10 +3405,15 @@ def fix_vehicle_categories():
         # Filtrer les items avec des catégories similaires à 'Véhicules'
         vehicles_to_fix = []
         for item in all_items:
-            category = item.get('category', '').lower()
-            if 'vehicule' in category or 'véhicule' in category or 'vehicules' in category or 'véhicules' in category:
+            category = item.get('category')
+            if category is None:
+                logger.warning(f"⚠️ Objet sans catégorie: {item.get('name')} (ID: {item.get('id')})")
+                continue
+                
+            category_lower = category.lower()
+            if 'vehicule' in category_lower or 'véhicule' in category_lower or 'vehicules' in category_lower or 'véhicules' in category_lower:
                 vehicles_to_fix.append(item)
-                logger.info(f"🚗 Véhicule trouvé: {item.get('name')} - Catégorie: {item.get('category')}")
+                logger.info(f"🚗 Véhicule trouvé: {item.get('name')} - Catégorie: {category}")
         
         if not vehicles_to_fix:
             return jsonify({
