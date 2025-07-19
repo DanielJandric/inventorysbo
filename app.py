@@ -2031,6 +2031,9 @@ def get_stock_price(symbol):
     Récupère le prix actuel d'une action, avec Yahoo Finance en priorité
     et EODHD/Finnhub comme alternatives robustes.
     """
+    # Vérifier si on force le refresh (ignore le cache)
+    force_refresh = request.args.get('force_refresh', 'false').lower() == 'true'
+    
     items = AdvancedDataManager.fetch_all_items()
     item = next((i for i in items if i.stock_symbol == symbol), None)
 
@@ -2046,18 +2049,24 @@ def get_stock_price(symbol):
             logger.info(f"Formatage du symbole suisse: {symbol} -> {formatted_symbol}")
 
     cache_key = f"stock_price_{symbol}"
-    if cache_key in stock_price_cache:
+    
+    # Si on ne force pas le refresh, vérifier le cache
+    if not force_refresh and cache_key in stock_price_cache:
         cached_data = stock_price_cache[cache_key]
         
         if time.time() - cached_data['timestamp'] < STOCK_PRICE_CACHE_DURATION:
             logger.info(f"Prix depuis le cache pour {symbol}")
             return jsonify(cached_data['data'])
+    
+    # Si on force le refresh, logger l'action
+    if force_refresh:
+        logger.info(f"Refresh forcé pour {symbol} - cache ignoré")
 
     try:
         # Exclure IREN de Yahoo Finance (cause des erreurs 429)
         if symbol.upper() == 'IREN' or symbol.upper() == 'IREN.SW':
             logger.info(f"IREN exclu de Yahoo Finance, bascule direct sur EODHD")
-            return get_stock_price_eodhd(formatted_symbol, item, cache_key)
+            return get_stock_price_eodhd(formatted_symbol, item, cache_key, force_refresh)
         
         import yfinance as yf
         # Délai plus long pour éviter rate limiting Yahoo Finance
@@ -2135,6 +2144,8 @@ def get_stock_price(symbol):
             "fifty_two_week_high": format_stock_value(final_52w_high, is_price=True),
             "fifty_two_week_low": format_stock_value(final_52w_low, is_price=True)
         }
+        
+        # Toujours mettre à jour le cache, même en cas de refresh forcé
         stock_price_cache[cache_key] = {'data': result, 'timestamp': time.time()}
         return jsonify(result)
 
@@ -2149,11 +2160,68 @@ def get_stock_price(symbol):
         
         # Essayer EODHD comme fallback
         logger.info(f"Essai avec EODHD pour {formatted_symbol}")
-        return get_stock_price_eodhd(formatted_symbol, item, cache_key)
+        return get_stock_price_eodhd(formatted_symbol, item, cache_key, force_refresh)
 
 
+@app.route("/api/stock-price/cache/clear", methods=["POST"])
+def clear_stock_price_cache():
+    """
+    Vide complètement le cache des prix des actions
+    """
+    try:
+        global stock_price_cache
+        cache_size = len(stock_price_cache)
+        stock_price_cache.clear()
+        logger.info(f"Cache des prix des actions vidé ({cache_size} entrées supprimées)")
+        return jsonify({
+            "success": True,
+            "message": f"Cache vidé avec succès ({cache_size} entrées supprimées)",
+            "cache_size_before": cache_size,
+            "cache_size_after": 0
+        })
+    except Exception as e:
+        logger.error(f"Erreur lors du vidage du cache: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
 
-def get_stock_price_eodhd(symbol: str, item: Optional[CollectionItem], cache_key: str):
+
+@app.route("/api/stock-price/cache/status")
+def get_stock_price_cache_status():
+    """
+    Retourne le statut du cache des prix des actions
+    """
+    try:
+        cache_size = len(stock_price_cache)
+        cache_keys = list(stock_price_cache.keys())
+        
+        # Calculer l'âge des entrées en cache
+        current_time = time.time()
+        cache_ages = {}
+        expired_entries = 0
+        
+        for key, data in stock_price_cache.items():
+            age = current_time - data['timestamp']
+            cache_ages[key] = age
+            if age > STOCK_PRICE_CACHE_DURATION:
+                expired_entries += 1
+        
+        return jsonify({
+            "cache_size": cache_size,
+            "cache_duration": STOCK_PRICE_CACHE_DURATION,
+            "expired_entries": expired_entries,
+            "cache_keys": cache_keys,
+            "cache_ages": cache_ages
+        })
+    except Exception as e:
+        logger.error(f"Erreur lors de la récupération du statut du cache: {e}")
+        return jsonify({
+            "error": str(e)
+        }), 500
+
+
+def get_stock_price_eodhd(symbol: str, item: Optional[CollectionItem], cache_key: str, force_refresh=False):
     """
     Récupère le prix via l'API EODHD. Excellente pour les actions suisses.
     Limite: 20 requêtes par jour.

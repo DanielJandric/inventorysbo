@@ -488,12 +488,12 @@ function startStockPriceUpdates() {
     stockPriceUpdateTimer = setInterval(updateStockPrices, 600000);
 }
 
-async function updateStockPrices() {
+async function updateStockPrices(forceRefresh = false) {
     const stockItems = allItems.filter(item => item.category === 'Actions' && item.stock_symbol);
     
     if (stockItems.length === 0) return;
     
-    console.log(`Mise à jour des prix pour ${stockItems.length} actions...`);
+    console.log(`Mise à jour des prix pour ${stockItems.length} actions...${forceRefresh ? ' (refresh forcé)' : ''}`);
     
     for (const item of stockItems) {
         // Vérifier si on a déjà eu trop d'erreurs pour ce symbole (augmenté à 5)
@@ -504,7 +504,10 @@ async function updateStockPrices() {
         }
         
         try {
-            const response = await fetch(`/api/stock-price/${item.stock_symbol}`);
+            const url = forceRefresh 
+                ? `/api/stock-price/${item.stock_symbol}?force_refresh=true`
+                : `/api/stock-price/${item.stock_symbol}`;
+            const response = await fetch(url);
             
             if (response.status === 429) {
                 // Rate limit atteint - retry intelligent
@@ -550,18 +553,65 @@ async function updateStockPrices() {
     updateStatistics();
 }
 
-// Fonction pour forcer la mise à jour immédiate des prix
+// Fonction pour forcer la mise à jour immédiate des prix (ignore le cache)
 async function forceUpdateStockPrices() {
-    console.log('Mise à jour forcée des prix...');
+    console.log('Mise à jour des prix (cache ignoré)...');
     showNotification('Mise à jour des prix en cours...', false);
     
     // Réinitialiser les erreurs pour permettre de nouveaux essais
     stockPriceUpdateErrors = {};
     
-    // Lancer la mise à jour immédiatement
-    await updateStockPrices();
+    // Lancer la mise à jour immédiatement avec force_refresh=true
+    await updateStockPrices(true);
     
     showNotification('Prix mis à jour !', false);
+}
+
+// Fonction pour vider le cache côté serveur
+async function clearStockPriceCache() {
+    try {
+        console.log('Vidage du cache des prix des actions...');
+        showNotification('Vidage du cache en cours...', false);
+        
+        const response = await fetch('/api/stock-price/cache/clear', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            console.log('Cache vidé:', result);
+            showNotification(`Cache vidé (${result.cache_size_before} entrées supprimées)`, false);
+        } else {
+            throw new Error(`Erreur ${response.status}`);
+        }
+    } catch (error) {
+        console.error('Erreur lors du vidage du cache:', error);
+        showNotification('Erreur lors du vidage du cache', true);
+    }
+}
+
+// Fonction pour afficher le statut du cache
+async function showCacheStatus() {
+    try {
+        const response = await fetch('/api/stock-price/cache/status');
+        
+        if (response.ok) {
+            const status = await response.json();
+            console.log('Statut du cache:', status);
+            
+            // Afficher dans une notification détaillée
+            const message = `Cache: ${status.cache_size} entrées\nExpirées: ${status.expired_entries}\nDurée: ${Math.round(status.cache_duration/60)}min`;
+            showNotification(message, false);
+        } else {
+            throw new Error(`Erreur ${response.status}`);
+        }
+    } catch (error) {
+        console.error('Erreur lors de la récupération du statut du cache:', error);
+        showNotification('Erreur lors de la récupération du statut', true);
+    }
 }
 
 // Fonction pour mettre à jour l'affichage d'une carte action
