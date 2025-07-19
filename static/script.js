@@ -528,6 +528,41 @@ async function forceUpdateStockPrices() {
     showNotification('Prix mis à jour !', false);
 }
 
+// Fonction pour générer le PDF
+async function generatePDF() {
+    try {
+        console.log('📄 Génération du PDF...');
+        showNotification('Génération du PDF en cours...', false);
+        
+        // Appeler l'API de génération PDF
+        const response = await fetch('/api/portfolio/pdf');
+        
+        if (response.ok) {
+            // Télécharger le PDF
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `bonvin_portfolio_${new Date().toISOString().slice(0, 10)}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            
+            console.log('✅ PDF généré et téléchargé avec succès');
+            showNotification('PDF généré avec succès !', false);
+        } else {
+            const error = await response.json();
+            console.error('❌ Erreur génération PDF:', error);
+            showNotification('Erreur lors de la génération du PDF: ' + (error.error || 'Erreur inconnue'), true);
+        }
+        
+    } catch (error) {
+        console.error('❌ Erreur:', error);
+        showNotification('Erreur lors de la génération du PDF', true);
+    }
+}
+
 // Fonction pour vider le cache côté serveur
 async function clearStockPriceCache() {
     try {

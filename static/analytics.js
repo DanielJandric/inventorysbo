@@ -450,6 +450,51 @@ async function refreshAnalytics() {
     await loadAnalytics();
 }
 
+// Fonction pour générer le PDF
+async function generatePDF() {
+    try {
+        console.log('📄 Génération du PDF...');
+        
+        // Afficher un indicateur de chargement
+        const button = event.target;
+        const originalText = button.innerHTML;
+        button.innerHTML = '⏳ Génération...';
+        button.disabled = true;
+        
+        // Appeler l'API de génération PDF
+        const response = await fetch('/api/portfolio/pdf');
+        
+        if (response.ok) {
+            // Télécharger le PDF
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `bonvin_portfolio_${new Date().toISOString().slice(0, 10)}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            
+            console.log('✅ PDF généré et téléchargé avec succès');
+        } else {
+            const error = await response.json();
+            console.error('❌ Erreur génération PDF:', error);
+            alert('Erreur lors de la génération du PDF: ' + (error.error || 'Erreur inconnue'));
+        }
+        
+    } catch (error) {
+        console.error('❌ Erreur:', error);
+        alert('Erreur lors de la génération du PDF');
+    } finally {
+        // Restaurer le bouton
+        const button = event.target;
+        button.innerHTML = '📄 Générer PDF';
+        button.disabled = false;
+    }
+}
+
 // Exposer les fonctions globalement
 window.toggleCategory = toggleCategory;
-window.refreshAnalytics = refreshAnalytics; 
+window.refreshAnalytics = refreshAnalytics;
+window.generatePDF = generatePDF; 

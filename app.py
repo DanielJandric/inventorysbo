@@ -2829,9 +2829,93 @@ def list_endpoints():
             "Détection d'intention de requête",
             "Support complet des actions boursières",
             "Mise à jour automatique des prix avec gestion 429",
-            "Prix manuel pour les actions"
+            "Prix manuel pour les actions",
+            "Génération PDF pixel perfect"
         ]
     })
+
+@app.route("/api/portfolio/pdf", methods=["GET"])
+def generate_portfolio_pdf():
+    """Génère un PDF pixel perfect du portefeuille complet"""
+    try:
+        # Récupérer tous les items
+        items = AdvancedDataManager.fetch_all_items()
+        
+        # Calculer les statistiques
+        total_items = len(items)
+        available_items = len([item for item in items if item.status == 'Available'])
+        categories = set([item.category for item in items if item.category])
+        categories_count = len(categories)
+        
+        # Calculer la valeur totale
+        total_value = 0
+        for item in items:
+            if item.status == 'Sold':
+                continue
+            if item.category == 'Actions' and item.current_price and item.stock_quantity:
+                total_value += item.current_price * item.stock_quantity
+            elif item.status == 'Available' and item.asking_price:
+                total_value += item.asking_price
+        
+        # Organiser les données par catégorie
+        categories_data = {}
+        actions = []
+        
+        for item in items:
+            if item.category == 'Actions':
+                actions.append(item)
+            else:
+                if item.category not in categories_data:
+                    categories_data[item.category] = []
+                categories_data[item.category].append(item)
+        
+        # Préparer les données pour le template
+        template_data = {
+            'generation_date': datetime.now().strftime('%d/%m/%Y à %H:%M'),
+            'total_items': total_items,
+            'total_value': formatPrice(total_value),
+            'available_items': available_items,
+            'categories_count': categories_count,
+            'actions': actions,
+            'categories': categories_data
+        }
+        
+        # Rendre le template HTML
+        html_content = render_template('portfolio_pdf.html', **template_data)
+        
+        # Générer le PDF avec WeasyPrint
+        try:
+            from weasyprint import HTML, CSS
+            from weasyprint.text.fonts import FontConfiguration
+            
+            # Configuration des polices
+            font_config = FontConfiguration()
+            
+            # Créer le PDF
+            pdf = HTML(string=html_content).write_pdf(
+                stylesheets=[],
+                font_config=font_config
+            )
+            
+            # Retourner le PDF
+            from flask import Response
+            response = Response(pdf, mimetype='application/pdf')
+            response.headers['Content-Disposition'] = f'attachment; filename=bonvin_portfolio_{datetime.now().strftime("%Y%m%d_%H%M")}.pdf'
+            
+            logger.info(f"✅ PDF généré avec succès: {total_items} items, {categories_count} catégories")
+            return response
+            
+        except ImportError:
+            logger.error("❌ WeasyPrint non installé")
+            return jsonify({
+                "error": "WeasyPrint non installé. Installez avec: pip install weasyprint"
+            }), 500
+            
+    except Exception as e:
+        logger.error(f"❌ Erreur génération PDF: {e}")
+        return jsonify({
+            "error": str(e)
+        }), 500
 
 # Fonctions utilitaires
 def clean_update_data(data: Dict[str, Any]) -> Dict[str, Any]:
