@@ -1660,6 +1660,39 @@ async function getMarketPrice(button, id) {
     }
 }
 
+// Fonction pour mettre à jour le prix avec l'estimation IA
+async function updatePriceWithAI(itemId, estimatedPrice) {
+    try {
+        showNotification('Mise à jour du prix en cours...', false);
+        
+        const response = await fetch(`/api/ai-update-price/${itemId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showSuccess(`✅ Prix mis à jour avec succès!\n\nNouveau prix: ${formatPrice(result.updated_price)}`);
+            
+            // Fermer le modal d'estimation
+            closeEstimationModal();
+            
+            // Recharger les données pour afficher les changements
+            await loadItems();
+            
+        } else {
+            showError(`Erreur: ${result.error}`);
+        }
+        
+    } catch (error) {
+        console.error('Erreur mise à jour prix IA:', error);
+        showError('Erreur lors de la mise à jour du prix');
+    }
+}
+
 function showEstimationModal(data, itemId) {
     const item = allItems.find(i => i.id === itemId);
     if (!item) return;
@@ -1714,6 +1747,18 @@ function showEstimationModal(data, itemId) {
                     <p class="text-slate-400 whitespace-pre-wrap">${reasoning}</p>
                 </div>
                 ${comparablesHTML}
+                <div class="text-center p-6 glass-subtle rounded-2xl">
+                    <h3 class="text-lg font-semibold mb-4">Mise à jour du prix</h3>
+                    <p class="text-slate-400 mb-4">Voulez-vous mettre à jour le prix actuel de cet objet avec l'estimation de l'IA ?</p>
+                    <div class="flex justify-center gap-4">
+                        <button onclick="updatePriceWithAI(${itemId}, ${estimated_price})" class="px-6 py-3 bg-green-600 hover:bg-green-700 rounded-xl font-medium transition-colors">
+                            ✅ Mettre à jour le prix
+                        </button>
+                        <button onclick="closeEstimationModal()" class="px-6 py-3 bg-gray-600 hover:bg-gray-700 rounded-xl font-medium transition-colors">
+                            ❌ Annuler
+                        </button>
+                    </div>
+                </div>
             </div>`;
     }
     
