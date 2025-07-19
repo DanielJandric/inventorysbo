@@ -663,6 +663,33 @@
             background: rgba(34, 211, 238, 0.2);
             transform: scale(1.05);
         }
+        
+        /* NAVIGATION */
+        .nav-link {
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.75rem;
+            font-weight: 500;
+            font-size: 0.875rem;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #94a3b8;
+        }
+        
+        .nav-link:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+            color: #e0e6e7;
+        }
+        
+        .nav-link.active {
+            background: rgba(0, 220, 255, 0.2);
+            border: 1px solid rgba(0, 220, 255, 0.4);
+            color: #00e5ff;
+            box-shadow: 0 0 20px rgba(0, 220, 255, 0.3);
+        }
 
         .no-tailwind-warning { display: none !important; }
     </style>
@@ -685,6 +712,24 @@
             </div>
             <h1 class="text-4xl md:text-5xl font-bold mb-4 tracking-wider">INVENTAIRE PRIVÉ</h1>
         </header>
+        
+        <!-- Barre de navigation -->
+        <nav class="flex justify-center mb-8">
+            <div class="flex gap-4">
+                <a href="/" class="nav-link active glass">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+                    </svg>
+                    Collection
+                </a>
+                <a href="/analytics" class="nav-link glass">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                    </svg>
+                    Analytics
+                </a>
+            </div>
+        </nav>
         
         <main>
             <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-12 stats-grid">
@@ -726,21 +771,13 @@
                 </div>
             </div>
 
-            <!-- Navigation et recherche -->
+            <!-- Recherche -->
             <section class="glass-dark p-6 mb-8 glowing-element">
-                <div class="flex flex-col md:flex-row gap-4 items-center">
-                    <div class="relative flex-1">
-                        <input type="text" id="search-input" oninput="handleSearch()" placeholder="Rechercher dans la collection..." class="w-full glass rounded-xl px-4 py-3 pl-12 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 transition-all">
-                        <svg class="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-                        </svg>
-                    </div>
-                    <a href="/analytics" class="glass px-6 py-3 rounded-xl text-sm font-medium transition-all hover:scale-105 flex items-center gap-2">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
-                        </svg>
-                        Analytics
-                    </a>
+                <div class="relative">
+                    <input type="text" id="search-input" oninput="handleSearch()" placeholder="Rechercher dans la collection..." class="w-full glass rounded-xl px-4 py-3 pl-12 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 transition-all">
+                    <svg class="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
                 </div>
             </section>
 
