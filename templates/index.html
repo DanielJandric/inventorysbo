@@ -1464,6 +1464,36 @@
     <script src="/static/script.js"></script>
     
     <script>
+        // Initialisation de l'application
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🚀 Initialisation de l\'application BONVIN Collection...');
+            
+            // Initialiser les variables globales
+            window.allItems = [];
+            window.currentMainFilter = 'all';
+            window.selectedCategories = new Set();
+            window.currentViewMode = 'cards';
+            window.stockPriceUpdateErrors = {};
+            
+            // Charger les données
+            loadItems().then(() => {
+                console.log('✅ Données chargées avec succès');
+                
+                // Charger les prix des actions après le chargement initial
+                setTimeout(() => {
+                    loadStockPricesOnStartup();
+                }, 1000);
+            }).catch(error => {
+                console.error('❌ Erreur lors du chargement des données:', error);
+            });
+            
+            // Initialiser les observateurs de cartes
+            initCardObserver();
+            
+            // Ajouter les actions rapides du chatbot
+            addQuickActions();
+        });
+        
         // Fonction pour gérer le menu hamburger
         function toggleHamburgerMenu() {
             const dropdown = document.getElementById('hamburger-dropdown');

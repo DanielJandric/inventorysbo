@@ -1191,8 +1191,6 @@ function createItemCardHTML(item) {
                 </div>
             `;
         }
-        
-
     }
     
     return `

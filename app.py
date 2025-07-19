@@ -2278,10 +2278,12 @@ def advanced_analytics():
 def get_items():
     """Récupère tous les objets"""
     try:
+        logger.info("📥 Demande de récupération de tous les items")
         items = AdvancedDataManager.fetch_all_items()
+        logger.info(f"✅ {len(items)} items récupérés avec succès")
         return jsonify([item.to_dict() for item in items])
     except Exception as e:
-        logger.error(f"Erreur get_items: {e}")
+        logger.error(f"❌ Erreur get_items: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route("/api/items", methods=["POST"])
