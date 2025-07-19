@@ -1,3 +1,12 @@
+# Variables d'environnement
+.env
+.env.local
+.env.production
+
+# Fichiers de configuration avec clés sensibles
+config_local.py
+config_production.py
+
 # Python
 __pycache__/
 *.py[cod]
@@ -19,12 +28,10 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST
 
-# Virtual Environment
-venv/
-env/
-ENV/
+# Logs
+*.log
+logs/
 
 # IDE
 .vscode/
@@ -36,19 +43,7 @@ ENV/
 .DS_Store
 Thumbs.db
 
-# Logs
-*.log
-
-# Environment variables
-.env
-.env.local
-.env.production
-
-# Database
-*.db
-*.sqlite3
-
-# Temporary files
-*.tmp
-*.temp
+# Tests
+test_*.py
+*_test.py
 

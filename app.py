@@ -22,6 +22,13 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
+# Import configuration
+try:
+    import config
+    print("✅ Configuration importée")
+except ImportError:
+    print("⚠️ Fichier config.py non trouvé")
+
 # Configuration logging sophistiquée
 logging.basicConfig(
     level=logging.INFO,
