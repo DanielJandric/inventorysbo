@@ -2791,27 +2791,33 @@ def get_stock_price_chatgpt(symbol: str, item: Optional[CollectionItem], cache_k
         ticker = symbol
         
         prompt = f"""
-Tu es un expert en analyse financière. Je recherche les données boursières actuelles pour {company_name} (ticker {ticker}) cotée sur la bourse suisse.
+Tu es un expert en analyse financière. Je recherche les données boursières actuelles pour {company_name} (ticker {ticker}).
 
 RÈGLES STRICTES :
 - Utilise des sources fiables (Yahoo Finance, Google Finance, etc.)
-- Le current_price DOIT être un nombre positif en CHF
-- Vérifie que le prix est raisonnable (entre 0.01 et 1000000 CHF)
+- Retourne les prix dans la devise NATIVE de l'action :
+  * Actions américaines (NYSE, NASDAQ) : prix en USD
+  * Actions suisses (SIX) : prix en CHF
+  * Actions européennes : prix en EUR
+- Le current_price DOIT être un nombre positif
+- Vérifie que le prix est raisonnable (entre 0.01 et 1000000)
 - Si une donnée n'est pas disponible, utilise null
 
 Récupère et retourne UNIQUEMENT un JSON avec les données suivantes :
-- current_price: prix actuel en CHF (OBLIGATOIRE, nombre positif)
+- current_price: prix actuel dans la devise native (OBLIGATOIRE, nombre positif)
+- currency: devise du prix (USD, CHF, EUR, etc.)
 - daily_volume: volume d'échange du jour (nombre entier positif)
 - average_volume: volume d'échange moyen (30 jours, nombre entier positif)
-- fifty_two_week_high: plus haut des 52 semaines en CHF (nombre positif)
-- fifty_two_week_low: plus bas des 52 semaines en CHF (nombre positif)
+- fifty_two_week_high: plus haut des 52 semaines dans la devise native (nombre positif)
+- fifty_two_week_low: plus bas des 52 semaines dans la devise native (nombre positif)
 - pe_ratio: ratio P/E (TTM) (nombre positif ou null)
-- daily_change: variation du jour en CHF (positif ou négatif)
+- daily_change: variation du jour dans la devise native (positif ou négatif)
 - daily_change_percent: variation du jour en pourcentage
 
 Format de réponse JSON uniquement, sans texte supplémentaire :
 {{
     "current_price": 125.50,
+    "currency": "USD",
     "daily_volume": 876,
     "average_volume": 3150,
     "fifty_two_week_high": 128.50,
@@ -2821,7 +2827,7 @@ Format de réponse JSON uniquement, sans texte supplémentaire :
     "daily_change_percent": 1.87
 }}
 
-IMPORTANT : Le current_price est OBLIGATOIRE et doit être un nombre positif valide.
+IMPORTANT : Le current_price est OBLIGATOIRE et doit être un nombre positif valide dans la devise native de l'action.
 """
         
         # Appeler ChatGPT-4o
@@ -2866,15 +2872,30 @@ IMPORTANT : Le current_price est OBLIGATOIRE et doit être un nombre positif val
             if current_price < 0.01 or current_price > 1000000:
                 raise Exception(f"Prix hors limites: {current_price}")
             
+            # Récupérer la devise et convertir en CHF si nécessaire
+            original_currency = data.get('currency', 'CHF')
+            original_price = current_price
+            price_chf = current_price
+            
+            # Conversion vers CHF si nécessaire
+            if original_currency != 'CHF':
+                try:
+                    exchange_rate = get_live_exchange_rate(original_currency, 'CHF')
+                    price_chf = original_price * exchange_rate
+                    logger.info(f"💱 Conversion {original_currency} vers CHF: {original_price} {original_currency} = {price_chf:.2f} CHF (taux: {exchange_rate:.4f})")
+                except Exception as e:
+                    logger.warning(f"⚠️ Erreur conversion {original_currency} vers CHF: {e}, utilisation du prix original")
+                    price_chf = original_price
+            
             # Formater les données pour l'affichage
             result = {
                 "symbol": symbol,
-                "price": current_price,
-                "price_chf": current_price,
-                "currency": "CHF",
+                "price": original_price,
+                "price_chf": price_chf,
+                "currency": original_currency,
                 "company_name": company_name,
                 "last_update": datetime.now().isoformat(),
-                "source": "ChatGPT-4o (recherche internet)",
+                "source": f"ChatGPT-4o ({original_currency} → CHF)",
                 "change": format_stock_value(data.get('daily_change', 0), is_price=True),
                 "change_percent": format_stock_value(data.get('daily_change_percent', 0), is_percent=True),
                 "volume": format_stock_value(data.get('daily_volume', 0), is_volume=True),
@@ -2892,8 +2913,12 @@ IMPORTANT : Le current_price est OBLIGATOIRE et doit être un nombre positif val
             # Mettre à jour le prix dans la DB si c'est une action existante
             if item and item.id:
                 try:
+                    # Calculer la valeur totale en CHF
+                    total_value_chf = price_chf * (item.stock_quantity or 1)
+                    
                     update_data = {
-                        'current_price': result['price'],
+                        'current_price': price_chf,  # Prix en CHF
+                        'current_value': total_value_chf,  # Valeur totale en CHF
                         'last_price_update': datetime.now().isoformat(),
                         'stock_volume': data.get('daily_volume'),
                         'stock_pe_ratio': data.get('pe_ratio'),
@@ -2908,7 +2933,9 @@ IMPORTANT : Le current_price est OBLIGATOIRE et doit être un nombre positif val
                     if supabase:
                         response = supabase.table('items').update(update_data).eq('id', item.id).execute()
                         if response.data:
-                            logger.info(f"✅ Prix et métriques mis à jour dans DB pour action {item.name} (ID: {item.id}): {result['price']} CHF")
+                            logger.info(f"✅ Prix et métriques mis à jour dans DB pour action {item.name} (ID: {item.id})")
+                            logger.info(f"💰 Prix: {original_price} {original_currency} → {price_chf:.2f} CHF")
+                            logger.info(f"💼 Valeur totale: {total_value_chf:.2f} CHF ({item.stock_quantity or 1} actions)")
                             logger.info(f"📊 Métriques: Volume={update_data['stock_volume']}, PE={update_data['stock_pe_ratio']}, 52W-H={update_data['stock_52_week_high']}, 52W-L={update_data['stock_52_week_low']}")
                         else:
                             logger.warning(f"⚠️ Échec mise à jour DB pour action {item.name} (ID: {item.id})")
