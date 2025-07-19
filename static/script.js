@@ -548,9 +548,8 @@ async function forceUpdateStockPrices() {
     showNotification('Prix mis à jour !', false);
 }
 
-// Fonction pour mettre à jour le prix d'un véhicule via IA
-async function aiUpdateVehiclePrice() {
-    // Demander à l'utilisateur de sélectionner un véhicule
+// Fonction pour ouvrir la modal de sélection de véhicule
+function openVehicleSelectModal() {
     const vehicles = allItems.filter(item => item.category !== 'Actions' && item.status === 'Available');
     
     if (vehicles.length === 0) {
@@ -558,22 +557,78 @@ async function aiUpdateVehiclePrice() {
         return;
     }
     
-    // Créer une liste de sélection
-    const vehicleList = vehicles.map(v => `${v.name} (${v.category})`).join('\n');
-    const selectedName = prompt(`Sélectionnez un véhicule à mettre à jour via IA:\n\n${vehicleList}\n\nEntrez le nom exact du véhicule:`);
+    // Remplir la liste déroulante
+    const select = document.getElementById('vehicle-select');
+    select.innerHTML = '<option value="">Sélectionnez un véhicule...</option>';
     
-    if (!selectedName) return;
+    vehicles.forEach(vehicle => {
+        const option = document.createElement('option');
+        option.value = vehicle.id;
+        option.textContent = `${vehicle.name} (${vehicle.category})`;
+        select.appendChild(option);
+    });
     
-    const selectedVehicle = vehicles.find(v => v.name === selectedName);
+    // Afficher la modal
+    document.getElementById('vehicle-select-modal').classList.remove('hidden');
+    
+    // Écouter les changements de sélection
+    select.addEventListener('change', function() {
+        const selectedId = this.value;
+        const vehicleDetails = document.getElementById('vehicle-details');
+        const vehicleInfo = document.getElementById('vehicle-info');
+        const confirmBtn = document.getElementById('confirm-ai-btn');
+        
+        if (selectedId) {
+            const vehicle = vehicles.find(v => v.id == selectedId);
+            if (vehicle) {
+                // Afficher les détails du véhicule
+                vehicleInfo.innerHTML = `
+                    <div><strong>Nom:</strong> ${vehicle.name}</div>
+                    <div><strong>Catégorie:</strong> ${vehicle.category}</div>
+                    <div><strong>Année:</strong> ${vehicle.construction_year || 'N/A'}</div>
+                    <div><strong>État:</strong> ${vehicle.condition || 'N/A'}</div>
+                    <div><strong>Prix actuel:</strong> ${vehicle.current_value ? formatPrice(vehicle.current_value) : 'Non défini'}</div>
+                    <div><strong>Prix d'acquisition:</strong> ${vehicle.acquisition_price ? formatPrice(vehicle.acquisition_price) : 'Non défini'}</div>
+                    ${vehicle.description ? `<div><strong>Description:</strong> ${vehicle.description.substring(0, 100)}...</div>` : ''}
+                `;
+                vehicleDetails.classList.remove('hidden');
+                confirmBtn.disabled = false;
+            }
+        } else {
+            vehicleDetails.classList.add('hidden');
+            confirmBtn.disabled = true;
+        }
+    });
+}
+
+// Fonction pour fermer la modal de sélection
+function closeVehicleSelectModal() {
+    document.getElementById('vehicle-select-modal').classList.add('hidden');
+    document.getElementById('vehicle-select').value = '';
+    document.getElementById('vehicle-details').classList.add('hidden');
+    document.getElementById('confirm-ai-btn').disabled = true;
+}
+
+// Fonction pour confirmer la mise à jour IA
+async function confirmAiUpdate() {
+    const selectedId = document.getElementById('vehicle-select').value;
+    if (!selectedId) return;
+    
+    const vehicles = allItems.filter(item => item.category !== 'Actions' && item.status === 'Available');
+    const selectedVehicle = vehicles.find(v => v.id == selectedId);
+    
     if (!selectedVehicle) {
         showError('Véhicule non trouvé');
         return;
     }
     
-    // Confirmation
+    // Confirmation finale
     if (!confirm(`Mettre à jour le prix de "${selectedVehicle.name}" via l'IA ?\n\nCette opération va:\n- Analyser le marché actuel\n- Calculer une nouvelle estimation\n- Mettre à jour la base de données\n\nContinuer ?`)) {
         return;
     }
+    
+    // Fermer la modal
+    closeVehicleSelectModal();
     
     try {
         showNotification('Analyse IA en cours...', false);
@@ -614,6 +669,11 @@ async function aiUpdateVehiclePrice() {
         console.error('Erreur mise à jour IA:', error);
         showError('Erreur lors de la mise à jour IA');
     }
+}
+
+// Fonction pour mettre à jour le prix d'un véhicule via IA (ancienne version - maintenant redirige vers la modal)
+async function aiUpdateVehiclePrice() {
+    openVehicleSelectModal();
 }
 
 // Fonction pour mettre à jour tous les véhicules via IA
