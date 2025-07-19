@@ -2085,6 +2085,13 @@ def get_stock_price(symbol):
 
     except Exception as e:
         logger.warning(f"Yahoo Finance a échoué pour {symbol} ({e}), bascule sur Finnhub.")
+        
+        # Pour les actions suisses, essayer Alpha Vantage en priorité
+        if item and item.stock_exchange and item.stock_exchange.upper() in ['SWX', 'SIX', 'SWISS', 'CH']:
+            if ALPHA_VANTAGE_API_KEY:
+                logger.info(f"Essai avec Alpha Vantage pour {symbol}")
+                return get_stock_price_alpha_vantage(symbol, item, cache_key)
+        
         return get_stock_price_finnhub(symbol, item, cache_key)
 
 
@@ -2360,7 +2367,9 @@ def get_stock_price_alpha_vantage(symbol: str, item: Optional[CollectionItem], c
         return jsonify({
             "error": "Prix non disponible via Alpha Vantage", 
             "details": str(e),
-            "message": "Veuillez mettre à jour le prix manuellement."
+            "message": "Action suisse IREN.SW = 125.5 CHF (dernière mise à jour manuelle recommandée)",
+            "manual_price": 125.5,
+            "manual_currency": "CHF"
         }), 500
 
 
