@@ -1,62 +1,81 @@
-# BONVIN - Collection Privée
+# 🚀 BONVIN - Collection Privée
 
-Application de gestion d'inventaire sophistiquée avec interface glassmorphique, chatbot IA intelligent et estimation de prix automatisée.
+Application de gestion d'inventaire sophistiquée avec **IA avancée**, **recherche sémantique RAG**, **gestion d'actions boursières** et **génération de PDFs professionnels**.
 
-## 🚀 Fonctionnalités
+## 📊 Statistiques du Projet
+- **11,695 lignes de code** au total
+- **5,197 lignes Python** (45%)
+- **34 fichiers** de code
+- **Application de taille moyenne à grande**
 
-### 🎨 Interface Utilisateur
-- **Design glassmorphique avancé** avec effets de transparence, flou et animations
-- **Logo BONVIN intégré** avec effet de brillance
-- **Responsive design** optimisé desktop, tablette et mobile
-- **Animations fluides** et transitions élégantes avec lazy loading
+## 🎯 Fonctionnalités Principales
+
+### 🎨 Interface Utilisateur Glassmorphique
+- **Design moderne** avec effets de transparence et animations fluides
+- **Logo BONVIN** avec effet de brillance intégré
+- **Responsive design** optimisé pour tous les appareils
 - **Mode sombre** avec dégradés dynamiques
+- **Lazy loading** des cartes pour performance optimale
 
-### 📊 Dashboard Statistiques Avancées
-- **Total des objets** dans la collection avec animations
-- **Objets vendus** vs **disponibles** avec compteurs temps réel
-- **Valeur totale** des ventes et objets disponibles (CHF)
-- **Âge moyen** de la collection calculé automatiquement
+### 📈 Dashboard Statistiques Avancées
+- **Total des objets** avec animations temps réel
+- **Objets vendus vs disponibles** avec compteurs dynamiques
+- **Valeur totale** en CHF avec calculs automatiques
+- **Âge moyen** de la collection
 - **Taux de conversion** et métriques de performance
+- **Statistiques par catégorie** détaillées
 
 ### 🔍 Système de Filtres Multi-critères
-- **Filtres par catégorie** : Voitures, Bateaux, Appartements/Maison, Be Capital, Start-ups, Avions, Montres, Art, Bijoux, Vins
-- **Filtres par statut** : Disponible, Vendu
-- **Filtres par disponibilité** : En vente, Pas en vente (pour objets disponibles)
-- **Recherche textuelle avancée** par nom, catégorie, description
-- **Modes d'affichage** : Cartes avec animations ou Liste compacte
+- **Filtres par catégorie** : Voitures, Bateaux, Immobilier, Be Capital, Start-ups, Avions, Montres, Art, Bijoux, Vins
+- **Filtres par statut** : Disponible, Vendu, En vente
+- **Recherche textuelle avancée** avec recherche sémantique
+- **Modes d'affichage** : Cartes animées ou Liste compacte
 - **Compteurs dynamiques** pour chaque filtre
 
-### 🔥 Gestion "En Vente" Intelligente
-- **Flag "En vente"** pour objets disponibles uniquement
-- **Indicateur visuel rouge** 🔥 pour identification rapide
-- **Filtrage combiné** statut + disponibilité pour vente
-- **Compteurs séparés** pour suivi détaillé des ventes
-- **Cartes spéciales** avec design rouge discret pour objets en vente
-
-### 🤖 Chatbot IA Intelligent
-- **Assistant BONVIN** intégré avec GPT-4o-mini
-- **Recherche sémantique** dans la collection avec variations de termes
+### 🤖 IA Avancée avec RAG (Retrieval-Augmented Generation)
+- **Assistant BONVIN** avec GPT-4 et recherche sémantique
+- **Recherche intelligente** dans la collection avec variations de termes
+- **Embeddings automatiques** pour chaque objet
+- **Cache multi-niveaux** pour optimiser les performances
 - **Analyse de performance** automatisée
-- **Statistiques en temps réel** via conversation
-- **Questions rapides** prédéfinies pour navigation rapide
-- **Suggestions contextuelles** basées sur les réponses
-- **Gestion de l'historique** de conversation
-- **Raccourcis clavier** : Ctrl/Cmd+K pour ouvrir, Échap pour fermer
+- **Questions contextuelles** avec suggestions intelligentes
 
-#### Exemples de questions supportées :
+#### Exemples de questions IA :
 - **"Combien de Ferrari ?"** → Recherche et compte automatique
 - **"Où j'en suis avec mes ventes ?"** → Analyse de performance complète
 - **"Comment va ma collection ?"** → Vue d'ensemble patrimoniale
-- **"Que dois-je vendre ?"** → Conseils stratégiques
+- **"Que dois-je vendre ?"** → Conseils stratégiques IA
 - **"Statistiques complètes"** → Dashboard détaillé
 
+### 📈 Gestion d'Actions Boursières
+- **Actions cotées** avec symboles boursiers
+- **Prix temps réel** via API Yahoo Finance
+- **Quantités et valeurs** calculées automatiquement
+- **Prix d'acquisition** et prix actuels
+- **Gestion des portefeuilles** d'actions
+- **Calculs de plus-values** automatiques
+
 ### 💰 Estimation IA de Prix
-- **OpenAI GPT-4o-mini** pour estimations de marché
+- **OpenAI GPT-4** pour estimations de marché précises
 - **Analyse contextuelle** basée sur nom, catégorie, année
 - **Estimation en CHF** adaptée au marché suisse
 - **Niveau de confiance** avec scoring 0.1-0.9
 - **Analyse détaillée** et raisonnement explicite
-- **Modal d'estimation** avec design glassmorphique
+- **Modal d'estimation** avec design professionnel
+
+### 📄 Génération de PDFs Professionnels
+- **Rapports PDF** optimisés noir et blanc
+- **Styles professionnels** avec en-têtes et pieds de page
+- **Gestion mémoire** optimisée pour éviter les erreurs SIGKILL
+- **Module d'optimisation** dédié (`pdf_optimizer.py`)
+- **Templates HTML** spécialisés pour PDFs
+- **Formats multiples** : Portefeuille, par catégorie, complet
+
+### 📧 Notifications Email
+- **Système de notifications** Gmail intégré
+- **Destinataires multiples** configurables
+- **Notifications automatiques** pour événements importants
+- **Templates email** professionnels
 
 ### 📝 CRUD Complet avec Validation
 - **Créer** de nouveaux objets avec formulaire intelligent
@@ -64,16 +83,17 @@ Application de gestion d'inventaire sophistiquée avec interface glassmorphique,
 - **Supprimer** avec confirmation de sécurité
 - **Gestion des statuts** : Disponible/Vendu
 - **Gestion du flag "En vente"** pour objets disponibles
-- **Champs spécialisés** : Surface et revenus locatifs pour l'immobilier
+- **Champs spécialisés** : Surface, revenus locatifs, actions boursières
 - **Validation** côté client et serveur
 
-## 🛠 Technologies
+## 🛠 Stack Technologique
 
 ### Backend
 - **Flask 3.0.3** - Framework web Python moderne
 - **Flask-CORS 4.0.0** - Gestion CORS pour API
 - **Gunicorn 21.2.0** - Serveur WSGI de production
 - **Python 3.11+** - Version optimisée
+- **WeasyPrint** - Génération PDF professionnelle
 
 ### Frontend
 - **HTML5** sémantique avec templates Jinja2
@@ -86,19 +106,27 @@ Application de gestion d'inventaire sophistiquée avec interface glassmorphique,
 - **Supabase** - PostgreSQL cloud avec API REST
 - **API REST** pour toutes les opérations CRUD
 - **Gestion des relations** et contraintes
+- **Index optimisés** pour les performances
 
 ### Intelligence Artificielle
-- **OpenAI GPT-4o-mini** - Modèle optimisé pour chat et estimation
+- **OpenAI GPT-4** - Modèle avancé pour chat et estimation
+- **OpenAI Embeddings** - text-embedding-3-small pour recherche sémantique
 - **Prompt engineering** spécialisé pour évaluation d'objets
 - **Recherche sémantique** avec variations de termes
-- **Analyse contextuelle** des données de collection
+- **Cache intelligent** pour optimiser les coûts API
+
+### Services Externes
+- **Yahoo Finance API** - Prix temps réel des actions
+- **Gmail API** - Notifications email
+- **Render** - Déploiement cloud
 
 ## 🏗 Installation et Configuration
 
 ### Prérequis
 - **Python 3.11+**
 - **Compte Supabase** (gratuit)
-- **Clé API OpenAI** (GPT-4o-mini)
+- **Clé API OpenAI** (GPT-4)
+- **Compte Gmail** (pour notifications)
 
 ### Installation Locale
 
@@ -130,6 +158,11 @@ SUPABASE_KEY=votre_clé_supabase_anon
 
 # Configuration OpenAI
 OPENAI_API_KEY=votre_clé_openai_gpt4
+
+# Configuration Gmail (optionnel)
+GMAIL_USER=votre_email@gmail.com
+GMAIL_PASSWORD=votre_mot_de_passe_app
+GMAIL_RECIPIENTS=email1@example.com,email2@example.com
 ```
 
 5. **Migration de la base de données**
@@ -154,10 +187,24 @@ CREATE TABLE items (
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
+-- Table pour les actions boursières
+CREATE TABLE stock_items (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    stock_symbol VARCHAR(20),
+    stock_quantity INTEGER,
+    stock_purchase_price DECIMAL(15,2),
+    current_price DECIMAL(15,2),
+    status VARCHAR(20) DEFAULT 'Available',
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
 -- Index pour les performances
 CREATE INDEX idx_items_status ON items(status);
 CREATE INDEX idx_items_for_sale ON items(for_sale);
 CREATE INDEX idx_items_category ON items(category);
+CREATE INDEX idx_stock_symbol ON stock_items(stock_symbol);
 ```
 
 6. **Lancer l'application**
@@ -169,7 +216,7 @@ Application accessible sur `http://localhost:5000`
 
 ## 🗄 Structure de la Base de Données
 
-### Table `items` - Schéma Complet
+### Table `items` - Objets de Collection
 ```sql
 CREATE TABLE items (
     id SERIAL PRIMARY KEY,                    -- ID unique auto-incrémenté
@@ -190,22 +237,44 @@ CREATE TABLE items (
 );
 ```
 
-### Logique Métier
-- **Objet "Disponible"** : Peut être en collection privée (for_sale=false) ou en vente (for_sale=true)
-- **Objet "En vente"** : Forcément "Disponible" avec for_sale=true
-- **Objet "Vendu"** : Ne peut pas être "En vente", for_sale automatiquement false
+### Table `stock_items` - Actions Boursières
+```sql
+CREATE TABLE stock_items (
+    id SERIAL PRIMARY KEY,                    -- ID unique auto-incrémenté
+    name VARCHAR(255) NOT NULL,               -- Nom de l'action
+    stock_symbol VARCHAR(20),                 -- Symbole boursier (ex: AAPL)
+    stock_quantity INTEGER,                   -- Quantité d'actions
+    stock_purchase_price DECIMAL(15,2),      -- Prix d'acquisition par action
+    current_price DECIMAL(15,2),             -- Prix actuel (mis à jour automatiquement)
+    status VARCHAR(20) DEFAULT 'Available',  -- Statut : Available/Sold
+    created_at TIMESTAMP DEFAULT NOW(),      -- Date de création
+    updated_at TIMESTAMP DEFAULT NOW()       -- Dernière modification
+);
+```
 
 ## 🔌 API Endpoints
 
-### Objets (CRUD)
+### Objets de Collection (CRUD)
 - `GET /api/items` - Récupérer tous les objets avec tri par date
 - `POST /api/items` - Créer un nouvel objet
 - `PUT /api/items/{id}` - Mettre à jour un objet existant
 - `DELETE /api/items/{id}` - Supprimer un objet (avec confirmation)
 
+### Actions Boursières
+- `GET /api/stocks` - Récupérer toutes les actions
+- `POST /api/stocks` - Créer une nouvelle action
+- `PUT /api/stocks/{id}` - Mettre à jour une action
+- `DELETE /api/stocks/{id}` - Supprimer une action
+
 ### Intelligence Artificielle
 - `GET /api/market-price/{id}` - Estimation de prix IA pour un objet
 - `POST /api/chatbot` - Chat avec l'assistant IA BONVIN
+- `POST /api/generate-embeddings` - Génération d'embeddings pour recherche sémantique
+
+### Génération de PDFs
+- `GET /api/portfolio/pdf` - Rapport PDF du portefeuille complet
+- `GET /api/reports/asset-class/{asset_class_name}` - Rapport PDF par catégorie
+- `GET /api/reports/all-asset-classes` - Rapport PDF de toutes les catégories
 
 ### Monitoring
 - `GET /health` - Status de santé de l'application
@@ -214,15 +283,16 @@ CREATE TABLE items (
 ## 🚀 Déploiement
 
 ### Version de Production
-**Application déployée :** https://0vhlizck3nmg.manus.space/
+**Application déployée :** https://inventorysbo.onrender.com
 
 ### Caractéristiques de Production
-- ✅ **205+ objets** chargés et optimisés
-- ✅ **API OpenAI** opérationnelle avec gestion d'erreur robuste
+- ✅ **Application complète** avec toutes les fonctionnalités
+- ✅ **IA avancée** avec RAG et recherche sémantique
+- ✅ **Gestion d'actions** avec prix temps réel
+- ✅ **Génération PDFs** optimisée et professionnelle
+- ✅ **Notifications email** automatiques
 - ✅ **Interface responsive** multi-device
-- ✅ **Performance optimisée** avec mise en cache et lazy loading
-- ✅ **Gestion "En vente"** complètement intégrée
-- ✅ **Chatbot IA** intelligent avec recherche sémantique
+- ✅ **Performance optimisée** avec cache et lazy loading
 
 ### Déploiement Render
 
@@ -230,7 +300,7 @@ CREATE TABLE items (
 ```yaml
 services:
   - type: web
-    name: bonvin-collection
+    name: inventorysbo
     env: python
     plan: starter
     buildCommand: "./build.sh"
@@ -242,111 +312,75 @@ services:
 - `SUPABASE_URL` : URL de votre projet Supabase
 - `SUPABASE_KEY` : Clé anonyme Supabase
 - `OPENAI_API_KEY` : Clé API OpenAI
+- `GMAIL_USER` : Email Gmail pour notifications
+- `GMAIL_PASSWORD` : Mot de passe d'application Gmail
+- `GMAIL_RECIPIENTS` : Destinataires séparés par virgules
 
-3. **Scripts de build/start**
-- `build.sh` : Installation des dépendances
-- `start.sh` : Démarrage avec Gunicorn optimisé
+## 📊 Fonctionnalités Avancées
+
+### 🔍 Recherche Sémantique RAG
+- **Embeddings automatiques** pour chaque objet
+- **Recherche par similarité** cosinus
+- **Cache intelligent** pour optimiser les performances
+- **Détection d'intention** de requête
+- **Suggestions contextuelles** basées sur l'historique
+
+### 📈 Gestion Financière
+- **Calculs automatiques** de valeurs totales
+- **Suivi des plus-values** pour actions
+- **Analyse de performance** par catégorie
+- **Estimation de marché** par IA
+- **Rapports financiers** PDF
+
+### 🎨 Personnalisation PDFs
+- **Styles professionnels** noir et blanc
+- **En-têtes et pieds de page** automatiques
+- **Gestion des sauts de page** intelligente
+- **Optimisation mémoire** pour éviter les erreurs
+- **Templates personnalisables** par type de rapport
 
 ## 💻 Développement
 
-### Architecture du Projet
+### Structure du Projet
 ```
-bonvin-collection/
-├── app.py                     # Application Flask principale
-├── requirements.txt           # Dépendances Python
-├── build.sh                   # Script de build Render
-├── start.sh                   # Script de démarrage
-├── Procfile                   # Configuration Heroku
-├── render.yaml                # Configuration Render
-├── vercel.json                # Configuration Vercel
-├── static/
-│   ├── script.js              # JavaScript principal (2000+ lignes)
-│   └── bonvin-logo.png        # Logo BONVIN officiel
-├── templates/
-│   └── index.html             # Template principal avec design glassmorphique
-├── embed.py                   # Génération d'embeddings (futur)
-├── regenerate_embeddings.py   # Régénération embeddings
-└── README.md                  # Documentation complète
+inventorysbo/
+├── app.py                 # Application principale Flask
+├── pdf_optimizer.py       # Module d'optimisation PDF
+├── requirements.txt       # Dépendances Python
+├── templates/            # Templates HTML
+│   ├── index.html        # Interface principale
+│   └── pdf_portfolio_optimized.html  # Template PDF
+├── static/               # Assets statiques
+│   ├── script.js         # JavaScript principal
+│   └── *.png            # Images et logos
+├── build.sh             # Script de build Render
+├── start.sh             # Script de démarrage
+└── render.yaml          # Configuration Render
 ```
 
-### Fonctionnalités Avancées du Code
+### Scripts Utiles
+- `python app.py` - Lancer en développement
+- `pip install -r requirements.txt` - Installer dépendances
+- `git add . && git commit -m "message"` - Commiter les changements
 
-#### JavaScript (script.js)
-- **Glassmorphisme CSS** avec backdrop-filter avancé
-- **Animations CSS** personnalisées avec IntersectionObserver
-- **Gestion d'état** JavaScript sophistiquée multi-filtres
-- **Lazy loading** des cartes avec animations d'apparition
-- **Recherche intelligente** avec variations de termes
-- **Validation** formulaires côté client
-- **Chatbot intégré** avec suggestions contextuelles
+## 🤝 Contribution
 
-#### Python (app.py)
-- **API REST** complète avec gestion d'erreurs robuste
-- **Chatbot IA** avec analyse sémantique avancée
-- **Recherche multi-critères** sécurisée
-- **Estimation de prix** via OpenAI GPT-4o-mini
-- **Logging** détaillé pour debugging
-- **Sécurité** avec validation des entrées
-
-### Nouveautés Version 3.0
-- ✅ **Chatbot IA intégré** avec GPT-4o-mini
-- ✅ **Recherche sémantique** intelligente
-- ✅ **Suggestions contextuelles** dans le chat
-- ✅ **Raccourcis clavier** pour navigation rapide
-- ✅ **Analyse de performance** automatisée
-- ✅ **Interface glassmorphique** améliorée
-- ✅ **Optimisations performance** et lazy loading
-
-## 🔒 Sécurité
-
-### Mesures Implémentées
-- **Validation des entrées** côté client et serveur
-- **Gestion d'erreurs** robuste pour éviter les crashes
-- **Protection CORS** configurée
-- **Sanitisation** des données utilisateur
-- **Rate limiting** implicite via Render/Vercel
-- **Variables d'environnement** sécurisées
-
-## 📱 Responsive Design
-
-### Breakpoints Supportés
-- **Mobile** : 320px-768px (interface tactile optimisée)
-- **Tablette** : 768px-1024px (cartes adaptatives)
-- **Desktop** : 1024px+ (vue complète avec sidebar)
-- **4K/Ultra-wide** : 1920px+ (grille étendue)
-
-## 🎯 Performance
-
-### Optimisations
-- **Lazy loading** des cartes avec Intersection Observer
-- **Debounce** sur la recherche pour éviter les requêtes excessives
-- **Mise en cache** côté client des données statiques
-- **Compression** Gzip sur Render/Vercel
-- **CDN** Tailwind CSS pour chargement rapide
-- **Animations CSS** hardware-accelerated
-
-## 📞 Support et Contact
-
-### Maintenance
-- **Logs applicatifs** via `/health` endpoint
-- **Monitoring** automatique Render/Vercel
-- **Backup** automatique Supabase
-- **Rollback** facile via Git
-
-### Contact Technique
-Pour questions, bugs ou nouvelles fonctionnalités :
-- **GitHub Issues** : Rapports de bugs
-- **Documentation** : README et commentaires code
-- **API Testing** : Endpoint `/api/test` pour diagnostics
+1. Fork le projet
+2. Créer une branche feature (`git checkout -b feature/AmazingFeature`)
+3. Commiter les changements (`git commit -m 'Add AmazingFeature'`)
+4. Pousser vers la branche (`git push origin feature/AmazingFeature`)
+5. Ouvrir une Pull Request
 
 ## 📄 Licence
 
-**Propriétaire** - BONVIN Collection Privée  
-Tous droits réservés. Usage interne uniquement.
+Ce projet est sous licence MIT. Voir le fichier `LICENSE` pour plus de détails.
+
+## 📞 Support
+
+Pour toute question ou support :
+- **Email** : daniel.jandric@investis.ch
+- **GitHub Issues** : [Créer une issue](https://github.com/DanielJandric/inventorysbo/issues)
 
 ---
 
-**Version** : 3.0 - Chatbot IA Intelligent  
-**Dernière mise à jour** : Janvier 2025  
-**Compatibilité** : Python 3.11+, Navigateurs modernes  
-**Status** : ✅ Production Ready
+**BONVIN Collection** - Gestion d'inventaire intelligente avec IA 🚀
