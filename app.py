@@ -33,16 +33,7 @@ logger = logging.getLogger(__name__)
 stock_price_cache = {}
 STOCK_PRICE_CACHE_DURATION = 3600  # 1 heure
 
-# Cache spécial pour Alpha Vantage (actions suisses) - plus long pour économiser les requêtes
-ALPHA_VANTAGE_CACHE_DURATION = 7200  # 2 heures pour les actions suisses
 
-# Compteur de requêtes Alpha Vantage (limite: 25/jour)
-alpha_vantage_request_count = 0
-alpha_vantage_last_reset = time.time()
-
-# Compteur de requêtes EODHD (limite: 20/jour)
-eodhd_request_count = 0
-eodhd_last_reset = time.time()
 
 # Cache pour les taux de change avec expiration
 forex_cache = {}
@@ -122,15 +113,7 @@ EMAIL_RECIPIENTS = os.getenv("EMAIL_RECIPIENTS", "").split(",")
 
 FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY")
 
-# Configuration Alpha Vantage
-ALPHA_VANTAGE_API_KEY = os.getenv("ALPHA_VANTAGE_API_KEY")
-if not ALPHA_VANTAGE_API_KEY:
-    logger.warning("ALPHA_VANTAGE_API_KEY non configurée")
 
-# Configuration EODHD (excellente alternative pour actions suisses)
-EODHD_API_KEY = os.getenv("EODHD_API_KEY")
-if not EODHD_API_KEY:
-    logger.warning("EODHD_API_KEY non configurée")
 
 if not all([SUPABASE_URL, SUPABASE_KEY]):
     logger.error("Variables d'environnement manquantes")
@@ -2051,13 +2034,8 @@ def get_stock_price(symbol):
     if cache_key in stock_price_cache:
         cached_data = stock_price_cache[cache_key]
         
-        # Durée de cache différente selon la source
-        cache_duration = STOCK_PRICE_CACHE_DURATION
-        if item and item.stock_exchange and item.stock_exchange.upper() in ['SWX', 'SIX', 'SWISS', 'CH']:
-            cache_duration = ALPHA_VANTAGE_CACHE_DURATION  # Cache plus long pour les actions suisses
-        
-        if time.time() - cached_data['timestamp'] < cache_duration:
-            logger.info(f"Prix depuis le cache pour {symbol} (durée: {cache_duration//3600}h)")
+        if time.time() - cached_data['timestamp'] < STOCK_PRICE_CACHE_DURATION:
+            logger.info(f"Prix depuis le cache pour {symbol}")
             return jsonify(cached_data['data'])
 
     try:
@@ -2095,14 +2073,7 @@ def get_stock_price(symbol):
     except Exception as e:
         logger.warning(f"Yahoo Finance a échoué pour {symbol} ({e}), bascule sur Finnhub.")
         
-        # Pour les actions suisses, essayer EODHD en priorité, puis Alpha Vantage
-        if item and item.stock_exchange and item.stock_exchange.upper() in ['SWX', 'SIX', 'SWISS', 'CH']:
-            if EODHD_API_KEY:
-                logger.info(f"Essai avec EODHD pour {symbol}")
-                return get_stock_price_eodhd(symbol, item, cache_key)
-            elif ALPHA_VANTAGE_API_KEY:
-                logger.info(f"Essai avec Alpha Vantage pour {symbol}")
-                return get_stock_price_alpha_vantage(symbol, item, cache_key)
+
         
         return get_stock_price_finnhub(symbol, item, cache_key)
 
@@ -2225,17 +2196,16 @@ def get_stock_price_finnhub(symbol: str, item: Optional[CollectionItem], cache_k
     except Exception as e:
         logger.error(f"Erreur Finnhub pour {symbol}: {e}")
         
-        # Essayer Alpha Vantage si disponible
-        if ALPHA_VANTAGE_API_KEY:
-            logger.info(f"Essai avec Alpha Vantage pour {symbol}")
-            return get_stock_price_alpha_vantage(symbol, item, cache_key)
+
         
-        # Pour les actions suisses, donner un message plus spécifique
+        # Pour les actions suisses, donner un message informatif avec prix manuel
         if item and item.stock_exchange and item.stock_exchange.upper() in ['SWX', 'SIX', 'SWISS', 'CH']:
             return jsonify({
-                "error": "Données suisses non disponibles",
-                "details": "Les actions suisses nécessitent un plan Finnhub payant ou une mise à jour manuelle",
-                "message": "Veuillez mettre à jour le prix manuellement depuis Swissquote ou Yahoo Finance.",
+                "error": "Prix non disponible via API",
+                "details": "Yahoo Finance échoue sur Render pour les actions suisses",
+                "message": "IREN.SW = 125.5 CHF (dernière mise à jour manuelle recommandée)",
+                "manual_price": 125.5,
+                "manual_currency": "CHF",
                 "symbol": symbol,
                 "exchange": item.stock_exchange
             }), 500
@@ -2252,269 +2222,7 @@ def get_stock_price_finnhub(symbol: str, item: Optional[CollectionItem], cache_k
         }), 500
 
 
-def get_stock_price_alpha_vantage(symbol: str, item: Optional[CollectionItem], cache_key: str):
-    """
-    Récupère le prix via l'API Alpha Vantage. Excellente alternative pour les actions suisses.
-    Limite: 25 requêtes par jour.
-    """
-    global alpha_vantage_request_count, alpha_vantage_last_reset
-    
-    if not ALPHA_VANTAGE_API_KEY:
-        return jsonify({"error": "Clé API Alpha Vantage non configurée"}), 500
-    
-    # Réinitialiser le compteur chaque jour
-    current_time = time.time()
-    if current_time - alpha_vantage_last_reset > 86400:  # 24 heures
-        alpha_vantage_request_count = 0
-        alpha_vantage_last_reset = current_time
-        logger.info("🔄 Compteur Alpha Vantage réinitialisé")
-    
-    # Vérifier la limite quotidienne
-    if alpha_vantage_request_count >= 25:
-        logger.warning(f"⚠️ Limite Alpha Vantage atteinte (25/jour) pour {symbol}")
-        # Utiliser le cache si disponible
-        if cache_key in stock_price_cache:
-            logger.info(f"Retour des données en cache pour {symbol}")
-            return jsonify(stock_price_cache[cache_key]['data'])
-        
-        return jsonify({
-            "error": "Limite Alpha Vantage atteinte",
-            "details": "25 requêtes/jour atteintes. Réessayez demain ou mettez à jour manuellement.",
-            "message": "Veuillez mettre à jour le prix manuellement."
-        }), 429
 
-    try:
-        logger.info(f"Interrogation d'Alpha Vantage avec le symbole : {symbol}")
-        
-        import requests
-        # Alpha Vantage Global Quote API
-        quote_url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={symbol}&apikey={ALPHA_VANTAGE_API_KEY}"
-        response = requests.get(quote_url, timeout=10)
-        
-        if response.status_code == 429:
-            raise Exception("Rate limit Alpha Vantage atteint")
-        response.raise_for_status()
-        
-        data = response.json()
-        
-        # Vérifier si la réponse contient des données
-        if "Global Quote" not in data or not data["Global Quote"]:
-            # Essayer avec différents formats pour les actions suisses
-            if item and item.stock_exchange and item.stock_exchange.upper() in ['SWX', 'SIX', 'SWISS', 'CH']:
-                symbol_variants = [
-                    symbol.replace('.SW', ''),  # Symbole sans suffixe (IREN)
-                    f"{symbol}.SW",  # Format suisse standard (IREN.SW)
-                    f"{symbol}.SWX",  # Format SWX
-                    f"{symbol}.SIX",  # Format SIX
-                ]
-                
-                for variant in symbol_variants:
-                    if variant == symbol:
-                        continue
-                        
-                    logger.info(f"Essai Alpha Vantage avec le symbole: '{variant}'")
-                    quote_url_variant = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={variant}&apikey={ALPHA_VANTAGE_API_KEY}"
-                    response_variant = requests.get(quote_url_variant, timeout=10)
-                    
-                    if response_variant.ok:
-                        data_variant = response_variant.json()
-                        if "Global Quote" in data_variant and data_variant["Global Quote"]:
-                            data = data_variant
-                            symbol = variant
-                            logger.info(f"✅ Symbole Alpha Vantage '{variant}' fonctionne")
-                            break
-            
-            # Si toujours pas de données
-            if "Global Quote" not in data or not data["Global Quote"]:
-                raise Exception(f"Aucune donnée trouvée pour '{symbol}' sur Alpha Vantage")
-        
-        quote = data["Global Quote"]
-        current_price = float(quote.get("05. price", 0))
-        
-        if current_price <= 0:
-            raise Exception("Prix invalide reçu d'Alpha Vantage")
-        
-        # Récupérer la devise
-        currency = quote.get("08. previous close", "USD")  # Alpha Vantage ne donne pas directement la devise
-        # Pour les actions suisses, on suppose CHF
-        if item and item.stock_exchange and item.stock_exchange.upper() in ['SWX', 'SIX', 'SWISS', 'CH']:
-            currency = "CHF"
-        
-        # Conversion en CHF si nécessaire
-        if currency != "CHF":
-            conversion_rate = get_live_exchange_rate(currency, 'CHF')
-            price_chf = current_price * conversion_rate
-        else:
-            price_chf = current_price
-        
-        result = {
-            "symbol": symbol,
-            "price": current_price,
-            "price_chf": price_chf,
-            "currency": currency,
-            "company_name": quote.get("01. symbol", symbol),
-            "last_update": datetime.now().isoformat(),
-            "source": "Alpha Vantage",
-            "change": quote.get("09. change", "N/A"),
-            "change_percent": quote.get("10. change percent", "N/A")
-        }
-        
-        # Incrémenter le compteur de requêtes
-        alpha_vantage_request_count += 1
-        logger.info(f"✅ Prix Alpha Vantage récupéré pour {symbol}: {current_price} {currency} (cache 2h) - Requête {alpha_vantage_request_count}/25")
-        
-        # Mettre en cache avec durée spéciale pour Alpha Vantage
-        stock_price_cache[cache_key] = {'data': result, 'timestamp': time.time()}
-        
-        return jsonify(result)
-        
-    except Exception as e:
-        logger.error(f"Erreur Alpha Vantage pour {symbol}: {e}")
-        
-        # Utiliser le cache si disponible
-        if cache_key in stock_price_cache:
-            logger.info(f"Erreur API, retour des données en cache pour {symbol}")
-            return jsonify(stock_price_cache[cache_key]['data'])
-        
-        return jsonify({
-            "error": "Prix non disponible via Alpha Vantage", 
-            "details": str(e),
-            "message": "Action suisse IREN.SW = 125.5 CHF (dernière mise à jour manuelle recommandée)",
-            "manual_price": 125.5,
-            "manual_currency": "CHF"
-        }), 500
-
-
-def get_stock_price_eodhd(symbol: str, item: Optional[CollectionItem], cache_key: str):
-    """
-    Récupère le prix via l'API EODHD. Excellente alternative pour les actions suisses.
-    Limite: 20 requêtes par jour.
-    """
-    global eodhd_request_count, eodhd_last_reset
-    
-    if not EODHD_API_KEY:
-        return jsonify({"error": "Clé API EODHD non configurée"}), 500
-    
-    # Réinitialiser le compteur chaque jour
-    current_time = time.time()
-    if current_time - eodhd_last_reset > 86400:  # 24 heures
-        eodhd_request_count = 0
-        eodhd_last_reset = current_time
-        logger.info("🔄 Compteur EODHD réinitialisé")
-    
-    # Vérifier la limite quotidienne
-    if eodhd_request_count >= 20:
-        logger.warning(f"⚠️ Limite EODHD atteinte (20/jour) pour {symbol}")
-        # Utiliser le cache si disponible
-        if cache_key in stock_price_cache:
-            logger.info(f"Retour des données en cache pour {symbol}")
-            return jsonify(stock_price_cache[cache_key]['data'])
-        
-        return jsonify({
-            "error": "Limite EODHD atteinte",
-            "details": "20 requêtes/jour atteintes. Réessayez demain ou mettez à jour manuellement.",
-            "message": "Veuillez mettre à jour le prix manuellement."
-        }), 429
-
-    try:
-        logger.info(f"Interrogation d'EODHD avec le symbole : {symbol}")
-        
-        import requests
-        # EODHD Real-Time API
-        quote_url = f"https://eodhd.com/api/real-time/{symbol}?api_token={EODHD_API_KEY}&fmt=json"
-        response = requests.get(quote_url, timeout=10)
-        
-        if response.status_code == 429:
-            raise Exception("Rate limit EODHD atteint")
-        response.raise_for_status()
-        
-        data = response.json()
-        
-        # Vérifier si la réponse contient des données
-        if not data or len(data) == 0:
-            # Essayer avec différents formats pour les actions suisses
-            if item and item.stock_exchange and item.stock_exchange.upper() in ['SWX', 'SIX', 'SWISS', 'CH']:
-                symbol_variants = [
-                    f"{symbol}.SW",  # Format suisse standard
-                    symbol.replace('.SW', ''),  # Symbole sans suffixe
-                    f"{symbol}.SWX",  # Format SWX
-                    f"{symbol}.SIX",  # Format SIX
-                ]
-                
-                for variant in symbol_variants:
-                    if variant == symbol:
-                        continue
-                        
-                    logger.info(f"Essai EODHD avec le symbole: '{variant}'")
-                    quote_url_variant = f"https://eodhd.com/api/real-time/{variant}?api_token={EODHD_API_KEY}&fmt=json"
-                    response_variant = requests.get(quote_url_variant, timeout=10)
-                    
-                    if response_variant.ok:
-                        data_variant = response_variant.json()
-                        if data_variant and len(data_variant) > 0:
-                            data = data_variant
-                            symbol = variant
-                            logger.info(f"✅ Symbole EODHD '{variant}' fonctionne")
-                            break
-            
-            # Si toujours pas de données
-            if not data or len(data) == 0:
-                raise Exception(f"Aucune donnée trouvée pour '{symbol}' sur EODHD")
-        
-        # EODHD retourne un array, prendre le premier élément
-        quote = data[0] if isinstance(data, list) else data
-        current_price = float(quote.get("close", 0))
-        
-        if current_price <= 0:
-            raise Exception("Prix invalide reçu d'EODHD")
-        
-        # Récupérer la devise
-        currency = quote.get("currency", "USD")
-        # Pour les actions suisses, on suppose CHF
-        if item and item.stock_exchange and item.stock_exchange.upper() in ['SWX', 'SIX', 'SWISS', 'CH']:
-            currency = "CHF"
-        
-        # Conversion en CHF si nécessaire
-        if currency != "CHF":
-            conversion_rate = get_live_exchange_rate(currency, 'CHF')
-            price_chf = current_price * conversion_rate
-        else:
-            price_chf = current_price
-        
-        result = {
-            "symbol": symbol,
-            "price": current_price,
-            "price_chf": price_chf,
-            "currency": currency,
-            "company_name": quote.get("code", symbol),
-            "last_update": datetime.now().isoformat(),
-            "source": "EODHD",
-            "change": quote.get("change", "N/A"),
-            "change_percent": quote.get("change_p", "N/A")
-        }
-        
-        # Incrémenter le compteur de requêtes
-        eodhd_request_count += 1
-        logger.info(f"✅ Prix EODHD récupéré pour {symbol}: {current_price} {currency} (cache 2h) - Requête {eodhd_request_count}/20")
-        
-        # Mettre en cache avec durée spéciale pour EODHD
-        stock_price_cache[cache_key] = {'data': result, 'timestamp': time.time()}
-        
-        return jsonify(result)
-        
-    except Exception as e:
-        logger.error(f"Erreur EODHD pour {symbol}: {e}")
-        
-        # Utiliser le cache si disponible
-        if cache_key in stock_price_cache:
-            logger.info(f"Erreur API, retour des données en cache pour {symbol}")
-            return jsonify(stock_price_cache[cache_key]['data'])
-        
-        return jsonify({
-            "error": "Prix non disponible via EODHD", 
-            "details": str(e),
-            "message": "Veuillez mettre à jour le prix manuellement."
-        }), 500
 
 
 @app.route("/api/market-price/<int:item_id>")
