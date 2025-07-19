@@ -1734,17 +1734,14 @@ ai_engine = PureOpenAIEngineWithRAG(openai_client) if openai_client else None
 # Routes
 @app.route("/")
 def index():
-    """Page d'accueil"""
-    try:
-        return render_template("index.html")
-    except Exception as e:
-        logger.error(f"Erreur template: {e}")
-        return jsonify({"error": "Template non disponible"}), 500
+    """Page principale de l'application"""
+    return render_template('index.html')
 
-# Ajouter après les autres variables d'environnement (vers ligne 140)
-FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY")
+@app.route("/analytics")
+def analytics():
+    """Page analytics avec diagrammes et statistiques"""
+    return render_template('analytics.html')
 
-# Et dans la fonction health() pour vérifier le statut
 @app.route("/health")
 def health():
     """Health check"""

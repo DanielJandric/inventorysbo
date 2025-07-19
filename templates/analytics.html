@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="fr" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BONVIN - Analytics</title>
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/Bonvin_180x180.png">
+    <link rel="apple-touch-icon" sizes="152x152" href="/static/BONVIN_152X152 (1).PNG">
+    <link rel="apple-touch-icon" sizes="120x120" href="/static/BONVIN_120X120.PNG">
+    
+    <!-- Icône par défaut pour navigateurs -->
+    <link rel="icon" href="/static/Bonvin_180x180.png">
+    
+    <!-- Configuration iOS -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="BONVIN">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-color: #0A232A;
+            --glass-bg: rgba(10, 50, 60, 0.25);
+            --glass-border: rgba(0, 200, 220, 0.2);
+            --glass-glow: rgba(0, 220, 255, 0.15);
+            --text-primary: #e0e6e7;
+            --text-secondary: #88a0a8;
+        }
+        html { scroll-behavior: smooth; }
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+        }
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            background: radial-gradient(circle at 15% 25%, rgba(0, 220, 255, 0.2), transparent 40%),
+                        radial-gradient(circle at 85% 75%, rgba(10, 50, 60, 0.3), transparent 40%);
+            z-index: -1;
+            animation: moveGradient 20s linear infinite alternate;
+            filter: blur(50px);
+        }
+        @keyframes moveGradient {
+            from { transform: translate(0, 0); }
+            to { transform: translate(5vw, -5vh); }
+        }
+        .glowing-element { position: relative; transition: all 0.4s ease; }
+        .glowing-element::before {
+            content: ''; position: absolute; left: 0; top: 0;
+            width: 100%; height: 100%;
+            border-radius: inherit;
+            background: radial-gradient(circle at 50% 50%, var(--glass-glow), transparent 70%);
+            filter: blur(30px); opacity: 0.6; z-index: -1;
+            transition: opacity 0.4s ease, transform 0.4s ease;
+        }
+        .glowing-element:hover::before, .glowing-element.is-active::before { opacity: 1; }
+        .glass {
+            background: var(--glass-bg);
+            backdrop-filter: blur(15px);
+            border: 1px solid var(--glass-border);
+            border-radius: 1.5rem;
+        }
+        .glass-dark {
+            background: rgba(10, 40, 50, 0.4);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            border-radius: 1.5rem;
+        }
+        .glass-subtle {
+            background: rgba(10, 35, 45, 0.3);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: 1.5rem;
+        }
+        
+        /* FILTRES GLASSMORPHIQUES PURS */
+        .main-filter-btn {
+            transition: all 0.3s ease;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.75rem;
+            font-weight: 500;
+            font-size: 0.875rem;
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(15px);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+        .main-filter-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+        }
+        .main-filter-btn.active {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 35px rgba(0, 0, 0, 0.2);
+        }
+        
+        /* COULEURS TRANSPARENTES */
+        .filter-all { 
+            background: rgba(100, 116, 139, 0.15);
+            border: 1px solid rgba(100, 116, 139, 0.25);
+            color: #94a3b8;
+        }
+        .filter-available { 
+            background: rgba(22, 163, 74, 0.15);
+            border: 1px solid rgba(22, 163, 74, 0.25);
+            color: #4ade80;
+        }
+        .filter-for-sale { 
+            background: rgba(220, 38, 38, 0.15);
+            border: 1px solid rgba(220, 38, 38, 0.25);
+            color: #f87171;
+        }
+        .filter-sold { 
+            background: rgba(234, 88, 12, 0.15);
+            border: 1px solid rgba(234, 88, 12, 0.25);
+            color: #fb923c;
+        }
+        
+        /* HOVER EFFECTS */
+        .filter-all:hover { 
+            background: rgba(100, 116, 139, 0.25);
+            border-color: rgba(100, 116, 139, 0.4);
+        }
+        .filter-available:hover { 
+            background: rgba(22, 163, 74, 0.25);
+            border-color: rgba(22, 163, 74, 0.4);
+        }
+        .filter-for-sale:hover { 
+            background: rgba(220, 38, 38, 0.25);
+            border-color: rgba(220, 38, 38, 0.4);
+        }
+        .filter-sold:hover { 
+            background: rgba(234, 88, 12, 0.25);
+            border-color: rgba(234, 88, 12, 0.4);
+        }
+        
+        /* ACTIVE STATES */
+        .filter-all.active { 
+            background: rgba(100, 116, 139, 0.35);
+            border-color: rgba(100, 116, 139, 0.6);
+            box-shadow: 0 0 25px rgba(100, 116, 139, 0.3);
+        }
+        .filter-available.active { 
+            background: rgba(22, 163, 74, 0.35);
+            border-color: rgba(22, 163, 74, 0.6);
+            box-shadow: 0 0 25px rgba(22, 163, 74, 0.3);
+        }
+        .filter-for-sale.active { 
+            background: rgba(220, 38, 38, 0.35);
+            border-color: rgba(220, 38, 38, 0.6);
+            box-shadow: 0 0 25px rgba(220, 38, 38, 0.3);
+            animation: pulse-filter-active 2s infinite;
+        }
+        .filter-sold.active { 
+            background: rgba(234, 88, 12, 0.35);
+            border-color: rgba(234, 88, 12, 0.6);
+            box-shadow: 0 0 25px rgba(234, 88, 12, 0.3);
+        }
+        
+        @keyframes pulse-filter-active {
+            0%, 100% { 
+                background: rgba(220, 38, 38, 0.35);
+                box-shadow: 0 0 25px rgba(220, 38, 38, 0.3);
+            }
+            50% { 
+                background: rgba(220, 38, 38, 0.45);
+                box-shadow: 0 0 35px rgba(220, 38, 38, 0.5);
+            }
+        }
+        
+        /* CARTES */
+        .floating-card {
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+            transform: perspective(1000px); cursor: pointer;
+            opacity: 0; transform: translateY(30px);
+            transition: opacity 0.6s ease-out, transform 0.6s ease-out, box-shadow 0.3s ease-in-out;
+        }
+        .floating-card.is-visible { opacity: 1; transform: translateY(0); }
+        .floating-card.is-visible:hover { transform: perspective(1000px) translateY(-10px) rotateX(2deg); box-shadow: 0 45px 70px -15px rgba(0,0,0,0.6); }
+        
+        /* STATS */
+        .stat-card { 
+            padding: 1.5rem; 
+            display: flex; 
+            align-items: center; 
+            gap: 1rem;
+            position: relative;
+            transform: translateY(0);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            animation: statFloat 4s ease-in-out infinite;
+            cursor: pointer;
+        }
+        .stat-card:nth-child(1) { animation-delay: 0s; }
+        .stat-card:nth-child(2) { animation-delay: 0.5s; }
+        .stat-card:nth-child(3) { animation-delay: 1s; }
+        .stat-card:nth-child(4) { animation-delay: 1.5s; }
+        .stat-card:nth-child(5) { animation-delay: 2s; }
+        .stat-card:nth-child(6) { animation-delay: 2.5s; }
+
+        @keyframes statFloat {
+            0%, 100% { 
+                transform: translateY(0) rotateX(0deg) rotateY(0deg);
+                box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            }
+            50% { 
+                transform: translateY(-5px) rotateX(1deg) rotateY(1deg);
+                box-shadow: 0 35px 60px -15px rgba(0, 0, 0, 0.6);
+            }
+        }
+
+        .stat-card:hover {
+            transform: translateY(-10px) scale(1.03) rotateX(2deg) rotateY(2deg);
+            box-shadow: 0 45px 70px -15px rgba(0, 0, 0, 0.7);
+            z-index: 10;
+        }
+
+        .stat-card:hover .stat-icon {
+            transform: scale(1.1) rotate(5deg);
+            background: rgba(0, 220, 255, 0.2);
+        }
+
+        .stat-card:hover .stat-value {
+            transform: scale(1.05);
+        }
+
+        .stat-card:active {
+            transform: translateY(-8px) scale(1.02);
+            transition: all 0.1s ease;
+        }
+
+        .stat-icon { 
+            background: rgba(0, 220, 255, 0.1); 
+            border-radius: 9999px; 
+            padding: 0.75rem; 
+            flex-shrink: 0; 
+            color: #00e5ff;
+            transition: all 0.3s ease;
+        }
+        .stat-title { 
+            font-size: 0.9rem; 
+            font-weight: 500; 
+            color: var(--text-secondary);
+            transition: all 0.3s ease;
+        }
+        .stat-value { 
+            font-size: 1.8rem; 
+            font-weight: 800; 
+            line-height: 1.2; 
+            color: var(--text-primary);
+            transition: all 0.3s ease;
+        }
+        
+        /* CHART CONTAINER */
+        .chart-container {
+            position: relative;
+            height: 400px;
+            width: 100%;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        /* CATEGORY SELECTOR */
+        .category-selector {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .category-chip {
+            padding: 0.5rem 1rem;
+            border-radius: 2rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: rgba(100, 116, 139, 0.15);
+            border: 1px solid rgba(100, 116, 139, 0.25);
+            color: #94a3b8;
+        }
+        
+        .category-chip:hover {
+            background: rgba(100, 116, 139, 0.25);
+            border-color: rgba(100, 116, 139, 0.4);
+            transform: translateY(-2px);
+        }
+        
+        .category-chip.selected {
+            background: rgba(0, 220, 255, 0.2);
+            border-color: rgba(0, 220, 255, 0.4);
+            color: #00e5ff;
+            box-shadow: 0 0 20px rgba(0, 220, 255, 0.3);
+        }
+        
+        /* NAVIGATION */
+        .nav-link {
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.75rem;
+            font-weight: 500;
+            font-size: 0.875rem;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .nav-link:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+        }
+        
+        .nav-link.active {
+            background: rgba(0, 220, 255, 0.2);
+            border: 1px solid rgba(0, 220, 255, 0.4);
+            color: #00e5ff;
+            box-shadow: 0 0 20px rgba(0, 220, 255, 0.3);
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <header class="text-center mb-12">
+            <div class="flex items-center justify-center gap-4 mb-6">
+                <img src="/static/Bonvin_180x180.png" alt="BONVIN" class="w-16 h-16 rounded-full">
+                <div>
+                    <h1 class="text-4xl font-bold text-cyan-300">BONVIN</h1>
+                    <p class="text-slate-400">Analytics & Insights</p>
+                </div>
+            </div>
+            
+            <!-- Navigation -->
+            <nav class="flex justify-center gap-4 mb-8">
+                <a href="/" class="nav-link glass">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+                    </svg>
+                    Collection
+                </a>
+                <a href="/analytics" class="nav-link active">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                    </svg>
+                    Analytics
+                </a>
+            </nav>
+        </header>
+
+        <!-- Statistics Cards -->
+        <section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
+            <div class="stat-card glass glowing-element">
+                <div class="stat-icon">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                    </svg>
+                </div>
+                <div>
+                    <div class="stat-title">Total Items</div>
+                    <div class="stat-value" id="total-items">0</div>
+                </div>
+            </div>
+            
+            <div class="stat-card glass glowing-element">
+                <div class="stat-icon">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
+                    </svg>
+                </div>
+                <div>
+                    <div class="stat-title">Total Value</div>
+                    <div class="stat-value" id="total-value">0 CHF</div>
+                </div>
+            </div>
+            
+            <div class="stat-card glass glowing-element">
+                <div class="stat-icon">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                </div>
+                <div>
+                    <div class="stat-title">Available</div>
+                    <div class="stat-value" id="available-items">0</div>
+                </div>
+            </div>
+            
+            <div class="stat-card glass glowing-element">
+                <div class="stat-icon">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path>
+                    </svg>
+                </div>
+                <div>
+                    <div class="stat-title">For Sale</div>
+                    <div class="stat-value" id="for-sale-items">0</div>
+                </div>
+            </div>
+            
+            <div class="stat-card glass glowing-element">
+                <div class="stat-icon">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                </div>
+                <div>
+                    <div class="stat-title">Sold</div>
+                    <div class="stat-value" id="sold-items">0</div>
+                </div>
+            </div>
+            
+            <div class="stat-card glass glowing-element">
+                <div class="stat-icon">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                    </svg>
+                </div>
+                <div>
+                    <div class="stat-title">Categories</div>
+                    <div class="stat-value" id="total-categories">0</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Category Selector -->
+        <section class="glass-dark p-6 mb-8">
+            <h2 class="text-2xl font-bold mb-4 text-cyan-300">Sélection de Catégories</h2>
+            <p class="text-slate-400 mb-4">Sélectionnez une ou plusieurs catégories pour voir leur répartition dans le diagramme</p>
+            <div class="category-selector" id="category-selector">
+                <!-- Categories will be populated by JavaScript -->
+            </div>
+        </section>
+
+        <!-- Chart Section -->
+        <section class="glass-dark p-8 mb-8">
+            <h2 class="text-2xl font-bold mb-6 text-cyan-300">Répartition par Catégories</h2>
+            <div class="chart-container">
+                <canvas id="categoryChart"></canvas>
+            </div>
+            <div class="text-center mt-6">
+                <div class="text-3xl font-bold text-cyan-300" id="selected-percentage">100%</div>
+                <div class="text-slate-400">du total de la collection</div>
+            </div>
+        </section>
+
+        <!-- Additional Analytics -->
+        <section class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <!-- Top Categories by Value -->
+            <div class="glass-dark p-6">
+                <h3 class="text-xl font-bold mb-4 text-cyan-300">Top Catégories par Valeur</h3>
+                <div id="top-categories" class="space-y-3">
+                    <!-- Will be populated by JavaScript -->
+                </div>
+            </div>
+            
+            <!-- Recent Activity -->
+            <div class="glass-dark p-6">
+                <h3 class="text-xl font-bold mb-4 text-cyan-300">Activité Récente</h3>
+                <div id="recent-activity" class="space-y-3">
+                    <!-- Will be populated by JavaScript -->
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script src="/static/analytics.js"></script>
+</body>
+</html> 
