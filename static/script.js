@@ -552,7 +552,7 @@ async function updateStockPrices() {
 
 // Fonction pour forcer la mise à jour immédiate des prix
 async function forceUpdateStockPrices() {
-    console.log('🔄 Mise à jour forcée des prix...');
+    console.log('Mise à jour forcée des prix...');
     showNotification('Mise à jour des prix en cours...', false);
     
     // Réinitialiser les erreurs pour permettre de nouveaux essais
@@ -575,14 +575,56 @@ function updateStockCardDisplay(itemId, stockData) {
         const changeClass = stockData.change_percent > 0 ? 'text-green-400' : 'text-red-400';
         const arrow = stockData.change_percent > 0 ? '↑' : '↓';
         
+        // Formater les volumes
+        const formatVolume = (volume) => {
+            if (volume === 'N/A' || !volume) return 'N/A';
+            if (volume > 1e9) return `${(volume/1e9).toFixed(2)}B`;
+            if (volume > 1e6) return `${(volume/1e6).toFixed(2)}M`;
+            if (volume > 1e3) return `${(volume/1e3).toFixed(2)}K`;
+            return volume.toString();
+        };
+        
+        // Formater les prix
+        const formatPriceValue = (price) => {
+            if (price === 'N/A' || !price) return 'N/A';
+            return parseFloat(price).toFixed(2);
+        };
+        
         priceElement.innerHTML = `
-            <div class="flex items-center gap-2">
-                <span class="text-lg font-bold">${formatPrice(stockData.price_chf)}</span>
-                <span class="${changeClass} text-sm">
-                    ${arrow} ${Math.abs(stockData.change_percent).toFixed(2)}%
-                </span>
+            <div class="space-y-3">
+                <!-- Prix principal -->
+                <div class="flex items-center justify-between">
+                    <span class="text-lg font-bold">${formatPrice(stockData.price_chf)}</span>
+                    <span class="${changeClass} text-sm font-semibold">
+                        ${arrow} ${Math.abs(stockData.change_percent).toFixed(2)}%
+                    </span>
+                </div>
+                
+                <!-- Informations supplémentaires -->
+                <div class="grid grid-cols-2 gap-2 text-xs">
+                    <div class="glass-subtle p-2 rounded-lg">
+                        <div class="text-cyan-300 font-medium">Volume</div>
+                        <div class="text-slate-300">${formatVolume(stockData.volume)}</div>
+                    </div>
+                    <div class="glass-subtle p-2 rounded-lg">
+                        <div class="text-cyan-300 font-medium">P/E Ratio</div>
+                        <div class="text-slate-300">${stockData.pe_ratio !== 'N/A' ? parseFloat(stockData.pe_ratio).toFixed(1) : 'N/A'}</div>
+                    </div>
+                    <div class="glass-subtle p-2 rounded-lg">
+                        <div class="text-cyan-300 font-medium">52W High</div>
+                        <div class="text-slate-300">${formatPriceValue(stockData.fifty_two_week_high)}</div>
+                    </div>
+                    <div class="glass-subtle p-2 rounded-lg">
+                        <div class="text-cyan-300 font-medium">52W Low</div>
+                        <div class="text-slate-300">${formatPriceValue(stockData.fifty_two_week_low)}</div>
+                    </div>
+                </div>
+                
+                <!-- Source et timestamp -->
+                <div class="text-xs text-slate-500 text-center">
+                    ${stockData.source} • ${new Date(stockData.last_update).toLocaleTimeString()}
+                </div>
             </div>
-            <div class="text-xs text-gray-500">Mis à jour: ${new Date(stockData.last_update).toLocaleTimeString()}</div>
         `;
         
         // Retirer l'animation de chargement
@@ -691,10 +733,38 @@ function createItemCardHTML(item) {
         } else {
             // Cas normal - en attente ou avec prix
             stockPriceSection = `
-                <div class="stock-price-live mt-3 p-2 bg-black/20 rounded-lg">
-                    <div class="flex items-center gap-2">
-                        <span class="text-lg font-bold animate-pulse">⏳</span>
-                        <span class="text-sm">Chargement du cours...</span>
+                <div class="stock-price-live mt-3 p-3 bg-black/20 rounded-lg">
+                    <div class="space-y-3">
+                        <!-- Prix principal -->
+                        <div class="flex items-center justify-between">
+                            <span class="text-lg font-bold animate-pulse">Chargement...</span>
+                            <span class="text-sm text-slate-400">--</span>
+                        </div>
+                        
+                        <!-- Informations supplémentaires -->
+                        <div class="grid grid-cols-2 gap-2 text-xs">
+                            <div class="glass-subtle p-2 rounded-lg">
+                                <div class="text-cyan-300 font-medium">Volume</div>
+                                <div class="text-slate-300 animate-pulse">--</div>
+                            </div>
+                            <div class="glass-subtle p-2 rounded-lg">
+                                <div class="text-cyan-300 font-medium">P/E Ratio</div>
+                                <div class="text-slate-300 animate-pulse">--</div>
+                            </div>
+                            <div class="glass-subtle p-2 rounded-lg">
+                                <div class="text-cyan-300 font-medium">52W High</div>
+                                <div class="text-slate-300 animate-pulse">--</div>
+                            </div>
+                            <div class="glass-subtle p-2 rounded-lg">
+                                <div class="text-cyan-300 font-medium">52W Low</div>
+                                <div class="text-slate-300 animate-pulse">--</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Source et timestamp -->
+                        <div class="text-xs text-slate-500 text-center">
+                            Chargement en cours...
+                        </div>
                     </div>
                 </div>
             `;

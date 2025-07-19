@@ -2086,7 +2086,12 @@ def get_stock_price(symbol):
             "last_update": datetime.now().isoformat(),
             "source": "Yahoo Finance (Taux de change via Finnhub)",
             "change": round(change, 2) if change != 0 else "N/A",
-            "change_percent": round(change_percent, 2) if change_percent != 0 else "N/A"
+            "change_percent": round(change_percent, 2) if change_percent != 0 else "N/A",
+            "volume": info.get('volume', 'N/A'),
+            "average_volume": info.get('averageVolume', 'N/A'),
+            "pe_ratio": info.get('trailingPE', 'N/A'),
+            "fifty_two_week_high": info.get('fiftyTwoWeekHigh', 'N/A'),
+            "fifty_two_week_low": info.get('fiftyTwoWeekLow', 'N/A')
         }
         stock_price_cache[cache_key] = {'data': result, 'timestamp': time.time()}
         return jsonify(result)
@@ -2228,7 +2233,12 @@ def get_stock_price_finnhub(symbol: str, item: Optional[CollectionItem], cache_k
             "last_update": datetime.now().isoformat(),
             "source": "Finnhub",
             "change": round(change, 2) if change != 0 else "N/A",
-            "change_percent": round(change_percent, 2) if change_percent != 0 else "N/A"
+            "change_percent": round(change_percent, 2) if change_percent != 0 else "N/A",
+            "volume": quote_data.get('v', 'N/A'),
+            "average_volume": quote_data.get('av', 'N/A'),
+            "pe_ratio": "N/A",  # Finnhub ne fournit pas le PE ratio
+            "fifty_two_week_high": quote_data.get('h', 'N/A'),
+            "fifty_two_week_low": quote_data.get('l', 'N/A')
         }
         
         stock_price_cache[cache_key] = {'data': result, 'timestamp': time.time()}
@@ -2340,7 +2350,12 @@ def get_stock_price_eodhd(symbol: str, item: Optional[CollectionItem], cache_key
             "last_update": datetime.now().isoformat(),
             "source": f"EODHD (symbole utilisé: {working_symbol})",
             "change": quote.get("change", "N/A"),
-            "change_percent": quote.get("change_p", "N/A")
+            "change_percent": quote.get("change_p", "N/A"),
+            "volume": quote.get("volume", "N/A"),
+            "average_volume": quote.get("avg_volume", "N/A"),
+            "pe_ratio": "N/A",  # EODHD ne fournit pas le PE ratio
+            "fifty_two_week_high": quote.get("high_52_weeks", "N/A"),
+            "fifty_two_week_low": quote.get("low_52_weeks", "N/A")
         }
         
         logger.info(f"✅ Prix EODHD récupéré pour {symbol}: {current_price} {currency}")
