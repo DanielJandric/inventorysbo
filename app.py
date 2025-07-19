@@ -551,7 +551,7 @@ class GmailNotificationManager:
             logger.error(f"Erreur envoi Gmail: {e}")
     
     def _create_webapp_style_html(self, subject: str, content: str, item_data: Optional[Dict] = None) -> str:
-        """Crée un HTML avec le style EXACT de la web app"""
+        """Crée un HTML avec un style professionnel et lisible pour les emails"""
         timestamp = datetime.now().strftime("%d/%m/%Y à %H:%M")
         
         # Données de l'objet si disponibles
@@ -566,265 +566,205 @@ class GmailNotificationManager:
             <meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>{subject}</title>
-            <link rel="preconnect" href="https://fonts.googleapis.com">
-            <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-            <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
             <style>
-                :root {{
-                    --bg-color: #0A232A;
-                    --glass-bg: rgba(10, 50, 60, 0.25);
-                    --glass-border: rgba(0, 200, 220, 0.2);
-                    --glass-glow: rgba(0, 220, 255, 0.15);
-                    --text-primary: #e0e6e7;
-                    --text-secondary: #88a0a8;
-                }}
-                
                 body {{
-                    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                    font-family: Arial, sans-serif;
                     line-height: 1.6;
-                    color: var(--text-primary);
-                    background-color: var(--bg-color);
+                    color: #333333;
+                    background-color: #f5f5f5;
                     margin: 0;
                     padding: 20px;
-                    background-image: 
-                        radial-gradient(circle at 15% 25%, rgba(0, 220, 255, 0.2), transparent 40%),
-                        radial-gradient(circle at 85% 75%, rgba(10, 50, 60, 0.3), transparent 40%);
-                }}
-                
-                .glass {{
-                    background: var(--glass-bg);
-                    backdrop-filter: blur(15px);
-                    -webkit-backdrop-filter: blur(15px);
-                    border: 1px solid var(--glass-border);
-                    border-radius: 1.5rem;
-                    box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
-                }}
-                
-                .glass-dark {{
-                    background: rgba(10, 40, 50, 0.4);
-                    backdrop-filter: blur(20px);
-                    -webkit-backdrop-filter: blur(20px);
-                    border: 1px solid var(--glass-border);
-                    border-radius: 1.5rem;
-                }}
-                
-                .glass-subtle {{
-                    background: rgba(10, 35, 45, 0.3);
-                    backdrop-filter: blur(12px);
-                    -webkit-backdrop-filter: blur(12px);
-                    border: 1px solid var(--glass-border);
-                    border-radius: 1.5rem;
-                }}
-                
-                .header-gradient {{
-                    background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
-                    box-shadow: 0 10px 25px rgba(14, 165, 233, 0.3);
                 }}
                 
                 .container {{
                     max-width: 600px;
                     margin: 0 auto;
-                }}
-                
-                .main-card {{
-                    margin-bottom: 30px;
-                    padding: 30px;
-                    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
-                }}
-                
-                .timestamp-badge {{
-                    background: rgba(245, 158, 11, 0.15);
-                    border: 1px solid rgba(245, 158, 11, 0.25);
-                    color: #fbbf24;
-                    padding: 15px;
-                    border-radius: 12px;
-                    margin: 20px 0;
-                    border-left: 4px solid #f59e0b;
-                }}
-                
-                .cta-button {{
-                    background: linear-gradient(135deg, #0ea5e9, #0284c7);
-                    color: white;
-                    text-decoration: none;
-                    padding: 12px 24px;
-                    border-radius: 12px;
-                    font-weight: 600;
-                    display: inline-block;
-                    box-shadow: 0 4px 15px rgba(14, 165, 233, 0.3);
-                    transition: all 0.3s ease;
-                }}
-                
-                .cta-button:hover {{
-                    transform: translateY(-2px);
-                    box-shadow: 0 8px 25px rgba(14, 165, 233, 0.4);
-                }}
-                
-                /* Status badges - identiques à la web app */
-                .status-available {{
-                    background: rgba(22, 163, 74, 0.2);
-                    border: 1px solid rgba(22, 163, 74, 0.4);
-                    color: #4ade80;
-                    padding: 6px 12px;
-                    border-radius: 12px;
-                    font-size: 12px;
-                    font-weight: 600;
-                    display: inline-block;
-                }}
-                
-                .status-sold {{
-                    background: rgba(234, 88, 12, 0.2);
-                    border: 1px solid rgba(234, 88, 12, 0.4);
-                    color: #fb923c;
-                    padding: 6px 12px;
-                    border-radius: 12px;
-                    font-size: 12px;
-                    font-weight: 600;
-                    display: inline-block;
-                }}
-                
-                .status-for-sale {{
-                    background: rgba(220, 38, 38, 0.15);
-                    border: 1px solid rgba(220, 38, 38, 0.3);
-                    color: #f87171;
-                    padding: 6px 12px;
-                    border-radius: 12px;
-                    font-size: 12px;
-                    font-weight: 600;
-                    display: inline-block;
-                    animation: pulse-sale 2s infinite;
-                }}
-                
-                .status-sale-progress {{
-                    background: rgba(59, 130, 246, 0.2);
-                    border: 1px solid rgba(59, 130, 246, 0.4);
-                    color: #60a5fa;
-                    padding: 6px 12px;
-                    border-radius: 12px;
-                    font-size: 12px;
-                    font-weight: 600;
-                    display: inline-block;
-                }}
-                
-                @keyframes pulse-sale {{
-                    0%, 100% {{ opacity: 1; }}
-                    50% {{ opacity: 0.7; }}
-                }}
-                
-                .item-table {{
-                    width: 100%;
-                    border-collapse: separate;
-                    border-spacing: 0;
-                    background: rgba(15, 23, 42, 0.6);
-                    border-radius: 12px;
+                    background-color: #ffffff;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
                     overflow: hidden;
                 }}
                 
-                .item-table td {{
-                    padding: 12px 16px;
-                    border-bottom: 1px solid rgba(0, 200, 220, 0.1);
+                .header {{
+                    background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+                    color: white;
+                    padding: 30px;
+                    text-align: center;
                 }}
                 
-                .item-table td:first-child {{
-                    font-weight: 600;
-                    color: var(--text-secondary);
-                    width: 40%;
+                .header h1 {{
+                    font-size: 24px;
+                    font-weight: bold;
+                    margin: 0 0 5px 0;
+                    letter-spacing: 1px;
                 }}
                 
-                .item-table tr:last-child td {{
-                    border-bottom: none;
+                .header p {{
+                    font-size: 14px;
+                    margin: 0;
+                    opacity: 0.9;
                 }}
                 
-                .content-text {{
+                .content {{
+                    padding: 30px;
+                }}
+                
+                .timestamp {{
+                    background-color: #f8fafc;
+                    border-left: 4px solid #3b82f6;
+                    padding: 15px;
+                    margin: 20px 0;
+                    border-radius: 0 4px 4px 0;
+                    font-size: 14px;
+                    color: #64748b;
+                }}
+                
+                .message {{
                     font-size: 16px;
                     line-height: 1.7;
                     margin: 20px 0;
+                    color: #374151;
                 }}
                 
-                .footer-card {{
-                    text-align: center;
-                    padding: 20px;
-                    color: var(--text-secondary);
-                    font-size: 14px;
-                    margin-top: 20px;
-                }}
-                
-                .price-highlight {{
-                    font-weight: 700;
-                    color: #10b981;
-                }}
-                
-                .offer-highlight {{
-                    font-weight: 700;
-                    color: #ef4444;
-                }}
-                
-                h1, h2, h3 {{
-                    font-weight: 700;
-                    color: var(--text-primary);
-                }}
-                
-                .logo-text {{
-                    font-size: 28px;
-                    font-weight: 800;
-                    letter-spacing: 2px;
+                .cta-button {{
+                    background: linear-gradient(135deg, #3b82f6, #1e40af);
                     color: white;
-                    margin: 0;
+                    text-decoration: none;
+                    padding: 12px 24px;
+                    border-radius: 6px;
+                    font-weight: 600;
+                    display: inline-block;
+                    margin: 20px 0;
                 }}
                 
-                .subtitle {{
-                    color: #e0f2fe;
-                    margin: 10px 0 0 0;
-                    font-size: 16px;
-                    font-weight: 500;
+                .footer {{
+                    background-color: #f8fafc;
+                    padding: 20px;
+                    text-align: center;
+                    border-top: 1px solid #e5e7eb;
+                    font-size: 12px;
+                    color: #6b7280;
+                }}
+                
+                .footer a {{
+                    color: #3b82f6;
+                    text-decoration: none;
+                }}
+                
+                .item-details {{
+                    background-color: #f8fafc;
+                    border: 1px solid #e5e7eb;
+                    border-radius: 6px;
+                    padding: 20px;
+                    margin: 20px 0;
+                }}
+                
+                .item-details h3 {{
+                    color: #1f2937;
+                    margin: 0 0 15px 0;
+                    font-size: 18px;
+                    font-weight: 600;
+                }}
+                
+                .detail-table {{
+                    width: 100%;
+                    border-collapse: collapse;
+                }}
+                
+                .detail-table td {{
+                    padding: 8px 0;
+                    border-bottom: 1px solid #e5e7eb;
+                    vertical-align: top;
+                }}
+                
+                .detail-table td:first-child {{
+                    font-weight: 600;
+                    color: #4b5563;
+                    width: 40%;
+                }}
+                
+                .detail-table tr:last-child td {{
+                    border-bottom: none;
+                }}
+                
+                .status-badge {{
+                    display: inline-block;
+                    padding: 4px 8px;
+                    border-radius: 4px;
+                    font-size: 12px;
+                    font-weight: 600;
+                }}
+                
+                .status-available {{
+                    background-color: #dcfce7;
+                    color: #166534;
+                }}
+                
+                .status-sold {{
+                    background-color: #fed7aa;
+                    color: #9a3412;
+                }}
+                
+                .status-for-sale {{
+                    background-color: #fee2e2;
+                    color: #991b1b;
+                }}
+                
+                .status-sale-progress {{
+                    background-color: #dbeafe;
+                    color: #1e40af;
+                }}
+                
+                .price {{
+                    font-weight: 700;
+                    color: #059669;
+                }}
+                
+                .offer {{
+                    font-weight: 700;
+                    color: #dc2626;
                 }}
                 
                 @media (max-width: 600px) {{
                     body {{ padding: 10px; }}
-                    .main-card {{ padding: 20px; }}
-                    .item-table td {{ padding: 10px 12px; }}
+                    .content {{ padding: 20px; }}
+                    .header {{ padding: 20px; }}
                 }}
             </style>
         </head>
         <body>
             <div class="container">
-                <!-- Header avec style exact de la web app -->
-                <div class="header-gradient glass" style="padding: 30px; text-align: center; margin-bottom: 30px;">
-                    <h1 class="logo-text">BONVIN COLLECTION</h1>
-                    <p class="subtitle">Notification de changement</p>
+                <div class="header">
+                    <h1>BONVIN COLLECTION</h1>
+                    <p>Notification de changement</p>
                 </div>
                 
-                <!-- Contenu principal -->
-                <div class="glass main-card">
-                    <h2 style="margin: 0 0 20px 0; font-size: 22px;">{subject}</h2>
+                <div class="content">
+                    <h2 style="margin: 0 0 20px 0; font-size: 20px; color: #1f2937;">{subject}</h2>
                     
-                    <!-- Timestamp -->
-                    <div class="timestamp-badge">
-                        <strong>📅 {timestamp}</strong>
+                    <div class="timestamp">
+                        <strong>{timestamp}</strong>
                     </div>
                     
-                    <!-- Contenu -->
-                    <div class="content-text">
+                    <div class="message">
                         {content.replace(chr(10), '<br>')}
                     </div>
                     
-                    <!-- Détails de l'objet -->
                     {item_section}
                     
-                    <!-- Call to Action -->
-                    <div style="text-align: center; margin: 30px 0;">
+                    <div style="text-align: center;">
                         <a href="{self.app_url}" class="cta-button">
-                            f"Acceder au tableau de bord"
+                            Accéder au tableau de bord
                         </a>
                     </div>
                 </div>
                 
-                <!-- Footer -->
-                <div class="glass footer-card">
-                    <p style="margin: 0 0 10px 0;">
+                <div class="footer">
+                    <p style="margin: 0 0 5px 0;">
                         <strong>Notification automatique BONVIN Collection</strong>
                     </p>
-                    <p style="margin: 0; opacity: 0.8;">
-                        Email généré automatiquement • <a href="{self.app_url}" style="color: #22d3ee;">Accéder à l'interface</a>
+                    <p style="margin: 0;">
+                        Email généré automatiquement • <a href="{self.app_url}">Accéder à l'interface</a>
                     </p>
                 </div>
             </div>
@@ -833,7 +773,7 @@ class GmailNotificationManager:
         """
     
     def _create_item_details_section(self, item_data: Dict) -> str:
-        """Crée la section détails avec le style de la web app"""
+        """Crée la section détails avec un style professionnel et lisible"""
         details_rows = []
         
         # Nom
@@ -844,39 +784,52 @@ class GmailNotificationManager:
         if item_data.get('category'):
             details_rows.append(f'<tr><td>Catégorie:</td><td>{item_data["category"]}</td></tr>')
         
+        # Localisation
+        if item_data.get('location'):
+            details_rows.append(f'<tr><td>Localisation:</td><td>{item_data["location"]}</td></tr>')
+        
         # Statut avec badge
         if item_data.get('status'):
             status_class = 'status-available' if item_data['status'] == 'Available' else 'status-sold'
             status_text = 'Disponible' if item_data['status'] == 'Available' else 'Vendu'
-            details_rows.append(f'<tr><td>Statut:</td><td><span class="{status_class}">{status_text}</span></td></tr>')
+            details_rows.append(f'<tr><td>Statut:</td><td><span class="status-badge {status_class}">{status_text}</span></td></tr>')
         
         # En vente
         if item_data.get('for_sale'):
-            details_rows.append(f'<tr><td>En vente:</td><td><span class="status-for-sale">EN VENTE</span></td></tr>')
+            details_rows.append(f'<tr><td>En vente:</td><td><span class="status-badge status-for-sale">EN VENTE</span></td></tr>')
         
-        # Statut de vente
-        if item_data.get('sale_status'):
+        # Statut de vente (seulement si différent de 'initial')
+        if item_data.get('sale_status') and item_data['sale_status'] != 'initial':
             status_label = self._get_sale_status_label_text(item_data['sale_status'])
-            details_rows.append(f'<tr><td>Statut vente:</td><td><span class="status-sale-progress">{status_label}</span></td></tr>')
+            details_rows.append(f'<tr><td>Statut vente:</td><td><span class="status-badge status-sale-progress">{status_label}</span></td></tr>')
         
         # Valeur actuelle
         if item_data.get('current_value'):
             price_formatted = f"{item_data['current_value']:,.0f} CHF"
-            details_rows.append(f'<tr><td>Valeur actuelle:</td><td><span class="price-highlight">{price_formatted}</span></td></tr>')
+            details_rows.append(f'<tr><td>Valeur actuelle:</td><td><span class="price">{price_formatted}</span></td></tr>')
+        
+        # Prix d'acquisition
+        if item_data.get('acquisition_price'):
+            acquisition_formatted = f"{item_data['acquisition_price']:,.0f} CHF"
+            details_rows.append(f'<tr><td>Prix d\'acquisition:</td><td>{acquisition_formatted}</td></tr>')
         
         # Offre actuelle
         if item_data.get('current_offer'):
             offer_formatted = f"{item_data['current_offer']:,.0f} CHF"
-            details_rows.append(f'<tr><td>Offre actuelle:</td><td><span class="offer-highlight">{offer_formatted}</span></td></tr>')
+            details_rows.append(f'<tr><td>Offre actuelle:</td><td><span class="offer">{offer_formatted}</span></td></tr>')
         
         # Prix de vente
         if item_data.get('sold_price'):
             sold_formatted = f"{item_data['sold_price']:,.0f} CHF"
-            details_rows.append(f'<tr><td>Vendu pour:</td><td><span class="price-highlight">{sold_formatted}</span></td></tr>')
+            details_rows.append(f'<tr><td>Vendu pour:</td><td><span class="price">{sold_formatted}</span></td></tr>')
         
         # Année
         if item_data.get('construction_year'):
             details_rows.append(f'<tr><td>Année:</td><td>{item_data["construction_year"]}</td></tr>')
+        
+        # Condition
+        if item_data.get('condition'):
+            details_rows.append(f'<tr><td>Condition:</td><td>{item_data["condition"]}</td></tr>')
         
         # Informations spécifiques aux actions
         if item_data.get('category') == 'Actions':
@@ -894,7 +847,7 @@ class GmailNotificationManager:
         # Détails du progrès
         if item_data.get('sale_progress'):
             progress_text = item_data['sale_progress'][:150] + ('...' if len(item_data['sale_progress']) > 150 else '')
-            details_rows.append(f'<tr><td>Détails du progrès:</td><td style="font-style: italic; color: #60a5fa;">{progress_text}</td></tr>')
+            details_rows.append(f'<tr><td>Détails du progrès:</td><td style="font-style: italic; color: #6b7280;">{progress_text}</td></tr>')
         
         # Description
         if item_data.get('description'):
@@ -903,9 +856,9 @@ class GmailNotificationManager:
         
         if details_rows:
             return f'''
-            <div class="glass-subtle" style="padding: 20px; margin: 20px 0;">
-                <h3 style="color: #22d3ee; margin: 0 0 15px 0; font-size: 18px;">Details de l'objet</h3>
-                <table class="item-table">
+            <div class="item-details">
+                <h3>Détails de l'objet</h3>
+                <table class="detail-table">
                     {''.join(details_rows)}
                 </table>
             </div>
@@ -916,7 +869,6 @@ class GmailNotificationManager:
     def _get_sale_status_label_text(self, status: str) -> str:
         """Libellés de statut de vente"""
         status_labels = {
-            'initial': 'Mise en vente initiale',
             'presentation': 'Préparation présentation',
             'intermediary': 'Choix intermédiaires',
             'inquiries': 'Premières demandes',
