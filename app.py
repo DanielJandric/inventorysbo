@@ -1293,7 +1293,7 @@ class AdvancedDataManager:
         roi_percentage = (total_profit / total_acquisition * 100) if total_acquisition > 0 else 0
         
         return {
-            'portfolio_value': total_asking,
+            'portfolio_value': total_current,
             'realized_sales': total_sold,
             'total_acquisition_cost': total_acquisition,
             'total_profit': total_profit,
