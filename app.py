@@ -74,6 +74,7 @@ class CollectionItem:
     last_action_date: Optional[str] = None
     surface_m2: Optional[float] = None
     rental_income_chf: Optional[float] = None
+    location: Optional[str] = None
     # Champs spécifiques aux actions
     stock_symbol: Optional[str] = None
     stock_quantity: Optional[int] = None
@@ -4021,7 +4022,7 @@ def clean_update_data(data: Dict[str, Any]) -> Dict[str, Any]:
     text_fields = [
         'name', 'category', 'description', 'sale_progress', 
         'buyer_contact', 'intermediary', 'status', 'condition', 
-        'sale_status', 'stock_symbol', 'stock_exchange'
+        'sale_status', 'stock_symbol', 'stock_exchange', 'location'
     ]
     for field in text_fields:
         if field in data:

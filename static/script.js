@@ -1074,6 +1074,7 @@ async function handleFormSubmit(e) {
         current_value: parseFloat(document.getElementById('item-current-value')?.value) || null,
         sold_price: parseFloat(document.getElementById('item-sold-price')?.value) || null,
         description: document.getElementById('item-description')?.value?.trim() || null,
+        location: document.getElementById('item-location')?.value || null,
         for_sale: document.getElementById('item-for-sale')?.checked || false,
         
         // Champs spécifiques aux actions
