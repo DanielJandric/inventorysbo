@@ -99,6 +99,31 @@ document.addEventListener('DOMContentLoaded', function() {
         // Démarrer la mise à jour automatique des prix (avec gestion d'erreur améliorée)
         startStockPriceUpdates();
         
+        // Forcer la mise à jour des prix au refresh de la page
+        window.addEventListener('beforeunload', function() {
+            // Nettoyer le timer avant de quitter
+            if (stockPriceUpdateTimer) {
+                clearInterval(stockPriceUpdateTimer);
+            }
+        });
+        
+        // Mise à jour forcée au focus de la page (quand l'utilisateur revient sur l'onglet)
+        window.addEventListener('focus', function() {
+            console.log('Page refocusée - mise à jour des prix...');
+            forceUpdateStockPrices();
+        });
+        
+        // Détecter le refresh de la page et forcer la mise à jour
+        let pageAccessedByReload = sessionStorage.getItem('pageAccessedByReload');
+        if (pageAccessedByReload === null) {
+            sessionStorage.setItem('pageAccessedByReload', 'true');
+        } else {
+            sessionStorage.removeItem('pageAccessedByReload');
+            // C'est un refresh, forcer la mise à jour des prix
+            console.log('Refresh détecté - mise à jour forcée des prix...');
+            setTimeout(() => forceUpdateStockPrices(), 1000);
+        }
+        
     } catch (error) {
         console.error('Erreur lors de l\'initialisation:', error);
         showError('Erreur lors du chargement de l\'interface');
@@ -453,14 +478,14 @@ function displayItems() {
 
 // --- Gestion améliorée de la mise à jour des prix des actions ---
 function startStockPriceUpdates() {
-    // Mise à jour initiale après 1 seconde
-    setTimeout(updateStockPrices, 1000);
+    // Mise à jour initiale immédiate
+    updateStockPrices();
     
-                        // Puis toutes les 15 minutes (900000ms) pour éviter rate limiting
-                    if (stockPriceUpdateTimer) {
-                        clearInterval(stockPriceUpdateTimer);
-                    }
-                    stockPriceUpdateTimer = setInterval(updateStockPrices, 900000);
+    // Puis toutes les 5 minutes (300000ms) pour des mises à jour plus fréquentes
+    if (stockPriceUpdateTimer) {
+        clearInterval(stockPriceUpdateTimer);
+    }
+    stockPriceUpdateTimer = setInterval(updateStockPrices, 300000);
 }
 
 async function updateStockPrices() {
@@ -675,17 +700,7 @@ function createItemCardHTML(item) {
             `;
         }
         
-        // Ajouter un message spécial pour les actions suisses
-        if (item.category === 'Actions' && item.stock_exchange && 
-            ['SWX', 'SIX', 'SWISS', 'CH'].includes(item.stock_exchange.toUpperCase())) {
-            stockPriceSection += `
-                <div class="mt-2 p-2 bg-blue-900/20 rounded-lg border border-blue-500/30">
-                    <div class="text-xs text-blue-300">
-                        💡 Action suisse : Mise à jour manuelle recommandée
-                    </div>
-                </div>
-            `;
-        }
+
     }
     
     return `

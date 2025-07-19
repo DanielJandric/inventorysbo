@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 # Cache pour les prix des actions avec expiration
 stock_price_cache = {}
-STOCK_PRICE_CACHE_DURATION = 900  # 15 minutes (pour éviter rate limiting Yahoo)
+STOCK_PRICE_CACHE_DURATION = 300  # 5 minutes (pour des mises à jour plus fréquentes)
 
 
 
@@ -2239,17 +2239,11 @@ def get_stock_price_finnhub(symbol: str, item: Optional[CollectionItem], cache_k
         
 
         
-        # Pour les actions suisses, donner un message informatif avec prix manuel
+        # Pour les actions suisses, utiliser le cache si disponible
         if item and item.stock_exchange and item.stock_exchange.upper() in ['SWX', 'SIX', 'SWISS', 'CH']:
-            return jsonify({
-                "error": "Prix non disponible via API",
-                "details": "Yahoo Finance échoue sur Render pour les actions suisses",
-                "message": "IREN.SW = 125.5 CHF (dernière mise à jour manuelle recommandée)",
-                "manual_price": 125.5,
-                "manual_currency": "CHF",
-                "symbol": symbol,
-                "exchange": item.stock_exchange
-            }), 500
+            if cache_key in stock_price_cache:
+                logger.info(f"Erreur API, retour des données en cache pour {symbol}")
+                return jsonify(stock_price_cache[cache_key]['data'])
         
         # Pour les autres actions, utiliser le cache si disponible
         if cache_key in stock_price_cache:
