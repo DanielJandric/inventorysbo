@@ -8,7 +8,6 @@ let currentViewMode = 'cards';
 let conversationHistory = [];
 let isTyping = false;
 let cardObserver = null;
-let stockPriceUpdateTimer = null;
 let stockPriceUpdateErrors = {}; // Pour tracker les erreurs par symbole
 
 // --- Notifications ---
@@ -96,33 +95,8 @@ document.addEventListener('DOMContentLoaded', function() {
         // Ajouter les actions rapides du chatbot
         setTimeout(addQuickActions, 1000);
         
-        // Démarrer la mise à jour automatique des prix (avec gestion d'erreur améliorée)
-        startStockPriceUpdates();
-        
-        // Forcer la mise à jour des prix au refresh de la page
-        window.addEventListener('beforeunload', function() {
-            // Nettoyer le timer avant de quitter
-            if (stockPriceUpdateTimer) {
-                clearInterval(stockPriceUpdateTimer);
-            }
-        });
-        
-        // Mise à jour forcée au focus de la page (quand l'utilisateur revient sur l'onglet)
-        window.addEventListener('focus', function() {
-            console.log('Page refocusée - mise à jour des prix...');
-            forceUpdateStockPrices();
-        });
-        
-        // Détecter le refresh de la page et forcer la mise à jour
-        let pageAccessedByReload = sessionStorage.getItem('pageAccessedByReload');
-        if (pageAccessedByReload === null) {
-            sessionStorage.setItem('pageAccessedByReload', 'true');
-        } else {
-            sessionStorage.removeItem('pageAccessedByReload');
-            // C'est un refresh, forcer la mise à jour des prix
-            console.log('Refresh détecté - mise à jour forcée des prix...');
-            setTimeout(() => forceUpdateStockPrices(), 1000);
-        }
+        // Aucune mise à jour automatique des prix - uniquement manuelle via le bouton
+        console.log('Mise à jour automatique des prix désactivée - uniquement manuelle');
         
     } catch (error) {
         console.error('Erreur lors de l\'initialisation:', error);
@@ -477,26 +451,17 @@ function displayItems() {
 }
 
 // --- Gestion améliorée de la mise à jour des prix des actions ---
-function startStockPriceUpdates() {
-    // Mise à jour initiale immédiate
-    updateStockPrices();
-    
-    // Puis toutes les 10 minutes (600000ms) pour éviter les rate limits
-    if (stockPriceUpdateTimer) {
-        clearInterval(stockPriceUpdateTimer);
-    }
-    stockPriceUpdateTimer = setInterval(updateStockPrices, 600000);
-}
+// Fonction startStockPriceUpdates() supprimée - plus de mises à jour automatiques
 
 async function updateStockPrices(forceRefresh = false) {
     const stockItems = allItems.filter(item => item.category === 'Actions' && item.stock_symbol);
     
     if (stockItems.length === 0) return;
     
-    console.log(`Mise à jour des prix pour ${stockItems.length} actions...${forceRefresh ? ' (refresh forcé)' : ''}`);
+    console.log(`Mise à jour manuelle des prix pour ${stockItems.length} actions...${forceRefresh ? ' (refresh forcé)' : ''}`);
     
     for (const item of stockItems) {
-        // Vérifier si on a déjà eu trop d'erreurs pour ce symbole (augmenté à 5)
+        // Vérifier si on a déjà eu trop d'erreurs pour ce symbole
         const errorCount = stockPriceUpdateErrors[item.stock_symbol] || 0;
         if (errorCount >= 5) {
             console.log(`Ignorer ${item.stock_symbol} - trop d'erreurs (${errorCount})`);
@@ -510,12 +475,9 @@ async function updateStockPrices(forceRefresh = false) {
             const response = await fetch(url);
             
             if (response.status === 429) {
-                // Rate limit atteint - retry intelligent
-                console.warn(`Rate limit atteint pour ${item.stock_symbol}, retry dans 3 secondes...`);
+                // Rate limit atteint
+                console.warn(`Rate limit atteint pour ${item.stock_symbol}`);
                 stockPriceUpdateErrors[item.stock_symbol] = (errorCount || 0) + 1;
-                
-                // Retry après 3 secondes au lieu de 5
-                await new Promise(resolve => setTimeout(resolve, 3000));
                 continue;
             }
             
@@ -544,9 +506,8 @@ async function updateStockPrices(forceRefresh = false) {
             stockPriceUpdateErrors[item.stock_symbol] = (errorCount || 0) + 1;
         }
         
-                        // Délai plus long pour éviter rate limiting Yahoo Finance
-                const delay = item.stock_exchange && ['SWX', 'SIX', 'SWISS', 'CH'].includes(item.stock_exchange.toUpperCase()) ? 8000 : 3000;
-                await new Promise(resolve => setTimeout(resolve, delay));
+        // Délai minimal entre les requêtes pour éviter les rate limits
+        await new Promise(resolve => setTimeout(resolve, 1000));
     }
     
     // Rafraîchir les statistiques si des prix ont été mis à jour
