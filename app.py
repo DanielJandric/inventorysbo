@@ -13,7 +13,7 @@ from enum import Enum
 from functools import lru_cache, wraps
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, Response
 from flask_cors import CORS
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
@@ -2916,7 +2916,6 @@ def generate_portfolio_pdf():
             pdf = pdfkit.from_string(html_content, False, options=options)
             
             # Retourner le PDF
-            from flask import Response
             response = Response(pdf, mimetype='application/pdf')
             response.headers['Content-Disposition'] = f'attachment; filename=bonvin_portfolio_{datetime.now().strftime("%Y%m%d_%H%M")}.pdf'
             
