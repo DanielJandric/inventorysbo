@@ -516,8 +516,9 @@ async function updateStockPrices() {
             stockPriceUpdateErrors[item.stock_symbol] = (errorCount || 0) + 1;
         }
         
-        // Délai réduit entre chaque requête (1 seconde au lieu de 2)
-        await new Promise(resolve => setTimeout(resolve, 1000));
+                        // Délai plus long pour les actions suisses (économie Alpha Vantage)
+                const delay = item.stock_exchange && ['SWX', 'SIX', 'SWISS', 'CH'].includes(item.stock_exchange.toUpperCase()) ? 3000 : 1000;
+                await new Promise(resolve => setTimeout(resolve, delay));
     }
     
     // Rafraîchir les statistiques si des prix ont été mis à jour
@@ -669,6 +670,18 @@ function createItemCardHTML(item) {
                     <div class="flex items-center gap-2">
                         <span class="text-lg font-bold animate-pulse">⏳</span>
                         <span class="text-sm">Chargement du cours...</span>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // Ajouter un message spécial pour les actions suisses
+        if (item.category === 'Actions' && item.stock_exchange && 
+            ['SWX', 'SIX', 'SWISS', 'CH'].includes(item.stock_exchange.toUpperCase())) {
+            stockPriceSection += `
+                <div class="mt-2 p-2 bg-blue-900/20 rounded-lg border border-blue-500/30">
+                    <div class="text-xs text-blue-300">
+                        💡 Action suisse : Mise à jour manuelle recommandée
                     </div>
                 </div>
             `;
