@@ -3360,7 +3360,7 @@ def fix_vehicle_categories():
     """Corriger automatiquement les catégories 'Véhicules' en 'Voitures'"""
     try:
         # Utiliser le client Supabase Python au lieu de requests
-        response = supabase.table('collection_items').select('*').execute()
+        response = supabase.table('items').select('*').execute()
         
         if response.data is None:
             logger.error(f"❌ Erreur récupération items: Réponse vide")
@@ -3426,7 +3426,7 @@ def fix_vehicle_categories():
         for vehicle in vehicles_to_fix:
             try:
                 # Mettre à jour la catégorie avec le client Supabase
-                update_response = supabase.table('collection_items').update({
+                update_response = supabase.table('items').update({
                     'category': 'Voitures'
                 }).eq('id', vehicle['id']).execute()
                 
