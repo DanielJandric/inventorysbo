@@ -2218,6 +2218,60 @@ def get_stock_price_cache_status():
         }), 500
 
 
+@app.route("/api/stock-price/update-all", methods=["POST"])
+def update_all_stock_prices():
+    """Met à jour tous les prix d'actions dans la DB"""
+    try:
+        items = AdvancedDataManager.fetch_all_items()
+        action_items = [item for item in items if item.category == 'Actions' and item.stock_symbol]
+        
+        if not action_items:
+            return jsonify({
+                "success": True,
+                "message": "Aucune action trouvée à mettre à jour",
+                "updated_count": 0
+            })
+        
+        updated_count = 0
+        errors = []
+        
+        for item in action_items:
+            try:
+                cache_key = f"stock_{item.stock_symbol}"
+                # Forcer le refresh
+                result = get_stock_price_eodhd(item.stock_symbol, item, cache_key, force_refresh=True)
+                
+                if hasattr(result, 'json'):
+                    data = result.json
+                    if isinstance(data, dict) and 'price' in data:
+                        updated_count += 1
+                        logger.info(f"✅ Prix mis à jour pour {item.name}: {data['price']} CHF")
+                    else:
+                        errors.append(f"Données invalides pour {item.name}")
+                else:
+                    errors.append(f"Réponse invalide pour {item.name}")
+                    
+            except Exception as e:
+                error_msg = f"Erreur pour {item.name}: {str(e)}"
+                errors.append(error_msg)
+                logger.error(f"❌ {error_msg}")
+        
+        return jsonify({
+            "success": True,
+            "message": f"Mise à jour terminée: {updated_count} actions mises à jour",
+            "updated_count": updated_count,
+            "total_actions": len(action_items),
+            "errors": errors
+        })
+        
+    except Exception as e:
+        logger.error(f"❌ Erreur mise à jour globale: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
 def get_stock_price_eodhd(symbol: str, item: Optional[CollectionItem], cache_key: str, force_refresh=False):
     """
     Récupère le prix via l'API EODHD. Excellente pour les actions suisses.
@@ -2325,6 +2379,24 @@ def get_stock_price_eodhd(symbol: str, item: Optional[CollectionItem], cache_key
         
         # Mettre en cache
         stock_price_cache[cache_key] = {'data': result, 'timestamp': time.time()}
+        
+        # Mettre à jour le prix dans la DB si c'est une action existante
+        if item and item.id:
+            try:
+                update_data = {
+                    'current_price': current_price,
+                    'last_price_update': datetime.now().isoformat()
+                }
+                
+                # Mettre à jour dans Supabase
+                if supabase:
+                    response = supabase.table('collection_items').update(update_data).eq('id', item.id).execute()
+                    if response.data:
+                        logger.info(f"✅ Prix mis à jour dans DB pour action {item.name} (ID: {item.id}): {current_price} CHF")
+                    else:
+                        logger.warning(f"⚠️ Échec mise à jour DB pour action {item.name} (ID: {item.id})")
+            except Exception as e:
+                logger.error(f"❌ Erreur mise à jour DB pour action {item.name}: {e}")
         
         return jsonify(result)
         
@@ -2746,12 +2818,13 @@ def clean_update_data(data: Dict[str, Any]) -> Dict[str, Any]:
         cleaned['last_action_date'] = data['last_action_date']
     
     # Logique métier : nettoyer les champs actions si pas une action
+    # MAIS préserver le current_price si il existe déjà
     if cleaned.get('category') != 'Actions':
         cleaned['stock_symbol'] = None
         cleaned['stock_quantity'] = None
         cleaned['stock_purchase_price'] = None
         cleaned['stock_exchange'] = None
-        cleaned['current_price'] = None
+        # NE PAS effacer current_price ici - il peut être mis à jour manuellement
     
     # Logique métier existante pour les ventes
     if cleaned.get('for_sale') == False:
