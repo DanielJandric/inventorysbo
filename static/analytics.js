@@ -64,11 +64,9 @@ function updateStatistics() {
     const forSaleItems = allItems.filter(item => item.status === 'Available' && item.for_sale === true).length;
     const soldItems = allItems.filter(item => item.status === 'Sold').length;
     
-    // Calculer la valeur totale
+    // Calculer la valeur totale (exclure les objets vendus)
     const totalValue = allItems.reduce((sum, item) => {
-        if (item.status === 'Sold' && item.sold_price) {
-            return sum + item.sold_price;
-        } else if (item.status === 'Available' && item.asking_price) {
+        if (item.status === 'Available' && item.asking_price) {
             return sum + item.asking_price;
         } else if (item.category === 'Actions' && item.current_price && item.stock_quantity) {
             return sum + (item.current_price * item.stock_quantity);
@@ -145,7 +143,7 @@ function initializeChart() {
                         const percentage = ctx.raw.p;
                         return [
                             category,
-                            `${value} CHF`,
+                            `${formatPrice(value)}`,
                             `(${percentage}%)`
                         ];
                     },
@@ -218,9 +216,7 @@ function updateChart() {
             }
             
             let value = 0;
-            if (item.status === 'Sold' && item.sold_price) {
-                value = item.sold_price;
-            } else if (item.status === 'Available' && item.asking_price) {
+            if (item.status === 'Available' && item.asking_price) {
                 value = item.asking_price;
             } else if (item.category === 'Actions' && item.current_price && item.stock_quantity) {
                 value = item.current_price * item.stock_quantity;
@@ -240,7 +236,7 @@ function updateChart() {
         percentage: totalValue > 0 ? ((value / totalValue) * 100).toFixed(1) : 0
     }));
     
-    // S'assurer que les Actions (Investis) apparaissent en premier si elles existent
+    // S'assurer que les Actions apparaissent en premier si elles existent
     const sortedData = treeData.sort((a, b) => {
         // Priorité aux Actions
         if (a.category === 'Actions' && b.category !== 'Actions') return -1;
@@ -261,9 +257,7 @@ function updateChart() {
     // Mettre à jour le pourcentage
     const totalSelected = Object.values(categoryData).reduce((sum, value) => sum + value, 0);
     const totalAllValue = allItems.reduce((sum, item) => {
-        if (item.status === 'Sold' && item.sold_price) {
-            return sum + item.sold_price;
-        } else if (item.status === 'Available' && item.asking_price) {
+        if (item.status === 'Available' && item.asking_price) {
             return sum + item.asking_price;
         } else if (item.category === 'Actions' && item.current_price && item.stock_quantity) {
             return sum + (item.current_price * item.stock_quantity);
@@ -283,9 +277,7 @@ function updateTopCategories() {
         if (!item.category) return;
         
         let value = 0;
-        if (item.status === 'Sold' && item.sold_price) {
-            value = item.sold_price;
-        } else if (item.status === 'Available' && item.asking_price) {
+        if (item.status === 'Available' && item.asking_price) {
             value = item.asking_price;
         } else if (item.category === 'Actions' && item.current_price && item.stock_quantity) {
             value = item.current_price * item.stock_quantity;
