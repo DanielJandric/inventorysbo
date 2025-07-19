@@ -2288,6 +2288,22 @@ def get_stock_price_eodhd(symbol: str, item: Optional[CollectionItem], cache_key
         # Pour les cartes, on garde le prix dans la devise originale
         price_chf = current_price
         
+        # Récupérer les données fondamentales pour le PE ratio
+        pe_ratio = "N/A"
+        try:
+            fundamental_url = f"https://eodhd.com/api/fundamentals/{working_symbol}?api_token={EODHD_API_KEY}&fmt=json"
+            fundamental_response = requests.get(fundamental_url, timeout=10)
+            
+            if fundamental_response.ok:
+                fundamental_data = fundamental_response.json()
+                if fundamental_data and 'General' in fundamental_data:
+                    general_data = fundamental_data['General']
+                    if 'PERatio' in general_data and general_data['PERatio']:
+                        pe_ratio = str(general_data['PERatio'])
+                    logger.info(f"✅ Données fondamentales EODHD récupérées pour {working_symbol}")
+        except Exception as e:
+            logger.warning(f"Impossible de récupérer les données fondamentales EODHD pour {working_symbol}: {e}")
+        
         result = {
             "symbol": symbol,  # Garder le symbole original pour l'affichage
             "price": current_price,
@@ -2300,7 +2316,7 @@ def get_stock_price_eodhd(symbol: str, item: Optional[CollectionItem], cache_key
             "change_percent": format_stock_value(quote.get("change_p"), is_percent=True),
             "volume": format_stock_value(quote.get("volume"), is_volume=True),
             "average_volume": format_stock_value(quote.get("avg_volume"), is_volume=True),
-            "pe_ratio": "N/A",  # EODHD ne fournit pas le PE ratio
+            "pe_ratio": pe_ratio,
             "fifty_two_week_high": format_stock_value(quote.get("high_52_weeks"), is_price=True),
             "fifty_two_week_low": format_stock_value(quote.get("low_52_weeks"), is_price=True)
         }

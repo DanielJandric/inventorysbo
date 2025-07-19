@@ -226,6 +226,37 @@
             border: 1px solid rgba(168, 162, 158, 0.2);
         }
         
+        /* BOUTON DE MISE À JOUR DES PRIX - GRIS DORÉ AVEC SURBRILLANCE */
+        .stock-update-btn {
+            background: rgba(120, 113, 108, 0.25);
+            border: 1px solid rgba(168, 162, 158, 0.4);
+            color: #fbbf24;
+            box-shadow: 0 10px 25px rgba(120, 113, 108, 0.3);
+            backdrop-filter: blur(15px);
+        }
+        .stock-update-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: radial-gradient(circle at 50% 50%, rgba(251, 191, 36, 0.15), transparent 70%);
+            border-radius: inherit;
+            z-index: -1;
+        }
+        .stock-update-btn:hover {
+            background: rgba(120, 113, 108, 0.35);
+            border-color: rgba(168, 162, 158, 0.6);
+            color: #f59e0b;
+            box-shadow: 0 15px 35px rgba(120, 113, 108, 0.4), 0 0 20px rgba(251, 191, 36, 0.3);
+            transform: translateY(-2px);
+        }
+        .stock-update-btn:active {
+            transform: translateY(0);
+            box-shadow: 0 8px 20px rgba(120, 113, 108, 0.3);
+        }
+        
         .floating-card {
             box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
             transform: perspective(1000px); cursor: pointer;
@@ -762,7 +793,7 @@
                 
                 <!-- Bouton de mise à jour des prix des actions -->
                 <div class="mt-6 pt-6 border-t border-cyan-900/20 flex justify-center">
-                    <button onclick="forceUpdateStockPrices()" class="glass glowing-element px-6 py-3 rounded-xl text-sm font-medium transition-all hover:scale-105 flex items-center gap-2">
+                    <button onclick="forceUpdateStockPrices()" class="stock-update-btn glass glowing-element px-6 py-3 rounded-xl text-sm font-medium transition-all hover:scale-105 flex items-center gap-2">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
                         </svg>

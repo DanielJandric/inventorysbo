@@ -606,36 +606,36 @@ function updateStockCardDisplay(itemId, stockData) {
                 <!-- Prix principal -->
                 <div class="flex items-center justify-between">
                     <div class="flex items-center gap-2">
-                        <span class="text-lg font-bold">${formatPrice(stockData.price_chf)}</span>
-                        <span class="text-xs text-slate-400 font-medium">${stockData.currency}</span>
+                        <span class="text-lg font-bold text-amber-200">${formatPrice(stockData.price_chf)}</span>
+                        <span class="text-xs text-amber-300/70 font-medium">${stockData.currency}</span>
                     </div>
                     <span class="${changeClass} text-sm font-semibold">
                         ${arrow} ${Math.abs(stockData.change_percent).toFixed(2)}%
                     </span>
                 </div>
                 
-                <!-- Informations supplémentaires -->
-                <div class="grid grid-cols-2 gap-2 text-xs">
-                    <div class="glass-subtle p-2 rounded-lg">
-                        <div class="text-cyan-300 font-medium">Volume</div>
-                        <div class="text-slate-300">${formatVolume(stockData.volume)}</div>
+                <!-- Informations supplémentaires sans tableaux -->
+                <div class="space-y-2 text-xs">
+                    <div class="flex justify-between">
+                        <span class="text-amber-300/80 font-medium">Volume:</span>
+                        <span class="text-amber-200/90">${formatVolume(stockData.volume)}</span>
                     </div>
-                    <div class="glass-subtle p-2 rounded-lg">
-                        <div class="text-cyan-300 font-medium">P/E Ratio</div>
-                        <div class="text-slate-300">${stockData.pe_ratio !== 'N/A' ? parseFloat(stockData.pe_ratio).toFixed(1) : 'N/A'}</div>
+                    <div class="flex justify-between">
+                        <span class="text-amber-300/80 font-medium">P/E Ratio:</span>
+                        <span class="text-amber-200/90">${stockData.pe_ratio !== 'N/A' ? parseFloat(stockData.pe_ratio).toFixed(1) : 'N/A'}</span>
                     </div>
-                    <div class="glass-subtle p-2 rounded-lg">
-                        <div class="text-cyan-300 font-medium">52W High</div>
-                        <div class="text-slate-300">${formatPriceValue(stockData.fifty_two_week_high)}</div>
+                    <div class="flex justify-between">
+                        <span class="text-amber-300/80 font-medium">52W High:</span>
+                        <span class="text-amber-200/90">${formatPriceValue(stockData.fifty_two_week_high)}</span>
                     </div>
-                    <div class="glass-subtle p-2 rounded-lg">
-                        <div class="text-cyan-300 font-medium">52W Low</div>
-                        <div class="text-slate-300">${formatPriceValue(stockData.fifty_two_week_low)}</div>
+                    <div class="flex justify-between">
+                        <span class="text-amber-300/80 font-medium">52W Low:</span>
+                        <span class="text-amber-200/90">${formatPriceValue(stockData.fifty_two_week_low)}</span>
                     </div>
                 </div>
                 
                 <!-- Source et timestamp -->
-                <div class="text-xs text-slate-500 text-center">
+                <div class="text-xs text-amber-300/60 text-center pt-1 border-t border-amber-300/20">
                     ${stockData.source} • ${new Date(stockData.last_update).toLocaleTimeString()}
                 </div>
             </div>
@@ -756,34 +756,34 @@ function createItemCardHTML(item) {
                         <!-- Prix principal -->
                         <div class="flex items-center justify-between">
                             <div class="flex items-center gap-2">
-                                <span class="text-lg font-bold animate-pulse">Chargement...</span>
-                                <span class="text-xs text-slate-400 font-medium">--</span>
+                                <span class="text-lg font-bold text-amber-200 animate-pulse">Chargement...</span>
+                                <span class="text-xs text-amber-300/70 font-medium">--</span>
                             </div>
-                            <span class="text-sm text-slate-400">--</span>
+                            <span class="text-sm text-amber-300/60">--</span>
                         </div>
                         
-                        <!-- Informations supplémentaires -->
-                        <div class="grid grid-cols-2 gap-2 text-xs">
-                            <div class="glass-subtle p-2 rounded-lg">
-                                <div class="text-cyan-300 font-medium">Volume</div>
-                                <div class="text-slate-300 animate-pulse">--</div>
+                        <!-- Informations supplémentaires sans tableaux -->
+                        <div class="space-y-2 text-xs">
+                            <div class="flex justify-between">
+                                <span class="text-amber-300/80 font-medium">Volume:</span>
+                                <span class="text-amber-200/90 animate-pulse">--</span>
                             </div>
-                            <div class="glass-subtle p-2 rounded-lg">
-                                <div class="text-cyan-300 font-medium">P/E Ratio</div>
-                                <div class="text-slate-300 animate-pulse">--</div>
+                            <div class="flex justify-between">
+                                <span class="text-amber-300/80 font-medium">P/E Ratio:</span>
+                                <span class="text-amber-200/90 animate-pulse">--</span>
                             </div>
-                            <div class="glass-subtle p-2 rounded-lg">
-                                <div class="text-cyan-300 font-medium">52W High</div>
-                                <div class="text-slate-300 animate-pulse">--</div>
+                            <div class="flex justify-between">
+                                <span class="text-amber-300/80 font-medium">52W High:</span>
+                                <span class="text-amber-200/90 animate-pulse">--</span>
                             </div>
-                            <div class="glass-subtle p-2 rounded-lg">
-                                <div class="text-cyan-300 font-medium">52W Low</div>
-                                <div class="text-slate-300 animate-pulse">--</div>
+                            <div class="flex justify-between">
+                                <span class="text-amber-300/80 font-medium">52W Low:</span>
+                                <span class="text-amber-200/90 animate-pulse">--</span>
                             </div>
                         </div>
                         
                         <!-- Source et timestamp -->
-                        <div class="text-xs text-slate-500 text-center">
+                        <div class="text-xs text-amber-300/60 text-center pt-1 border-t border-amber-300/20">
                             Chargement en cours...
                         </div>
                     </div>
