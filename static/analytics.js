@@ -143,7 +143,14 @@ function initializeChart() {
 
 // Mettre à jour le Treemap avec D3.js
 function updateChart() {
-    if (!categoryChart || !categoryChart.svg) return;
+    console.log('🔄 updateChart() appelée');
+    console.log('categoryChart:', categoryChart);
+    console.log('categoryChart.svg:', categoryChart?.svg);
+    
+    if (!categoryChart || !categoryChart.svg) {
+        console.error('❌ categoryChart ou svg manquant');
+        return;
+    }
     
     let filteredItems = allItems;
     
@@ -172,7 +179,7 @@ function updateChart() {
         }
     });
     
-    console.log('Données par catégorie:', categoryData);
+    console.log('📊 Données par catégorie:', categoryData);
     
     // Calculer le total pour les pourcentages
     const totalValue = Object.values(categoryData).reduce((sum, value) => sum + value, 0);
@@ -198,6 +205,7 @@ function updateChart() {
     
     // Si pas de données, afficher un message
     if (sortedData.length === 0) {
+        console.log('⚠️ Aucune donnée pour le Treemap');
         categoryChart.svg.append('text')
             .attr('x', '50%')
             .attr('y', '50%')
@@ -210,14 +218,28 @@ function updateChart() {
         return;
     }
     
+    console.log('📈 Données pour Treemap:', sortedData);
+    
+    // Vérifier que D3.js est disponible
+    if (typeof d3 === 'undefined') {
+        console.error('❌ D3.js non disponible');
+        return;
+    }
+    
+    console.log('✅ D3.js disponible:', d3);
+    
     // Créer la hiérarchie pour D3 avec un seul root
     const hierarchyData = {
         name: 'root',
         children: sortedData
     };
     
+    console.log('🌳 Hiérarchie D3:', hierarchyData);
+    
     const root = d3.hierarchy(hierarchyData)
         .sum(d => d.value || 0);
+    
+    console.log('🌳 Root D3:', root);
     
     // Créer le Treemap
     const treemap = d3.treemap()
