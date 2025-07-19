@@ -3374,6 +3374,24 @@ def fix_vehicle_categories():
             return jsonify({"error": "Erreur lors de la récupération des données"}), 500
         
         all_items = response.json()
+        logger.info(f"📊 Total objets récupérés: {len(all_items)}")
+        
+        # Analyser toutes les catégories existantes
+        all_categories = set()
+        categories_with_count = {}
+        items_without_category = 0
+        
+        for item in all_items:
+            category = item.get('category')
+            if category:
+                all_categories.add(category)
+                categories_with_count[category] = categories_with_count.get(category, 0) + 1
+            else:
+                items_without_category += 1
+        
+        logger.info(f"📋 Toutes les catégories trouvées: {sorted(list(all_categories))}")
+        logger.info(f"📊 Répartition des catégories: {categories_with_count}")
+        logger.info(f"⚠️ Objets sans catégorie: {items_without_category}")
         
         # Filtrer les items avec des catégories similaires à 'Véhicules'
         vehicles_to_fix = []
@@ -3381,12 +3399,16 @@ def fix_vehicle_categories():
             category = item.get('category', '').lower()
             if 'vehicule' in category or 'véhicule' in category or 'vehicules' in category or 'véhicules' in category:
                 vehicles_to_fix.append(item)
+                logger.info(f"🚗 Véhicule trouvé: {item.get('name')} - Catégorie: {item.get('category')}")
         
         if not vehicles_to_fix:
             return jsonify({
                 "message": "Aucun objet avec une catégorie contenant 'Véhicule' trouvé",
                 "fixed": 0,
-                "all_categories": list(set([item.get('category') for item in all_items if item.get('category')]))
+                "all_categories": sorted(list(all_categories)),
+                "categories_with_count": categories_with_count,
+                "total_items": len(all_items),
+                "items_without_category": items_without_category
             })
         
         fixed_count = 0
@@ -3408,7 +3430,7 @@ def fix_vehicle_categories():
                 
                 if update_response.status_code == 204:
                     fixed_count += 1
-                    logger.info(f"✅ Catégorie corrigée pour {vehicle['name']}: Véhicules → Voitures")
+                    logger.info(f"✅ Catégorie corrigée pour {vehicle['name']}: {vehicle.get('category')} → Voitures")
                 else:
                     errors.append({
                         "id": vehicle['id'],
@@ -3426,14 +3448,15 @@ def fix_vehicle_categories():
                 logger.error(f"❌ Exception correction catégorie {vehicle['name']}: {e}")
         
         logger.info(f"🔄 Correction catégories terminée: {fixed_count}/{len(vehicles_to_fix)} objets corrigés")
-        logger.info(f"📊 Catégories trouvées: {[item.get('category') for item in vehicles_to_fix]}")
         
         return jsonify({
             "success": True,
             "message": f"Correction terminée: {fixed_count} objets corrigés",
             "total_found": len(vehicles_to_fix),
             "fixed": fixed_count,
-            "errors": errors
+            "errors": errors,
+            "all_categories": sorted(list(all_categories)),
+            "categories_with_count": categories_with_count
         })
         
     except Exception as e:

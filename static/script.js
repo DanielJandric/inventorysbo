@@ -761,7 +761,24 @@ async function fixVehicleCategories() {
                     console.warn('❌ Erreurs lors de la correction:', result.errors);
                 }
             } else {
-                showSuccess(`ℹ️ ${result.message}`);
+                // Afficher les informations de diagnostic
+                let diagnosticMessage = `ℹ️ ${result.message}`;
+                
+                if (result.categories_with_count) {
+                    diagnosticMessage += `\n\n📊 Diagnostic:\n`;
+                    diagnosticMessage += `• Total objets: ${result.total_items || 'N/A'}\n`;
+                    diagnosticMessage += `• Objets sans catégorie: ${result.items_without_category || 0}\n`;
+                    diagnosticMessage += `• Catégories trouvées: ${result.all_categories ? result.all_categories.join(', ') : 'Aucune'}\n\n`;
+                    
+                    if (result.categories_with_count) {
+                        diagnosticMessage += `📋 Répartition:\n`;
+                        Object.entries(result.categories_with_count).forEach(([cat, count]) => {
+                            diagnosticMessage += `• ${cat}: ${count} objet(s)\n`;
+                        });
+                    }
+                }
+                
+                showSuccess(diagnosticMessage);
             }
             
             console.log('📊 Résultats correction catégories:', result);
