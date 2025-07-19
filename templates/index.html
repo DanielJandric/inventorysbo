@@ -60,36 +60,36 @@
         }
         .glowing-element:hover::before, .glowing-element.is-active::before { opacity: 1; }
         
-        /* STYLES DORÉS SUBTILS POUR LA CARTE VALEUR DISPONIBLE */
+        /* STYLES GRIS SUBTILS POUR LA CARTE VALEUR DISPONIBLE */
         .golden-card {
-            background: rgba(184, 134, 11, 0.08) !important;
-            border: 1px solid rgba(184, 134, 11, 0.2) !important;
-            box-shadow: 0 10px 30px rgba(184, 134, 11, 0.15) !important;
+            background: rgba(128, 128, 128, 0.06) !important;
+            border: 1px solid rgba(128, 128, 128, 0.15) !important;
+            box-shadow: 0 10px 30px rgba(128, 128, 128, 0.1) !important;
         }
         
         .golden-card::before {
-            background: radial-gradient(circle at 50% 50%, rgba(184, 134, 11, 0.2), transparent 70%) !important;
+            background: radial-gradient(circle at 50% 50%, rgba(128, 128, 128, 0.12), transparent 70%) !important;
         }
         
         .golden-card:hover {
-            background: rgba(184, 134, 11, 0.12) !important;
-            border-color: rgba(184, 134, 11, 0.3) !important;
-            box-shadow: 0 15px 40px rgba(184, 134, 11, 0.25) !important;
+            background: rgba(128, 128, 128, 0.09) !important;
+            border-color: rgba(128, 128, 128, 0.2) !important;
+            box-shadow: 0 15px 40px rgba(128, 128, 128, 0.15) !important;
         }
         
         .golden-icon {
-            background: rgba(184, 134, 11, 0.15) !important;
-            border: 1px solid rgba(184, 134, 11, 0.25) !important;
-            color: #B8860B !important;
+            background: rgba(128, 128, 128, 0.1) !important;
+            border: 1px solid rgba(128, 128, 128, 0.18) !important;
+            color: #6B7280 !important;
         }
         
         .golden-text {
-            color: #8B7355 !important;
+            color: #6B7280 !important;
         }
         
         .golden-value {
-            color: #A0522D !important;
-            text-shadow: 0 0 6px rgba(139, 115, 85, 0.2) !important;
+            color: #4B5563 !important;
+            text-shadow: 0 0 4px rgba(107, 114, 128, 0.15) !important;
         }
         .glass {
             background: var(--glass-bg);
@@ -1245,7 +1245,7 @@
                     </div>
                     <div>
                         <label class="block text-sm font-semibold mb-2">valeur actuelle (CHF)</label>
-                        <input type="number" id="item-asking-price" class="w-full glass rounded-xl px-4 py-3 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400" step="0.01">
+                        <input type="number" id="item-current-value" class="w-full glass rounded-xl px-4 py-3 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400" step="0.01">
                     </div>
                     <div>
                         <label class="block text-sm font-semibold mb-2">Prix de vente (CHF)</label>

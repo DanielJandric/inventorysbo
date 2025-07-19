@@ -152,17 +152,17 @@ function toggleSaleProgressFields() {
 // --- Fonction pour mettre à jour manuellement le prix actuel ---
 function updateCurrentPriceManually() {
     const currentPriceInput = document.getElementById('item-current-price');
-    const askingPriceInput = document.getElementById('item-asking-price');
+            const currentValueInput = document.getElementById('item-current-value');
     const stockQuantityInput = document.getElementById('item-stock-quantity');
     
-    if (!currentPriceInput || !askingPriceInput || !stockQuantityInput) return;
+    if (!currentPriceInput || !currentValueInput || !stockQuantityInput) return;
     
     const currentPrice = parseFloat(currentPriceInput.value);
     const quantity = parseInt(stockQuantityInput.value) || 1;
     
     if (currentPrice && quantity) {
         const totalValue = currentPrice * quantity;
-        askingPriceInput.value = totalValue.toFixed(2);
+        currentValueInput.value = totalValue.toFixed(2);
         showSuccess(`Valeur totale mise à jour: ${formatPrice(totalValue)}`);
     }
 }
@@ -1071,7 +1071,7 @@ async function handleFormSubmit(e) {
         surface_m2: parseFloat(document.getElementById('item-surface')?.value) || null,
         rental_income_chf: parseFloat(document.getElementById('item-rental-income')?.value) || null,
         acquisition_price: parseFloat(document.getElementById('item-acquisition-price')?.value) || null,
-        current_value: parseFloat(document.getElementById('item-asking-price')?.value) || null,
+        current_value: parseFloat(document.getElementById('item-current-value')?.value) || null,
         sold_price: parseFloat(document.getElementById('item-sold-price')?.value) || null,
         description: document.getElementById('item-description')?.value?.trim() || null,
         for_sale: document.getElementById('item-for-sale')?.checked || false,
