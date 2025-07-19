@@ -2050,7 +2050,8 @@ Utilise l'historique pour enrichir ta réponse et éviter les répétitions."""
                 category_stats[item.category]['value'] += item.sold_price
         
         for category, stats in category_stats.items():
-            context_parts.append(f"\n{category.upper()}:")
+            category_name = category.upper() if category else "AUTRE"
+            context_parts.append(f"\n{category_name}:")
             context_parts.append(f"  - Nombre: {stats['count']}")
             context_parts.append(f"  - Valeur: {stats['value']:,.0f} CHF")
             context_parts.append(f"  - Objets: {', '.join([item.name for item in stats['items'][:5]])}")
@@ -2178,7 +2179,8 @@ Utilise l'historique pour enrichir ta réponse et éviter les répétitions."""
             categories[cat].append(item)
         
         for category, cat_items in categories.items():
-            context_parts.append(f"\n{category.upper()} ({len(cat_items)} objets):")
+            category_name = category.upper() if category else "AUTRE"
+            context_parts.append(f"\n{category_name} ({len(cat_items)} objets):")
             
             # Trier par statut
             for_sale = [i for i in cat_items if i.for_sale]
