@@ -3,28 +3,28 @@ let allItems = [];
 let selectedCategories = new Set();
 let categoryChart = null;
 
-// Couleurs pour le diagramme
+// Couleurs glassmorphiques pour le diagramme
 const chartColors = [
-    'rgba(0, 220, 255, 0.8)',   // Cyan
-    'rgba(34, 211, 238, 0.8)',  // Light cyan
-    'rgba(6, 182, 212, 0.8)',   // Darker cyan
-    'rgba(8, 145, 178, 0.8)',   // Blue cyan
-    'rgba(21, 94, 117, 0.8)',   // Dark blue
-    'rgba(22, 163, 74, 0.8)',   // Green
-    'rgba(34, 197, 94, 0.8)',   // Light green
-    'rgba(16, 185, 129, 0.8)',  // Emerald
-    'rgba(5, 150, 105, 0.8)',   // Dark emerald
-    'rgba(168, 85, 247, 0.8)',  // Purple
-    'rgba(147, 51, 234, 0.8)',  // Dark purple
-    'rgba(236, 72, 153, 0.8)',  // Pink
-    'rgba(244, 63, 94, 0.8)',   // Rose
-    'rgba(239, 68, 68, 0.8)',   // Red
-    'rgba(245, 101, 101, 0.8)', // Light red
-    'rgba(251, 146, 60, 0.8)',  // Orange
-    'rgba(245, 158, 11, 0.8)',  // Amber
-    'rgba(234, 179, 8, 0.8)',   // Yellow
-    'rgba(132, 204, 22, 0.8)',  // Lime
-    'rgba(34, 197, 94, 0.8)'    // Green
+    'rgba(255, 215, 0, 0.6)',     // Or doré
+    'rgba(192, 192, 192, 0.6)',   // Argent
+    'rgba(255, 140, 0, 0.6)',     // Orange doré
+    'rgba(255, 69, 0, 0.6)',      // Rouge-orange
+    'rgba(138, 43, 226, 0.6)',    // Violet
+    'rgba(75, 0, 130, 0.6)',      // Indigo
+    'rgba(0, 128, 128, 0.6)',     // Teal
+    'rgba(34, 139, 34, 0.6)',     // Forest green
+    'rgba(255, 20, 147, 0.6)',    // Deep pink
+    'rgba(220, 20, 60, 0.6)',     // Crimson
+    'rgba(255, 165, 0, 0.6)',     // Orange
+    'rgba(255, 215, 0, 0.6)',     // Gold
+    'rgba(218, 165, 32, 0.6)',    // Goldenrod
+    'rgba(184, 134, 11, 0.6)',    // Dark goldenrod
+    'rgba(139, 69, 19, 0.6)',     // Saddle brown
+    'rgba(160, 82, 45, 0.6)',     // Sienna
+    'rgba(205, 92, 92, 0.6)',     // Indian red
+    'rgba(233, 150, 122, 0.6)',   // Dark salmon
+    'rgba(255, 160, 122, 0.6)',   // Light salmon
+    'rgba(255, 182, 193, 0.6)'    // Light pink
 ];
 
 // Initialisation
@@ -255,49 +255,59 @@ function updateChart() {
         .append('g')
         .attr('transform', d => `translate(${d.x0},${d.y0})`);
     
-    // Ajouter les rectangles
+    // Ajouter les rectangles avec effet glassmorphique
     nodes.append('rect')
         .attr('width', d => d.x1 - d.x0)
         .attr('height', d => d.y1 - d.y0)
         .attr('fill', (d, i) => chartColors[i % chartColors.length])
-        .attr('stroke', 'rgba(0, 220, 255, 0.3)')
-        .attr('stroke-width', 2)
+        .attr('stroke', 'rgba(255, 255, 255, 0.2)')
+        .attr('stroke-width', 1)
         .style('cursor', 'pointer')
+        .style('backdrop-filter', 'blur(10px)')
+        .style('filter', 'drop-shadow(0 8px 32px rgba(0, 0, 0, 0.3))')
         .on('mouseover', function(event, d) {
             d3.select(this)
-                .attr('stroke', 'rgba(0, 220, 255, 0.8)')
-                .attr('stroke-width', 3);
+                .attr('stroke', 'rgba(255, 215, 0, 0.8)')
+                .attr('stroke-width', 3)
+                .style('filter', 'drop-shadow(0 12px 40px rgba(255, 215, 0, 0.4)) brightness(1.1)');
         })
         .on('mouseout', function(event, d) {
             d3.select(this)
-                .attr('stroke', 'rgba(0, 220, 255, 0.3)')
-                .attr('stroke-width', 2);
+                .attr('stroke', 'rgba(255, 255, 255, 0.2)')
+                .attr('stroke-width', 1)
+                .style('filter', 'drop-shadow(0 8px 32px rgba(0, 0, 0, 0.3))');
         });
     
-    // Ajouter les labels
+    // Ajouter les labels avec effet glassmorphique
     nodes.append('text')
         .attr('x', 10)
         .attr('y', 20)
-        .attr('fill', '#e0e6e7')
+        .attr('fill', '#ffffff')
         .style('font-family', 'Inter')
         .style('font-size', '12px')
-        .style('font-weight', '600')
+        .style('font-weight', '700')
+        .style('text-shadow', '0 2px 4px rgba(0, 0, 0, 0.8)')
+        .style('filter', 'drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5))')
         .text(d => d.data.name);
     
     nodes.append('text')
         .attr('x', 10)
         .attr('y', 35)
-        .attr('fill', '#e0e6e7')
+        .attr('fill', '#f0f0f0')
         .style('font-family', 'Inter')
         .style('font-size', '10px')
+        .style('font-weight', '600')
+        .style('text-shadow', '0 1px 3px rgba(0, 0, 0, 0.8)')
         .text(d => formatPrice(d.data.value));
     
     nodes.append('text')
         .attr('x', 10)
         .attr('y', 50)
-        .attr('fill', '#88a0a8')
+        .attr('fill', '#d4d4d4')
         .style('font-family', 'Inter')
         .style('font-size', '9px')
+        .style('font-weight', '500')
+        .style('text-shadow', '0 1px 2px rgba(0, 0, 0, 0.8)')
         .text(d => `(${d.data.percentage}%)`);
     
     // Mettre à jour le pourcentage
