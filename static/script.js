@@ -426,6 +426,26 @@ function displayItems() {
         );
     }
     
+    // Tri par priorité de catégorie : Actions → Voitures → Bateaux → Avions → Reste
+    filteredItems.sort((a, b) => {
+        const categoryPriority = {
+            'Actions': 1,
+            'Véhicules': 2,
+            'Bateaux': 3,
+            'Avions': 4
+        };
+        
+        const priorityA = categoryPriority[a.category] || 5;
+        const priorityB = categoryPriority[b.category] || 5;
+        
+        if (priorityA !== priorityB) {
+            return priorityA - priorityB;
+        }
+        
+        // Si même priorité, trier par nom
+        return (a.name || '').localeCompare(b.name || '');
+    });
+    
     const container = document.getElementById('items-container');
     if (!container) return;
     
