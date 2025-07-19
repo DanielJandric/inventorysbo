@@ -1,4 +1,4 @@
-// analytics.js - Page Analytics avec diagramme en anneaux
+// analytics.js - Page Analytics avec Treemap
 let allItems = [];
 let selectedCategories = new Set();
 let categoryChart = null;
@@ -116,21 +116,46 @@ function toggleCategory(category) {
     updateChart();
 }
 
-// Initialiser le diagramme
+// Initialiser le Treemap
 function initializeChart() {
     const ctx = document.getElementById('categoryChart').getContext('2d');
     
     categoryChart = new Chart(ctx, {
-        type: 'doughnut',
+        type: 'treemap',
         data: {
-            labels: [],
             datasets: [{
-                data: [],
-                backgroundColor: chartColors,
+                tree: [],
+                key: 'value',
+                groups: ['category'],
+                spacing: 2,
+                backgroundColor: function(ctx) {
+                    if (ctx.type !== 'data') return 'transparent';
+                    const colors = chartColors;
+                    return colors[ctx.dataIndex % colors.length];
+                },
                 borderColor: 'rgba(0, 220, 255, 0.3)',
                 borderWidth: 2,
                 hoverBorderColor: 'rgba(0, 220, 255, 0.8)',
-                hoverBorderWidth: 3
+                hoverBorderWidth: 3,
+                labels: {
+                    display: true,
+                    formatter: function(ctx) {
+                        const value = ctx.raw.v;
+                        const category = ctx.raw.g;
+                        const percentage = ctx.raw.p;
+                        return [
+                            category,
+                            `${value} CHF`,
+                            `(${percentage}%)`
+                        ];
+                    },
+                    color: '#e0e6e7',
+                    font: {
+                        family: 'Inter',
+                        size: 11,
+                        weight: '600'
+                    }
+                }
             }]
         },
         options: {
@@ -138,17 +163,7 @@ function initializeChart() {
             maintainAspectRatio: false,
             plugins: {
                 legend: {
-                    position: 'bottom',
-                    labels: {
-                        color: '#e0e6e7',
-                        font: {
-                            family: 'Inter',
-                            size: 12
-                        },
-                        padding: 20,
-                        usePointStyle: true,
-                        pointStyle: 'circle'
-                    }
+                    display: false
                 },
                 tooltip: {
                     backgroundColor: 'rgba(10, 40, 50, 0.9)',
@@ -159,31 +174,31 @@ function initializeChart() {
                     cornerRadius: 8,
                     displayColors: true,
                     callbacks: {
+                        title: function(context) {
+                            return context[0].raw.g;
+                        },
                         label: function(context) {
-                            const label = context.label || '';
-                            const value = context.parsed;
-                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                            const percentage = ((value / total) * 100).toFixed(1);
-                            return `${label}: ${value} (${percentage}%)`;
+                            const value = context.raw.v;
+                            const percentage = context.raw.p;
+                            return [
+                                `Valeur: ${formatPrice(value)}`,
+                                `Pourcentage: ${percentage}%`
+                            ];
                         }
                     }
                 }
             },
             animation: {
-                animateRotate: true,
-                animateScale: true,
                 duration: 1000,
                 easing: 'easeOutQuart'
-            },
-            cutout: '60%',
-            radius: '90%'
+            }
         }
     });
     
     updateChart();
 }
 
-// Mettre à jour le diagramme
+// Mettre à jour le Treemap
 function updateChart() {
     if (!categoryChart) return;
     
@@ -194,35 +209,69 @@ function updateChart() {
         filteredItems = allItems.filter(item => selectedCategories.has(item.category));
     }
     
-    // Grouper par catégorie
+    // Grouper par catégorie et calculer les valeurs monétaires
     const categoryData = {};
     filteredItems.forEach(item => {
         if (item.category) {
             if (!categoryData[item.category]) {
                 categoryData[item.category] = 0;
             }
-            categoryData[item.category]++;
+            
+            let value = 0;
+            if (item.status === 'Sold' && item.sold_price) {
+                value = item.sold_price;
+            } else if (item.status === 'Available' && item.asking_price) {
+                value = item.asking_price;
+            } else if (item.category === 'Actions' && item.current_price && item.stock_quantity) {
+                value = item.current_price * item.stock_quantity;
+            }
+            
+            categoryData[item.category] += value;
         }
     });
     
-    // Préparer les données pour Chart.js
-    const labels = Object.keys(categoryData);
-    const data = Object.values(categoryData);
+    // Calculer le total pour les pourcentages
+    const totalValue = Object.values(categoryData).reduce((sum, value) => sum + value, 0);
     
-    // Mettre à jour le diagramme
-    categoryChart.data.labels = labels;
-    categoryChart.data.datasets[0].data = data;
-    categoryChart.data.datasets[0].backgroundColor = labels.map((_, index) => 
-        chartColors[index % chartColors.length]
-    );
+    // Préparer les données pour le Treemap
+    const treeData = Object.entries(categoryData).map(([category, value]) => ({
+        category: category,
+        value: value,
+        percentage: totalValue > 0 ? ((value / totalValue) * 100).toFixed(1) : 0
+    }));
+    
+    // S'assurer que les Actions (Investis) apparaissent en premier si elles existent
+    const sortedData = treeData.sort((a, b) => {
+        // Priorité aux Actions
+        if (a.category === 'Actions' && b.category !== 'Actions') return -1;
+        if (b.category === 'Actions' && a.category !== 'Actions') return 1;
+        // Sinon trier par valeur décroissante
+        return b.value - a.value;
+    });
+    
+    // Mettre à jour le Treemap
+    categoryChart.data.datasets[0].tree = sortedData.map(item => ({
+        v: item.value,
+        g: item.category,
+        p: item.percentage
+    }));
     
     categoryChart.update();
     
     // Mettre à jour le pourcentage
-    const totalSelected = data.reduce((sum, value) => sum + value, 0);
-    const totalAll = allItems.length;
-    const percentage = totalAll > 0 ? ((totalSelected / totalAll) * 100).toFixed(1) : 0;
+    const totalSelected = Object.values(categoryData).reduce((sum, value) => sum + value, 0);
+    const totalAllValue = allItems.reduce((sum, item) => {
+        if (item.status === 'Sold' && item.sold_price) {
+            return sum + item.sold_price;
+        } else if (item.status === 'Available' && item.asking_price) {
+            return sum + item.asking_price;
+        } else if (item.category === 'Actions' && item.current_price && item.stock_quantity) {
+            return sum + (item.current_price * item.stock_quantity);
+        }
+        return sum;
+    }, 0);
     
+    const percentage = totalAllValue > 0 ? ((totalSelected / totalAllValue) * 100).toFixed(1) : 0;
     document.getElementById('selected-percentage').textContent = `${percentage}%`;
 }
 
@@ -248,10 +297,21 @@ function updateTopCategories() {
         categoryValues[item.category] += value;
     });
     
-    // Trier par valeur décroissante
-    const sortedCategories = Object.entries(categoryValues)
-        .sort(([,a], [,b]) => b - a)
-        .slice(0, 5);
+    // S'assurer que les Actions apparaissent dans le top 5
+    let sortedCategories = Object.entries(categoryValues)
+        .sort(([,a], [,b]) => b - a);
+    
+    // Si Actions n'est pas dans le top 5, l'ajouter
+    const actionsIndex = sortedCategories.findIndex(([category]) => category === 'Actions');
+    if (actionsIndex > 4) {
+        // Retirer Actions de sa position actuelle
+        const actionsEntry = sortedCategories.splice(actionsIndex, 1)[0];
+        // L'ajouter en position 4 (5ème place)
+        sortedCategories.splice(4, 0, actionsEntry);
+    }
+    
+    // Prendre les 5 premiers
+    sortedCategories = sortedCategories.slice(0, 5);
     
     const container = document.getElementById('top-categories');
     container.innerHTML = sortedCategories.map(([category, value], index) => `
