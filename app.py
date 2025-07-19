@@ -3225,7 +3225,14 @@ def ai_update_all_vehicles():
             "details": []
         }
         
-        for vehicle in vehicles:
+        # Limiter le nombre de véhicules pour éviter les timeouts
+        max_vehicles = 10  # Limite pour éviter les timeouts
+        vehicles_to_process = vehicles[:max_vehicles]
+        
+        if len(vehicles) > max_vehicles:
+            logger.warning(f"⚠️ Limitation: {len(vehicles)} véhicules trouvés, traitement limité à {max_vehicles}")
+        
+        for vehicle in vehicles_to_process:
             try:
                 # Utiliser directement la logique de mise à jour
                 # Obtenir l'estimation IA
@@ -3279,7 +3286,7 @@ Réponds en JSON avec:
                     ],
                     response_format={"type": "json_object"},
                     max_tokens=800,
-                    timeout=20
+                    timeout=15  # Timeout réduit
                 )
                 
                 market_data = json.loads(response.choices[0].message.content)
@@ -3325,8 +3332,8 @@ Réponds en JSON avec:
                         "error": "Aucune donnée retournée par la mise à jour"
                     })
                 
-                # Délai pour éviter de surcharger l'API OpenAI
-                time.sleep(2)
+                # Délai réduit pour éviter de surcharger l'API OpenAI
+                time.sleep(1)
                 
             except Exception as e:
                 results["errors"] += 1
@@ -3338,9 +3345,16 @@ Réponds en JSON avec:
                 })
                 logger.error(f"Erreur mise à jour {vehicle.name}: {e}")
         
-        logger.info(f"🔄 Mise à jour IA terminée: {results['updated']}/{results['total_vehicles']} véhicules mis à jour")
+        logger.info(f"🔄 Mise à jour IA terminée: {results['updated']}/{len(vehicles_to_process)} véhicules mis à jour")
         
-        return jsonify(results)
+        # Ajouter des informations sur la limitation
+        response_data = results.copy()
+        if len(vehicles) > max_vehicles:
+            response_data["limitation_info"] = f"Traitement limité à {max_vehicles} véhicules sur {len(vehicles)} trouvés pour éviter les timeouts"
+            response_data["total_found"] = len(vehicles)
+            response_data["processed"] = len(vehicles_to_process)
+        
+        return jsonify(response_data)
         
     except Exception as e:
         logger.error(f"Erreur ai_update_all_vehicles: {e}")
