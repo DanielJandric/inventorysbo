@@ -954,6 +954,10 @@ function openCreateModal() {
     if (form) form.reset();
     if (itemId) itemId.value = '';
     
+    // Réinitialiser explicitement le champ location
+    const locationField = document.getElementById('item-location');
+    if (locationField) locationField.value = '';
+    
     toggleRealEstateFields();
     toggleStockFields();
     toggleSaleProgressFields();
@@ -1045,6 +1049,14 @@ function closeModal() {
         modal.classList.add('hidden');
         modal.classList.remove('flex');
     }
+    
+    // Nettoyer le formulaire quand on ferme le modal
+    const form = document.getElementById('item-form');
+    if (form) form.reset();
+    
+    // Réinitialiser explicitement le champ location
+    const locationField = document.getElementById('item-location');
+    if (locationField) locationField.value = '';
 }
 
 function closeEstimationModal() {
