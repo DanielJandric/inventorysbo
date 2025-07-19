@@ -3982,14 +3982,36 @@ def clean_date_format(date_str: str) -> Optional[str]:
         return date_str
     
     # Si c'est un format DD/MM/YYYY, le convertir en YYYY-MM-DD
-    if re.match(r'^\d{2}/\d{2}/\d{4}$', date_str):
-        parts = date_str.split('/')
-        return f"{parts[2]}-{parts[1]}-{parts[0]}"
+    if re.match(r'^\d{1,2}/\d{1,2}/\d{4}$', date_str):
+        try:
+            parts = date_str.split('/')
+            day, month, year = parts[0], parts[1], parts[2]
+            # S'assurer que les jours et mois ont 2 chiffres
+            day = day.zfill(2)
+            month = month.zfill(2)
+            # Valider que c'est une date valide
+            from datetime import datetime
+            datetime.strptime(f"{year}-{month}-{day}", "%Y-%m-%d")
+            return f"{year}-{month}-{day}"
+        except (ValueError, IndexError):
+            logger.warning(f"Date invalide ignorée: {date_str}")
+            return None
     
     # Si c'est un format MM/DD/YYYY, le convertir en YYYY-MM-DD
-    if re.match(r'^\d{2}/\d{2}/\d{4}$', date_str):
-        parts = date_str.split('/')
-        return f"{parts[2]}-{parts[0]}-{parts[1]}"
+    if re.match(r'^\d{1,2}/\d{1,2}/\d{4}$', date_str):
+        try:
+            parts = date_str.split('/')
+            month, day, year = parts[0], parts[1], parts[2]
+            # S'assurer que les jours et mois ont 2 chiffres
+            day = day.zfill(2)
+            month = month.zfill(2)
+            # Valider que c'est une date valide
+            from datetime import datetime
+            datetime.strptime(f"{year}-{month}-{day}", "%Y-%m-%d")
+            return f"{year}-{month}-{day}"
+        except (ValueError, IndexError):
+            logger.warning(f"Date invalide ignorée: {date_str}")
+            return None
     
     # Si c'est juste une heure (HH:MM ou HH:MM.S), l'ignorer
     if re.match(r'^\d{1,2}:\d{2}(\.\d+)?$', date_str):
