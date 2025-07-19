@@ -2071,12 +2071,26 @@ def get_stock_price(symbol):
         if previous_close and current_price:
             change = current_price - previous_close
             change_percent = (change / previous_close) * 100 if previous_close > 0 else 0
+        else:
+            # Essayer de récupérer depuis les champs Yahoo Finance
+            change = info.get('regularMarketChange', 0)
+            change_percent = info.get('regularMarketChangePercent', 0)
 
         currency = info.get('currency', 'USD')
         # La conversion utilise maintenant la fonction basée sur Finnhub
         conversion_rate = get_live_exchange_rate(currency, 'CHF')
         price_chf = current_price * conversion_rate
 
+        # Formater les données avec gestion des valeurs manquantes
+        def format_value(value, is_price=False, is_percent=False):
+            if value is None or value == '' or value == 0:
+                return "N/A"
+            if is_price:
+                return round(float(value), 2)
+            if is_percent:
+                return round(float(value), 2)
+            return value
+        
         result = {
             "symbol": symbol,
             "price": current_price,
@@ -2085,13 +2099,13 @@ def get_stock_price(symbol):
             "company_name": info.get('longName', symbol),
             "last_update": datetime.now().isoformat(),
             "source": "Yahoo Finance (Taux de change via Finnhub)",
-            "change": round(change, 2) if change != 0 else "N/A",
-            "change_percent": round(change_percent, 2) if change_percent != 0 else "N/A",
-            "volume": info.get('volume', 'N/A'),
-            "average_volume": info.get('averageVolume', 'N/A'),
-            "pe_ratio": info.get('trailingPE', 'N/A'),
-            "fifty_two_week_high": info.get('fiftyTwoWeekHigh', 'N/A'),
-            "fifty_two_week_low": info.get('fiftyTwoWeekLow', 'N/A')
+            "change": format_value(change, is_price=True),
+            "change_percent": format_value(change_percent, is_percent=True),
+            "volume": format_value(info.get('volume')),
+            "average_volume": format_value(info.get('averageVolume')),
+            "pe_ratio": format_value(info.get('trailingPE'), is_price=True),
+            "fifty_two_week_high": format_value(info.get('fiftyTwoWeekHigh'), is_price=True),
+            "fifty_two_week_low": format_value(info.get('fiftyTwoWeekLow'), is_price=True)
         }
         stock_price_cache[cache_key] = {'data': result, 'timestamp': time.time()}
         return jsonify(result)
@@ -2220,6 +2234,16 @@ def get_stock_price_finnhub(symbol: str, item: Optional[CollectionItem], cache_k
             change = current_price - previous_close
             change_percent = (change / previous_close) * 100 if previous_close > 0 else 0
 
+        # Formater les données avec gestion des valeurs manquantes
+        def format_value(value, is_price=False, is_percent=False):
+            if value is None or value == '' or value == 0:
+                return "N/A"
+            if is_price:
+                return round(float(value), 2)
+            if is_percent:
+                return round(float(value), 2)
+            return value
+
         # Conversion en CHF avec le taux de change Finnhub
         conversion_rate = get_live_exchange_rate(currency, 'CHF')
         price_chf = current_price * conversion_rate
@@ -2232,13 +2256,13 @@ def get_stock_price_finnhub(symbol: str, item: Optional[CollectionItem], cache_k
             "company_name": company_name,
             "last_update": datetime.now().isoformat(),
             "source": "Finnhub",
-            "change": round(change, 2) if change != 0 else "N/A",
-            "change_percent": round(change_percent, 2) if change_percent != 0 else "N/A",
-            "volume": quote_data.get('v', 'N/A'),
-            "average_volume": quote_data.get('av', 'N/A'),
+            "change": format_value(change, is_price=True),
+            "change_percent": format_value(change_percent, is_percent=True),
+            "volume": format_value(quote_data.get('v')),
+            "average_volume": format_value(quote_data.get('av')),
             "pe_ratio": "N/A",  # Finnhub ne fournit pas le PE ratio
-            "fifty_two_week_high": quote_data.get('h', 'N/A'),
-            "fifty_two_week_low": quote_data.get('l', 'N/A')
+            "fifty_two_week_high": format_value(quote_data.get('h'), is_price=True),
+            "fifty_two_week_low": format_value(quote_data.get('l'), is_price=True)
         }
         
         stock_price_cache[cache_key] = {'data': result, 'timestamp': time.time()}
@@ -2341,6 +2365,16 @@ def get_stock_price_eodhd(symbol: str, item: Optional[CollectionItem], cache_key
         else:
             price_chf = current_price
         
+        # Formater les données avec gestion des valeurs manquantes
+        def format_value(value, is_price=False, is_percent=False):
+            if value is None or value == '' or value == 0:
+                return "N/A"
+            if is_price:
+                return round(float(value), 2)
+            if is_percent:
+                return round(float(value), 2)
+            return value
+
         result = {
             "symbol": symbol,  # Garder le symbole original pour l'affichage
             "price": current_price,
@@ -2349,13 +2383,13 @@ def get_stock_price_eodhd(symbol: str, item: Optional[CollectionItem], cache_key
             "company_name": quote.get("code", symbol),
             "last_update": datetime.now().isoformat(),
             "source": f"EODHD (symbole utilisé: {working_symbol})",
-            "change": quote.get("change", "N/A"),
-            "change_percent": quote.get("change_p", "N/A"),
-            "volume": quote.get("volume", "N/A"),
-            "average_volume": quote.get("avg_volume", "N/A"),
+            "change": format_value(quote.get("change"), is_price=True),
+            "change_percent": format_value(quote.get("change_p"), is_percent=True),
+            "volume": format_value(quote.get("volume")),
+            "average_volume": format_value(quote.get("avg_volume")),
             "pe_ratio": "N/A",  # EODHD ne fournit pas le PE ratio
-            "fifty_two_week_high": quote.get("high_52_weeks", "N/A"),
-            "fifty_two_week_low": quote.get("low_52_weeks", "N/A")
+            "fifty_two_week_high": format_value(quote.get("high_52_weeks"), is_price=True),
+            "fifty_two_week_low": format_value(quote.get("low_52_weeks"), is_price=True)
         }
         
         logger.info(f"✅ Prix EODHD récupéré pour {symbol}: {current_price} {currency}")
