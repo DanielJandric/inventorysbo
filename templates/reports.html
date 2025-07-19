@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BONVIN - Rapports Bancaires</title>
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/Bonvin_180x180.png">
+    <link rel="apple-touch-icon" sizes="152x152" href="/static/BONVIN_152X152 (1).PNG">
+    <link rel="apple-touch-icon" sizes="120x120" href="/static/BONVIN_120X120.PNG">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/BONVIN_120X120.PNG">
+    <link rel="icon" href="/static/Bonvin_180x180.png">
+    <meta name="theme-color" content="#0A232A">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="BONVIN">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'glass': 'rgba(255, 255, 255, 0.1)',
+                        'glass-dark': 'rgba(0, 0, 0, 0.2)',
+                        'glass-border': 'rgba(255, 255, 255, 0.2)',
+                        'glass-subtle': 'rgba(255, 255, 255, 0.05)'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #0A232A 0%, #0F2F3A 50%, #0A232A 100%);
+            min-height: 100vh;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+        
+        .glass {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .glass-dark {
+            background: rgba(0, 0, 0, 0.2);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .glowing-element {
+            box-shadow: 0 0 20px rgba(0, 220, 255, 0.1);
+        }
+        
+        .nav-link {
+            @apply px-4 py-2 rounded-lg text-gray-300 hover:text-white transition-all duration-300 flex items-center gap-2;
+        }
+        
+        .nav-link.active {
+            @apply bg-cyan-500 text-white;
+        }
+        
+        .asset-class-card {
+            @apply bg-white rounded-lg shadow-lg p-6 hover:shadow-xl transition-all duration-300 border border-gray-200;
+        }
+        
+        .asset-class-card:hover {
+            transform: translateY(-2px);
+        }
+        
+        .generate-btn {
+            @apply bg-black text-white px-6 py-3 rounded-lg font-semibold hover:bg-gray-800 transition-all duration-300 transform hover:scale-105;
+        }
+        
+        .stats-card {
+            @apply bg-white rounded-lg shadow-md p-4 text-center;
+        }
+        
+        .stats-value {
+            @apply text-2xl font-bold text-gray-800;
+        }
+        
+        .stats-label {
+            @apply text-sm text-gray-600 mt-1;
+        }
+    </style>
+</head>
+<body class="text-white">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <header class="glass-dark p-6 mb-8 rounded-2xl">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center gap-4">
+                    <img src="/static/1da6a1fb-f4c3-401c-aa60-63e9b63360b0.png" alt="BONVIN" class="w-16 h-16">
+                    <div>
+                        <h1 class="text-4xl font-bold text-cyan-300">BONVIN</h1>
+                        <p class="text-slate-400">Rapports Bancaires par Classe d'Actif</p>
+                    </div>
+                </div>
+                <nav class="flex gap-4">
+                    <a href="/" class="nav-link">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+                        </svg>
+                        Collection
+                    </a>
+                    <a href="/analytics" class="nav-link">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                        </svg>
+                        Analytics
+                    </a>
+                    <a href="/reports" class="nav-link active">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                        Rapports
+                    </a>
+                </nav>
+            </div>
+        </header>
+
+        <!-- Statistiques Globales -->
+        <section class="mb-8">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <div class="stats-card">
+                    <div class="stats-value" id="total-assets">-</div>
+                    <div class="stats-label">Total Actifs</div>
+                </div>
+                <div class="stats-card">
+                    <div class="stats-value" id="total-value">-</div>
+                    <div class="stats-label">Valeur Totale</div>
+                </div>
+                <div class="stats-card">
+                    <div class="stats-value" id="asset-classes">-</div>
+                    <div class="stats-label">Classes d'Actifs</div>
+                </div>
+                <div class="stats-card">
+                    <div class="stats-value" id="available-assets">-</div>
+                    <div class="stats-label">Actifs Disponibles</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Classes d'Actifs -->
+        <section class="mb-8">
+            <h2 class="text-3xl font-bold mb-6 text-center">Classification Bancaire par Classe d'Actif</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="asset-classes-grid">
+                <!-- Les cartes seront générées dynamiquement -->
+            </div>
+        </section>
+
+        <!-- Bouton Générer Tous les Rapports -->
+        <section class="text-center mb-8">
+            <button onclick="generateAllReports()" class="generate-btn text-lg">
+                📄 Générer Tous les Rapports Bancaires
+            </button>
+        </section>
+    </div>
+
+    <script src="/static/reports.js"></script>
+</body>
+</html> 

@@ -1760,6 +1760,11 @@ def analytics():
     """Page analytics avec diagrammes et statistiques"""
     return render_template('analytics.html')
 
+@app.route("/reports")
+def reports():
+    """Page des rapports bancaires par classe d'actif"""
+    return render_template('reports.html')
+
 @app.route("/health")
 def health():
     """Health check"""
@@ -2921,6 +2926,337 @@ def generate_portfolio_pdf():
             
     except Exception as e:
         logger.error(f"❌ Erreur génération PDF: {e}")
+        return jsonify({
+            "error": str(e)
+        }), 500
+
+@app.route("/api/reports/asset-class/<asset_class_name>", methods=["GET"])
+def generate_asset_class_report(asset_class_name):
+    """Génère un rapport PDF pour une classe d'actif spécifique"""
+    try:
+        # Récupérer tous les items
+        items = AdvancedDataManager.fetch_all_items()
+        
+        # Classification bancaire des actifs
+        ASSET_CLASSIFICATION = {
+            'Actions': {
+                'bankClass': 'Actions cotées',
+                'subCategory': 'Titres cotés en bourse (actions)'
+            },
+            'Voitures': {
+                'bankClass': 'Actifs réels',
+                'subCategory': 'Automobiles (véhicules de collection ou de luxe)'
+            },
+            'Appartements / maison': {
+                'bankClass': 'Immobilier direct ou indirect',
+                'subCategory': 'Immobilier résidentiel (logements)'
+            },
+            'Be Capital': {
+                'bankClass': 'Immobilier direct ou indirect',
+                'subCategory': 'Immobilier de rendement (biens générant des revenus locatifs)'
+            },
+            'Bateaux': {
+                'bankClass': 'Actifs réels',
+                'subCategory': 'Bateaux (yachts, bateaux de plaisance)'
+            },
+            'Avions': {
+                'bankClass': 'Actifs réels',
+                'subCategory': 'Avions (jets privés, aviation d\'affaires)'
+            },
+            'Start-ups': {
+                'bankClass': 'Private Equity / Venture Capital',
+                'subCategory': 'Start-ups (jeunes entreprises non cotées)'
+            },
+            'Investis services': {
+                'bankClass': 'Private Equity / Venture Capital',
+                'subCategory': 'Sociétés de rénovation (services immobiliers)'
+            },
+            'Saanen': {
+                'bankClass': 'Immobilier direct ou indirect',
+                'subCategory': 'Projet immobilier à Saanen (type d\'actif immobilier non précisé)'
+            },
+            'Dixence Resort': {
+                'bankClass': 'Immobilier direct ou indirect',
+                'subCategory': 'Immobilier hôtelier (complexe resort touristique)'
+            },
+            'Investis properties': {
+                'bankClass': 'Immobilier direct ou indirect',
+                'subCategory': 'Immobilier de rendement (portefeuille d\'immeubles locatifs)'
+            },
+            'Mibo': {
+                'bankClass': 'Immobilier direct ou indirect',
+                'subCategory': 'Actif immobilier (précision non fournie)'
+            },
+            'Portfolio Rhône Hotels': {
+                'bankClass': 'Immobilier direct ou indirect',
+                'subCategory': 'Immobilier hôtelier (portefeuille d\'hôtels, rendement locatif)'
+            },
+            'Rhône Property – Portfolio IAM': {
+                'bankClass': 'Immobilier direct ou indirect',
+                'subCategory': 'Immobilier de rendement (portefeuille immobilier)'
+            },
+            'Be Capital Activities': {
+                'bankClass': 'Private Equity / Venture Capital',
+                'subCategory': 'Sociétés de e-commerce (participations non cotées)'
+            },
+            'IB': {
+                'bankClass': 'Immobilier direct ou indirect',
+                'subCategory': 'Actif immobilier (précision non fournie)'
+            }
+        }
+        
+        # Filtrer les items pour cette classe d'actif
+        asset_class_items = []
+        for item in items:
+            if item.status == 'Sold':
+                continue
+                
+            classification = ASSET_CLASSIFICATION.get(item.category)
+            if classification and classification['bankClass'] == asset_class_name:
+                asset_class_items.append(item)
+        
+        if not asset_class_items:
+            return jsonify({
+                "error": f"Aucun actif trouvé pour la classe '{asset_class_name}'"
+            }), 404
+        
+        # Organiser par sous-catégorie
+        assets_by_subcategory = {}
+        subcategories_summary = {}
+        
+        for item in asset_class_items:
+            classification = ASSET_CLASSIFICATION[item.category]
+            subcategory = classification['subCategory']
+            
+            if subcategory not in assets_by_subcategory:
+                assets_by_subcategory[subcategory] = []
+                subcategories_summary[subcategory] = {'value': 0, 'count': 0}
+            
+            # Calculer la valeur
+            value = 0
+            if item.category == 'Actions' and item.current_price and item.stock_quantity:
+                value = item.current_price * item.stock_quantity
+            elif item.status == 'Available' and item.asking_price:
+                value = item.asking_price
+            
+            # Ajouter les données formatées
+            asset_data = {
+                'name': item.name,
+                'status': item.status,
+                'value': format_price(value),
+                'category': item.category,
+                'current_price': item.current_price,
+                'stock_purchase_price': item.stock_purchase_price,
+                'stock_quantity': item.stock_quantity,
+                'construction_year': item.construction_year,
+                'condition': item.condition
+            }
+            
+            assets_by_subcategory[subcategory].append(asset_data)
+            subcategories_summary[subcategory]['value'] += value
+            subcategories_summary[subcategory]['count'] += 1
+        
+        # Formater les valeurs dans le résumé
+        for subcategory in subcategories_summary:
+            subcategories_summary[subcategory]['value'] = format_price(subcategories_summary[subcategory]['value'])
+        
+        # Calculer les statistiques
+        total_assets = len(asset_class_items)
+        available_assets = len([item for item in asset_class_items if item.status == 'Available'])
+        subcategories_count = len(assets_by_subcategory)
+        
+        total_value = sum([
+            item.current_price * item.stock_quantity if item.category == 'Actions' and item.current_price and item.stock_quantity
+            else item.asking_price if item.status == 'Available' and item.asking_price
+            else 0
+            for item in asset_class_items
+        ])
+        
+        # Préparer les données pour le template
+        template_data = {
+            'asset_class_name': asset_class_name,
+            'generation_date': datetime.now().strftime('%d/%m/%Y à %H:%M'),
+            'total_assets': total_assets,
+            'total_value': format_price(total_value),
+            'available_assets': available_assets,
+            'subcategories_count': subcategories_count,
+            'assets_by_subcategory': assets_by_subcategory,
+            'subcategories_summary': subcategories_summary
+        }
+        
+        # Rendre le template HTML
+        html_content = render_template('bank_report_pdf.html', **template_data)
+        
+        # Générer le PDF avec WeasyPrint
+        try:
+            from weasyprint import HTML
+            from weasyprint.text.fonts import FontConfiguration
+            
+            font_config = FontConfiguration()
+            pdf = HTML(string=html_content).write_pdf(font_config=font_config)
+            
+            response = Response(pdf, mimetype='application/pdf')
+            response.headers['Content-Disposition'] = f'attachment; filename=bonvin_{asset_class_name.replace(" ", "_").lower()}_{datetime.now().strftime("%Y%m%d_%H%M")}.pdf'
+            
+            logger.info(f"✅ Rapport bancaire généré: {asset_class_name} - {total_assets} actifs")
+            return response
+            
+        except ImportError:
+            logger.error("❌ WeasyPrint non installé")
+            return jsonify({
+                "error": "WeasyPrint non installé. Installez avec: pip install weasyprint"
+            }), 500
+            
+    except Exception as e:
+        logger.error(f"❌ Erreur génération rapport bancaire: {e}")
+        return jsonify({
+            "error": str(e)
+        }), 500
+
+@app.route("/api/reports/all-asset-classes", methods=["GET"])
+def generate_all_asset_classes_report():
+    """Génère un rapport PDF pour toutes les classes d'actifs"""
+    try:
+        # Récupérer tous les items
+        items = AdvancedDataManager.fetch_all_items()
+        
+        # Classification bancaire des actifs (même que ci-dessus)
+        ASSET_CLASSIFICATION = {
+            'Actions': {'bankClass': 'Actions cotées', 'subCategory': 'Titres cotés en bourse (actions)'},
+            'Voitures': {'bankClass': 'Actifs réels', 'subCategory': 'Automobiles (véhicules de collection ou de luxe)'},
+            'Appartements / maison': {'bankClass': 'Immobilier direct ou indirect', 'subCategory': 'Immobilier résidentiel (logements)'},
+            'Be Capital': {'bankClass': 'Immobilier direct ou indirect', 'subCategory': 'Immobilier de rendement (biens générant des revenus locatifs)'},
+            'Bateaux': {'bankClass': 'Actifs réels', 'subCategory': 'Bateaux (yachts, bateaux de plaisance)'},
+            'Avions': {'bankClass': 'Actifs réels', 'subCategory': 'Avions (jets privés, aviation d\'affaires)'},
+            'Start-ups': {'bankClass': 'Private Equity / Venture Capital', 'subCategory': 'Start-ups (jeunes entreprises non cotées)'},
+            'Investis services': {'bankClass': 'Private Equity / Venture Capital', 'subCategory': 'Sociétés de rénovation (services immobiliers)'},
+            'Saanen': {'bankClass': 'Immobilier direct ou indirect', 'subCategory': 'Projet immobilier à Saanen (type d\'actif immobilier non précisé)'},
+            'Dixence Resort': {'bankClass': 'Immobilier direct ou indirect', 'subCategory': 'Immobilier hôtelier (complexe resort touristique)'},
+            'Investis properties': {'bankClass': 'Immobilier direct ou indirect', 'subCategory': 'Immobilier de rendement (portefeuille d\'immeubles locatifs)'},
+            'Mibo': {'bankClass': 'Immobilier direct ou indirect', 'subCategory': 'Actif immobilier (précision non fournie)'},
+            'Portfolio Rhône Hotels': {'bankClass': 'Immobilier direct ou indirect', 'subCategory': 'Immobilier hôtelier (portefeuille d\'hôtels, rendement locatif)'},
+            'Rhône Property – Portfolio IAM': {'bankClass': 'Immobilier direct ou indirect', 'subCategory': 'Immobilier de rendement (portefeuille immobilier)'},
+            'Be Capital Activities': {'bankClass': 'Private Equity / Venture Capital', 'subCategory': 'Sociétés de e-commerce (participations non cotées)'},
+            'IB': {'bankClass': 'Immobilier direct ou indirect', 'subCategory': 'Actif immobilier (précision non fournie)'}
+        }
+        
+        # Organiser par classe d'actif
+        asset_classes_data = {}
+        
+        for item in items:
+            if item.status == 'Sold':
+                continue
+                
+            classification = ASSET_CLASSIFICATION.get(item.category)
+            if not classification:
+                continue
+                
+            bank_class = classification['bankClass']
+            
+            if bank_class not in asset_classes_data:
+                asset_classes_data[bank_class] = {
+                    'items': [],
+                    'total_value': 0,
+                    'subcategories': {}
+                }
+            
+            # Calculer la valeur
+            value = 0
+            if item.category == 'Actions' and item.current_price and item.stock_quantity:
+                value = item.current_price * item.stock_quantity
+            elif item.status == 'Available' and item.asking_price:
+                value = item.asking_price
+            
+            asset_classes_data[bank_class]['items'].append(item)
+            asset_classes_data[bank_class]['total_value'] += value
+            
+            # Organiser par sous-catégorie
+            subcategory = classification['subCategory']
+            if subcategory not in asset_classes_data[bank_class]['subcategories']:
+                asset_classes_data[bank_class]['subcategories'][subcategory] = []
+            asset_classes_data[bank_class]['subcategories'][subcategory].append(item)
+        
+        # Créer le contenu HTML pour toutes les classes
+        html_parts = []
+        
+        for i, (bank_class, data) in enumerate(asset_classes_data.items()):
+            if i > 0:
+                html_parts.append('<div class="page-break"></div>')
+            
+            # Préparer les données pour cette classe
+            template_data = {
+                'asset_class_name': bank_class,
+                'generation_date': datetime.now().strftime('%d/%m/%Y à %H:%M'),
+                'total_assets': len(data['items']),
+                'total_value': format_price(data['total_value']),
+                'available_assets': len([item for item in data['items'] if item.status == 'Available']),
+                'subcategories_count': len(data['subcategories']),
+                'assets_by_subcategory': {},
+                'subcategories_summary': {}
+            }
+            
+            # Organiser les données par sous-catégorie
+            for subcategory, subcategory_items in data['subcategories'].items():
+                template_data['assets_by_subcategory'][subcategory] = []
+                subcategory_value = 0
+                
+                for item in subcategory_items:
+                    value = 0
+                    if item.category == 'Actions' and item.current_price and item.stock_quantity:
+                        value = item.current_price * item.stock_quantity
+                    elif item.status == 'Available' and item.asking_price:
+                        value = item.asking_price
+                    
+                    subcategory_value += value
+                    
+                    asset_data = {
+                        'name': item.name,
+                        'status': item.status,
+                        'value': format_price(value),
+                        'category': item.category,
+                        'current_price': item.current_price,
+                        'stock_purchase_price': item.stock_purchase_price,
+                        'stock_quantity': item.stock_quantity,
+                        'construction_year': item.construction_year,
+                        'condition': item.condition
+                    }
+                    
+                    template_data['assets_by_subcategory'][subcategory].append(asset_data)
+                
+                template_data['subcategories_summary'][subcategory] = {
+                    'value': format_price(subcategory_value),
+                    'count': len(subcategory_items)
+                }
+            
+            # Rendre le template pour cette classe
+            html_content = render_template('bank_report_pdf.html', **template_data)
+            html_parts.append(html_content)
+        
+        # Combiner tous les HTML
+        full_html = '\n'.join(html_parts)
+        
+        # Générer le PDF
+        try:
+            from weasyprint import HTML
+            from weasyprint.text.fonts import FontConfiguration
+            
+            font_config = FontConfiguration()
+            pdf = HTML(string=full_html).write_pdf(font_config=font_config)
+            
+            response = Response(pdf, mimetype='application/pdf')
+            response.headers['Content-Disposition'] = f'attachment; filename=bonvin_all_asset_classes_{datetime.now().strftime("%Y%m%d_%H%M")}.pdf'
+            
+            logger.info(f"✅ Rapport complet généré: {len(asset_classes_data)} classes d'actifs")
+            return response
+            
+        except ImportError:
+            logger.error("❌ WeasyPrint non installé")
+            return jsonify({
+                "error": "WeasyPrint non installé. Installez avec: pip install weasyprint"
+            }), 500
+            
+    except Exception as e:
+        logger.error(f"❌ Erreur génération rapport complet: {e}")
         return jsonify({
             "error": str(e)
         }), 500
