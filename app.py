@@ -2869,11 +2869,20 @@ def generate_portfolio_pdf():
                     categories_data[item.category] = []
                 categories_data[item.category].append(item)
         
+        # Fonction pour formater les prix
+        def format_price(price):
+            if not price or price == 0:
+                return '0 CHF'
+            try:
+                return f"{price:,.0f} CHF"
+            except:
+                return '0 CHF'
+        
         # Préparer les données pour le template
         template_data = {
             'generation_date': datetime.now().strftime('%d/%m/%Y à %H:%M'),
             'total_items': total_items,
-            'total_value': formatPrice(total_value),
+            'total_value': format_price(total_value),
             'available_items': available_items,
             'categories_count': categories_count,
             'actions': actions,
