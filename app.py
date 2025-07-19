@@ -2283,10 +2283,10 @@ def get_stock_price_alpha_vantage(symbol: str, item: Optional[CollectionItem], c
             # Essayer avec différents formats pour les actions suisses
             if item and item.stock_exchange and item.stock_exchange.upper() in ['SWX', 'SIX', 'SWISS', 'CH']:
                 symbol_variants = [
-                    f"{symbol}.SW",  # Format suisse standard
+                    symbol.replace('.SW', ''),  # Symbole sans suffixe (IREN)
+                    f"{symbol}.SW",  # Format suisse standard (IREN.SW)
                     f"{symbol}.SWX",  # Format SWX
                     f"{symbol}.SIX",  # Format SIX
-                    symbol.replace('.SW', ''),  # Symbole sans suffixe
                 ]
                 
                 for variant in symbol_variants:
