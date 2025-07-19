@@ -550,7 +550,12 @@ async function forceUpdateStockPrices() {
 
 // Fonction pour ouvrir la modal de sélection de véhicule
 function openVehicleSelectModal() {
-    const vehicles = allItems.filter(item => item.category !== 'Actions' && item.status === 'Available');
+    // Filtrer seulement les véhicules (Voitures, Bateaux, Avions, etc.) - pas les Actions
+    const vehicleCategories = ['Voitures', 'Bateaux', 'Avions', 'Véhicules', 'Motos', 'Camions'];
+    const vehicles = allItems.filter(item => 
+        vehicleCategories.includes(item.category) && 
+        item.status === 'Available'
+    );
     
     if (vehicles.length === 0) {
         showError('Aucun véhicule disponible pour la mise à jour');
@@ -614,7 +619,12 @@ async function confirmAiUpdate() {
     const selectedId = document.getElementById('vehicle-select').value;
     if (!selectedId) return;
     
-    const vehicles = allItems.filter(item => item.category !== 'Actions' && item.status === 'Available');
+    // Filtrer seulement les véhicules (Voitures, Bateaux, Avions, etc.) - pas les Actions
+    const vehicleCategories = ['Voitures', 'Bateaux', 'Avions', 'Véhicules', 'Motos', 'Camions'];
+    const vehicles = allItems.filter(item => 
+        vehicleCategories.includes(item.category) && 
+        item.status === 'Available'
+    );
     const selectedVehicle = vehicles.find(v => v.id == selectedId);
     
     if (!selectedVehicle) {
@@ -678,7 +688,12 @@ async function aiUpdateVehiclePrice() {
 
 // Fonction pour mettre à jour tous les véhicules via IA
 async function aiUpdateAllVehicles() {
-    const vehicles = allItems.filter(item => item.category !== 'Actions' && item.status === 'Available');
+    // Filtrer seulement les véhicules (Voitures, Bateaux, Avions, etc.) - pas les Actions
+    const vehicleCategories = ['Voitures', 'Bateaux', 'Avions', 'Véhicules', 'Motos', 'Camions'];
+    const vehicles = allItems.filter(item => 
+        vehicleCategories.includes(item.category) && 
+        item.status === 'Available'
+    );
     
     if (vehicles.length === 0) {
         showError('Aucun véhicule disponible pour la mise à jour');
