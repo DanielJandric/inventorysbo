@@ -19,6 +19,7 @@ from flask_cors import CORS
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 from dotenv import load_dotenv
+import requests
 
 # Load environment variables from .env file
 load_dotenv()
@@ -3062,6 +3063,145 @@ Réponds en JSON avec:
     except Exception as e:
         logger.error(f"Erreur market_price: {e}")
         return jsonify({"error": "Moteur IA Indisponible"}), 500
+
+@app.route("/api/ai-update-price/<int:item_id>", methods=["POST"])
+def ai_update_price(item_id):
+    """Mise à jour automatique du prix via IA et sauvegarde en base"""
+    if not openai_client:
+        return jsonify({"error": "Moteur IA Indisponible"}), 503
+    
+    try:
+        # Récupérer l'objet
+        items = AdvancedDataManager.fetch_all_items()
+        target_item = next((item for item in items if item.id == item_id), None)
+        
+        if not target_item:
+            return jsonify({"error": "Objet non trouvé"}), 404
+        
+        # Vérifier que c'est un véhicule (pas une action)
+        if target_item.category == 'Actions':
+            return jsonify({"error": "Cette fonction est réservée aux véhicules. Utilisez la mise à jour des prix d'actions pour les actions."}), 400
+        
+        # Obtenir l'estimation IA
+        market_response = market_price(item_id)
+        if market_response.status_code != 200:
+            return market_response
+        
+        market_data = market_response.get_json()
+        estimated_price = market_data.get('estimated_price')
+        
+        if not estimated_price or estimated_price <= 0:
+            return jsonify({"error": "Estimation IA invalide"}), 400
+        
+        # Préparer les données de mise à jour
+        update_data = {
+            'current_value': estimated_price,
+            'last_action_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+        
+        # Mettre à jour en base de données
+        try:
+            response = requests.put(
+                f"{os.getenv('SUPABASE_URL')}/rest/v1/collection_items?id=eq.{item_id}",
+                headers={
+                    'apikey': os.getenv('SUPABASE_KEY'),
+                    'Authorization': f'Bearer {os.getenv("SUPABASE_KEY")}',
+                    'Content-Type': 'application/json',
+                    'Prefer': 'return=minimal'
+                },
+                json=update_data
+            )
+            
+            if response.status_code == 204:
+                # Succès - mettre à jour l'objet en mémoire
+                target_item.current_value = estimated_price
+                target_item.last_action_date = update_data['last_action_date']
+                
+                logger.info(f"✅ Prix IA mis à jour pour {target_item.name}: {estimated_price:,.0f} CHF")
+                
+                return jsonify({
+                    "success": True,
+                    "message": f"Prix mis à jour avec succès: {estimated_price:,.0f} CHF",
+                    "updated_price": estimated_price,
+                    "ai_estimation": market_data,
+                    "item_name": target_item.name
+                })
+            else:
+                logger.error(f"Erreur mise à jour base: {response.status_code} - {response.text}")
+                return jsonify({"error": "Erreur lors de la mise à jour en base de données"}), 500
+                
+        except Exception as db_error:
+            logger.error(f"Erreur base de données: {db_error}")
+            return jsonify({"error": "Erreur de connexion à la base de données"}), 500
+        
+    except Exception as e:
+        logger.error(f"Erreur ai_update_price: {e}")
+        return jsonify({"error": "Erreur lors de la mise à jour IA"}), 500
+
+@app.route("/api/ai-update-all-vehicles", methods=["POST"])
+def ai_update_all_vehicles():
+    """Mise à jour automatique des prix de tous les véhicules via IA"""
+    if not openai_client:
+        return jsonify({"error": "Moteur IA Indisponible"}), 503
+    
+    try:
+        # Récupérer tous les véhicules (pas les actions)
+        items = AdvancedDataManager.fetch_all_items()
+        vehicles = [item for item in items if item.category != 'Actions' and item.status == 'Available']
+        
+        if not vehicles:
+            return jsonify({"error": "Aucun véhicule trouvé"}), 404
+        
+        results = {
+            "total_vehicles": len(vehicles),
+            "updated": 0,
+            "errors": 0,
+            "details": []
+        }
+        
+        for vehicle in vehicles:
+            try:
+                # Appeler la mise à jour individuelle
+                update_response = ai_update_price(vehicle.id)
+                update_data = update_response.get_json()
+                
+                if update_response.status_code == 200:
+                    results["updated"] += 1
+                    results["details"].append({
+                        "id": vehicle.id,
+                        "name": vehicle.name,
+                        "status": "success",
+                        "new_price": update_data.get("updated_price"),
+                        "message": update_data.get("message")
+                    })
+                else:
+                    results["errors"] += 1
+                    results["details"].append({
+                        "id": vehicle.id,
+                        "name": vehicle.name,
+                        "status": "error",
+                        "error": update_data.get("error", "Erreur inconnue")
+                    })
+                
+                # Délai pour éviter de surcharger l'API OpenAI
+                time.sleep(2)
+                
+            except Exception as e:
+                results["errors"] += 1
+                results["details"].append({
+                    "id": vehicle.id,
+                    "name": vehicle.name,
+                    "status": "error",
+                    "error": str(e)
+                })
+        
+        logger.info(f"🔄 Mise à jour IA terminée: {results['updated']}/{results['total_vehicles']} véhicules mis à jour")
+        
+        return jsonify(results)
+        
+    except Exception as e:
+        logger.error(f"Erreur ai_update_all_vehicles: {e}")
+        return jsonify({"error": "Erreur lors de la mise à jour en masse"}), 500
 
 @app.route("/api/chatbot", methods=["POST"])
 def chatbot():

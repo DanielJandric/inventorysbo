@@ -548,6 +548,128 @@ async function forceUpdateStockPrices() {
     showNotification('Prix mis à jour !', false);
 }
 
+// Fonction pour mettre à jour le prix d'un véhicule via IA
+async function aiUpdateVehiclePrice() {
+    // Demander à l'utilisateur de sélectionner un véhicule
+    const vehicles = allItems.filter(item => item.category !== 'Actions' && item.status === 'Available');
+    
+    if (vehicles.length === 0) {
+        showError('Aucun véhicule disponible pour la mise à jour');
+        return;
+    }
+    
+    // Créer une liste de sélection
+    const vehicleList = vehicles.map(v => `${v.name} (${v.category})`).join('\n');
+    const selectedName = prompt(`Sélectionnez un véhicule à mettre à jour via IA:\n\n${vehicleList}\n\nEntrez le nom exact du véhicule:`);
+    
+    if (!selectedName) return;
+    
+    const selectedVehicle = vehicles.find(v => v.name === selectedName);
+    if (!selectedVehicle) {
+        showError('Véhicule non trouvé');
+        return;
+    }
+    
+    // Confirmation
+    if (!confirm(`Mettre à jour le prix de "${selectedVehicle.name}" via l'IA ?\n\nCette opération va:\n- Analyser le marché actuel\n- Calculer une nouvelle estimation\n- Mettre à jour la base de données\n\nContinuer ?`)) {
+        return;
+    }
+    
+    try {
+        showNotification('Analyse IA en cours...', false);
+        
+        const response = await fetch(`/api/ai-update-price/${selectedVehicle.id}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showSuccess(`✅ ${result.message}\n\nNouveau prix: ${formatPrice(result.updated_price)}`);
+            
+            // Recharger les données pour afficher les changements
+            await loadItems();
+            
+            // Afficher les détails de l'estimation IA
+            if (result.ai_estimation) {
+                const details = result.ai_estimation;
+                const confidence = Math.round(details.confidence_score * 100);
+                const reasoning = details.reasoning ? details.reasoning.substring(0, 200) + '...' : 'Aucun détail';
+                
+                console.log('📊 Estimation IA:', {
+                    prix: result.updated_price,
+                    confiance: confidence + '%',
+                    raisonnement: reasoning,
+                    tendance: details.market_trend
+                });
+            }
+        } else {
+            showError(`Erreur: ${result.error}`);
+        }
+        
+    } catch (error) {
+        console.error('Erreur mise à jour IA:', error);
+        showError('Erreur lors de la mise à jour IA');
+    }
+}
+
+// Fonction pour mettre à jour tous les véhicules via IA
+async function aiUpdateAllVehicles() {
+    const vehicles = allItems.filter(item => item.category !== 'Actions' && item.status === 'Available');
+    
+    if (vehicles.length === 0) {
+        showError('Aucun véhicule disponible pour la mise à jour');
+        return;
+    }
+    
+    // Confirmation importante
+    const confirmMessage = `Mettre à jour TOUS les véhicules via l'IA ?\n\nCette opération va:\n- Analyser ${vehicles.length} véhicules\n- Calculer de nouvelles estimations pour chacun\n- Mettre à jour la base de données\n- Prendre plusieurs minutes\n\nÊtes-vous sûr de vouloir continuer ?`;
+    
+    if (!confirm(confirmMessage)) {
+        return;
+    }
+    
+    try {
+        showNotification(`Mise à jour IA en cours pour ${vehicles.length} véhicules...`, false);
+        
+        const response = await fetch('/api/ai-update-all-vehicles', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            const successRate = Math.round((result.updated / result.total_vehicles) * 100);
+            showSuccess(`✅ Mise à jour terminée!\n\n${result.updated}/${result.total_vehicles} véhicules mis à jour (${successRate}%)\n${result.errors} erreurs`);
+            
+            // Recharger les données
+            await loadItems();
+            
+            // Afficher les détails dans la console
+            console.log('📊 Résultats mise à jour IA:', result);
+            
+            // Afficher les erreurs s'il y en a
+            if (result.errors > 0) {
+                const errors = result.details.filter(d => d.status === 'error');
+                console.warn('❌ Erreurs lors de la mise à jour:', errors);
+            }
+            
+        } else {
+            showError(`Erreur: ${result.error}`);
+        }
+        
+    } catch (error) {
+        console.error('Erreur mise à jour IA en masse:', error);
+        showError('Erreur lors de la mise à jour IA en masse');
+    }
+}
+
 // Fonction pour générer le PDF
 async function generatePDF() {
     try {
