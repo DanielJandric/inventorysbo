@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>BONVIN - Portefeuille de Collection</title>
+</head>
+<body>
+    <!-- En-tête du rapport -->
+    <div class="header">
+        <h1>BONVIN - Collection Privée</h1>
+        <div class="subtitle">Rapport de Portefeuille Complet</div>
+        <div class="date">Généré le {{ generation_date }}</div>
+    </div>
+
+    <!-- Résumé des statistiques -->
+    <div class="section">
+        <div class="section-title">Résumé du Portefeuille</div>
+        <div class="grid-3">
+            <div class="summary-box">
+                <div class="summary-title">Vue d'ensemble</div>
+                <div class="summary-item">
+                    <span class="summary-label">Total d'items:</span>
+                    <span class="summary-value">{{ total_items }}</span>
+                </div>
+                <div class="summary-item">
+                    <span class="summary-label">Items disponibles:</span>
+                    <span class="summary-value">{{ available_items }}</span>
+                </div>
+                <div class="summary-item">
+                    <span class="summary-label">Catégories:</span>
+                    <span class="summary-value">{{ categories_count }}</span>
+                </div>
+                <div class="summary-item">
+                    <span class="summary-label">Valeur totale:</span>
+                    <span class="summary-value">{{ total_value }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Actions -->
+    {% if actions %}
+    <div class="section">
+        <div class="section-title">Actions Cotées</div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Symbole</th>
+                    <th>Quantité</th>
+                    <th>Prix d'acquisition</th>
+                    <th>Prix actuel</th>
+                    <th>Valeur totale</th>
+                    <th>Statut</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for action in actions %}
+                <tr>
+                    <td><strong>{{ action.stock_symbol or 'N/A' }}</strong></td>
+                    <td>{{ action.stock_quantity or 0 }}</td>
+                    <td class="price">{{ action.stock_purchase_price|format_price if action.stock_purchase_price else 'N/A' }}</td>
+                    <td class="price">{{ action.current_price|format_price if action.current_price else 'N/A' }}</td>
+                    <td class="value-highlight">
+                        {% if action.current_price and action.stock_quantity %}
+                            {{ (action.current_price * action.stock_quantity)|format_price }}
+                        {% else %}
+                            N/A
+                        {% endif %}
+                    </td>
+                    <td><span class="status-{{ action.status.lower() }}">{{ action.status }}</span></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    <!-- Autres catégories -->
+    {% for category_name, category_items in categories.items() %}
+    <div class="section">
+        <div class="section-title">{{ category_name }}</div>
+        {% for item in category_items %}
+        <div class="item">
+            <div class="item-name">{{ item.name }}</div>
+            <div class="item-details">
+                <strong>Statut:</strong> <span class="status-{{ item.status.lower() }}">{{ item.status }}</span><br>
+                {% if item.acquisition_price %}
+                <strong>Prix d'acquisition:</strong> <span class="price">{{ item.acquisition_price|format_price }}</span><br>
+                {% endif %}
+                {% if item.asking_price %}
+                <strong>Prix de vente:</strong> <span class="price">{{ item.asking_price|format_price }}</span><br>
+                {% endif %}
+                {% if item.description %}
+                <strong>Description:</strong> {{ item.description }}<br>
+                {% endif %}
+                {% if item.construction_year %}
+                <strong>Année:</strong> {{ item.construction_year }}<br>
+                {% endif %}
+                {% if item.condition %}
+                <strong>État:</strong> {{ item.condition }}<br>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endfor %}
+
+    <!-- Notes et informations -->
+    <div class="section">
+        <div class="section-title">Informations</div>
+        <div class="note">
+            Ce rapport a été généré automatiquement par le système de gestion BONVIN.
+            Les prix sont exprimés en CHF et peuvent être sujets à variations selon les conditions du marché.
+        </div>
+    </div>
+</body>
+</html> 

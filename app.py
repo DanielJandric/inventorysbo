@@ -14,6 +14,7 @@ from functools import lru_cache, wraps
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from flask import Flask, jsonify, render_template, request, Response
+from pdf_optimizer import generate_optimized_pdf, create_summary_box, create_item_card_html, format_price_for_pdf
 from flask_cors import CORS
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
@@ -164,6 +165,324 @@ try:
         logger.warning("⚠️ OpenAI non configuré")
 except Exception as e:
     logger.warning(f"⚠️ OpenAI non disponible: {e}")
+
+# CSS optimisé pour PDFs noir et blanc professionnels
+def get_optimized_pdf_css():
+    """Retourne un CSS optimisé pour PDFs noir et blanc avec styles professionnels"""
+    return '''
+    @page {
+        size: A4;
+        margin: 0.75in;
+        @top-center {
+            content: "BONVIN - Collection Privée";
+            font-size: 9pt;
+            font-family: Arial, sans-serif;
+            color: #333;
+        }
+        @bottom-center {
+            content: "Page " counter(page) " sur " counter(pages);
+            font-size: 9pt;
+            font-family: Arial, sans-serif;
+            color: #333;
+        }
+    }
+    
+    /* Reset et base */
+    * {
+        box-sizing: border-box;
+    }
+    
+    body {
+        font-family: Arial, sans-serif;
+        font-size: 10pt;
+        line-height: 1.4;
+        color: #000;
+        margin: 0;
+        padding: 0;
+        background: white;
+    }
+    
+    /* En-têtes */
+    .header {
+        text-align: center;
+        margin-bottom: 2em;
+        padding-bottom: 1em;
+        border-bottom: 2px solid #000;
+    }
+    
+    .header h1 {
+        font-size: 18pt;
+        font-weight: bold;
+        margin: 0 0 0.5em 0;
+        color: #000;
+    }
+    
+    .header .subtitle {
+        font-size: 12pt;
+        color: #333;
+        margin: 0;
+    }
+    
+    .header .date {
+        font-size: 10pt;
+        color: #666;
+        margin-top: 0.5em;
+    }
+    
+    /* Sections */
+    .section {
+        margin-bottom: 2em;
+        page-break-inside: avoid;
+    }
+    
+    .section-title {
+        font-size: 14pt;
+        font-weight: bold;
+        margin-bottom: 1em;
+        color: #000;
+        border-bottom: 1px solid #333;
+        padding-bottom: 0.5em;
+        text-transform: uppercase;
+        letter-spacing: 0.5pt;
+    }
+    
+    /* Items */
+    .item {
+        margin-bottom: 1em;
+        padding: 0.75em;
+        border: 1px solid #ccc;
+        border-radius: 3px;
+        background: #fafafa;
+        page-break-inside: avoid;
+    }
+    
+    .item-name {
+        font-weight: bold;
+        font-size: 11pt;
+        color: #000;
+        margin-bottom: 0.5em;
+    }
+    
+    .item-details {
+        color: #333;
+        font-size: 9pt;
+        line-height: 1.3;
+    }
+    
+    .item-details strong {
+        color: #000;
+    }
+    
+    /* Prix et valeurs */
+    .price {
+        font-weight: bold;
+        font-size: 11pt;
+        color: #000;
+        background: #f0f0f0;
+        padding: 0.25em 0.5em;
+        border-radius: 2px;
+        display: inline-block;
+    }
+    
+    .value-highlight {
+        font-weight: bold;
+        color: #000;
+        background: #e8e8e8;
+        padding: 0.2em 0.4em;
+        border-radius: 2px;
+    }
+    
+    /* Statuts avec styles distinctifs */
+    .status-available { 
+        color: #000; 
+        font-weight: bold;
+        background: #e8f5e8;
+        padding: 0.2em 0.4em;
+        border-radius: 2px;
+        border: 1px solid #ccc;
+    }
+    .status-for-sale { 
+        color: #000; 
+        font-weight: bold;
+        background: #fff3cd;
+        padding: 0.2em 0.4em;
+        border-radius: 2px;
+        border: 1px solid #ccc;
+    }
+    .status-sold { 
+        color: #000; 
+        font-weight: bold;
+        background: #f8d7da;
+        padding: 0.2em 0.4em;
+        border-radius: 2px;
+        border: 1px solid #ccc;
+    }
+    
+    /* Tableaux optimisés */
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 1em;
+        font-size: 9pt;
+        page-break-inside: avoid;
+    }
+    
+    th {
+        background-color: #333;
+        color: white;
+        font-weight: bold;
+        padding: 0.5em;
+        text-align: left;
+        border: 1px solid #000;
+        font-size: 9pt;
+    }
+    
+    td {
+        border: 1px solid #ccc;
+        padding: 0.4em;
+        text-align: left;
+        vertical-align: top;
+    }
+    
+    tr:nth-child(even) {
+        background-color: #f9f9f9;
+    }
+    
+    tr:hover {
+        background-color: #f0f0f0;
+    }
+    
+    /* Résumés et statistiques */
+    .summary-box {
+        border: 2px solid #333;
+        padding: 1em;
+        margin: 1em 0;
+        background: #f8f8f8;
+        page-break-inside: avoid;
+    }
+    
+    .summary-title {
+        font-size: 12pt;
+        font-weight: bold;
+        color: #000;
+        margin-bottom: 0.5em;
+        border-bottom: 1px solid #333;
+        padding-bottom: 0.25em;
+    }
+    
+    .summary-item {
+        margin-bottom: 0.5em;
+        display: flex;
+        justify-content: space-between;
+    }
+    
+    .summary-label {
+        font-weight: bold;
+        color: #333;
+    }
+    
+    .summary-value {
+        font-weight: bold;
+        color: #000;
+    }
+    
+    /* Grilles et layouts */
+    .grid-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1em;
+        margin-bottom: 1em;
+    }
+    
+    .grid-3 {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 1em;
+        margin-bottom: 1em;
+    }
+    
+    /* Utilitaires */
+    .text-center { text-align: center; }
+    .text-right { text-align: right; }
+    .text-bold { font-weight: bold; }
+    .text-small { font-size: 8pt; }
+    .text-large { font-size: 12pt; }
+    
+    .mb-1 { margin-bottom: 0.5em; }
+    .mb-2 { margin-bottom: 1em; }
+    .mb-3 { margin-bottom: 1.5em; }
+    
+    .mt-1 { margin-top: 0.5em; }
+    .mt-2 { margin-top: 1em; }
+    .mt-3 { margin-top: 1.5em; }
+    
+    /* Saut de page contrôlé */
+    .page-break { page-break-before: always; }
+    .no-break { page-break-inside: avoid; }
+    
+    /* Notes et commentaires */
+    .note {
+        font-size: 8pt;
+        color: #666;
+        font-style: italic;
+        border-left: 2px solid #ccc;
+        padding-left: 0.5em;
+        margin: 0.5em 0;
+    }
+    
+    /* Codes et références */
+    .code {
+        font-family: 'Courier New', monospace;
+        background: #f0f0f0;
+        padding: 0.2em 0.4em;
+        border-radius: 2px;
+        font-size: 8pt;
+    }
+    '''
+
+# Fonction utilitaire pour générer des PDFs optimisés
+def generate_optimized_pdf(html_content: str, css_string: str, filename: str):
+    """Génère un PDF optimisé avec gestion d'erreur mémoire"""
+    try:
+        from weasyprint import HTML, CSS
+        from weasyprint.text.fonts import FontConfiguration
+        
+        # Configuration des polices
+        font_config = FontConfiguration()
+        
+        # Créer le PDF avec optimisations mémoire
+        html_doc = HTML(string=html_content)
+        css_doc = CSS(string=css_string, font_config=font_config)
+        
+        # Options pour réduire la consommation mémoire
+        pdf = html_doc.write_pdf(
+            stylesheets=[css_doc], 
+            font_config=font_config,
+            optimize_images=True,
+            jpeg_quality=85
+        )
+        
+        # Retourner le PDF
+        response = Response(pdf, mimetype='application/pdf')
+        response.headers['Content-Disposition'] = f'attachment; filename={filename}'
+        
+        return response
+        
+    except MemoryError:
+        logger.error("❌ Erreur mémoire lors de la génération PDF")
+        return jsonify({
+            "error": "Erreur mémoire. Le rapport est trop volumineux. Essayez de filtrer les données."
+        }), 500
+    except ImportError:
+        logger.error("❌ WeasyPrint non installé")
+        return jsonify({
+            "error": "WeasyPrint non installé. Installez avec: pip install weasyprint"
+        }), 500
+    except Exception as e:
+        logger.error(f"❌ Erreur génération PDF: {e}")
+        return jsonify({
+            "error": f"Erreur lors de la génération PDF: {str(e)}"
+        }), 500
 
 # Gestionnaire de notifications Gmail avec style exact de la web app
 class GmailNotificationManager:
@@ -2905,78 +3224,71 @@ def generate_portfolio_pdf():
             # Configuration des polices
             font_config = FontConfiguration()
             
-            # CSS pour le PDF
+            # CSS simplifié pour réduire la consommation mémoire
             css_string = '''
             @page {
                 size: A4;
-                margin: 1in;
-                @top-center {
-                    content: "BONVIN - Collection Privée";
-                    font-size: 10pt;
-                    color: #666;
-                }
-                @bottom-center {
-                    content: "Page " counter(page) " sur " counter(pages);
-                    font-size: 10pt;
-                    color: #666;
-                }
+                margin: 0.75in;
             }
             body {
                 font-family: Arial, sans-serif;
-                font-size: 12pt;
-                line-height: 1.4;
-                color: #333;
+                font-size: 11pt;
+                line-height: 1.3;
+                color: #000;
+                margin: 0;
+                padding: 0;
             }
             .header {
                 text-align: center;
-                margin-bottom: 2em;
-                border-bottom: 2px solid #333;
-                padding-bottom: 1em;
-            }
-            .section {
-                margin-bottom: 2em;
-            }
-            .section-title {
-                font-size: 16pt;
-                font-weight: bold;
-                margin-bottom: 1em;
-                color: #333;
-                border-bottom: 1px solid #ccc;
+                margin-bottom: 1.5em;
+                border-bottom: 1px solid #000;
                 padding-bottom: 0.5em;
             }
+            .section {
+                margin-bottom: 1.5em;
+                page-break-inside: avoid;
+            }
+            .section-title {
+                font-size: 14pt;
+                font-weight: bold;
+                margin-bottom: 0.5em;
+                color: #000;
+                border-bottom: 1px solid #ccc;
+                padding-bottom: 0.25em;
+            }
             .item {
-                margin-bottom: 1em;
-                padding: 0.5em;
-                border: 1px solid #ddd;
-                border-radius: 4px;
+                margin-bottom: 0.5em;
+                padding: 0.25em;
+                border: 1px solid #ccc;
             }
             .item-name {
                 font-weight: bold;
-                color: #333;
+                color: #000;
             }
             .item-details {
-                color: #666;
-                font-size: 10pt;
+                color: #333;
+                font-size: 9pt;
             }
             .price {
                 font-weight: bold;
-                color: #2c5aa0;
+                color: #000;
             }
-            .status-available { color: #28a745; }
-            .status-for-sale { color: #dc3545; }
-            .status-sold { color: #ffc107; }
+            .status-available { color: #000; }
+            .status-for-sale { color: #000; }
+            .status-sold { color: #000; }
             table {
                 width: 100%;
                 border-collapse: collapse;
-                margin-bottom: 1em;
+                margin-bottom: 0.5em;
+                font-size: 9pt;
             }
             th, td {
-                border: 1px solid #ddd;
-                padding: 8px;
+                border: 1px solid #ccc;
+                padding: 4px;
                 text-align: left;
             }
             th {
-                background-color: #f8f9fa;
+                background-color: #f0f0f0;
                 font-weight: bold;
             }
             '''
@@ -3179,78 +3491,71 @@ def generate_asset_class_report(asset_class_name):
             # Configuration des polices
             font_config = FontConfiguration()
             
-            # CSS pour le PDF
+            # CSS simplifié pour réduire la consommation mémoire
             css_string = '''
             @page {
                 size: A4;
-                margin: 1in;
-                @top-center {
-                    content: "BONVIN - Rapport Classe d'Actif";
-                    font-size: 10pt;
-                    color: #666;
-                }
-                @bottom-center {
-                    content: "Page " counter(page) " sur " counter(pages);
-                    font-size: 10pt;
-                    color: #666;
-                }
+                margin: 0.75in;
             }
             body {
                 font-family: Arial, sans-serif;
-                font-size: 12pt;
-                line-height: 1.4;
-                color: #333;
+                font-size: 11pt;
+                line-height: 1.3;
+                color: #000;
+                margin: 0;
+                padding: 0;
             }
             .header {
                 text-align: center;
-                margin-bottom: 2em;
-                border-bottom: 2px solid #333;
-                padding-bottom: 1em;
-            }
-            .section {
-                margin-bottom: 2em;
-            }
-            .section-title {
-                font-size: 16pt;
-                font-weight: bold;
-                margin-bottom: 1em;
-                color: #333;
-                border-bottom: 1px solid #ccc;
+                margin-bottom: 1.5em;
+                border-bottom: 1px solid #000;
                 padding-bottom: 0.5em;
             }
+            .section {
+                margin-bottom: 1.5em;
+                page-break-inside: avoid;
+            }
+            .section-title {
+                font-size: 14pt;
+                font-weight: bold;
+                margin-bottom: 0.5em;
+                color: #000;
+                border-bottom: 1px solid #ccc;
+                padding-bottom: 0.25em;
+            }
             .item {
-                margin-bottom: 1em;
-                padding: 0.5em;
-                border: 1px solid #ddd;
-                border-radius: 4px;
+                margin-bottom: 0.5em;
+                padding: 0.25em;
+                border: 1px solid #ccc;
             }
             .item-name {
                 font-weight: bold;
-                color: #333;
+                color: #000;
             }
             .item-details {
-                color: #666;
-                font-size: 10pt;
+                color: #333;
+                font-size: 9pt;
             }
             .price {
                 font-weight: bold;
-                color: #2c5aa0;
+                color: #000;
             }
-            .status-available { color: #28a745; }
-            .status-for-sale { color: #dc3545; }
-            .status-sold { color: #ffc107; }
+            .status-available { color: #000; }
+            .status-for-sale { color: #000; }
+            .status-sold { color: #000; }
             table {
                 width: 100%;
                 border-collapse: collapse;
-                margin-bottom: 1em;
+                margin-bottom: 0.5em;
+                font-size: 9pt;
             }
             th, td {
-                border: 1px solid #ddd;
-                padding: 8px;
+                border: 1px solid #ccc;
+                padding: 4px;
                 text-align: left;
             }
             th {
-                background-color: #f8f9fa;
+                background-color: #f0f0f0;
                 font-weight: bold;
             }
             '''
@@ -3417,78 +3722,71 @@ def generate_all_asset_classes_report():
             # Configuration des polices
             font_config = FontConfiguration()
             
-            # CSS pour le PDF
+            # CSS simplifié pour réduire la consommation mémoire
             css_string = '''
             @page {
                 size: A4;
-                margin: 1in;
-                @top-center {
-                    content: "BONVIN - Rapport Complet Classes d'Actifs";
-                    font-size: 10pt;
-                    color: #666;
-                }
-                @bottom-center {
-                    content: "Page " counter(page) " sur " counter(pages);
-                    font-size: 10pt;
-                    color: #666;
-                }
+                margin: 0.75in;
             }
             body {
                 font-family: Arial, sans-serif;
-                font-size: 12pt;
-                line-height: 1.4;
-                color: #333;
+                font-size: 11pt;
+                line-height: 1.3;
+                color: #000;
+                margin: 0;
+                padding: 0;
             }
             .header {
                 text-align: center;
-                margin-bottom: 2em;
-                border-bottom: 2px solid #333;
-                padding-bottom: 1em;
-            }
-            .section {
-                margin-bottom: 2em;
-            }
-            .section-title {
-                font-size: 16pt;
-                font-weight: bold;
-                margin-bottom: 1em;
-                color: #333;
-                border-bottom: 1px solid #ccc;
+                margin-bottom: 1.5em;
+                border-bottom: 1px solid #000;
                 padding-bottom: 0.5em;
             }
+            .section {
+                margin-bottom: 1.5em;
+                page-break-inside: avoid;
+            }
+            .section-title {
+                font-size: 14pt;
+                font-weight: bold;
+                margin-bottom: 0.5em;
+                color: #000;
+                border-bottom: 1px solid #ccc;
+                padding-bottom: 0.25em;
+            }
             .item {
-                margin-bottom: 1em;
-                padding: 0.5em;
-                border: 1px solid #ddd;
-                border-radius: 4px;
+                margin-bottom: 0.5em;
+                padding: 0.25em;
+                border: 1px solid #ccc;
             }
             .item-name {
                 font-weight: bold;
-                color: #333;
+                color: #000;
             }
             .item-details {
-                color: #666;
-                font-size: 10pt;
+                color: #333;
+                font-size: 9pt;
             }
             .price {
                 font-weight: bold;
-                color: #2c5aa0;
+                color: #000;
             }
-            .status-available { color: #28a745; }
-            .status-for-sale { color: #dc3545; }
-            .status-sold { color: #ffc107; }
+            .status-available { color: #000; }
+            .status-for-sale { color: #000; }
+            .status-sold { color: #000; }
             table {
                 width: 100%;
                 border-collapse: collapse;
-                margin-bottom: 1em;
+                margin-bottom: 0.5em;
+                font-size: 9pt;
             }
             th, td {
-                border: 1px solid #ddd;
-                padding: 8px;
+                border: 1px solid #ccc;
+                padding: 4px;
                 text-align: left;
             }
             th {
-                background-color: #f8f9fa;
+                background-color: #f0f0f0;
                 font-weight: bold;
             }
             '''
