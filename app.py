@@ -70,6 +70,14 @@ class CollectionItem:
     stock_exchange: Optional[str] = None
     current_price: Optional[float] = None
     last_price_update: Optional[str] = None
+    # Métriques boursières supplémentaires
+    stock_volume: Optional[int] = None
+    stock_pe_ratio: Optional[float] = None
+    stock_52_week_high: Optional[float] = None
+    stock_52_week_low: Optional[float] = None
+    stock_change: Optional[float] = None
+    stock_change_percent: Optional[float] = None
+    stock_average_volume: Optional[int] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
     embedding: Optional[List[float]] = None
@@ -1886,7 +1894,9 @@ def update_item(item_id):
         # Vérifier si l'embedding doit être mis à jour
         should_update_embedding = False
         embedding_fields = ['name', 'category', 'description', 'status', 'construction_year', 
-                          'condition', 'for_sale', 'sale_status', 'stock_symbol', 'stock_quantity', 'current_price']
+                          'condition', 'for_sale', 'sale_status', 'stock_symbol', 'stock_quantity', 'current_price',
+        'stock_volume', 'stock_pe_ratio', 'stock_52_week_high', 'stock_52_week_low',
+        'stock_change', 'stock_change_percent', 'stock_average_volume']
         
         for field in embedding_fields:
             if field in cleaned_data and old_data.get(field) != cleaned_data.get(field):
@@ -2385,14 +2395,22 @@ def get_stock_price_eodhd(symbol: str, item: Optional[CollectionItem], cache_key
             try:
                 update_data = {
                     'current_price': current_price,
-                    'last_price_update': datetime.now().isoformat()
+                    'last_price_update': datetime.now().isoformat(),
+                    'stock_volume': quote.get("volume"),
+                    'stock_pe_ratio': pe_ratio if pe_ratio != "N/A" else None,
+                    'stock_52_week_high': quote.get("high_52_weeks"),
+                    'stock_52_week_low': quote.get("low_52_weeks"),
+                    'stock_change': quote.get("change"),
+                    'stock_change_percent': quote.get("change_p"),
+                    'stock_average_volume': quote.get("avg_volume")
                 }
                 
                 # Mettre à jour dans Supabase
                 if supabase:
                     response = supabase.table('collection_items').update(update_data).eq('id', item.id).execute()
                     if response.data:
-                        logger.info(f"✅ Prix mis à jour dans DB pour action {item.name} (ID: {item.id}): {current_price} CHF")
+                        logger.info(f"✅ Prix et métriques mis à jour dans DB pour action {item.name} (ID: {item.id}): {current_price} CHF")
+                        logger.info(f"📊 Métriques: Volume={update_data['stock_volume']}, PE={update_data['stock_pe_ratio']}, 52W-H={update_data['stock_52_week_high']}, 52W-L={update_data['stock_52_week_low']}")
                     else:
                         logger.warning(f"⚠️ Échec mise à jour DB pour action {item.name} (ID: {item.id})")
             except Exception as e:
@@ -2788,7 +2806,9 @@ def clean_update_data(data: Dict[str, Any]) -> Dict[str, Any]:
     numeric_fields = [
         'asking_price', 'sold_price', 'acquisition_price', 
         'current_offer', 'commission_rate', 'surface_m2', 
-        'rental_income_chf', 'stock_purchase_price', 'current_price'
+        'rental_income_chf', 'stock_purchase_price', 'current_price',
+        'stock_pe_ratio', 'stock_52_week_high', 'stock_52_week_low',
+        'stock_change', 'stock_change_percent'
     ]
     for field in numeric_fields:
         if field in data:
@@ -2809,6 +2829,15 @@ def clean_update_data(data: Dict[str, Any]) -> Dict[str, Any]:
             cleaned['stock_quantity'] = int(data['stock_quantity']) if data['stock_quantity'] else None
         except:
             cleaned['stock_quantity'] = None
+    
+    # Champs entiers pour les métriques boursières
+    volume_fields = ['stock_volume', 'stock_average_volume']
+    for field in volume_fields:
+        if field in data:
+            try:
+                cleaned[field] = int(data[field]) if data[field] else None
+            except:
+                cleaned[field] = None
     
     # Booléen
     if 'for_sale' in data:
