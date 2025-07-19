@@ -2793,13 +2793,19 @@ def get_stock_price_chatgpt(symbol: str, item: Optional[CollectionItem], cache_k
         prompt = f"""
 Tu es un expert en analyse financière. Je recherche les données boursières actuelles pour {company_name} (ticker {ticker}) cotée sur la bourse suisse.
 
-Récupère et retourne UNIQUEMENT un JSON avec les données suivantes (utilise des valeurs numériques, pas de texte) :
-- current_price: prix actuel en CHF
-- daily_volume: volume d'échange du jour
-- average_volume: volume d'échange moyen (30 jours)
-- fifty_two_week_high: plus haut des 52 semaines en CHF
-- fifty_two_week_low: plus bas des 52 semaines en CHF
-- pe_ratio: ratio P/E (TTM)
+RÈGLES STRICTES :
+- Utilise des sources fiables (Yahoo Finance, Google Finance, etc.)
+- Le current_price DOIT être un nombre positif en CHF
+- Vérifie que le prix est raisonnable (entre 0.01 et 1000000 CHF)
+- Si une donnée n'est pas disponible, utilise null
+
+Récupère et retourne UNIQUEMENT un JSON avec les données suivantes :
+- current_price: prix actuel en CHF (OBLIGATOIRE, nombre positif)
+- daily_volume: volume d'échange du jour (nombre entier positif)
+- average_volume: volume d'échange moyen (30 jours, nombre entier positif)
+- fifty_two_week_high: plus haut des 52 semaines en CHF (nombre positif)
+- fifty_two_week_low: plus bas des 52 semaines en CHF (nombre positif)
+- pe_ratio: ratio P/E (TTM) (nombre positif ou null)
 - daily_change: variation du jour en CHF (positif ou négatif)
 - daily_change_percent: variation du jour en pourcentage
 
@@ -2815,7 +2821,7 @@ Format de réponse JSON uniquement, sans texte supplémentaire :
     "daily_change_percent": 1.87
 }}
 
-Si une donnée n'est pas disponible, utilise null. Assure-toi que les valeurs sont récentes et précises.
+IMPORTANT : Le current_price est OBLIGATOIRE et doit être un nombre positif valide.
 """
         
         # Appeler ChatGPT-4o
@@ -2842,15 +2848,29 @@ Si une donnée n'est pas disponible, utilise null. Assure-toi que les valeurs so
             
             data = json.loads(response_text)
             
-            # Validation des données
-            if not data.get('current_price') or data['current_price'] <= 0:
-                raise Exception("Prix invalide reçu de ChatGPT")
+            # Validation des données avec plus de robustesse
+            current_price = data.get('current_price')
+            if not current_price or current_price <= 0:
+                logger.error(f"Prix invalide reçu de ChatGPT pour {symbol}: {current_price}")
+                logger.error(f"Données complètes reçues: {data}")
+                raise Exception(f"Prix invalide reçu de ChatGPT: {current_price}")
+            
+            # Convertir en float si c'est une string
+            if isinstance(current_price, str):
+                try:
+                    current_price = float(current_price.replace(',', '').replace('$', '').replace('CHF', '').strip())
+                except ValueError:
+                    raise Exception(f"Impossible de convertir le prix en nombre: {current_price}")
+            
+            # Vérifier que le prix est raisonnable (entre 0.01 et 1000000)
+            if current_price < 0.01 or current_price > 1000000:
+                raise Exception(f"Prix hors limites: {current_price}")
             
             # Formater les données pour l'affichage
             result = {
                 "symbol": symbol,
-                "price": float(data.get('current_price', 0)),
-                "price_chf": float(data.get('current_price', 0)),
+                "price": current_price,
+                "price_chf": current_price,
                 "currency": "CHF",
                 "company_name": company_name,
                 "last_update": datetime.now().isoformat(),
