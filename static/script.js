@@ -594,7 +594,10 @@ function updateStockCardDisplay(itemId, stockData) {
             <div class="space-y-3">
                 <!-- Prix principal -->
                 <div class="flex items-center justify-between">
-                    <span class="text-lg font-bold">${formatPrice(stockData.price_chf)}</span>
+                    <div class="flex items-center gap-2">
+                        <span class="text-lg font-bold">${formatPrice(stockData.price_chf)}</span>
+                        <span class="text-xs text-slate-400 font-medium">${stockData.currency}</span>
+                    </div>
                     <span class="${changeClass} text-sm font-semibold">
                         ${arrow} ${Math.abs(stockData.change_percent).toFixed(2)}%
                     </span>
@@ -737,7 +740,10 @@ function createItemCardHTML(item) {
                     <div class="space-y-3">
                         <!-- Prix principal -->
                         <div class="flex items-center justify-between">
-                            <span class="text-lg font-bold animate-pulse">Chargement...</span>
+                            <div class="flex items-center gap-2">
+                                <span class="text-lg font-bold animate-pulse">Chargement...</span>
+                                <span class="text-xs text-slate-400 font-medium">--</span>
+                            </div>
                             <span class="text-sm text-slate-400">--</span>
                         </div>
                         

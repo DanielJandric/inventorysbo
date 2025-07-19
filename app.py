@@ -116,6 +116,9 @@ FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY")
 # Configuration EODHD (excellente pour actions suisses)
 EODHD_API_KEY = os.getenv("EODHD_API_KEY", "687ae6e8493e52.65071366")  # Clé par défaut pour test
 
+# Configuration FreeCurrency (pour conversion USD/EUR vers CHF)
+FREECURRENCY_API_KEY = os.getenv("FREECURRENCY_API_KEY", "fca_live_MhoTdTd6auvKD1Dr5kVQ7ua9SwgGPApjylr3CrRe")
+
 if not all([SUPABASE_URL, SUPABASE_KEY]):
     logger.error("Variables d'environnement manquantes")
     raise EnvironmentError("SUPABASE_URL et SUPABASE_KEY sont requis")
@@ -1970,52 +1973,39 @@ def format_stock_value(value, is_price=False, is_percent=False, is_volume=False)
 
 def get_live_exchange_rate(from_currency: str, to_currency: str = 'CHF') -> float:
     """
-    Récupère le taux de change en direct en utilisant l'API Finnhub.
+    Récupère le taux de change en direct en utilisant l'API FreeCurrency.
     Convertit une valeur de 'from_currency' vers 'to_currency'.
     """
     if from_currency == to_currency:
         return 1.0
-    if not FINNHUB_API_KEY:
-        logger.error("Impossible de récupérer les taux de change : Clé API Finnhub manquante.")
-        return 1.0 # Retourne 1.0 pour ne pas causer d'erreur de calcul
-
+    
     now = time.time()
-    # Le cache est basé sur la devise de destination (notre référence)
-    cache_key = f"forex_{to_currency}"
+    cache_key = f"forex_{from_currency}_{to_currency}"
 
-    # 1. Vérifier si les taux sont en cache et valides
+    # 1. Vérifier si le taux est en cache et valide
     if cache_key in forex_cache and now - forex_cache[cache_key]['timestamp'] < FOREX_CACHE_DURATION:
-        rates = forex_cache[cache_key]['rates']
-    else:
-        # 2. Appel API pour récupérer tous les taux par rapport à notre devise de référence
-        logger.info(f"💰 Appel API Finnhub pour les taux de change (Base: {to_currency})")
-        try:
-            import requests
-            forex_url = f"https://finnhub.io/api/v1/forex/rates?base={to_currency}&token={FINNHUB_API_KEY}"
-            response = requests.get(forex_url, timeout=10)
-            response.raise_for_status()
-            rates = response.json().get('quote', {})
+        return forex_cache[cache_key]['rate']
+
+    # 2. Appel API FreeCurrency
+    logger.info(f"💰 Appel API FreeCurrency pour {from_currency} -> {to_currency}")
+    try:
+        import requests
+        url = f"https://api.freecurrencyapi.com/v1/latest?apikey={FREECURRENCY_API_KEY}&currencies={to_currency}&base_currency={from_currency}"
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        
+        rate = data.get('data', {}).get(to_currency)
+        if rate:
             # Mettre à jour le cache
-            forex_cache[cache_key] = {'rates': rates, 'timestamp': now}
-        except Exception as e:
-            logger.error(f"Erreur API taux de change Finnhub: {e}. Utilisation d'un taux de 1.0")
-            # En cas d'erreur, on retourne un dictionnaire vide pour éviter de mettre en cache des données erronées
-            rates = {}
-
-    # 3. Calculer le taux de conversion
-    # L'API Finnhub avec base=CHF nous donne la valeur de 1 CHF en autres devises (ex: {'USD': 1.10})
-    # Pour convertir un prix USD en CHF, il faut donc diviser par ce taux.
-    rate = rates.get(from_currency.upper())
-
-    if rate:
-        try:
-            # Le multiplicateur pour convertir from_currency -> to_currency est 1 / rate
-            return 1.0 / rate
-        except ZeroDivisionError:
-            logger.error(f"Le taux de change pour {from_currency} est zéro, conversion impossible.")
+            forex_cache[cache_key] = {'rate': rate, 'timestamp': now}
+            return rate
+        else:
+            logger.warning(f"Taux de change non trouvé pour {from_currency} -> {to_currency}")
             return 1.0
-    else:
-        logger.warning(f"Taux de change non trouvé pour {from_currency} -> {to_currency}. Utilisation d'un taux de 1.0")
+            
+    except Exception as e:
+        logger.error(f"Erreur API FreeCurrency: {e}. Utilisation d'un taux de 1.0")
         return 1.0
 
 
@@ -2093,9 +2083,9 @@ def get_stock_price(symbol):
             change_percent = info.get('regularMarketChangePercent', 0)
 
         currency = info.get('currency', 'USD')
-        # La conversion utilise maintenant la fonction basée sur Finnhub
-        conversion_rate = get_live_exchange_rate(currency, 'CHF')
-        price_chf = current_price * conversion_rate
+        # Pour les cartes, on garde le prix dans la devise originale
+        # La conversion CHF sera utilisée uniquement pour le dashboard total
+        price_chf = current_price
 
         # Récupérer les données historiques pour 52W plus précises
         try:
@@ -2150,168 +2140,12 @@ def get_stock_price(symbol):
                 logger.info(f"Retour des données en cache pour {symbol}")
                 return jsonify(stock_price_cache[cache_key]['data'])
         
-        logger.warning(f"Yahoo Finance a échoué pour {symbol} ({e}), bascule sur EODHD puis Finnhub.")
+        logger.warning(f"Yahoo Finance a échoué pour {symbol} ({e}), bascule sur EODHD.")
         
-        # Pour les actions suisses, essayer EODHD en priorité
-        if item and item.stock_exchange and item.stock_exchange.upper() in ['SWX', 'SIX', 'SWISS', 'CH']:
-            logger.info(f"Essai avec EODHD pour {formatted_symbol}")
-            return get_stock_price_eodhd(formatted_symbol, item, cache_key)
-        
-        return get_stock_price_finnhub(symbol, item, cache_key)
+        # Essayer EODHD comme fallback
+        logger.info(f"Essai avec EODHD pour {formatted_symbol}")
+        return get_stock_price_eodhd(formatted_symbol, item, cache_key)
 
-
-def get_stock_price_finnhub(symbol: str, item: Optional[CollectionItem], cache_key: str):
-    """
-    Récupère le prix via l'API Finnhub. Utilise l'objet 'item' pour une précision maximale.
-    """
-    if not FINNHUB_API_KEY:
-        return jsonify({"error": "Clé API Finnhub non configurée"}), 500
-
-    try:
-        finnhub_symbol = symbol
-        # Only append exchange suffix if it's a valid exchange code and not already present
-        if item and item.stock_exchange:
-            exchange = item.stock_exchange.upper()
-            # Common exchange mappings for Finnhub
-            exchange_mapping = {
-                'US': '.O',  # US OTC
-                'NASDAQ': '.O',  # NASDAQ
-                'NYSE': '.N',  # NYSE
-                'LSE': '.L',  # London Stock Exchange
-                'SWX': '.SW',  # Swiss Exchange
-                'SIX': '.SW',  # SIX Swiss Exchange
-                'SWISS': '.SW',  # Swiss Exchange (alternative)
-                'CH': '.SW',  # Switzerland
-            }
-            
-            # Use mapping if available, but don't add suffix if symbol already contains it
-            if exchange in exchange_mapping:
-                suffix = exchange_mapping[exchange]
-                # Don't add suffix if symbol already ends with it
-                if not symbol.endswith(suffix):
-                    finnhub_symbol = f"{symbol}{suffix}"
-                else:
-                    finnhub_symbol = symbol  # Keep original symbol
-            elif not symbol.endswith(exchange):
-                finnhub_symbol = f"{symbol}.{exchange}"
-        
-        logger.info(f"Interrogation de Finnhub avec le symbole : {finnhub_symbol}")
-        
-        import requests
-        quote_url = f"https://finnhub.io/api/v1/quote?symbol={finnhub_symbol}&token={FINNHUB_API_KEY}"
-        response = requests.get(quote_url, timeout=10)
-        
-        if response.status_code == 429:
-            raise Exception("Rate limit Finnhub")
-        response.raise_for_status()
-        
-        quote_data = response.json()
-        current_price = quote_data.get('c')
-        
-        if current_price is None or (current_price == 0 and quote_data.get('pc') == 0):
-            # Try multiple symbol formats for Swiss stocks
-            symbol_variants = []
-            
-            if finnhub_symbol != symbol:
-                symbol_variants.append(symbol)  # Original symbol
-            
-            # For Swiss stocks, try different formats
-            if item and item.stock_exchange and item.stock_exchange.upper() in ['SWX', 'SIX', 'SWISS', 'CH']:
-                symbol_variants.extend([
-                    f"{symbol}.SW",  # Standard Swiss format
-                    f"{symbol}.SWX",  # Alternative Swiss format
-                    f"{symbol}.SIX",  # SIX format
-                    symbol,  # Plain symbol
-                ])
-            
-            # Try each variant
-            for variant in symbol_variants:
-                if variant == finnhub_symbol:
-                    continue  # Already tried
-                    
-                logger.info(f"Essai avec le symbole: '{variant}'")
-                quote_url_variant = f"https://finnhub.io/api/v1/quote?symbol={variant}&token={FINNHUB_API_KEY}"
-                response_variant = requests.get(quote_url_variant, timeout=10)
-                
-                if response_variant.ok:
-                    quote_data_variant = response_variant.json()
-                    current_price = quote_data_variant.get('c')
-                    if current_price and current_price > 0:
-                        finnhub_symbol = variant
-                        quote_data = quote_data_variant
-                        logger.info(f"✅ Symbole '{variant}' fonctionne")
-                        break
-                else:
-                    logger.warning(f"Symbole '{variant}' invalide")
-            
-            # If no variant worked
-            if current_price is None or current_price == 0:
-                raise Exception(f"Aucun format de symbole valide trouvé pour '{symbol}' sur Finnhub")
-
-        profile_url = f"https://finnhub.io/api/v1/stock/profile2?symbol={finnhub_symbol}&token={FINNHUB_API_KEY}"
-        profile_response = requests.get(profile_url, timeout=10)
-        
-        currency = 'USD'
-        company_name = symbol
-        if profile_response.ok and profile_response.json():
-            profile_data = profile_response.json()
-            currency = profile_data.get('currency', 'USD')
-            company_name = profile_data.get('name', symbol)
-        
-        # Récupérer les variations depuis Finnhub
-        previous_close = quote_data.get('pc', 0)
-        change = 0
-        change_percent = 0
-        
-        if previous_close and current_price:
-            change = current_price - previous_close
-            change_percent = (change / previous_close) * 100 if previous_close > 0 else 0
-
-        # Conversion en CHF avec le taux de change Finnhub
-        conversion_rate = get_live_exchange_rate(currency, 'CHF')
-        price_chf = current_price * conversion_rate
-
-        result = {
-            "symbol": symbol,
-            "price": current_price,
-            "price_chf": price_chf,
-            "currency": currency,
-            "company_name": company_name,
-            "last_update": datetime.now().isoformat(),
-            "source": "Finnhub",
-            "change": format_stock_value(change, is_price=True),
-            "change_percent": format_stock_value(change_percent, is_percent=True),
-            "volume": format_stock_value(quote_data.get('v'), is_volume=True),
-            "average_volume": format_stock_value(quote_data.get('av'), is_volume=True),
-            "pe_ratio": "N/A",  # Finnhub ne fournit pas le PE ratio
-            "fifty_two_week_high": format_stock_value(quote_data.get('h'), is_price=True),
-            "fifty_two_week_low": format_stock_value(quote_data.get('l'), is_price=True)
-        }
-        
-        stock_price_cache[cache_key] = {'data': result, 'timestamp': time.time()}
-        return jsonify(result)
-
-    except Exception as e:
-        logger.error(f"Erreur Finnhub pour {symbol}: {e}")
-        
-
-        
-        # Pour les actions suisses, utiliser le cache si disponible
-        if item and item.stock_exchange and item.stock_exchange.upper() in ['SWX', 'SIX', 'SWISS', 'CH']:
-            if cache_key in stock_price_cache:
-                logger.info(f"Erreur API, retour des données en cache pour {symbol}")
-                return jsonify(stock_price_cache[cache_key]['data'])
-        
-        # Pour les autres actions, utiliser le cache si disponible
-        if cache_key in stock_price_cache:
-            logger.info(f"Erreur API, retour des données en cache pour {symbol}")
-            return jsonify(stock_price_cache[cache_key]['data'])
-        
-        return jsonify({
-            "error": "Prix non disponible", 
-            "details": str(e),
-            "message": "Veuillez mettre à jour le prix manuellement."
-        }), 500
 
 
 def get_stock_price_eodhd(symbol: str, item: Optional[CollectionItem], cache_key: str):
@@ -2381,12 +2215,8 @@ def get_stock_price_eodhd(symbol: str, item: Optional[CollectionItem], cache_key
         if item and item.stock_exchange and item.stock_exchange.upper() in ['SWX', 'SIX', 'SWISS', 'CH']:
             currency = "CHF"
         
-        # Conversion en CHF si nécessaire
-        if currency != "CHF":
-            conversion_rate = get_live_exchange_rate(currency, 'CHF')
-            price_chf = current_price * conversion_rate
-        else:
-            price_chf = current_price
+        # Pour les cartes, on garde le prix dans la devise originale
+        price_chf = current_price
         
         result = {
             "symbol": symbol,  # Garder le symbole original pour l'affichage
