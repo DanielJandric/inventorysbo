@@ -3172,21 +3172,16 @@ Réponds en JSON avec:
         
         # Mettre à jour en base de données
         try:
-            response = requests.put(
-                f"{os.getenv('SUPABASE_URL')}/rest/v1/collection_items?id=eq.{item_id}",
-                headers={
-                    'apikey': os.getenv('SUPABASE_KEY'),
-                    'Authorization': f'Bearer {os.getenv("SUPABASE_KEY")}',
-                    'Content-Type': 'application/json',
-                    'Prefer': 'return=minimal'
-                },
-                json=update_data
-            )
+            response = supabase.table('items').update(update_data).eq('id', item_id).execute()
             
-            if response.status_code == 204:
+            if response.data:
                 # Succès - mettre à jour l'objet en mémoire
                 target_item.current_value = estimated_price
                 target_item.last_action_date = update_data['last_action_date']
+                
+                # Invalider le cache
+                smart_cache.invalidate('items')
+                smart_cache.invalidate('analytics')
                 
                 logger.info(f"✅ Prix IA mis à jour pour {target_item.name}: {estimated_price:,.0f} CHF")
                 
@@ -3198,7 +3193,7 @@ Réponds en JSON avec:
                     "item_name": target_item.name
                 })
             else:
-                logger.error(f"Erreur mise à jour base: {response.status_code} - {response.text}")
+                logger.error(f"Erreur mise à jour base: Aucune donnée retournée")
                 return jsonify({"error": "Erreur lors de la mise à jour en base de données"}), 500
                 
         except Exception as db_error:
@@ -3299,18 +3294,9 @@ Réponds en JSON avec:
                     'last_action_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 }
                 
-                db_response = requests.put(
-                    f"{os.getenv('SUPABASE_URL')}/rest/v1/collection_items?id=eq.{vehicle.id}",
-                    headers={
-                        'apikey': os.getenv('SUPABASE_KEY'),
-                        'Authorization': f'Bearer {os.getenv("SUPABASE_KEY")}',
-                        'Content-Type': 'application/json',
-                        'Prefer': 'return=minimal'
-                    },
-                    json=update_data
-                )
+                db_response = supabase.table('items').update(update_data).eq('id', vehicle.id).execute()
                 
-                if db_response.status_code == 204:
+                if db_response.data:
                     # Succès - mettre à jour l'objet en mémoire
                     vehicle.current_value = estimated_price
                     vehicle.last_action_date = update_data['last_action_date']
@@ -3331,7 +3317,7 @@ Réponds en JSON avec:
                         "id": vehicle.id,
                         "name": vehicle.name,
                         "status": "error",
-                        "error": f"Erreur base de données: {db_response.status_code}"
+                        "error": "Aucune donnée retournée par la mise à jour"
                     })
                 
                 # Délai pour éviter de surcharger l'API OpenAI
