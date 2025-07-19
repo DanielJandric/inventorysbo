@@ -3359,34 +3359,16 @@ Réponds en JSON avec:
 def fix_vehicle_categories():
     """Corriger automatiquement les catégories 'Véhicules' en 'Voitures'"""
     try:
-        # Récupérer tous les items avec des catégories similaires à 'Véhicules'
-        response = requests.get(
-            f"{os.getenv('SUPABASE_URL')}/rest/v1/collection_items",
-            headers={
-                'apikey': os.getenv('SUPABASE_KEY'),
-                'Authorization': f'Bearer {os.getenv("SUPABASE_KEY")}',
-                'Content-Type': 'application/json'
-            }
-        )
+        # Utiliser le client Supabase Python au lieu de requests
+        response = supabase.table('collection_items').select('*').execute()
         
-        if response.status_code != 200:
-            logger.error(f"❌ Erreur récupération items: {response.status_code} - {response.text}")
+        if response.data is None:
+            logger.error(f"❌ Erreur récupération items: Réponse vide")
             return jsonify({
-                "error": f"Erreur lors de la récupération des données (HTTP {response.status_code})",
-                "status_code": response.status_code,
-                "response_text": response.text[:500]
+                "error": "Erreur lors de la récupération des données - Réponse vide"
             }), 500
         
-        # Vérifier que la réponse contient des données JSON valides
-        try:
-            all_items = response.json()
-        except Exception as e:
-            logger.error(f"❌ Erreur parsing JSON: {e} - Response: {response.text[:200]}")
-            return jsonify({
-                "error": "Erreur lors du parsing de la réponse JSON",
-                "parse_error": str(e),
-                "response_preview": response.text[:200]
-            }), 500
+        all_items = response.data
         logger.info(f"📊 Total objets récupérés: {len(all_items)}")
         logger.info(f"🔍 Données brutes: {all_items[:2]}")  # Log des 2 premiers objets pour debug
         
@@ -3443,28 +3425,21 @@ def fix_vehicle_categories():
         
         for vehicle in vehicles_to_fix:
             try:
-                # Mettre à jour la catégorie
-                update_response = requests.patch(
-                    f"{os.getenv('SUPABASE_URL')}/rest/v1/collection_items?id=eq.{vehicle['id']}",
-                    headers={
-                        'apikey': os.getenv('SUPABASE_KEY'),
-                        'Authorization': f'Bearer {os.getenv("SUPABASE_KEY")}',
-                        'Content-Type': 'application/json',
-                        'Prefer': 'return=minimal'
-                    },
-                    json={'category': 'Voitures'}
-                )
+                # Mettre à jour la catégorie avec le client Supabase
+                update_response = supabase.table('collection_items').update({
+                    'category': 'Voitures'
+                }).eq('id', vehicle['id']).execute()
                 
-                if update_response.status_code == 204:
+                if update_response.data:
                     fixed_count += 1
                     logger.info(f"✅ Catégorie corrigée pour {vehicle['name']}: {vehicle.get('category')} → Voitures")
                 else:
                     errors.append({
                         "id": vehicle['id'],
                         "name": vehicle['name'],
-                        "error": f"Erreur {update_response.status_code}: {update_response.text}"
+                        "error": "Aucune donnée retournée par la mise à jour"
                     })
-                    logger.error(f"❌ Erreur correction catégorie {vehicle['name']}: {update_response.status_code}")
+                    logger.error(f"❌ Erreur correction catégorie {vehicle['name']}: Aucune donnée retournée")
                 
             except Exception as e:
                 errors.append({
