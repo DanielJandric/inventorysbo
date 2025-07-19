@@ -2054,9 +2054,14 @@ def get_stock_price(symbol):
             return jsonify(cached_data['data'])
 
     try:
+        # Exclure IREN de Yahoo Finance (cause des erreurs 429)
+        if symbol.upper() == 'IREN' or symbol.upper() == 'IREN.SW':
+            logger.info(f"IREN exclu de Yahoo Finance, bascule direct sur EODHD")
+            return get_stock_price_eodhd(formatted_symbol, item, cache_key)
+        
         import yfinance as yf
         # Délai plus long pour éviter rate limiting Yahoo Finance
-        time.sleep(2)
+        time.sleep(3)
         ticker = yf.Ticker(formatted_symbol)
         info = ticker.info
         

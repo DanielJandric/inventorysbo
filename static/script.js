@@ -481,11 +481,11 @@ function startStockPriceUpdates() {
     // Mise à jour initiale immédiate
     updateStockPrices();
     
-    // Puis toutes les 5 minutes (300000ms) pour des mises à jour plus fréquentes
+    // Puis toutes les 10 minutes (600000ms) pour éviter les rate limits
     if (stockPriceUpdateTimer) {
         clearInterval(stockPriceUpdateTimer);
     }
-    stockPriceUpdateTimer = setInterval(updateStockPrices, 300000);
+    stockPriceUpdateTimer = setInterval(updateStockPrices, 600000);
 }
 
 async function updateStockPrices() {
@@ -542,7 +542,7 @@ async function updateStockPrices() {
         }
         
                         // Délai plus long pour éviter rate limiting Yahoo Finance
-                const delay = item.stock_exchange && ['SWX', 'SIX', 'SWISS', 'CH'].includes(item.stock_exchange.toUpperCase()) ? 5000 : 2000;
+                const delay = item.stock_exchange && ['SWX', 'SIX', 'SWISS', 'CH'].includes(item.stock_exchange.toUpperCase()) ? 8000 : 3000;
                 await new Promise(resolve => setTimeout(resolve, delay));
     }
     
