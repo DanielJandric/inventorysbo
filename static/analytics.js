@@ -64,12 +64,16 @@ function updateStatistics() {
     const forSaleItems = allItems.filter(item => item.status === 'Available' && item.for_sale === true).length;
     const soldItems = allItems.filter(item => item.status === 'Sold').length;
     
-    // Calculer la valeur totale (exclure les objets vendus)
+    // Calculer la valeur totale (exclure les objets vendus, inclure les actions)
     const totalValue = allItems.reduce((sum, item) => {
-        if (item.status === 'Available' && item.asking_price) {
-            return sum + item.asking_price;
-        } else if (item.category === 'Actions' && item.current_price && item.stock_quantity) {
+        if (item.status === 'Sold') {
+            return sum; // Exclure les objets vendus
+        }
+        
+        if (item.category === 'Actions' && item.current_price && item.stock_quantity) {
             return sum + (item.current_price * item.stock_quantity);
+        } else if (item.status === 'Available' && item.asking_price) {
+            return sum + item.asking_price;
         }
         return sum;
     }, 0);
@@ -114,91 +118,26 @@ function toggleCategory(category) {
     updateChart();
 }
 
-// Initialiser le Treemap
+// Initialiser le Treemap avec D3.js
 function initializeChart() {
-    const ctx = document.getElementById('categoryChart').getContext('2d');
+    const container = document.getElementById('categoryChart');
+    container.innerHTML = ''; // Nettoyer le contenu
     
-    categoryChart = new Chart(ctx, {
-        type: 'treemap',
-        data: {
-            datasets: [{
-                tree: [],
-                key: 'value',
-                groups: ['category'],
-                spacing: 2,
-                backgroundColor: function(ctx) {
-                    if (ctx.type !== 'data') return 'transparent';
-                    const colors = chartColors;
-                    return colors[ctx.dataIndex % colors.length];
-                },
-                borderColor: 'rgba(0, 220, 255, 0.3)',
-                borderWidth: 2,
-                hoverBorderColor: 'rgba(0, 220, 255, 0.8)',
-                hoverBorderWidth: 3,
-                labels: {
-                    display: true,
-                    formatter: function(ctx) {
-                        const value = ctx.raw.v;
-                        const category = ctx.raw.g;
-                        const percentage = ctx.raw.p;
-                        return [
-                            category,
-                            `${formatPrice(value)}`,
-                            `(${percentage}%)`
-                        ];
-                    },
-                    color: '#e0e6e7',
-                    font: {
-                        family: 'Inter',
-                        size: 11,
-                        weight: '600'
-                    }
-                }
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    display: false
-                },
-                tooltip: {
-                    backgroundColor: 'rgba(10, 40, 50, 0.9)',
-                    titleColor: '#00e5ff',
-                    bodyColor: '#e0e6e7',
-                    borderColor: 'rgba(0, 220, 255, 0.3)',
-                    borderWidth: 1,
-                    cornerRadius: 8,
-                    displayColors: true,
-                    callbacks: {
-                        title: function(context) {
-                            return context[0].raw.g;
-                        },
-                        label: function(context) {
-                            const value = context.raw.v;
-                            const percentage = context.raw.p;
-                            return [
-                                `Valeur: ${formatPrice(value)}`,
-                                `Pourcentage: ${percentage}%`
-                            ];
-                        }
-                    }
-                }
-            },
-            animation: {
-                duration: 1000,
-                easing: 'easeOutQuart'
-            }
-        }
-    });
+    // Créer un SVG pour le Treemap
+    const svg = d3.select(container)
+        .append('svg')
+        .attr('width', '100%')
+        .attr('height', '400px')
+        .style('background', 'transparent');
+    
+    categoryChart = { svg: svg, container: container };
     
     updateChart();
 }
 
-// Mettre à jour le Treemap
+// Mettre à jour le Treemap avec D3.js
 function updateChart() {
-    if (!categoryChart) return;
+    if (!categoryChart || !categoryChart.svg) return;
     
     let filteredItems = allItems;
     
@@ -210,16 +149,16 @@ function updateChart() {
     // Grouper par catégorie et calculer les valeurs monétaires
     const categoryData = {};
     filteredItems.forEach(item => {
-        if (item.category) {
+        if (item.category && item.status !== 'Sold') {
             if (!categoryData[item.category]) {
                 categoryData[item.category] = 0;
             }
             
             let value = 0;
-            if (item.status === 'Available' && item.asking_price) {
-                value = item.asking_price;
-            } else if (item.category === 'Actions' && item.current_price && item.stock_quantity) {
+            if (item.category === 'Actions' && item.current_price && item.stock_quantity) {
                 value = item.current_price * item.stock_quantity;
+            } else if (item.status === 'Available' && item.asking_price) {
+                value = item.asking_price;
             }
             
             categoryData[item.category] += value;
@@ -231,7 +170,7 @@ function updateChart() {
     
     // Préparer les données pour le Treemap
     const treeData = Object.entries(categoryData).map(([category, value]) => ({
-        category: category,
+        name: category,
         value: value,
         percentage: totalValue > 0 ? ((value / totalValue) * 100).toFixed(1) : 0
     }));
@@ -239,28 +178,93 @@ function updateChart() {
     // S'assurer que les Actions apparaissent en premier si elles existent
     const sortedData = treeData.sort((a, b) => {
         // Priorité aux Actions
-        if (a.category === 'Actions' && b.category !== 'Actions') return -1;
-        if (b.category === 'Actions' && a.category !== 'Actions') return 1;
+        if (a.name === 'Actions' && b.name !== 'Actions') return -1;
+        if (b.name === 'Actions' && a.name !== 'Actions') return 1;
         // Sinon trier par valeur décroissante
         return b.value - a.value;
     });
     
-    // Mettre à jour le Treemap
-    categoryChart.data.datasets[0].tree = sortedData.map(item => ({
-        v: item.value,
-        g: item.category,
-        p: item.percentage
-    }));
+    // Nettoyer le SVG
+    categoryChart.svg.selectAll('*').remove();
     
-    categoryChart.update();
+    // Créer la hiérarchie pour D3
+    const root = d3.stratify()
+        .id(d => d.name)
+        .parentId(() => null)
+        (sortedData);
+    
+    root.sum(d => d.value);
+    
+    // Créer le Treemap
+    const treemap = d3.treemap()
+        .size([categoryChart.container.clientWidth, 400])
+        .padding(2);
+    
+    treemap(root);
+    
+    // Créer les rectangles
+    const nodes = categoryChart.svg.selectAll('g')
+        .data(root.leaves())
+        .enter()
+        .append('g')
+        .attr('transform', d => `translate(${d.x0},${d.y0})`);
+    
+    // Ajouter les rectangles
+    nodes.append('rect')
+        .attr('width', d => d.x1 - d.x0)
+        .attr('height', d => d.y1 - d.y0)
+        .attr('fill', (d, i) => chartColors[i % chartColors.length])
+        .attr('stroke', 'rgba(0, 220, 255, 0.3)')
+        .attr('stroke-width', 2)
+        .style('cursor', 'pointer')
+        .on('mouseover', function(event, d) {
+            d3.select(this)
+                .attr('stroke', 'rgba(0, 220, 255, 0.8)')
+                .attr('stroke-width', 3);
+        })
+        .on('mouseout', function(event, d) {
+            d3.select(this)
+                .attr('stroke', 'rgba(0, 220, 255, 0.3)')
+                .attr('stroke-width', 2);
+        });
+    
+    // Ajouter les labels
+    nodes.append('text')
+        .attr('x', 10)
+        .attr('y', 20)
+        .attr('fill', '#e0e6e7')
+        .style('font-family', 'Inter')
+        .style('font-size', '12px')
+        .style('font-weight', '600')
+        .text(d => d.data.name);
+    
+    nodes.append('text')
+        .attr('x', 10)
+        .attr('y', 35)
+        .attr('fill', '#e0e6e7')
+        .style('font-family', 'Inter')
+        .style('font-size', '10px')
+        .text(d => formatPrice(d.data.value));
+    
+    nodes.append('text')
+        .attr('x', 10)
+        .attr('y', 50)
+        .attr('fill', '#88a0a8')
+        .style('font-family', 'Inter')
+        .style('font-size', '9px')
+        .text(d => `(${d.data.percentage}%)`);
     
     // Mettre à jour le pourcentage
     const totalSelected = Object.values(categoryData).reduce((sum, value) => sum + value, 0);
     const totalAllValue = allItems.reduce((sum, item) => {
-        if (item.status === 'Available' && item.asking_price) {
-            return sum + item.asking_price;
-        } else if (item.category === 'Actions' && item.current_price && item.stock_quantity) {
+        if (item.status === 'Sold') {
+            return sum; // Exclure les objets vendus
+        }
+        
+        if (item.category === 'Actions' && item.current_price && item.stock_quantity) {
             return sum + (item.current_price * item.stock_quantity);
+        } else if (item.status === 'Available' && item.asking_price) {
+            return sum + item.asking_price;
         }
         return sum;
     }, 0);
@@ -274,13 +278,13 @@ function updateTopCategories() {
     const categoryValues = {};
     
     allItems.forEach(item => {
-        if (!item.category) return;
+        if (!item.category || item.status === 'Sold') return;
         
         let value = 0;
-        if (item.status === 'Available' && item.asking_price) {
-            value = item.asking_price;
-        } else if (item.category === 'Actions' && item.current_price && item.stock_quantity) {
+        if (item.category === 'Actions' && item.current_price && item.stock_quantity) {
             value = item.current_price * item.stock_quantity;
+        } else if (item.status === 'Available' && item.asking_price) {
+            value = item.asking_price;
         }
         
         if (!categoryValues[item.category]) {
