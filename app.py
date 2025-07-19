@@ -2897,23 +2897,94 @@ def generate_portfolio_pdf():
         # Rendre le template HTML
         html_content = render_template('portfolio_pdf.html', **template_data)
         
-        # Générer le PDF avec pdfkit
+        # Générer le PDF avec WeasyPrint
         try:
-            import pdfkit
+            from weasyprint import HTML, CSS
+            from weasyprint.text.fonts import FontConfiguration
             
-            # Options pour pdfkit
-            options = {
-                'page-size': 'A4',
-                'margin-top': '0.75in',
-                'margin-right': '0.75in',
-                'margin-bottom': '0.75in',
-                'margin-left': '0.75in',
-                'encoding': "UTF-8",
-                'no-outline': None
+            # Configuration des polices
+            font_config = FontConfiguration()
+            
+            # CSS pour le PDF
+            css_string = '''
+            @page {
+                size: A4;
+                margin: 1in;
+                @top-center {
+                    content: "BONVIN - Collection Privée";
+                    font-size: 10pt;
+                    color: #666;
+                }
+                @bottom-center {
+                    content: "Page " counter(page) " sur " counter(pages);
+                    font-size: 10pt;
+                    color: #666;
+                }
             }
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 12pt;
+                line-height: 1.4;
+                color: #333;
+            }
+            .header {
+                text-align: center;
+                margin-bottom: 2em;
+                border-bottom: 2px solid #333;
+                padding-bottom: 1em;
+            }
+            .section {
+                margin-bottom: 2em;
+            }
+            .section-title {
+                font-size: 16pt;
+                font-weight: bold;
+                margin-bottom: 1em;
+                color: #333;
+                border-bottom: 1px solid #ccc;
+                padding-bottom: 0.5em;
+            }
+            .item {
+                margin-bottom: 1em;
+                padding: 0.5em;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+            }
+            .item-name {
+                font-weight: bold;
+                color: #333;
+            }
+            .item-details {
+                color: #666;
+                font-size: 10pt;
+            }
+            .price {
+                font-weight: bold;
+                color: #2c5aa0;
+            }
+            .status-available { color: #28a745; }
+            .status-for-sale { color: #dc3545; }
+            .status-sold { color: #ffc107; }
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: 1em;
+            }
+            th, td {
+                border: 1px solid #ddd;
+                padding: 8px;
+                text-align: left;
+            }
+            th {
+                background-color: #f8f9fa;
+                font-weight: bold;
+            }
+            '''
             
             # Créer le PDF
-            pdf = pdfkit.from_string(html_content, False, options=options)
+            html_doc = HTML(string=html_content)
+            css_doc = CSS(string=css_string, font_config=font_config)
+            pdf = html_doc.write_pdf(stylesheets=[css_doc], font_config=font_config)
             
             # Retourner le PDF
             response = Response(pdf, mimetype='application/pdf')
@@ -2923,9 +2994,9 @@ def generate_portfolio_pdf():
             return response
             
         except ImportError:
-            logger.error("❌ pdfkit non installé")
+            logger.error("❌ WeasyPrint non installé")
             return jsonify({
-                "error": "pdfkit non installé. Installez avec: pip install pdfkit"
+                "error": "WeasyPrint non installé. Installez avec: pip install weasyprint"
             }), 500
             
     except Exception as e:
@@ -3100,23 +3171,94 @@ def generate_asset_class_report(asset_class_name):
         # Rendre le template HTML
         html_content = render_template('bank_report_pdf.html', **template_data)
         
-        # Générer le PDF avec pdfkit
+        # Générer le PDF avec WeasyPrint
         try:
-            import pdfkit
+            from weasyprint import HTML, CSS
+            from weasyprint.text.fonts import FontConfiguration
             
-            # Options pour pdfkit
-            options = {
-                'page-size': 'A4',
-                'margin-top': '0.75in',
-                'margin-right': '0.75in',
-                'margin-bottom': '0.75in',
-                'margin-left': '0.75in',
-                'encoding': "UTF-8",
-                'no-outline': None
+            # Configuration des polices
+            font_config = FontConfiguration()
+            
+            # CSS pour le PDF
+            css_string = '''
+            @page {
+                size: A4;
+                margin: 1in;
+                @top-center {
+                    content: "BONVIN - Rapport Classe d'Actif";
+                    font-size: 10pt;
+                    color: #666;
+                }
+                @bottom-center {
+                    content: "Page " counter(page) " sur " counter(pages);
+                    font-size: 10pt;
+                    color: #666;
+                }
             }
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 12pt;
+                line-height: 1.4;
+                color: #333;
+            }
+            .header {
+                text-align: center;
+                margin-bottom: 2em;
+                border-bottom: 2px solid #333;
+                padding-bottom: 1em;
+            }
+            .section {
+                margin-bottom: 2em;
+            }
+            .section-title {
+                font-size: 16pt;
+                font-weight: bold;
+                margin-bottom: 1em;
+                color: #333;
+                border-bottom: 1px solid #ccc;
+                padding-bottom: 0.5em;
+            }
+            .item {
+                margin-bottom: 1em;
+                padding: 0.5em;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+            }
+            .item-name {
+                font-weight: bold;
+                color: #333;
+            }
+            .item-details {
+                color: #666;
+                font-size: 10pt;
+            }
+            .price {
+                font-weight: bold;
+                color: #2c5aa0;
+            }
+            .status-available { color: #28a745; }
+            .status-for-sale { color: #dc3545; }
+            .status-sold { color: #ffc107; }
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: 1em;
+            }
+            th, td {
+                border: 1px solid #ddd;
+                padding: 8px;
+                text-align: left;
+            }
+            th {
+                background-color: #f8f9fa;
+                font-weight: bold;
+            }
+            '''
             
             # Créer le PDF
-            pdf = pdfkit.from_string(html_content, False, options=options)
+            html_doc = HTML(string=html_content)
+            css_doc = CSS(string=css_string, font_config=font_config)
+            pdf = html_doc.write_pdf(stylesheets=[css_doc], font_config=font_config)
             
             response = Response(pdf, mimetype='application/pdf')
             response.headers['Content-Disposition'] = f'attachment; filename=bonvin_{asset_class_name.replace(" ", "_").lower()}_{datetime.now().strftime("%Y%m%d_%H%M")}.pdf'
@@ -3125,9 +3267,9 @@ def generate_asset_class_report(asset_class_name):
             return response
             
         except ImportError:
-            logger.error("❌ pdfkit non installé")
+            logger.error("❌ WeasyPrint non installé")
             return jsonify({
-                "error": "pdfkit non installé. Installez avec: pip install pdfkit"
+                "error": "WeasyPrint non installé. Installez avec: pip install weasyprint"
             }), 500
             
     except Exception as e:
@@ -3267,23 +3409,94 @@ def generate_all_asset_classes_report():
         # Combiner tous les HTML
         full_html = '\n'.join(html_parts)
         
-        # Générer le PDF avec pdfkit
+        # Générer le PDF avec WeasyPrint
         try:
-            import pdfkit
+            from weasyprint import HTML, CSS
+            from weasyprint.text.fonts import FontConfiguration
             
-            # Options pour pdfkit
-            options = {
-                'page-size': 'A4',
-                'margin-top': '0.75in',
-                'margin-right': '0.75in',
-                'margin-bottom': '0.75in',
-                'margin-left': '0.75in',
-                'encoding': "UTF-8",
-                'no-outline': None
+            # Configuration des polices
+            font_config = FontConfiguration()
+            
+            # CSS pour le PDF
+            css_string = '''
+            @page {
+                size: A4;
+                margin: 1in;
+                @top-center {
+                    content: "BONVIN - Rapport Complet Classes d'Actifs";
+                    font-size: 10pt;
+                    color: #666;
+                }
+                @bottom-center {
+                    content: "Page " counter(page) " sur " counter(pages);
+                    font-size: 10pt;
+                    color: #666;
+                }
             }
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 12pt;
+                line-height: 1.4;
+                color: #333;
+            }
+            .header {
+                text-align: center;
+                margin-bottom: 2em;
+                border-bottom: 2px solid #333;
+                padding-bottom: 1em;
+            }
+            .section {
+                margin-bottom: 2em;
+            }
+            .section-title {
+                font-size: 16pt;
+                font-weight: bold;
+                margin-bottom: 1em;
+                color: #333;
+                border-bottom: 1px solid #ccc;
+                padding-bottom: 0.5em;
+            }
+            .item {
+                margin-bottom: 1em;
+                padding: 0.5em;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+            }
+            .item-name {
+                font-weight: bold;
+                color: #333;
+            }
+            .item-details {
+                color: #666;
+                font-size: 10pt;
+            }
+            .price {
+                font-weight: bold;
+                color: #2c5aa0;
+            }
+            .status-available { color: #28a745; }
+            .status-for-sale { color: #dc3545; }
+            .status-sold { color: #ffc107; }
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: 1em;
+            }
+            th, td {
+                border: 1px solid #ddd;
+                padding: 8px;
+                text-align: left;
+            }
+            th {
+                background-color: #f8f9fa;
+                font-weight: bold;
+            }
+            '''
             
             # Créer le PDF
-            pdf = pdfkit.from_string(full_html, False, options=options)
+            html_doc = HTML(string=full_html)
+            css_doc = CSS(string=css_string, font_config=font_config)
+            pdf = html_doc.write_pdf(stylesheets=[css_doc], font_config=font_config)
             
             response = Response(pdf, mimetype='application/pdf')
             response.headers['Content-Disposition'] = f'attachment; filename=bonvin_all_asset_classes_{datetime.now().strftime("%Y%m%d_%H%M")}.pdf'
@@ -3292,9 +3505,9 @@ def generate_all_asset_classes_report():
             return response
             
         except ImportError:
-            logger.error("❌ pdfkit non installé")
+            logger.error("❌ WeasyPrint non installé")
             return jsonify({
-                "error": "pdfkit non installé. Installez avec: pip install pdfkit"
+                "error": "WeasyPrint non installé. Installez avec: pip install weasyprint"
             }), 500
             
     except Exception as e:
