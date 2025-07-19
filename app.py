@@ -3359,9 +3359,9 @@ Réponds en JSON avec:
 def fix_vehicle_categories():
     """Corriger automatiquement les catégories 'Véhicules' en 'Voitures'"""
     try:
-        # Récupérer tous les items avec la catégorie 'Véhicules'
+        # Récupérer tous les items avec des catégories similaires à 'Véhicules'
         response = requests.get(
-            f"{os.getenv('SUPABASE_URL')}/rest/v1/collection_items?category=eq.Véhicules",
+            f"{os.getenv('SUPABASE_URL')}/rest/v1/collection_items",
             headers={
                 'apikey': os.getenv('SUPABASE_KEY'),
                 'Authorization': f'Bearer {os.getenv("SUPABASE_KEY")}',
@@ -3373,12 +3373,20 @@ def fix_vehicle_categories():
             logger.error(f"Erreur récupération items: {response.status_code} - {response.text}")
             return jsonify({"error": "Erreur lors de la récupération des données"}), 500
         
-        vehicles_to_fix = response.json()
+        all_items = response.json()
+        
+        # Filtrer les items avec des catégories similaires à 'Véhicules'
+        vehicles_to_fix = []
+        for item in all_items:
+            category = item.get('category', '').lower()
+            if 'vehicule' in category or 'véhicule' in category or 'vehicules' in category or 'véhicules' in category:
+                vehicles_to_fix.append(item)
         
         if not vehicles_to_fix:
             return jsonify({
-                "message": "Aucun objet avec la catégorie 'Véhicules' trouvé",
-                "fixed": 0
+                "message": "Aucun objet avec une catégorie contenant 'Véhicule' trouvé",
+                "fixed": 0,
+                "all_categories": list(set([item.get('category') for item in all_items if item.get('category')]))
             })
         
         fixed_count = 0
@@ -3418,6 +3426,7 @@ def fix_vehicle_categories():
                 logger.error(f"❌ Exception correction catégorie {vehicle['name']}: {e}")
         
         logger.info(f"🔄 Correction catégories terminée: {fixed_count}/{len(vehicles_to_fix)} objets corrigés")
+        logger.info(f"📊 Catégories trouvées: {[item.get('category') for item in vehicles_to_fix]}")
         
         return jsonify({
             "success": True,
