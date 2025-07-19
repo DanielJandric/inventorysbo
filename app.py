@@ -1695,44 +1695,14 @@ class PureOpenAIEngineWithRAG:
         return self.generate_response_with_history(query, items, analytics, [])
     
     def generate_response_with_history(self, query: str, items: List[CollectionItem], analytics: Dict[str, Any], conversation_history: List[Dict[str, str]]) -> str:
-        """Génère une réponse via OpenAI GPT-4 avec approche hybride intelligente et mémoire conversationnelle"""
+        """Génère une réponse via OpenAI GPT-4 avec intelligence naturelle et mémoire conversationnelle"""
         
         if not self.client:
             return "Moteur IA Indisponible"
         
-        # Détecter si c'est une recherche par concepts qui nécessite l'intelligence de GPT-4
-        query_lower = query.lower()
-        concept_keywords = [
-            'rapide', 'rapides', 'sûr', 'sûrs', 'sécurisé', 'sécurisés',
-            'luxe', 'luxueux', 'premium', 'haut de gamme',
-            'opportunité', 'opportunités', 'croissance', 'potentiel',
-            'risque', 'risques', 'volatil', 'stable', 'stabilité',
-            'récents', 'anciens', 'neufs', 'occasion',
-            'places', 'sièges', 'portes', 'cylindres',
-            'électrique', 'hybride', 'essence', 'diesel',
-            'sport', 'sportif', 'confort', 'familial',
-            'investissement', 'placement', 'épargne',
-            'tendance', 'tendances', 'populaire', 'rare',
-            'cher', 'bon marché', 'accessible', 'exclusif'
-        ]
-        
-        # Si la requête contient des concepts ou est une question complexe, utiliser l'IA intelligente
-        is_concept_search = any(keyword in query_lower for keyword in concept_keywords)
-        is_complex_question = any(word in query_lower for word in ['pourquoi', 'comment', 'quand', 'où', 'quel', 'quelle', 'quels', 'quelles'])
-        
-        # Pour les petits datasets (< 500 items) OU les recherches par concepts, utiliser l'approche FULL CONTEXT
-        if len(items) < 500 or is_concept_search or is_complex_question:
-            logger.info(f"Utilisation de l'approche FULL CONTEXT - Dataset: {len(items)} items, Concept: {is_concept_search}, Complexe: {is_complex_question}")
-            return self._generate_full_context_response_with_history(query, items, analytics, conversation_history, is_concept_search)
-        
-        # Pour les gros datasets, utiliser la recherche sémantique
-        items_with_embeddings = sum(1 for item in items if item.embedding)
-        if items_with_embeddings > 0:
-            logger.info(f"Dataset large, utilisation de la recherche sémantique pour: '{query}'")
-            return self._generate_semantic_response_with_history(query, items, analytics, conversation_history)
-        
-        # Fallback sur l'ancienne méthode avec historique
-        logger.info(f"Pas d'embeddings, utilisation de la méthode classique avec historique")
+        # TOUJOURS utiliser l'approche FULL CONTEXT - faire confiance à GPT-4
+        logger.info(f"Utilisation de l'approche FULL CONTEXT - Faire confiance à l'intelligence de GPT-4")
+        return self._generate_full_context_response_with_history(query, items, analytics, conversation_history, True)
         
         # Cache avec historique
         history_hash = hashlib.md5(json.dumps(conversation_history, sort_keys=True).encode()).hexdigest()[:8]
@@ -1818,75 +1788,31 @@ Si la question fait référence à des éléments mentionnés précédemment, ut
             # Construire le contexte COMPLET avec TOUS les objets
             complete_context = self._build_complete_dataset_context(items, analytics)
             
-            # Prompt système optimisé pour l'analyse complète avec recherche par concepts et mémoire conversationnelle
+            # Prompt système simplifié - faire confiance à l'intelligence naturelle de GPT-4
             system_prompt = """Tu es l'assistant IA expert de la collection BONVIN avec mémoire conversationnelle.
 Tu as TOUS les objets de la collection et tu peux faire des analyses sophistiquées et détaillées.
 Tu peux te référer à l'historique de la conversation pour contextualiser tes réponses.
 
-POUVOIRS SPÉCIAUX POUR RECHERCHE INTELLIGENTE:
-1. **Recherche par concepts** : Tu peux identifier les objets selon des concepts abstraits
-   - "voitures rapides" → Ferrari, Lamborghini, Porsche GT3, voitures électriques
-   - "investissements sûrs" → Actions stables (Nestlé), immobilier, montres de luxe
-   - "objets de luxe" → Montres premium, voitures haut de gamme, art
-   - "opportunités de croissance" → Actions tech, start-ups, objets sous-évalués
+TON INTELLIGENCE NATURELLE:
+- Tu peux comprendre naturellement les questions en français
+- Tu peux analyser les données et faire des connexions logiques
+- Tu peux compter, filtrer, comparer et analyser selon le contexte
+- Tu peux identifier les objets pertinents selon l'intention de la question
+- Tu peux utiliser ton bon sens et tes connaissances générales
 
-2. **Recherche par caractéristiques** : Tu peux analyser les spécifications
-   - "voitures 4 places" → Analyser les descriptions et spécifications
-   - "objets en bon état" → Filtrer par condition (Excellent, Parfait)
-   - "investissements récents" → Analyser les dates d'acquisition
-   - "objets chers" → Analyser les prix demandés et d'acquisition
+EXEMPLES DE COMPRÉHENSION NATURELLE:
+- "combien de Urus" → Compter les objets contenant "Urus" dans le nom
+- "voitures pas en vente" → Filtrer les voitures avec for_sale = false
+- "objets chers" → Identifier les objets avec des prix élevés
+- "investissements sûrs" → Analyser la stabilité des investissements
+- "voitures rapides" → Identifier les voitures de sport et de luxe
 
-3. **Recherche contextuelle** : Tu peux comprendre le contexte
-   - "tendances" → Analyser les acquisitions récentes et les prix
-   - "risques" → Identifier les investissements volatils
-   - "performance" → Analyser les plus-values et moins-values
-   - "diversification" → Analyser la répartition par catégorie
-
-4. **Analyse comparative** : Tu peux comparer intelligemment
-   - Entre marques, catégories, années, prix
-   - Performance relative des investissements
-   - Opportunités vs risques
-
-5. **Insights business** : Tu peux proposer des recommandations
-   - Objets à vendre ou acheter
-   - Stratégies d'investissement
-   - Optimisation du portefeuille
-
-6. **Mémoire conversationnelle** : Tu peux te référer à l'historique
-   - Utilise les informations précédentes pour enrichir tes réponses
-   - Évite de répéter des informations déjà données sauf si demandé
-   - Fais des liens avec les questions précédentes
-
-7. **Questions complexes** : Tu peux analyser des conditions spécifiques
-   - "voitures pas en vente" = voitures avec for_sale = false
-   - "voitures en vente" = voitures avec for_sale = true
-   - "objets disponibles" = objets avec status = "Available"
-   - "objets vendus" = objets avec status = "Sold"
-   - "combien de X" = compter précisément les objets correspondants
-
-8. **Recherche de modèles spécifiques** : Tu peux identifier des modèles précis
-   - "Urus" → Lamborghini Urus uniquement
-   - "Cayenne" → Porsche Cayenne uniquement
-   - "911" → Porsche 911 uniquement
-   - "Aventador" → Lamborghini Aventador uniquement
-   - "488" → Ferrari 488 uniquement
-
-RÈGLES D'OR:
-1. **Précision absolue** : Utilise les données exactes de la collection
-2. **Intelligence conceptuelle** : Utilise tes connaissances pour interpréter les concepts
-3. **Recherche complète** : Analyse TOUS les objets pertinents, pas seulement une sélection
-4. **Contextualisation** : Explique pourquoi chaque objet correspond au concept demandé
-5. **Insights business** : Va au-delà des faits, propose des analyses et recommandations
-6. **Structure claire** : Organise tes réponses de manière professionnelle
-7. **Mémoire conversationnelle** : Utilise l'historique pour enrichir tes réponses
-
-EXEMPLES DE RECHERCHE PAR CONCEPTS:
-- "Montre-moi mes voitures rapides" → Identifier Ferrari, Lamborghini, Porsche GT3, voitures électriques
-- "Quels sont mes investissements sûrs ?" → Actions stables, immobilier, montres de luxe
-- "Opportunités de croissance" → Actions tech, start-ups, objets sous-évalués
-- "Objets de luxe" → Montres premium, voitures haut de gamme, art
-- "Risques dans mon portefeuille" → Actions volatiles, objets en mauvais état
-- "Tendances récentes" → Acquisitions récentes, évolution des prix"""
+RÈGLES SIMPLES:
+1. **Précision** : Utilise les données exactes de la collection
+2. **Intelligence** : Utilise ton bon sens pour comprendre l'intention
+3. **Contexte** : Utilise l'historique de conversation quand pertinent
+4. **Structure** : Organise tes réponses clairement
+5. **Comptage** : Donne toujours le nombre exact d'objets trouvés"""
 
             # Construire les messages avec historique
             messages = [{"role": "system", "content": system_prompt}]
@@ -1899,27 +1825,15 @@ EXEMPLES DE RECHERCHE PAR CONCEPTS:
                         "content": msg['content']
                     })
             
-            # Prompt utilisateur avec contexte complet et recherche par concepts
+            # Prompt utilisateur simplifié - faire confiance à l'intelligence naturelle
             user_prompt = f"""QUESTION: {query}
 
 DONNÉES COMPLÈTES DE LA COLLECTION BONVIN:
 {complete_context}
 
-INSTRUCTIONS D'ANALYSE:
-1. **Analysez la question** : Comprenez l'intention et les concepts demandés
-2. **Recherche intelligente** : Identifiez TOUS les objets pertinents selon les concepts
-3. **Contextualisation** : Expliquez pourquoi chaque objet correspond au concept
-4. **Analyse comparative** : Comparez les objets trouvés entre eux
-5. **Insights business** : Proposez des recommandations et insights
-6. **Mémoire conversationnelle** : Utilisez l'historique pour enrichir votre réponse
-
-EXEMPLES DE RECHERCHE PAR CONCEPTS:
-- Si on demande "voitures rapides" → Cherchez Ferrari, Lamborghini, Porsche GT3, voitures électriques
-- Si on demande "investissements sûrs" → Cherchez actions stables, immobilier, montres de luxe
-- Si on demande "opportunités" → Cherchez objets sous-évalués, actions tech, start-ups
-- Si on demande "objets de luxe" → Cherchez montres premium, voitures haut de gamme, art
-
-Fournissez une réponse COMPLÈTE, STRUCTURÉE et CONTEXTUALISÉE basée sur votre analyse intelligente de toutes les données et l'historique de notre conversation."""
+Analysez cette question naturellement en utilisant votre intelligence et votre bon sens.
+Comprenez l'intention de l'utilisateur et répondez de manière précise et structurée.
+Utilisez l'historique de conversation si pertinent."""
 
             messages.append({"role": "user", "content": user_prompt})
 
@@ -1947,7 +1861,7 @@ Fournissez une réponse COMPLÈTE, STRUCTURÉE et CONTEXTUALISÉE basée sur vot
             
         except Exception as e:
             logger.error(f"Erreur analyse complète: {e}")
-            return self._fallback_to_keyword_search(query, items)
+            return "❌ Erreur lors de l'analyse. Veuillez reformuler votre question."
     
     def _generate_semantic_response(self, query: str, items: List[CollectionItem], analytics: Dict[str, Any]) -> str:
         """Génère une réponse via recherche sémantique (sans historique)"""
@@ -1961,15 +1875,15 @@ Fournissez une réponse COMPLÈTE, STRUCTURÉE et CONTEXTUALISÉE basée sur vot
             logger.info(f"Recherche sémantique - Items avec embeddings: {items_with_embeddings}/{len(items)}")
             
             if items_with_embeddings == 0:
-                logger.warning("Aucun embedding disponible, bascule sur recherche par mots-clés")
-                return self._fallback_to_keyword_search(query, items)
+                logger.warning("Aucun embedding disponible, utilisation de l'analyse complète")
+                return self._generate_full_context_response_with_history(query, items, analytics, conversation_history, True)
             
             # Recherche sémantique
             semantic_results = self.semantic_search.semantic_search(query, items, top_k=15)
             
             if not semantic_results:
-                logger.warning("Pas de résultats sémantiques, bascule sur recherche par mots-clés")
-                return self._fallback_to_keyword_search(query, items)
+                logger.warning("Pas de résultats sémantiques, utilisation de l'analyse complète")
+                return self._generate_full_context_response_with_history(query, items, analytics, conversation_history, True)
             
             # Filtrer les résultats pertinents (score > 0.3 au lieu de 0.5 pour être plus inclusif)
             relevant_results = [(item, score) for item, score in semantic_results if score > 0.3]
@@ -2052,7 +1966,7 @@ Utilise l'historique pour enrichir ta réponse et éviter les répétitions."""
             
         except Exception as e:
             logger.error(f"Erreur recherche sémantique: {e}")
-            return self._fallback_to_keyword_search(query, items)
+            return self._generate_full_context_response_with_history(query, items, analytics, conversation_history, True)
     
     def _build_rag_context(self, results: List[Tuple[CollectionItem, float]], query: str) -> str:
         """Construit le contexte pour RAG"""
@@ -2109,132 +2023,7 @@ Utilise l'historique pour enrichir ta réponse et éviter les répétitions."""
         
         return "\n".join(context_parts)
     
-    def _fallback_to_keyword_search(self, query: str, items: List[CollectionItem]) -> str:
-        """Recherche par mots-clés si la recherche sémantique échoue"""
-        query_lower = query.lower()
-        
-        # Détecter les intentions spécifiques
-        car_brands = {
-            'allemandes': ['porsche', 'bmw', 'mercedes', 'audi', 'volkswagen'],
-            'italiennes': ['ferrari', 'lamborghini', 'maserati', 'alfa romeo'],
-            'françaises': ['peugeot', 'renault', 'citroën', 'bugatti'],
-            'japonaises': ['toyota', 'honda', 'nissan', 'mazda', 'lexus'],
-            'anglaises': ['rolls', 'bentley', 'aston martin', 'jaguar', 'mini']
-        }
-        
-        # Recherche intelligente selon le contexte
-        matching_items = []
-        
-        # Recherche spécifique pour les marques de voitures
-        for nationality, brands in car_brands.items():
-            if nationality in query_lower:
-                for brand in brands:
-                    matching_items.extend([item for item in items if brand.lower() in item.name.lower()])
-                break
-        
-        # Recherche spécifique pour les marques de voitures individuelles
-        car_brands_specific = ['porsche', 'mercedes', 'bmw', 'ferrari', 'lamborghini', 'audi', 'volkswagen']
-        car_models_specific = ['urus', 'cayenne', 'panamera', '911', 'aventador', 'huracan', '488', 'f8']
-        found_specific_brand = False
-        
-        # Vérifier d'abord les modèles spécifiques
-        for model in car_models_specific:
-            if model in query_lower:
-                matching_items = [item for item in items if model.lower() in item.name.lower()]
-                found_specific_brand = True
-                break
-        
-        # Si pas de modèle trouvé, vérifier les marques
-        if not found_specific_brand:
-            for brand in car_brands_specific:
-                if brand in query_lower:
-                    matching_items = [item for item in items if brand.lower() in item.name.lower()]
-                    found_specific_brand = True
-                    break
-        
-        # Recherche spécifique pour les questions complexes sur les voitures
-        if not found_specific_brand and 'voiture' in query_lower:
-            # Détecter les conditions spécifiques
-            if 'pas en vente' in query_lower or 'non en vente' in query_lower or 'pas à vendre' in query_lower:
-                # Voitures qui ne sont PAS en vente
-                matching_items = [item for item in items if item.category == "Voitures" and not item.for_sale]
-            elif 'en vente' in query_lower or 'à vendre' in query_lower:
-                # Voitures qui SONT en vente
-                matching_items = [item for item in items if item.category == "Voitures" and item.for_sale]
-            elif 'disponible' in query_lower:
-                # Voitures disponibles (pas vendues)
-                matching_items = [item for item in items if item.category == "Voitures" and item.status == "Available"]
-            elif 'vendu' in query_lower:
-                # Voitures vendues
-                matching_items = [item for item in items if item.category == "Voitures" and item.status == "Sold"]
-            else:
-                # Toutes les voitures
-                matching_items = [item for item in items if item.category == "Voitures"]
-            found_specific_brand = True
-        
-        # Recherche spécifique pour les actions
-        if not found_specific_brand and ('action' in query_lower or 'bourse' in query_lower or 'portefeuille' in query_lower):
-            matching_items = [item for item in items if item.category == "Actions"]
-        
-        # Recherche par mots-clés standard si pas de correspondance spécifique
-        elif not found_specific_brand:
-            keywords = query_lower.split()
-            for item in items:
-                item_text = f"{item.name} {item.category} {item.description or ''} {item.status}".lower()
-                if item.stock_symbol:
-                    item_text += f" {item.stock_symbol}".lower()
-                if any(keyword in item_text for keyword in keywords):
-                    matching_items.append(item)
-        
-        if not matching_items:
-            return f"""
-🔍 **Aucun résultat trouvé**
 
-Je n'ai trouvé aucun objet correspondant à votre recherche "{query}".
-
-💡 **Note importante:** Il semble que les embeddings ne soient pas correctement configurés.
-Pour une recherche intelligente optimale, assurez-vous que tous les objets ont des embeddings générés.
-
-📊 **Statistiques rapides:**
-- Total objets: {len(items)}
-- Catégories disponibles: {', '.join(set(i.category for i in items if i.category))}
-"""
-        
-        # Construire la réponse
-        response_parts = [f"🔍 **Résultats pour:** {query}\n"]
-        response_parts.append(f"J'ai trouvé **{len(matching_items)} objets**:\n")
-        
-        # Grouper par catégorie
-        by_category = {}
-        for item in matching_items:
-            cat = item.category or "Autre"
-            if cat not in by_category:
-                by_category[cat] = []
-            by_category[cat].append(item)
-        
-        for category, cat_items in by_category.items():
-            response_parts.append(f"\n**{category}** ({len(cat_items)} objets):")
-            for item in cat_items[:5]:
-                status = "✅ Disponible" if item.status == "Available" else "🏷️ Vendu"
-                price = ""
-                if item.asking_price:
-                    price = f" - {item.asking_price:,.0f} CHF"
-                elif item.sold_price:
-                    price = f" - Vendu: {item.sold_price:,.0f} CHF"
-                
-                for_sale = " 🔥 EN VENTE" if item.for_sale else ""
-                response_parts.append(f"- {item.name} ({item.construction_year or 'N/A'}) {status}{price}{for_sale}")
-                
-                # Détails spécifiques aux actions
-                if item.category == "Actions" and item.stock_symbol:
-                    response_parts.append(f"  → Symbole: {item.stock_symbol}, Quantité: {item.stock_quantity or 'N/A'}")
-                    if item.current_price:
-                        response_parts.append(f"  → Prix actuel: {item.current_price:,.0f} CHF/action")
-            
-            if len(cat_items) > 5:
-                response_parts.append(f"  ... et {len(cat_items) - 5} autres")
-        
-        return "\n".join(response_parts)
     
     def _build_complete_dataset_context(self, items: List[CollectionItem], analytics: Dict[str, Any]) -> str:
         """Construit un contexte COMPLET et structuré avec TOUS les objets"""
