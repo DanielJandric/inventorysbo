@@ -2417,7 +2417,7 @@ def get_stock_price_eodhd(symbol: str, item: Optional[CollectionItem], cache_key
                 
                 # Mettre à jour dans Supabase
                 if supabase:
-                    response = supabase.table('collection_items').update(update_data).eq('id', item.id).execute()
+                    response = supabase.table('items').update(update_data).eq('id', item.id).execute()
                     if response.data:
                         logger.info(f"✅ Prix et métriques mis à jour dans DB pour action {item.name} (ID: {item.id}): {current_price} CHF")
                         logger.info(f"📊 Métriques: Volume={update_data['stock_volume']}, PE={update_data['stock_pe_ratio']}, 52W-H={update_data['stock_52_week_high']}, 52W-L={update_data['stock_52_week_low']}")
