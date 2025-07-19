@@ -2899,10 +2899,11 @@ def generate_portfolio_pdf():
         
         # Générer le PDF avec WeasyPrint
         try:
-            from weasyprint import HTML
+            import weasyprint
             
-            # Créer le PDF sans paramètres supplémentaires
-            pdf = HTML(string=html_content).write_pdf()
+            # Créer le PDF avec une approche plus simple
+            html_doc = weasyprint.HTML(string=html_content)
+            pdf = html_doc.write_pdf()
             
             # Retourner le PDF
             from flask import Response
@@ -3083,10 +3084,11 @@ def generate_asset_class_report(asset_class_name):
         
         # Générer le PDF avec WeasyPrint
         try:
-            from weasyprint import HTML
+            import weasyprint
             
-            # Créer le PDF sans paramètres supplémentaires
-            pdf = HTML(string=html_content).write_pdf()
+            # Créer le PDF avec une approche plus simple
+            html_doc = weasyprint.HTML(string=html_content)
+            pdf = html_doc.write_pdf()
             
             response = Response(pdf, mimetype='application/pdf')
             response.headers['Content-Disposition'] = f'attachment; filename=bonvin_{asset_class_name.replace(" ", "_").lower()}_{datetime.now().strftime("%Y%m%d_%H%M")}.pdf'
@@ -3230,9 +3232,10 @@ def generate_all_asset_classes_report():
         
         # Générer le PDF
         try:
-            from weasyprint import HTML
+            import weasyprint
             
-            pdf = HTML(string=full_html).write_pdf()
+            html_doc = weasyprint.HTML(string=full_html)
+            pdf = html_doc.write_pdf()
             
             response = Response(pdf, mimetype='application/pdf')
             response.headers['Content-Disposition'] = f'attachment; filename=bonvin_all_asset_classes_{datetime.now().strftime("%Y%m%d_%H%M")}.pdf'
