@@ -1110,7 +1110,7 @@ async function handleImportSubmit(e) {
     }
     
     // Confirmation finale
-    if (!confirm('Êtes-vous sûr de vouloir supprimer toutes les voitures existantes et les remplacer par les données du CSV ? Cette action est irréversible !')) {
+    if (!confirm('Êtes-vous sûr de vouloir supprimer toutes les voitures existantes (catégorie "Véhicules") et les remplacer par les données du CSV ? Cette action est irréversible !')) {
         return;
     }
     
@@ -1144,6 +1144,96 @@ async function handleImportSubmit(e) {
     } catch (error) {
         console.error('Erreur import:', error);
         showError('Erreur lors de l\'import du fichier');
+    } finally {
+        // Restaurer le bouton
+        const submitBtn = e.target.querySelector('button[type="submit"]');
+        submitBtn.textContent = originalText;
+        submitBtn.disabled = false;
+    }
+}
+
+// --- Fonctions pour le rollback CSV ---
+function openRollbackModal() {
+    const modal = document.getElementById('rollback-modal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        
+        // Ajouter l'event listener pour le formulaire
+        const rollbackForm = document.getElementById('rollback-form');
+        if (rollbackForm) {
+            rollbackForm.addEventListener('submit', handleRollbackSubmit);
+        }
+    }
+}
+
+function closeRollbackModal() {
+    const modal = document.getElementById('rollback-modal');
+    if (modal) {
+        modal.classList.add('hidden');
+        
+        // Réinitialiser le formulaire
+        const rollbackForm = document.getElementById('rollback-form');
+        if (rollbackForm) {
+            rollbackForm.reset();
+        }
+    }
+}
+
+async function handleRollbackSubmit(e) {
+    e.preventDefault();
+    
+    const fileInput = document.getElementById('rollback-csv-file');
+    if (!fileInput || !fileInput.files[0]) {
+        showError('Veuillez sélectionner un fichier CSV de sauvegarde');
+        return;
+    }
+    
+    const file = fileInput.files[0];
+    if (!file.name.endsWith('.csv')) {
+        showError('Le fichier doit être au format CSV');
+        return;
+    }
+    
+    // Confirmation finale TRÈS importante
+    if (!confirm('⚠️ ATTENTION : Cette action va supprimer TOUTES les données existantes et les remplacer par votre CSV de sauvegarde. Êtes-vous ABSOLUMENT sûr ?')) {
+        return;
+    }
+    
+    // Double confirmation
+    if (!confirm('Dernière chance : Êtes-vous vraiment sûr de vouloir supprimer TOUTES les données actuelles ?')) {
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    try {
+        // Afficher un indicateur de chargement
+        const submitBtn = e.target.querySelector('button[type="submit"]');
+        const originalText = submitBtn.textContent;
+        submitBtn.textContent = 'Rollback en cours...';
+        submitBtn.disabled = true;
+        
+        const response = await fetch('/api/rollback-csv', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showSuccess(`Rollback réussi ! ${result.restored_count} objets restaurés`);
+            closeRollbackModal();
+            
+            // Recharger les données
+            await loadItems();
+        } else {
+            showError(`Erreur lors du rollback: ${result.error}`);
+        }
+        
+    } catch (error) {
+        console.error('Erreur rollback:', error);
+        showError('Erreur lors du rollback');
     } finally {
         // Restaurer le bouton
         const submitBtn = e.target.querySelector('button[type="submit"]');

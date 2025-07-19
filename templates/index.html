@@ -989,6 +989,13 @@
                         </svg>
                         Importer CSV
                     </button>
+                    
+                    <button onclick="openRollbackModal()" class="rollback-btn glass glowing-element px-6 py-3 rounded-xl text-sm font-medium transition-all hover:scale-105 flex items-center gap-2 bg-orange-600/20 border-orange-500/30">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"></path>
+                        </svg>
+                        Rollback CSV
+                    </button>
                 </div>
             </div>
 
@@ -1316,7 +1323,7 @@
                 <div class="p-4 glass-subtle rounded-xl">
                     <h3 class="text-lg font-semibold text-cyan-300 mb-3">Attention</h3>
                     <p class="text-sm text-gray-300 mb-3">
-                        Cette action va <strong>supprimer toutes les voitures existantes</strong> et les remplacer par les données du CSV.
+                        Cette action va <strong>supprimer toutes les voitures existantes (catégorie "Véhicules")</strong> et les remplacer par les données du CSV.
                     </p>
                     <p class="text-sm text-red-400">
                         Cette action est irréversible !
@@ -1341,6 +1348,49 @@
                     <div class="flex gap-4 justify-end pt-4">
                         <button type="button" onclick="closeImportModal()" class="px-6 py-3 glass rounded-xl font-medium hover:scale-105 transition-transform">Annuler</button>
                         <button type="submit" class="px-6 py-3 bg-red-600 hover:bg-red-700 rounded-xl font-medium transition-colors">Importer et remplacer</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for CSV Rollback -->
+    <div id="rollback-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 backdrop-blur-sm flex items-center justify-center z-50">
+        <div class="modal-content rounded-3xl p-8 max-w-2xl w-full mx-4">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold">Rollback CSV</h2>
+                <button onclick="closeRollbackModal()" class="text-gray-400 hover:text-white text-2xl">&times;</button>
+            </div>
+            
+            <div class="space-y-6">
+                <div class="p-4 bg-red-500/10 border border-red-400/30 rounded-xl">
+                    <h3 class="text-lg font-semibold text-red-400 mb-3">⚠️ ROLLBACK COMPLET</h3>
+                    <p class="text-sm text-gray-300 mb-3">
+                        Cette action va <strong>supprimer TOUTES les données existantes</strong> et les remplacer par les données du CSV de sauvegarde.
+                    </p>
+                    <p class="text-sm text-red-400 font-bold">
+                        ATTENTION : Cette action supprime TOUS les objets, pas seulement les voitures !
+                    </p>
+                </div>
+                
+                <form id="rollback-form" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-semibold mb-2">Fichier CSV de sauvegarde</label>
+                        <input type="file" id="rollback-csv-file" accept=".csv" class="w-full glass rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cyan-400" required>
+                    </div>
+                    
+                    <div class="p-3 bg-orange-500/10 border border-orange-400/30 rounded-lg">
+                        <p class="text-sm text-orange-300">
+                            <strong>Utilisez ce bouton uniquement pour restaurer vos données de sauvegarde !</strong>
+                        </p>
+                        <p class="text-sm text-orange-300 mt-2">
+                            Assurez-vous que votre CSV contient toutes les données que vous voulez restaurer.
+                        </p>
+                    </div>
+                    
+                    <div class="flex gap-4 justify-end pt-4">
+                        <button type="button" onclick="closeRollbackModal()" class="px-6 py-3 glass rounded-xl font-medium hover:scale-105 transition-transform">Annuler</button>
+                        <button type="submit" class="px-6 py-3 bg-orange-600 hover:bg-orange-700 rounded-xl font-medium transition-colors">Restaurer toutes les données</button>
                     </div>
                 </form>
             </div>

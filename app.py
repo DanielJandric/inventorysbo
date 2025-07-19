@@ -3966,6 +3966,40 @@ def generate_all_asset_classes_report():
         }), 500
 
 # Fonctions utilitaires
+def clean_date_format(date_str: str) -> Optional[str]:
+    """Nettoie et valide le format de date pour PostgreSQL (YYYY-MM-DD HH:mm:ss)"""
+    if not date_str or not date_str.strip():
+        return None
+    
+    date_str = date_str.strip()
+    
+    # Si c'est déjà un format date valide (YYYY-MM-DD), le retourner
+    if re.match(r'^\d{4}-\d{2}-\d{2}$', date_str):
+        return date_str
+    
+    # Si c'est un format avec heure (YYYY-MM-DD HH:MM:SS), le retourner
+    if re.match(r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}', date_str):
+        return date_str
+    
+    # Si c'est un format DD/MM/YYYY, le convertir en YYYY-MM-DD
+    if re.match(r'^\d{2}/\d{2}/\d{4}$', date_str):
+        parts = date_str.split('/')
+        return f"{parts[2]}-{parts[1]}-{parts[0]}"
+    
+    # Si c'est un format MM/DD/YYYY, le convertir en YYYY-MM-DD
+    if re.match(r'^\d{2}/\d{2}/\d{4}$', date_str):
+        parts = date_str.split('/')
+        return f"{parts[2]}-{parts[0]}-{parts[1]}"
+    
+    # Si c'est juste une heure (HH:MM ou HH:MM.S), l'ignorer
+    if re.match(r'^\d{1,2}:\d{2}(\.\d+)?$', date_str):
+        logger.warning(f"Format d'heure ignoré (pas de date): {date_str}")
+        return None
+    
+    # Si c'est un format non reconnu, l'ignorer
+    logger.warning(f"Format de date non reconnu ignoré: {date_str}")
+    return None
+
 def clean_update_data(data: Dict[str, Any]) -> Dict[str, Any]:
     """Nettoie les données de mise à jour - CORRIGÉ POUR INCLURE LES ACTIONS"""
     cleaned = {}
@@ -4089,9 +4123,9 @@ def import_csv():
         content = file.read().decode('utf-8')
         csv_reader = csv.DictReader(io.StringIO(content))
         
-        # Supprimer toutes les voitures existantes
+        # Supprimer seulement les voitures existantes (catégorie "Véhicules")
         try:
-            supabase.table("items").delete().neq("id", 0).execute()
+            supabase.table("items").delete().eq("category", "Véhicules").execute()
             logger.info("Toutes les voitures existantes supprimées")
         except Exception as e:
             logger.error(f"Erreur lors de la suppression: {e}")
@@ -4104,7 +4138,7 @@ def import_csv():
                 # Nettoyer et convertir les données
                 item_data = {
                     'name': row.get('name', '').strip(),
-                    'category': row.get('category', 'Véhicules').strip(),
+                    'category': 'Véhicules',  # Forcer la catégorie Véhicules pour l'import
                     'status': row.get('status', 'Available').strip(),
                     'condition': row.get('condition', '').strip() or None,
                     'description': row.get('description', '').strip() or None,
@@ -4171,6 +4205,111 @@ def import_csv():
     except Exception as e:
         logger.error(f"Erreur lors de l'import CSV: {e}")
         return jsonify({"error": f"Erreur lors de l'import: {str(e)}"}), 500
+
+@app.route("/api/rollback-csv", methods=["POST"])
+def rollback_csv():
+    """Rollback avec un CSV de sauvegarde - remplace TOUTES les données"""
+    try:
+        if 'file' not in request.files:
+            return jsonify({"error": "Aucun fichier fourni"}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({"error": "Aucun fichier sélectionné"}), 400
+        
+        if not file.filename.endswith('.csv'):
+            return jsonify({"error": "Le fichier doit être au format CSV"}), 400
+        
+        # Lire le contenu du CSV
+        import csv
+        import io
+        
+        # Décoder le contenu
+        content = file.read().decode('utf-8')
+        csv_reader = csv.DictReader(io.StringIO(content))
+        
+        # Supprimer TOUTES les données existantes (rollback complet)
+        try:
+            supabase.table("items").delete().neq("id", 0).execute()
+            logger.info("Toutes les données existantes supprimées pour le rollback")
+        except Exception as e:
+            logger.error(f"Erreur lors de la suppression: {e}")
+            return jsonify({"error": f"Erreur lors de la suppression des données existantes: {str(e)}"}), 500
+        
+        # Préparer les nouvelles données
+        new_items = []
+        for row in csv_reader:
+            try:
+                # Nettoyer et convertir les données
+                item_data = {
+                    'name': row.get('name', '').strip(),
+                    'category': row.get('category', '').strip(),
+                    'status': row.get('status', 'Available').strip(),
+                    'condition': row.get('condition', '').strip() or None,
+                    'description': row.get('description', '').strip() or None,
+                    'location': row.get('location', '').strip() or None,
+                    'current_value': float(row.get('current_value', 0)) if row.get('current_value') else None,
+                    'acquisition_price': float(row.get('acquisition_price', 0)) if row.get('acquisition_price') else None,
+                    'sold_price': float(row.get('sold_price', 0)) if row.get('sold_price') else None,
+                    'construction_year': int(row.get('construction_year', 0)) if row.get('construction_year') else None,
+                    'for_sale': row.get('for_sale', '').lower() in ['true', '1', 'yes', 'oui'],
+                    'sale_status': row.get('sale_status', '').strip() or None,
+                    'sale_progress': row.get('sale_progress', '').strip() or None,
+                    'buyer_contact': row.get('buyer_contact', '').strip() or None,
+                    'intermediary': row.get('intermediary', '').strip() or None,
+                    'current_offer': float(row.get('current_offer', 0)) if row.get('current_offer') else None,
+                    'commission_rate': float(row.get('commission_rate', 0)) if row.get('commission_rate') else None,
+                    'last_action_date': row.get('last_action_date', '').strip() or None,
+                    'surface_m2': float(row.get('surface_m2', 0)) if row.get('surface_m2') else None,
+                    'rental_income_chf': float(row.get('rental_income_chf', 0)) if row.get('rental_income_chf') else None,
+                    'stock_symbol': row.get('stock_symbol', '').strip() or None,
+                    'stock_quantity': int(row.get('stock_quantity', 0)) if row.get('stock_quantity') else None,
+                    'stock_purchase_price': float(row.get('stock_purchase_price', 0)) if row.get('stock_purchase_price') else None,
+                    'stock_exchange': row.get('stock_exchange', '').strip() or None,
+                    'current_price': float(row.get('current_price', 0)) if row.get('current_price') else None,
+                    'stock_volume': int(row.get('stock_volume', 0)) if row.get('stock_volume') else None,
+                    'stock_pe_ratio': float(row.get('stock_pe_ratio', 0)) if row.get('stock_pe_ratio') else None,
+                    'stock_52_week_high': float(row.get('stock_52_week_high', 0)) if row.get('stock_52_week_high') else None,
+                    'stock_52_week_low': float(row.get('stock_52_week_low', 0)) if row.get('stock_52_week_low') else None,
+                    'stock_change': float(row.get('stock_change', 0)) if row.get('stock_change') else None,
+                    'stock_change_percent': float(row.get('stock_change_percent', 0)) if row.get('stock_change_percent') else None,
+                    'stock_average_volume': int(row.get('stock_average_volume', 0)) if row.get('stock_average_volume') else None
+                }
+                
+                # Filtrer les valeurs None
+                item_data = {k: v for k, v in item_data.items() if v is not None}
+                new_items.append(item_data)
+                
+            except Exception as e:
+                logger.warning(f"Erreur lors du traitement de la ligne: {row} - {e}")
+                continue
+        
+        # Insérer les nouvelles données
+        if new_items:
+            try:
+                response = supabase.table("items").insert(new_items).execute()
+                inserted_count = len(response.data) if response.data else 0
+                logger.info(f"Rollback réussi: {inserted_count} objets restaurés")
+                
+                # Invalider le cache
+                smart_cache.invalidate()
+                
+                return jsonify({
+                    "success": True,
+                    "message": f"Rollback réussi ! {inserted_count} objets restaurés",
+                    "restored_count": inserted_count,
+                    "total_rows": len(new_items)
+                })
+                
+            except Exception as e:
+                logger.error(f"Erreur lors de l'insertion: {e}")
+                return jsonify({"error": f"Erreur lors de la restauration des données: {str(e)}"}), 500
+        else:
+            return jsonify({"error": "Aucune donnée valide trouvée dans le CSV de rollback"}), 400
+            
+    except Exception as e:
+        logger.error(f"Erreur lors du rollback CSV: {e}")
+        return jsonify({"error": f"Erreur lors du rollback: {str(e)}"}), 500
 
 # Point d'entrée
 if __name__ == "__main__":
