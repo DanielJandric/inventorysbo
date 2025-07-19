@@ -3294,7 +3294,12 @@ Réponds en JSON avec:
                     'last_action_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 }
                 
-                db_response = supabase.table('items').update(update_data).eq('id', vehicle.id).execute()
+                # Utiliser l'ID comme entier pour éviter les problèmes de type
+                vehicle_id = int(vehicle.id) if vehicle.id else None
+                if not vehicle_id:
+                    raise Exception("ID de véhicule invalide")
+                    
+                db_response = supabase.table('items').update(update_data).eq('id', vehicle_id).execute()
                 
                 if db_response.data:
                     # Succès - mettre à jour l'objet en mémoire
