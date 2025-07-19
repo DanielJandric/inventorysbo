@@ -39,6 +39,8 @@ async function loadAnalytics() {
         const response = await fetch('/api/items');
         if (response.ok) {
             allItems = await response.json();
+            console.log('Données chargées:', allItems.length, 'items');
+            console.log('Exemple d\'item Actions:', allItems.find(item => item.category === 'Actions'));
             initializeAnalytics();
         } else {
             console.error('Erreur lors du chargement des données');
@@ -71,12 +73,16 @@ function updateStatistics() {
         }
         
         if (item.category === 'Actions' && item.current_price && item.stock_quantity) {
-            return sum + (item.current_price * item.stock_quantity);
+            const actionValue = item.current_price * item.stock_quantity;
+            console.log(`Action ${item.name}: ${item.current_price} × ${item.stock_quantity} = ${actionValue}`);
+            return sum + actionValue;
         } else if (item.status === 'Available' && item.asking_price) {
             return sum + item.asking_price;
         }
         return sum;
     }, 0);
+    
+    console.log('Valeur totale calculée:', totalValue);
     
     // Compter les catégories uniques
     const categories = new Set(allItems.map(item => item.category).filter(Boolean));
@@ -157,6 +163,7 @@ function updateChart() {
             let value = 0;
             if (item.category === 'Actions' && item.current_price && item.stock_quantity) {
                 value = item.current_price * item.stock_quantity;
+                console.log(`Treemap - Action ${item.name}: ${item.current_price} × ${item.stock_quantity} = ${value}`);
             } else if (item.status === 'Available' && item.asking_price) {
                 value = item.asking_price;
             }
@@ -164,6 +171,8 @@ function updateChart() {
             categoryData[item.category] += value;
         }
     });
+    
+    console.log('Données par catégorie:', categoryData);
     
     // Calculer le total pour les pourcentages
     const totalValue = Object.values(categoryData).reduce((sum, value) => sum + value, 0);
@@ -187,17 +196,32 @@ function updateChart() {
     // Nettoyer le SVG
     categoryChart.svg.selectAll('*').remove();
     
-    // Créer la hiérarchie pour D3
-    const root = d3.stratify()
-        .id(d => d.name)
-        .parentId(() => null)
-        (sortedData);
+    // Si pas de données, afficher un message
+    if (sortedData.length === 0) {
+        categoryChart.svg.append('text')
+            .attr('x', '50%')
+            .attr('y', '50%')
+            .attr('text-anchor', 'middle')
+            .attr('dominant-baseline', 'middle')
+            .attr('fill', '#88a0a8')
+            .style('font-family', 'Inter')
+            .style('font-size', '16px')
+            .text('Aucune donnée disponible');
+        return;
+    }
     
-    root.sum(d => d.value);
+    // Créer la hiérarchie pour D3 avec un seul root
+    const hierarchyData = {
+        name: 'root',
+        children: sortedData
+    };
+    
+    const root = d3.hierarchy(hierarchyData)
+        .sum(d => d.value || 0);
     
     // Créer le Treemap
     const treemap = d3.treemap()
-        .size([categoryChart.container.clientWidth, 400])
+        .size([categoryChart.container.clientWidth || 600, 400])
         .padding(2);
     
     treemap(root);
