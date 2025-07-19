@@ -974,13 +974,20 @@
                 <div id="category-filters" class="mt-6 pt-6 border-t border-cyan-900/20 flex justify-center flex-wrap gap-3">
                 </div>
                 
-                <!-- Bouton de mise à jour des prix des actions -->
-                <div class="mt-6 pt-6 border-t border-cyan-900/20 flex justify-center">
+                <!-- Boutons d'action -->
+                <div class="mt-6 pt-6 border-t border-cyan-900/20 flex justify-center gap-4 flex-wrap">
                     <button onclick="forceUpdateStockPrices()" class="stock-update-btn glass glowing-element px-6 py-3 rounded-xl text-sm font-medium transition-all hover:scale-105 flex items-center gap-2">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
                         </svg>
                         Mettre à jour les prix des actions
+                    </button>
+                    
+                    <button onclick="openImportModal()" class="import-btn glass glowing-element px-6 py-3 rounded-xl text-sm font-medium transition-all hover:scale-105 flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                        </svg>
+                        Importer CSV
                     </button>
                 </div>
             </div>
@@ -1293,6 +1300,49 @@
             </div>
             
             <div id="estimation-content-body">
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for CSV Import -->
+    <div id="import-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 backdrop-blur-sm flex items-center justify-center z-50">
+        <div class="modal-content rounded-3xl p-8 max-w-2xl w-full mx-4">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold">Importer CSV</h2>
+                <button onclick="closeImportModal()" class="text-gray-400 hover:text-white text-2xl">&times;</button>
+            </div>
+            
+            <div class="space-y-6">
+                <div class="p-4 glass-subtle rounded-xl">
+                    <h3 class="text-lg font-semibold text-cyan-300 mb-3">Attention</h3>
+                    <p class="text-sm text-gray-300 mb-3">
+                        Cette action va <strong>supprimer toutes les voitures existantes</strong> et les remplacer par les données du CSV.
+                    </p>
+                    <p class="text-sm text-red-400">
+                        Cette action est irréversible !
+                    </p>
+                </div>
+                
+                <form id="import-form" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-semibold mb-2">Fichier CSV</label>
+                        <input type="file" id="csv-file" accept=".csv" class="w-full glass rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-cyan-400" required>
+                    </div>
+                    
+                    <div class="p-3 bg-blue-500/10 border border-blue-400/30 rounded-lg">
+                        <p class="text-sm text-blue-300">
+                            <strong>Format attendu :</strong> Le CSV doit contenir les colonnes : name, category, status, condition, description, location, current_value, acquisition_price, sold_price, construction_year, for_sale, etc.
+                        </p>
+                        <p class="text-sm text-blue-300 mt-2">
+                            <a href="/template_import_voitures.csv" download class="text-cyan-400 hover:underline">Télécharger le template CSV</a>
+                        </p>
+                    </div>
+                    
+                    <div class="flex gap-4 justify-end pt-4">
+                        <button type="button" onclick="closeImportModal()" class="px-6 py-3 glass rounded-xl font-medium hover:scale-105 transition-transform">Annuler</button>
+                        <button type="submit" class="px-6 py-3 bg-red-600 hover:bg-red-700 rounded-xl font-medium transition-colors">Importer et remplacer</button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>

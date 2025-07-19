@@ -1067,6 +1067,91 @@ function closeEstimationModal() {
     }
 }
 
+// --- Fonctions pour l'import CSV ---
+function openImportModal() {
+    const modal = document.getElementById('import-modal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        
+        // Ajouter l'event listener pour le formulaire
+        const importForm = document.getElementById('import-form');
+        if (importForm) {
+            importForm.addEventListener('submit', handleImportSubmit);
+        }
+    }
+}
+
+function closeImportModal() {
+    const modal = document.getElementById('import-modal');
+    if (modal) {
+        modal.classList.add('hidden');
+        
+        // Réinitialiser le formulaire
+        const importForm = document.getElementById('import-form');
+        if (importForm) {
+            importForm.reset();
+        }
+    }
+}
+
+async function handleImportSubmit(e) {
+    e.preventDefault();
+    
+    const fileInput = document.getElementById('csv-file');
+    if (!fileInput || !fileInput.files[0]) {
+        showError('Veuillez sélectionner un fichier CSV');
+        return;
+    }
+    
+    const file = fileInput.files[0];
+    if (!file.name.endsWith('.csv')) {
+        showError('Le fichier doit être au format CSV');
+        return;
+    }
+    
+    // Confirmation finale
+    if (!confirm('Êtes-vous sûr de vouloir supprimer toutes les voitures existantes et les remplacer par les données du CSV ? Cette action est irréversible !')) {
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    try {
+        // Afficher un indicateur de chargement
+        const submitBtn = e.target.querySelector('button[type="submit"]');
+        const originalText = submitBtn.textContent;
+        submitBtn.textContent = 'Import en cours...';
+        submitBtn.disabled = true;
+        
+        const response = await fetch('/api/import-csv', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showSuccess(`Import réussi ! ${result.imported_count} voitures importées`);
+            closeImportModal();
+            
+            // Recharger les données
+            await loadItems();
+        } else {
+            showError(`Erreur lors de l'import: ${result.error}`);
+        }
+        
+    } catch (error) {
+        console.error('Erreur import:', error);
+        showError('Erreur lors de l\'import du fichier');
+    } finally {
+        // Restaurer le bouton
+        const submitBtn = e.target.querySelector('button[type="submit"]');
+        submitBtn.textContent = originalText;
+        submitBtn.disabled = false;
+    }
+}
+
 async function handleFormSubmit(e) {
     e.preventDefault();
     
