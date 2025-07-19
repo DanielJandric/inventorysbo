@@ -1751,11 +1751,21 @@ function showEstimationModal(data, itemId) {
                     <h3 class="text-lg font-semibold mb-4">Mise à jour du prix</h3>
                     <p class="text-slate-400 mb-4">Voulez-vous mettre à jour le prix actuel de cet objet avec l'estimation de l'IA ?</p>
                     <div class="flex justify-center gap-4">
-                        <button onclick="updatePriceWithAI(${itemId}, ${estimated_price})" class="px-6 py-3 bg-green-600 hover:bg-green-700 rounded-xl font-medium transition-colors">
-                            ✅ Mettre à jour le prix
+                        <button onclick="updatePriceWithAI(${itemId}, ${estimated_price})" class="glass glowing-element px-6 py-3 rounded-xl font-medium transition-all duration-300 hover:scale-105 border border-green-500/30 text-green-400 hover:text-green-300 hover:border-green-400/50">
+                            <span class="flex items-center gap-2">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                </svg>
+                                Mettre à jour le prix
+                            </span>
                         </button>
-                        <button onclick="closeEstimationModal()" class="px-6 py-3 bg-gray-600 hover:bg-gray-700 rounded-xl font-medium transition-colors">
-                            ❌ Annuler
+                        <button onclick="closeEstimationModal()" class="glass glowing-element px-6 py-3 rounded-xl font-medium transition-all duration-300 hover:scale-105 border border-red-500/30 text-red-400 hover:text-red-300 hover:border-red-400/50">
+                            <span class="flex items-center gap-2">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                </svg>
+                                Annuler
+                            </span>
                         </button>
                     </div>
                 </div>
