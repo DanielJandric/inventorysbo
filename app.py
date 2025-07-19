@@ -1667,7 +1667,8 @@ class PureOpenAIEngineWithRAG:
         
         # Forcer la recherche sémantique pour les questions sur les quantités et marques
         car_brands = ['porsche', 'mercedes', 'bmw', 'ferrari', 'lamborghini', 'audi', 'volkswagen', 'allemande', 'italienne']
-        if 'combien' in query_lower or any(word in query_lower for word in car_brands + ['actions', 'bourse']):
+        complex_questions = ['pas en vente', 'non en vente', 'pas à vendre', 'en vente', 'à vendre', 'disponible', 'vendu']
+        if 'combien' in query_lower or any(word in query_lower for word in car_brands + ['actions', 'bourse'] + complex_questions):
             logger.info(f"Intent détecté: SEMANTIC_SEARCH pour '{query}'")
             return QueryIntent.SEMANTIC_SEARCH
         
@@ -1854,6 +1855,13 @@ POUVOIRS SPÉCIAUX POUR RECHERCHE INTELLIGENTE:
    - Utilise les informations précédentes pour enrichir tes réponses
    - Évite de répéter des informations déjà données sauf si demandé
    - Fais des liens avec les questions précédentes
+
+7. **Questions complexes** : Tu peux analyser des conditions spécifiques
+   - "voitures pas en vente" = voitures avec for_sale = false
+   - "voitures en vente" = voitures avec for_sale = true
+   - "objets disponibles" = objets avec status = "Available"
+   - "objets vendus" = objets avec status = "Sold"
+   - "combien de X" = compter précisément les objets correspondants
 
 RÈGLES D'OR:
 1. **Précision absolue** : Utilise les données exactes de la collection
@@ -2124,6 +2132,26 @@ Utilise l'historique pour enrichir ta réponse et éviter les répétitions."""
                 matching_items = [item for item in items if brand.lower() in item.name.lower()]
                 found_specific_brand = True
                 break
+        
+        # Recherche spécifique pour les questions complexes sur les voitures
+        if not found_specific_brand and 'voiture' in query_lower:
+            # Détecter les conditions spécifiques
+            if 'pas en vente' in query_lower or 'non en vente' in query_lower or 'pas à vendre' in query_lower:
+                # Voitures qui ne sont PAS en vente
+                matching_items = [item for item in items if item.category == "Voitures" and not item.for_sale]
+            elif 'en vente' in query_lower or 'à vendre' in query_lower:
+                # Voitures qui SONT en vente
+                matching_items = [item for item in items if item.category == "Voitures" and item.for_sale]
+            elif 'disponible' in query_lower:
+                # Voitures disponibles (pas vendues)
+                matching_items = [item for item in items if item.category == "Voitures" and item.status == "Available"]
+            elif 'vendu' in query_lower:
+                # Voitures vendues
+                matching_items = [item for item in items if item.category == "Voitures" and item.status == "Sold"]
+            else:
+                # Toutes les voitures
+                matching_items = [item for item in items if item.category == "Voitures"]
+            found_specific_brand = True
         
         # Recherche spécifique pour les actions
         if not found_specific_brand and ('action' in query_lower or 'bourse' in query_lower or 'portefeuille' in query_lower):
