@@ -82,6 +82,68 @@
         .stats-label {
             @apply text-sm text-gray-600 mt-1;
         }
+        
+        /* MENU HAMBURGER GLASSMORPHIQUE */
+        .hamburger-btn {
+            background: rgba(10, 50, 60, 0.25);
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(0, 200, 220, 0.2);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        
+        .hamburger-btn:hover {
+            background: rgba(10, 50, 60, 0.35);
+            border-color: rgba(0, 200, 220, 0.4);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+        }
+        
+        .hamburger-dropdown {
+            background: rgba(10, 40, 50, 0.95);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(0, 200, 220, 0.3);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        }
+        
+        .hamburger-dropdown.is-open {
+            transform: scale(1) opacity(1);
+            pointer-events: auto;
+        }
+        
+        .menu-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.875rem 1rem;
+            border-radius: 0.75rem;
+            color: #e0e6e7;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            background: rgba(10, 50, 60, 0.2);
+            border: 1px solid transparent;
+        }
+        
+        .menu-item:hover {
+            background: rgba(0, 200, 220, 0.15);
+            border-color: rgba(0, 200, 220, 0.3);
+            transform: translateX(4px);
+            box-shadow: 0 4px 15px rgba(0, 200, 220, 0.2);
+        }
+        
+        .menu-item.active {
+            background: rgba(0, 200, 220, 0.25);
+            border-color: rgba(0, 200, 220, 0.5);
+            color: #00e5ff;
+            box-shadow: 0 0 20px rgba(0, 200, 220, 0.3);
+        }
+        
+        .menu-item svg {
+            transition: all 0.3s ease;
+        }
+        
+        .menu-item:hover svg {
+            transform: scale(1.1);
+            color: #00e5ff;
+        }
     </style>
 </head>
 <body class="text-white">
@@ -96,26 +158,44 @@
                         <p class="text-slate-400">Rapports Bancaires par Classe d'Actif</p>
                     </div>
                 </div>
-                <nav class="flex gap-4">
-                    <a href="/" class="nav-link">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <!-- Menu Hamburger Glassmorphique -->
+        <div class="fixed top-6 right-6 z-50">
+            <button id="hamburger-menu" class="hamburger-btn glass glowing-element p-3 rounded-xl transition-all duration-300 hover:scale-105" onclick="toggleHamburgerMenu()">
+                <svg class="w-6 h-6 text-cyan-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                </svg>
+            </button>
+            
+            <!-- Menu déroulant -->
+            <div id="hamburger-dropdown" class="hamburger-dropdown glass-dark glowing-element absolute top-full right-0 mt-3 rounded-2xl p-4 min-w-64 transform scale-95 opacity-0 pointer-events-none transition-all duration-300 origin-top-right">
+                <div class="space-y-3">
+                    <a href="/" class="menu-item">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
                         </svg>
-                        Collection
+                        <span>Collection</span>
                     </a>
-                    <a href="/analytics" class="nav-link">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <a href="/analytics" class="menu-item">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
                         </svg>
-                        Analytics
+                        <span>Analytics</span>
                     </a>
-                    <a href="/reports" class="nav-link active">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <a href="/reports" class="menu-item active">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
                         </svg>
-                        Rapports
+                        <span>Rapports</span>
                     </a>
-                </nav>
+                    <button onclick="generateAllReports()" class="menu-item w-full text-left">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                        <span>Générer Tous les Rapports</span>
+                    </button>
+                </div>
+            </div>
+        </div>
             </div>
         </header>
 
@@ -159,5 +239,51 @@
     </div>
 
     <script src="/static/reports.js"></script>
+    
+    <script>
+        // Fonction pour gérer le menu hamburger
+        function toggleHamburgerMenu() {
+            const dropdown = document.getElementById('hamburger-dropdown');
+            const isOpen = dropdown.classList.contains('is-open');
+            
+            if (isOpen) {
+                dropdown.classList.remove('is-open');
+                dropdown.style.transform = 'scale(0.95)';
+                dropdown.style.opacity = '0';
+                dropdown.style.pointerEvents = 'none';
+            } else {
+                dropdown.classList.add('is-open');
+                dropdown.style.transform = 'scale(1)';
+                dropdown.style.opacity = '1';
+                dropdown.style.pointerEvents = 'auto';
+            }
+        }
+        
+        // Fermer le menu si on clique ailleurs
+        document.addEventListener('click', function(event) {
+            const hamburgerMenu = document.getElementById('hamburger-menu');
+            const dropdown = document.getElementById('hamburger-dropdown');
+            
+            if (!hamburgerMenu.contains(event.target) && !dropdown.contains(event.target)) {
+                dropdown.classList.remove('is-open');
+                dropdown.style.transform = 'scale(0.95)';
+                dropdown.style.opacity = '0';
+                dropdown.style.pointerEvents = 'none';
+            }
+        });
+        
+        // Fermer le menu après avoir cliqué sur un lien
+        document.querySelectorAll('.menu-item').forEach(item => {
+            item.addEventListener('click', function() {
+                setTimeout(() => {
+                    const dropdown = document.getElementById('hamburger-dropdown');
+                    dropdown.classList.remove('is-open');
+                    dropdown.style.transform = 'scale(0.95)';
+                    dropdown.style.opacity = '0';
+                    dropdown.style.pointerEvents = 'none';
+                }, 100);
+            });
+        });
+    </script>
 </body>
 </html> 
