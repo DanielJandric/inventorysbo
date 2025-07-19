@@ -567,7 +567,7 @@ async function updateSingleStockPrice(symbol, itemId) {
         if (response.ok) {
             const data = await response.json();
             console.log(`✅ Données reçues pour ${symbol}:`, data);
-            showSuccess(`${symbol} mis à jour: ${formatPrice(data.price_chf)} CHF`);
+            showSuccess(`${symbol} mis à jour: ${formatPrice(data.price)} ${data.currency}`);
             
             // Mettre à jour l'affichage de la carte
             console.log(`🔄 Appel updateStockCardDisplay pour ${itemId}`);
@@ -983,7 +983,7 @@ function updateStockCardDisplay(itemId, stockData) {
                 <!-- Prix principal -->
                 <div class="flex items-center justify-between">
                     <div class="flex items-center gap-2">
-                        <span class="text-lg font-bold text-amber-200">${formatPrice(stockData.price_chf)}</span>
+                        <span class="text-lg font-bold text-amber-200">${formatPrice(stockData.price)}</span>
                         <span class="text-xs text-amber-300/70 font-medium">${stockData.currency}</span>
                     </div>
                     <span class="${changeClass} text-sm font-semibold">
@@ -1718,9 +1718,12 @@ async function handleFormSubmit(e) {
                 form.dataset.hasUnsavedChanges = 'false';
             }
             
-            closeModal();
+            // Recharger les données AVANT de fermer le modal
             await loadItems();
             showSuccess(`Objet ${isEditing ? 'modifié' : 'créé'} avec succès`);
+            
+            // Fermer le modal APRÈS avoir rechargé les données
+            closeModal();
         } else {
             const err = await response.json();
             showError(`Erreur: ${err.error || 'Sauvegarde impossible'}`);
