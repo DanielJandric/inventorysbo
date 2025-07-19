@@ -628,11 +628,9 @@
                 z-index: 1000;
             }
             
-            /* Cacher le bouton chat quand la fenêtre est ouverte */
+            /* Cacher complètement le bouton chat quand la fenêtre est ouverte */
             #chatbot-window.is-open ~ #chatbot-button {
-                opacity: 0;
-                pointer-events: none;
-                transform: scale(0.8);
+                display: none !important;
             }
             
             #chatbot-window.is-open {
@@ -969,7 +967,7 @@
                 <div class="flex-1 relative">
                     <input type="text" id="chatbot-input" placeholder="Posez votre question..." autocomplete="off" class="w-full pr-12">
                     <button type="submit" id="chat-send-btn" class="absolute right-2 top-1/2 transform -translate-y-1/2 glass-subtle hover:glass p-2 rounded-full transition-all duration-300 hover:scale-110">
-                        <svg class="w-5 h-5 text-cyan-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg class="w-5 h-5 text-cyan-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="transform: rotate(90deg);">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
                         </svg>
                     </button>
