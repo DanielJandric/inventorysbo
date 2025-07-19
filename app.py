@@ -3355,6 +3355,82 @@ Réponds en JSON avec:
         logger.error(f"Erreur ai_update_all_vehicles: {e}")
         return jsonify({"error": "Erreur lors de la mise à jour en masse"}), 500
 
+@app.route("/api/fix-vehicle-categories", methods=["POST"])
+def fix_vehicle_categories():
+    """Corriger automatiquement les catégories 'Véhicules' en 'Voitures'"""
+    try:
+        # Récupérer tous les items avec la catégorie 'Véhicules'
+        response = requests.get(
+            f"{os.getenv('SUPABASE_URL')}/rest/v1/collection_items?category=eq.Véhicules",
+            headers={
+                'apikey': os.getenv('SUPABASE_KEY'),
+                'Authorization': f'Bearer {os.getenv("SUPABASE_KEY")}',
+                'Content-Type': 'application/json'
+            }
+        )
+        
+        if response.status_code != 200:
+            logger.error(f"Erreur récupération items: {response.status_code} - {response.text}")
+            return jsonify({"error": "Erreur lors de la récupération des données"}), 500
+        
+        vehicles_to_fix = response.json()
+        
+        if not vehicles_to_fix:
+            return jsonify({
+                "message": "Aucun objet avec la catégorie 'Véhicules' trouvé",
+                "fixed": 0
+            })
+        
+        fixed_count = 0
+        errors = []
+        
+        for vehicle in vehicles_to_fix:
+            try:
+                # Mettre à jour la catégorie
+                update_response = requests.patch(
+                    f"{os.getenv('SUPABASE_URL')}/rest/v1/collection_items?id=eq.{vehicle['id']}",
+                    headers={
+                        'apikey': os.getenv('SUPABASE_KEY'),
+                        'Authorization': f'Bearer {os.getenv("SUPABASE_KEY")}',
+                        'Content-Type': 'application/json',
+                        'Prefer': 'return=minimal'
+                    },
+                    json={'category': 'Voitures'}
+                )
+                
+                if update_response.status_code == 204:
+                    fixed_count += 1
+                    logger.info(f"✅ Catégorie corrigée pour {vehicle['name']}: Véhicules → Voitures")
+                else:
+                    errors.append({
+                        "id": vehicle['id'],
+                        "name": vehicle['name'],
+                        "error": f"Erreur {update_response.status_code}: {update_response.text}"
+                    })
+                    logger.error(f"❌ Erreur correction catégorie {vehicle['name']}: {update_response.status_code}")
+                
+            except Exception as e:
+                errors.append({
+                    "id": vehicle['id'],
+                    "name": vehicle['name'],
+                    "error": str(e)
+                })
+                logger.error(f"❌ Exception correction catégorie {vehicle['name']}: {e}")
+        
+        logger.info(f"🔄 Correction catégories terminée: {fixed_count}/{len(vehicles_to_fix)} objets corrigés")
+        
+        return jsonify({
+            "success": True,
+            "message": f"Correction terminée: {fixed_count} objets corrigés",
+            "total_found": len(vehicles_to_fix),
+            "fixed": fixed_count,
+            "errors": errors
+        })
+        
+    except Exception as e:
+        logger.error(f"Erreur fix_vehicle_categories: {e}")
+        return jsonify({"error": "Erreur lors de la correction des catégories"}), 500
+
 @app.route("/api/chatbot", methods=["POST"])
 def chatbot():
     """Chatbot utilisant OpenAI GPT-4 avec recherche sémantique RAG et mémoire conversationnelle"""

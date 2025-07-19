@@ -730,6 +730,52 @@ async function aiUpdateAllVehicles() {
     }
 }
 
+// Fonction pour corriger les catégories 'Véhicules' en 'Voitures'
+async function fixVehicleCategories() {
+    // Confirmation importante
+    if (!confirm(`Corriger les catégories 'Véhicules' en 'Voitures' ?\n\nCette opération va:\n- Rechercher tous les objets avec la catégorie 'Véhicules'\n- Les renommer en 'Voitures'\n- Corriger les erreurs de base de données\n\nContinuer ?`)) {
+        return;
+    }
+    
+    try {
+        showNotification('Correction des catégories en cours...', false);
+        
+        const response = await fetch('/api/fix-vehicle-categories', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            if (result.fixed > 0) {
+                showSuccess(`✅ ${result.message}\n\n${result.fixed} objets corrigés sur ${result.total_found} trouvés`);
+                
+                // Recharger les données pour afficher les changements
+                await loadItems();
+                
+                // Afficher les erreurs s'il y en a
+                if (result.errors && result.errors.length > 0) {
+                    console.warn('❌ Erreurs lors de la correction:', result.errors);
+                }
+            } else {
+                showSuccess(`ℹ️ ${result.message}`);
+            }
+            
+            console.log('📊 Résultats correction catégories:', result);
+            
+        } else {
+            showError(`Erreur: ${result.error}`);
+        }
+        
+    } catch (error) {
+        console.error('Erreur correction catégories:', error);
+        showError('Erreur lors de la correction des catégories');
+    }
+}
+
 // Fonction pour générer le PDF
 async function generatePDF() {
     try {
