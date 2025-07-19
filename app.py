@@ -2023,13 +2023,21 @@ def get_exchange_rate_route(from_currency: str, to_currency: str = 'CHF'):
 def get_stock_price(symbol):
     """
     Récupère le prix actuel d'une action, avec Yahoo Finance en priorité
-    et Finnhub comme alternative robuste.
+    et EODHD/Finnhub comme alternatives robustes.
     """
     items = AdvancedDataManager.fetch_all_items()
     item = next((i for i in items if i.stock_symbol == symbol), None)
 
     if not item:
         logger.warning(f"Aucun item trouvé pour le symbole {symbol}. L'API pourrait utiliser des hypothèses par défaut.")
+
+    # Formater le symbole correctement selon la bourse
+    formatted_symbol = symbol
+    if item and item.stock_exchange and item.stock_exchange.upper() in ['SWX', 'SIX', 'SWISS', 'CH']:
+        # Pour les actions suisses, s'assurer d'avoir le suffixe .SW
+        if not symbol.endswith('.SW'):
+            formatted_symbol = f"{symbol}.SW"
+            logger.info(f"Formatage du symbole suisse: {symbol} -> {formatted_symbol}")
 
     cache_key = f"stock_price_{symbol}"
     if cache_key in stock_price_cache:
@@ -2043,7 +2051,7 @@ def get_stock_price(symbol):
         import yfinance as yf
         # Délai plus long pour éviter rate limiting Yahoo Finance
         time.sleep(2)
-        ticker = yf.Ticker(symbol)
+        ticker = yf.Ticker(formatted_symbol)
         info = ticker.info
         
         current_price = info.get('currentPrice') or info.get('regularMarketPrice')
@@ -2053,7 +2061,7 @@ def get_stock_price(symbol):
                  current_price = hist['Close'].iloc[-1]
 
         if not current_price:
-            raise Exception("Prix non trouvé sur Yahoo Finance, essai avec Finnhub")
+            raise Exception("Prix non trouvé sur Yahoo Finance, essai avec EODHD")
 
         currency = info.get('currency', 'USD')
         # La conversion utilise maintenant la fonction basée sur Finnhub
@@ -2083,8 +2091,8 @@ def get_stock_price(symbol):
         
         # Pour les actions suisses, essayer EODHD en priorité
         if item and item.stock_exchange and item.stock_exchange.upper() in ['SWX', 'SIX', 'SWISS', 'CH']:
-            logger.info(f"Essai avec EODHD pour {symbol}")
-            return get_stock_price_eodhd(symbol, item, cache_key)
+            logger.info(f"Essai avec EODHD pour {formatted_symbol}")
+            return get_stock_price_eodhd(formatted_symbol, item, cache_key)
         
         return get_stock_price_finnhub(symbol, item, cache_key)
 
@@ -2245,46 +2253,47 @@ def get_stock_price_eodhd(symbol: str, item: Optional[CollectionItem], cache_key
         logger.info(f"Interrogation d'EODHD avec le symbole : {symbol}")
         
         import requests
-        # EODHD Real-Time API
-        quote_url = f"https://eodhd.com/api/real-time/{symbol}?api_token={EODHD_API_KEY}&fmt=json"
-        response = requests.get(quote_url, timeout=10)
         
-        if response.status_code == 429:
-            raise Exception("Rate limit EODHD atteint")
-        response.raise_for_status()
+        # Pour les actions suisses, essayer plusieurs variantes de symboles
+        symbol_variants = [symbol]  # Commencer par le symbole fourni
         
-        data = response.json()
+        if item and item.stock_exchange and item.stock_exchange.upper() in ['SWX', 'SIX', 'SWISS', 'CH']:
+            # Ajouter des variantes pour les actions suisses
+            base_symbol = symbol.replace('.SW', '').replace('.SWX', '').replace('.SIX', '')
+            symbol_variants.extend([
+                f"{base_symbol}.SW",  # Format suisse standard
+                f"{base_symbol}.SWX",  # Format SWX
+                f"{base_symbol}.SIX",  # Format SIX
+                base_symbol,  # Symbole sans suffixe
+            ])
+            # Supprimer les doublons
+            symbol_variants = list(dict.fromkeys(symbol_variants))
         
-        # Vérifier si la réponse contient des données
-        if not data or len(data) == 0:
-            # Essayer avec différents formats pour les actions suisses
-            if item and item.stock_exchange and item.stock_exchange.upper() in ['SWX', 'SIX', 'SWISS', 'CH']:
-                symbol_variants = [
-                    f"{symbol}.SW",  # Format suisse standard
-                    symbol.replace('.SW', ''),  # Symbole sans suffixe
-                    f"{symbol}.SWX",  # Format SWX
-                    f"{symbol}.SIX",  # Format SIX
-                ]
-                
-                for variant in symbol_variants:
-                    if variant == symbol:
-                        continue
-                        
-                    logger.info(f"Essai EODHD avec le symbole: '{variant}'")
-                    quote_url_variant = f"https://eodhd.com/api/real-time/{variant}?api_token={EODHD_API_KEY}&fmt=json"
-                    response_variant = requests.get(quote_url_variant, timeout=10)
-                    
-                    if response_variant.ok:
-                        data_variant = response_variant.json()
-                        if data_variant and len(data_variant) > 0:
-                            data = data_variant
-                            symbol = variant
-                            logger.info(f"✅ Symbole EODHD '{variant}' fonctionne")
-                            break
+        data = None
+        working_symbol = symbol
+        
+        # Essayer chaque variante de symbole
+        for variant in symbol_variants:
+            logger.info(f"Essai EODHD avec le symbole: '{variant}'")
+            quote_url = f"https://eodhd.com/api/real-time/{variant}?api_token={EODHD_API_KEY}&fmt=json"
+            response = requests.get(quote_url, timeout=10)
             
-            # Si toujours pas de données
-            if not data or len(data) == 0:
-                raise Exception(f"Aucune donnée trouvée pour '{symbol}' sur EODHD")
+            if response.status_code == 429:
+                raise Exception("Rate limit EODHD atteint")
+            
+            if response.ok:
+                response_data = response.json()
+                if response_data and len(response_data) > 0:
+                    data = response_data
+                    working_symbol = variant
+                    logger.info(f"✅ Symbole EODHD '{variant}' fonctionne")
+                    break
+            else:
+                logger.warning(f"Symbole EODHD '{variant}' invalide (status: {response.status_code})")
+        
+        # Si aucune variante n'a fonctionné
+        if not data or len(data) == 0:
+            raise Exception(f"Aucune donnée trouvée pour les variantes de '{symbol}' sur EODHD")
         
         # EODHD retourne un array, prendre le premier élément
         quote = data[0] if isinstance(data, list) else data
@@ -2307,13 +2316,13 @@ def get_stock_price_eodhd(symbol: str, item: Optional[CollectionItem], cache_key
             price_chf = current_price
         
         result = {
-            "symbol": symbol,
+            "symbol": symbol,  # Garder le symbole original pour l'affichage
             "price": current_price,
             "price_chf": price_chf,
             "currency": currency,
             "company_name": quote.get("code", symbol),
             "last_update": datetime.now().isoformat(),
-            "source": "EODHD",
+            "source": f"EODHD (symbole utilisé: {working_symbol})",
             "change": quote.get("change", "N/A"),
             "change_percent": quote.get("change_p", "N/A")
         }
