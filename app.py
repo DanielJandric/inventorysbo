@@ -2063,6 +2063,15 @@ def get_stock_price(symbol):
         if not current_price:
             raise Exception("Prix non trouvé sur Yahoo Finance, essai avec EODHD")
 
+        # Récupérer les variations depuis Yahoo Finance
+        previous_close = info.get('previousClose', 0)
+        change = 0
+        change_percent = 0
+        
+        if previous_close and current_price:
+            change = current_price - previous_close
+            change_percent = (change / previous_close) * 100 if previous_close > 0 else 0
+
         currency = info.get('currency', 'USD')
         # La conversion utilise maintenant la fonction basée sur Finnhub
         conversion_rate = get_live_exchange_rate(currency, 'CHF')
@@ -2075,7 +2084,9 @@ def get_stock_price(symbol):
             "currency": currency,
             "company_name": info.get('longName', symbol),
             "last_update": datetime.now().isoformat(),
-            "source": "Yahoo Finance (Taux de change via Finnhub)"
+            "source": "Yahoo Finance (Taux de change via Finnhub)",
+            "change": round(change, 2) if change != 0 else "N/A",
+            "change_percent": round(change_percent, 2) if change_percent != 0 else "N/A"
         }
         stock_price_cache[cache_key] = {'data': result, 'timestamp': time.time()}
         return jsonify(result)
@@ -2195,6 +2206,15 @@ def get_stock_price_finnhub(symbol: str, item: Optional[CollectionItem], cache_k
             currency = profile_data.get('currency', 'USD')
             company_name = profile_data.get('name', symbol)
         
+        # Récupérer les variations depuis Finnhub
+        previous_close = quote_data.get('pc', 0)
+        change = 0
+        change_percent = 0
+        
+        if previous_close and current_price:
+            change = current_price - previous_close
+            change_percent = (change / previous_close) * 100 if previous_close > 0 else 0
+
         # Conversion en CHF avec le taux de change Finnhub
         conversion_rate = get_live_exchange_rate(currency, 'CHF')
         price_chf = current_price * conversion_rate
@@ -2206,7 +2226,9 @@ def get_stock_price_finnhub(symbol: str, item: Optional[CollectionItem], cache_k
             "currency": currency,
             "company_name": company_name,
             "last_update": datetime.now().isoformat(),
-            "source": "Finnhub"
+            "source": "Finnhub",
+            "change": round(change, 2) if change != 0 else "N/A",
+            "change_percent": round(change_percent, 2) if change_percent != 0 else "N/A"
         }
         
         stock_price_cache[cache_key] = {'data': result, 'timestamp': time.time()}
