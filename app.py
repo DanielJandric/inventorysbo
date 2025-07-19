@@ -3082,13 +3082,84 @@ def ai_update_price(item_id):
         if target_item.category == 'Actions':
             return jsonify({"error": "Cette fonction est réservée aux véhicules. Utilisez la mise à jour des prix d'actions pour les actions."}), 400
         
-        # Obtenir l'estimation IA
-        market_response = market_price(item_id)
-        if market_response.status_code != 200:
-            return market_response
-        
-        market_data = market_response.get_json()
-        estimated_price = market_data.get('estimated_price')
+        # Obtenir l'estimation IA en appelant directement la logique
+        try:
+            # Récupérer les données nécessaires pour l'estimation
+            similar_items = [i for i in items if i.category == target_item.category and i.id != item_id]
+            comparable_prices = [i.sold_price or i.current_value for i in similar_items if i.sold_price or i.current_value]
+            
+            # Tri des objets similaires par pertinence
+            similar_items_with_prices = [
+                i for i in similar_items 
+                if (i.sold_price or i.current_value) and i.construction_year
+            ]
+            
+            # Calcul de score de similarité basé sur l'année et la catégorie
+            def similarity_score(item):
+                score = 100
+                if target_item.construction_year and item.construction_year:
+                    year_diff = abs(target_item.construction_year - item.construction_year)
+                    score -= year_diff * 2  # Pénalité de 2 points par année d'écart
+                return score
+            
+            # Tri par score de similarité
+            similar_items_sorted = sorted(similar_items_with_prices, key=similarity_score, reverse=True)
+            top_3_similar = similar_items_sorted[:3]
+            
+            # Contexte des 3 objets similaires
+            similar_context = ""
+            if top_3_similar:
+                similar_context = "\n\nOBJETS SIMILAIRES DANS LA COLLECTION:"
+                for i, similar_item in enumerate(top_3_similar, 1):
+                    price = similar_item.sold_price or similar_item.current_value
+                    status = "Vendu" if similar_item.sold_price else "valeur actuelle"
+                    similar_context += f"\n{i}. {similar_item.name} ({similar_item.construction_year or 'N/A'}) - {status}: {price:,.0f} CHF"
+                    if similar_item.description:
+                        similar_context += f" - {similar_item.description[:80]}..."
+            
+            # Prompt pour l'estimation
+            prompt = f"""Estime le prix de marché actuel de cet objet en CHF en te basant sur le marché réel :
+
+OBJET À ÉVALUER:
+- Nom: {target_item.name}
+- Catégorie: {target_item.category}
+- Année: {target_item.construction_year or 'N/A'}
+- État: {target_item.condition or 'N/A'}
+- Description: {target_item.description or 'N/A'}
+
+INSTRUCTIONS IMPORTANTES:
+1. Recherche les prix actuels du marché pour ce modèle exact ou des modèles très similaires
+2. Utilise tes connaissances du marché automobile/horloger/immobilier actuel
+3. Compare avec des ventes récentes d'objets similaires sur le marché (pas dans ma collection)
+4. Prends en compte l'année, l'état et les spécificités du modèle
+
+Pour les voitures : considère les sites comme AutoScout24, Comparis, annonces spécialisées
+Pour les montres : marché des montres d'occasion, chrono24, enchères récentes
+Pour l'immobilier : prix au m² dans la région, transactions récentes
+
+Réponds en JSON avec:
+- estimated_price (nombre en CHF basé sur le marché actuel)
+- reasoning (explication détaillée en français avec références de marché)
+- confidence_score (0.1-0.9)
+- market_trend (hausse/stable/baisse)"""
+
+            response = openai_client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."},
+                    {"role": "user", "content": prompt}
+                ],
+                response_format={"type": "json_object"},
+                max_tokens=800,
+                timeout=20
+            )
+            
+            market_data = json.loads(response.choices[0].message.content)
+            estimated_price = market_data.get('estimated_price')
+            
+        except Exception as ai_error:
+            logger.error(f"Erreur estimation IA: {ai_error}")
+            return jsonify({"error": "Erreur lors de l'estimation IA"}), 500
         
         if not estimated_price or estimated_price <= 0:
             return jsonify({"error": "Estimation IA invalide"}), 400
@@ -3161,26 +3232,106 @@ def ai_update_all_vehicles():
         
         for vehicle in vehicles:
             try:
-                # Appeler la mise à jour individuelle
-                update_response = ai_update_price(vehicle.id)
-                update_data = update_response.get_json()
+                # Utiliser directement la logique de mise à jour
+                # Obtenir l'estimation IA
+                similar_items = [i for i in items if i.category == vehicle.category and i.id != vehicle.id]
+                comparable_prices = [i.sold_price or i.current_value for i in similar_items if i.sold_price or i.current_value]
                 
-                if update_response.status_code == 200:
+                # Tri des objets similaires par pertinence
+                similar_items_with_prices = [
+                    i for i in similar_items 
+                    if (i.sold_price or i.current_value) and i.construction_year
+                ]
+                
+                # Calcul de score de similarité
+                def similarity_score(item):
+                    score = 100
+                    if vehicle.construction_year and item.construction_year:
+                        year_diff = abs(vehicle.construction_year - item.construction_year)
+                        score -= year_diff * 2
+                    return score
+                
+                similar_items_sorted = sorted(similar_items_with_prices, key=similarity_score, reverse=True)
+                top_3_similar = similar_items_sorted[:3]
+                
+                # Prompt pour l'estimation
+                prompt = f"""Estime le prix de marché actuel de cet objet en CHF en te basant sur le marché réel :
+
+OBJET À ÉVALUER:
+- Nom: {vehicle.name}
+- Catégorie: {vehicle.category}
+- Année: {vehicle.construction_year or 'N/A'}
+- État: {vehicle.condition or 'N/A'}
+- Description: {vehicle.description or 'N/A'}
+
+INSTRUCTIONS IMPORTANTES:
+1. Recherche les prix actuels du marché pour ce modèle exact ou des modèles très similaires
+2. Utilise tes connaissances du marché automobile/horloger/immobilier actuel
+3. Compare avec des ventes récentes d'objets similaires sur le marché (pas dans ma collection)
+4. Prends en compte l'année, l'état et les spécificités du modèle
+
+Réponds en JSON avec:
+- estimated_price (nombre en CHF basé sur le marché actuel)
+- reasoning (explication détaillée en français avec références de marché)
+- confidence_score (0.1-0.9)
+- market_trend (hausse/stable/baisse)"""
+
+                response = openai_client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {"role": "system", "content": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    response_format={"type": "json_object"},
+                    max_tokens=800,
+                    timeout=20
+                )
+                
+                market_data = json.loads(response.choices[0].message.content)
+                estimated_price = market_data.get('estimated_price')
+                
+                if not estimated_price or estimated_price <= 0:
+                    raise Exception("Estimation IA invalide")
+                
+                # Mettre à jour en base de données
+                update_data = {
+                    'current_value': estimated_price,
+                    'last_action_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                }
+                
+                db_response = requests.put(
+                    f"{os.getenv('SUPABASE_URL')}/rest/v1/collection_items?id=eq.{vehicle.id}",
+                    headers={
+                        'apikey': os.getenv('SUPABASE_KEY'),
+                        'Authorization': f'Bearer {os.getenv("SUPABASE_KEY")}',
+                        'Content-Type': 'application/json',
+                        'Prefer': 'return=minimal'
+                    },
+                    json=update_data
+                )
+                
+                if db_response.status_code == 204:
+                    # Succès - mettre à jour l'objet en mémoire
+                    vehicle.current_value = estimated_price
+                    vehicle.last_action_date = update_data['last_action_date']
+                    
                     results["updated"] += 1
                     results["details"].append({
                         "id": vehicle.id,
                         "name": vehicle.name,
                         "status": "success",
-                        "new_price": update_data.get("updated_price"),
-                        "message": update_data.get("message")
+                        "new_price": estimated_price,
+                        "message": f"Prix mis à jour: {estimated_price:,.0f} CHF"
                     })
+                    
+                    logger.info(f"✅ Prix IA mis à jour pour {vehicle.name}: {estimated_price:,.0f} CHF")
                 else:
                     results["errors"] += 1
                     results["details"].append({
                         "id": vehicle.id,
                         "name": vehicle.name,
                         "status": "error",
-                        "error": update_data.get("error", "Erreur inconnue")
+                        "error": f"Erreur base de données: {db_response.status_code}"
                     })
                 
                 # Délai pour éviter de surcharger l'API OpenAI
@@ -3194,6 +3345,7 @@ def ai_update_all_vehicles():
                     "status": "error",
                     "error": str(e)
                 })
+                logger.error(f"Erreur mise à jour {vehicle.name}: {e}")
         
         logger.info(f"🔄 Mise à jour IA terminée: {results['updated']}/{results['total_vehicles']} véhicules mis à jour")
         
