@@ -2900,15 +2900,9 @@ def generate_portfolio_pdf():
         # Générer le PDF avec WeasyPrint
         try:
             from weasyprint import HTML
-            from weasyprint.text.fonts import FontConfiguration
             
-            # Configuration des polices
-            font_config = FontConfiguration()
-            
-            # Créer le PDF
-            pdf = HTML(string=html_content).write_pdf(
-                font_config=font_config
-            )
+            # Créer le PDF sans paramètres supplémentaires
+            pdf = HTML(string=html_content).write_pdf()
             
             # Retourner le PDF
             from flask import Response
@@ -3090,10 +3084,9 @@ def generate_asset_class_report(asset_class_name):
         # Générer le PDF avec WeasyPrint
         try:
             from weasyprint import HTML
-            from weasyprint.text.fonts import FontConfiguration
             
-            font_config = FontConfiguration()
-            pdf = HTML(string=html_content).write_pdf(font_config=font_config)
+            # Créer le PDF sans paramètres supplémentaires
+            pdf = HTML(string=html_content).write_pdf()
             
             response = Response(pdf, mimetype='application/pdf')
             response.headers['Content-Disposition'] = f'attachment; filename=bonvin_{asset_class_name.replace(" ", "_").lower()}_{datetime.now().strftime("%Y%m%d_%H%M")}.pdf'
@@ -3238,10 +3231,8 @@ def generate_all_asset_classes_report():
         # Générer le PDF
         try:
             from weasyprint import HTML
-            from weasyprint.text.fonts import FontConfiguration
             
-            font_config = FontConfiguration()
-            pdf = HTML(string=full_html).write_pdf(font_config=font_config)
+            pdf = HTML(string=full_html).write_pdf()
             
             response = Response(pdf, mimetype='application/pdf')
             response.headers['Content-Disposition'] = f'attachment; filename=bonvin_all_asset_classes_{datetime.now().strftime("%Y%m%d_%H%M")}.pdf'
