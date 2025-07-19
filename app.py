@@ -113,7 +113,8 @@ EMAIL_RECIPIENTS = os.getenv("EMAIL_RECIPIENTS", "").split(",")
 
 FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY")
 
-
+# Configuration EODHD (excellente pour actions suisses)
+EODHD_API_KEY = os.getenv("EODHD_API_KEY", "687ae6e8493e52.65071366")  # Clé par défaut pour test
 
 if not all([SUPABASE_URL, SUPABASE_KEY]):
     logger.error("Variables d'environnement manquantes")
@@ -2078,9 +2079,12 @@ def get_stock_price(symbol):
                 logger.info(f"Retour des données en cache pour {symbol}")
                 return jsonify(stock_price_cache[cache_key]['data'])
         
-        logger.warning(f"Yahoo Finance a échoué pour {symbol} ({e}), bascule sur Finnhub.")
+        logger.warning(f"Yahoo Finance a échoué pour {symbol} ({e}), bascule sur EODHD puis Finnhub.")
         
-
+        # Pour les actions suisses, essayer EODHD en priorité
+        if item and item.stock_exchange and item.stock_exchange.upper() in ['SWX', 'SIX', 'SWISS', 'CH']:
+            logger.info(f"Essai avec EODHD pour {symbol}")
+            return get_stock_price_eodhd(symbol, item, cache_key)
         
         return get_stock_price_finnhub(symbol, item, cache_key)
 
@@ -2229,7 +2233,111 @@ def get_stock_price_finnhub(symbol: str, item: Optional[CollectionItem], cache_k
         }), 500
 
 
+def get_stock_price_eodhd(symbol: str, item: Optional[CollectionItem], cache_key: str):
+    """
+    Récupère le prix via l'API EODHD. Excellente pour les actions suisses.
+    Limite: 20 requêtes par jour.
+    """
+    if not EODHD_API_KEY:
+        return jsonify({"error": "Clé API EODHD non configurée"}), 500
 
+    try:
+        logger.info(f"Interrogation d'EODHD avec le symbole : {symbol}")
+        
+        import requests
+        # EODHD Real-Time API
+        quote_url = f"https://eodhd.com/api/real-time/{symbol}?api_token={EODHD_API_KEY}&fmt=json"
+        response = requests.get(quote_url, timeout=10)
+        
+        if response.status_code == 429:
+            raise Exception("Rate limit EODHD atteint")
+        response.raise_for_status()
+        
+        data = response.json()
+        
+        # Vérifier si la réponse contient des données
+        if not data or len(data) == 0:
+            # Essayer avec différents formats pour les actions suisses
+            if item and item.stock_exchange and item.stock_exchange.upper() in ['SWX', 'SIX', 'SWISS', 'CH']:
+                symbol_variants = [
+                    f"{symbol}.SW",  # Format suisse standard
+                    symbol.replace('.SW', ''),  # Symbole sans suffixe
+                    f"{symbol}.SWX",  # Format SWX
+                    f"{symbol}.SIX",  # Format SIX
+                ]
+                
+                for variant in symbol_variants:
+                    if variant == symbol:
+                        continue
+                        
+                    logger.info(f"Essai EODHD avec le symbole: '{variant}'")
+                    quote_url_variant = f"https://eodhd.com/api/real-time/{variant}?api_token={EODHD_API_KEY}&fmt=json"
+                    response_variant = requests.get(quote_url_variant, timeout=10)
+                    
+                    if response_variant.ok:
+                        data_variant = response_variant.json()
+                        if data_variant and len(data_variant) > 0:
+                            data = data_variant
+                            symbol = variant
+                            logger.info(f"✅ Symbole EODHD '{variant}' fonctionne")
+                            break
+            
+            # Si toujours pas de données
+            if not data or len(data) == 0:
+                raise Exception(f"Aucune donnée trouvée pour '{symbol}' sur EODHD")
+        
+        # EODHD retourne un array, prendre le premier élément
+        quote = data[0] if isinstance(data, list) else data
+        current_price = float(quote.get("close", 0))
+        
+        if current_price <= 0:
+            raise Exception("Prix invalide reçu d'EODHD")
+        
+        # Récupérer la devise
+        currency = quote.get("currency", "USD")
+        # Pour les actions suisses, on suppose CHF
+        if item and item.stock_exchange and item.stock_exchange.upper() in ['SWX', 'SIX', 'SWISS', 'CH']:
+            currency = "CHF"
+        
+        # Conversion en CHF si nécessaire
+        if currency != "CHF":
+            conversion_rate = get_live_exchange_rate(currency, 'CHF')
+            price_chf = current_price * conversion_rate
+        else:
+            price_chf = current_price
+        
+        result = {
+            "symbol": symbol,
+            "price": current_price,
+            "price_chf": price_chf,
+            "currency": currency,
+            "company_name": quote.get("code", symbol),
+            "last_update": datetime.now().isoformat(),
+            "source": "EODHD",
+            "change": quote.get("change", "N/A"),
+            "change_percent": quote.get("change_p", "N/A")
+        }
+        
+        logger.info(f"✅ Prix EODHD récupéré pour {symbol}: {current_price} {currency}")
+        
+        # Mettre en cache
+        stock_price_cache[cache_key] = {'data': result, 'timestamp': time.time()}
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Erreur EODHD pour {symbol}: {e}")
+        
+        # Utiliser le cache si disponible
+        if cache_key in stock_price_cache:
+            logger.info(f"Erreur API, retour des données en cache pour {symbol}")
+            return jsonify(stock_price_cache[cache_key]['data'])
+        
+        return jsonify({
+            "error": "Prix non disponible via EODHD", 
+            "details": str(e),
+            "message": "Veuillez mettre à jour le prix manuellement."
+        }), 500
 
 
 @app.route("/api/market-price/<int:item_id>")
