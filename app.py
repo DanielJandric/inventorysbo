@@ -2229,12 +2229,48 @@ def get_stock_price_cache_status():
             "cache_duration": STOCK_PRICE_CACHE_DURATION,
             "expired_entries": expired_entries,
             "cache_keys": cache_keys,
-            "cache_ages": cache_ages
+            "cache_ages": cache_ages,
+            "eodhd_quota_warning": "⚠️ Quota EODHD probablement dépassé (20 req/jour). Utilisez les prix manuels."
         })
     except Exception as e:
         logger.error(f"Erreur lors de la récupération du statut du cache: {e}")
         return jsonify({
             "error": str(e)
+        }), 500
+
+@app.route("/api/eodhd/quota")
+def check_eodhd_quota():
+    """Vérifie le quota EODHD restant"""
+    try:
+        import requests
+        # Test avec un symbole simple
+        test_url = f"https://eodhd.com/api/real-time/AAPL?api_token={EODHD_API_KEY}&fmt=json"
+        response = requests.get(test_url, timeout=5)
+        
+        if response.status_code == 402:
+            return jsonify({
+                "quota_exceeded": True,
+                "message": "Quota EODHD dépassé (20 requêtes/jour)",
+                "reset_time": "Minuit (heure locale)",
+                "suggestion": "Utilisez les prix manuels ou attendez le reset"
+            })
+        elif response.status_code == 200:
+            return jsonify({
+                "quota_exceeded": False,
+                "message": "Quota EODHD disponible",
+                "remaining_requests": "Inconnu (API ne fournit pas cette info)"
+            })
+        else:
+            return jsonify({
+                "quota_exceeded": "Unknown",
+                "status_code": response.status_code,
+                "message": f"Statut inattendu: {response.status_code}"
+            })
+            
+    except Exception as e:
+        return jsonify({
+            "error": str(e),
+            "message": "Impossible de vérifier le quota"
         }), 500
 
 
