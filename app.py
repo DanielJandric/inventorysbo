@@ -3370,11 +3370,34 @@ def fix_vehicle_categories():
         )
         
         if response.status_code != 200:
-            logger.error(f"Erreur récupération items: {response.status_code} - {response.text}")
-            return jsonify({"error": "Erreur lors de la récupération des données"}), 500
+            logger.error(f"❌ Erreur récupération items: {response.status_code} - {response.text}")
+            return jsonify({
+                "error": f"Erreur lors de la récupération des données (HTTP {response.status_code})",
+                "status_code": response.status_code,
+                "response_text": response.text[:500]
+            }), 500
         
-        all_items = response.json()
+        # Vérifier que la réponse contient des données JSON valides
+        try:
+            all_items = response.json()
+        except Exception as e:
+            logger.error(f"❌ Erreur parsing JSON: {e} - Response: {response.text[:200]}")
+            return jsonify({
+                "error": "Erreur lors du parsing de la réponse JSON",
+                "parse_error": str(e),
+                "response_preview": response.text[:200]
+            }), 500
         logger.info(f"📊 Total objets récupérés: {len(all_items)}")
+        logger.info(f"🔍 Données brutes: {all_items[:2]}")  # Log des 2 premiers objets pour debug
+        
+        # Vérifier si la réponse est valide
+        if not isinstance(all_items, list):
+            logger.error(f"❌ Réponse invalide: {type(all_items)} - {all_items}")
+            return jsonify({
+                "error": "Format de réponse invalide de la base de données",
+                "response_type": str(type(all_items)),
+                "response_preview": str(all_items)[:200]
+            }), 500
         
         # Analyser toutes les catégories existantes
         all_categories = set()
@@ -3382,6 +3405,10 @@ def fix_vehicle_categories():
         items_without_category = 0
         
         for item in all_items:
+            if not isinstance(item, dict):
+                logger.warning(f"⚠️ Objet invalide: {type(item)} - {item}")
+                continue
+                
             category = item.get('category')
             if category:
                 all_categories.add(category)

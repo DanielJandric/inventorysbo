@@ -784,7 +784,23 @@ async function fixVehicleCategories() {
             console.log('📊 Résultats correction catégories:', result);
             
         } else {
-            showError(`Erreur: ${result.error}`);
+            let errorMessage = `Erreur: ${result.error}`;
+            
+            // Ajouter des détails supplémentaires si disponibles
+            if (result.status_code) {
+                errorMessage += `\nCode HTTP: ${result.status_code}`;
+            }
+            if (result.response_text) {
+                errorMessage += `\nRéponse: ${result.response_text}`;
+            }
+            if (result.parse_error) {
+                errorMessage += `\nErreur parsing: ${result.parse_error}`;
+            }
+            if (result.response_preview) {
+                errorMessage += `\nAperçu: ${result.response_preview}`;
+            }
+            
+            showError(errorMessage);
         }
         
     } catch (error) {
