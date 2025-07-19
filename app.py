@@ -22,12 +22,15 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
-# Import configuration
-try:
-    import config
-    print("✅ Configuration importée")
-except ImportError:
-    print("⚠️ Fichier config.py non trouvé")
+# Import configuration seulement si les variables ne sont pas déjà définies
+if not os.getenv("SUPABASE_URL") or not os.getenv("SUPABASE_KEY"):
+    try:
+        import config
+        print("✅ Configuration locale importée")
+    except ImportError:
+        print("⚠️ Fichier config.py non trouvé")
+else:
+    print("✅ Variables d'environnement déjà définies (déploiement)")
 
 # Configuration logging sophistiquée
 logging.basicConfig(

@@ -4,6 +4,7 @@
 .env.production
 
 # Fichiers de configuration avec clés sensibles
+config.py
 config_local.py
 config_production.py
 

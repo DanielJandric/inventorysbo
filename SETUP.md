@@ -11,19 +11,16 @@
 
 ### 1. Variables d'environnement
 
-Créez un fichier `config.py` avec vos vraies clés :
+#### Pour le développement local :
+Copiez `config_example.py` en `config.py` et remplacez par vos vraies clés :
 
-```python
-import os
-
-# Supabase
-os.environ['SUPABASE_URL'] = "https://votre-projet.supabase.co"
-os.environ['SUPABASE_KEY'] = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.votre_clé_supabase_ici"
-
-# APIs
-os.environ['EODHD_API_KEY'] = "votre_clé_eodhd_ici"
-os.environ['OPENAI_API_KEY'] = "sk-votre_clé_openai_ici"
+```bash
+copy config_example.py config.py
+# Puis éditez config.py avec vos vraies clés
 ```
+
+#### Pour le déploiement (Render/Vercel) :
+Les variables d'environnement sont définies dans le dashboard du service.
 
 ### 2. Base de données
 
