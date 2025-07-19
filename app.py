@@ -1666,7 +1666,8 @@ class PureOpenAIEngineWithRAG:
         ]
         
         # Forcer la recherche sémantique pour les questions sur les quantités et marques
-        if 'combien' in query_lower or any(word in query_lower for word in ['porsche', 'mercedes', 'bmw', 'allemande', 'italienne', 'actions', 'bourse']):
+        car_brands = ['porsche', 'mercedes', 'bmw', 'ferrari', 'lamborghini', 'audi', 'volkswagen', 'allemande', 'italienne']
+        if 'combien' in query_lower or any(word in query_lower for word in car_brands + ['actions', 'bourse']):
             logger.info(f"Intent détecté: SEMANTIC_SEARCH pour '{query}'")
             return QueryIntent.SEMANTIC_SEARCH
         
@@ -1688,27 +1689,52 @@ class PureOpenAIEngineWithRAG:
         return QueryIntent.UNKNOWN
     
     def generate_response(self, query: str, items: List[CollectionItem], analytics: Dict[str, Any]) -> str:
-        """Génère une réponse via OpenAI GPT-4 avec approche hybride intelligente"""
+        """Génère une réponse via OpenAI GPT-4 avec approche hybride intelligente (sans historique)"""
+        return self.generate_response_with_history(query, items, analytics, [])
+    
+    def generate_response_with_history(self, query: str, items: List[CollectionItem], analytics: Dict[str, Any], conversation_history: List[Dict[str, str]]) -> str:
+        """Génère une réponse via OpenAI GPT-4 avec approche hybride intelligente et mémoire conversationnelle"""
         
         if not self.client:
             return "Moteur IA Indisponible"
         
-        # Pour les petits datasets (< 500 items), utiliser l'approche FULL CONTEXT
-        if len(items) < 500:
-            logger.info(f"Dataset petit ({len(items)} items), utilisation de l'approche FULL CONTEXT")
-            return self._generate_full_context_response(query, items, analytics)
+        # Détecter si c'est une recherche par concepts qui nécessite l'intelligence de GPT-4
+        query_lower = query.lower()
+        concept_keywords = [
+            'rapide', 'rapides', 'sûr', 'sûrs', 'sécurisé', 'sécurisés',
+            'luxe', 'luxueux', 'premium', 'haut de gamme',
+            'opportunité', 'opportunités', 'croissance', 'potentiel',
+            'risque', 'risques', 'volatil', 'stable', 'stabilité',
+            'récents', 'anciens', 'neufs', 'occasion',
+            'places', 'sièges', 'portes', 'cylindres',
+            'électrique', 'hybride', 'essence', 'diesel',
+            'sport', 'sportif', 'confort', 'familial',
+            'investissement', 'placement', 'épargne',
+            'tendance', 'tendances', 'populaire', 'rare',
+            'cher', 'bon marché', 'accessible', 'exclusif'
+        ]
+        
+        # Si la requête contient des concepts ou est une question complexe, utiliser l'IA intelligente
+        is_concept_search = any(keyword in query_lower for keyword in concept_keywords)
+        is_complex_question = any(word in query_lower for word in ['pourquoi', 'comment', 'quand', 'où', 'quel', 'quelle', 'quels', 'quelles'])
+        
+        # Pour les petits datasets (< 500 items) OU les recherches par concepts, utiliser l'approche FULL CONTEXT
+        if len(items) < 500 or is_concept_search or is_complex_question:
+            logger.info(f"Utilisation de l'approche FULL CONTEXT - Dataset: {len(items)} items, Concept: {is_concept_search}, Complexe: {is_complex_question}")
+            return self._generate_full_context_response_with_history(query, items, analytics, conversation_history, is_concept_search)
         
         # Pour les gros datasets, utiliser la recherche sémantique
         items_with_embeddings = sum(1 for item in items if item.embedding)
         if items_with_embeddings > 0:
             logger.info(f"Dataset large, utilisation de la recherche sémantique pour: '{query}'")
-            return self._generate_semantic_response(query, items, analytics)
+            return self._generate_semantic_response_with_history(query, items, analytics, conversation_history)
         
-        # Fallback sur l'ancienne méthode
-        logger.info(f"Pas d'embeddings, utilisation de la méthode classique")
+        # Fallback sur l'ancienne méthode avec historique
+        logger.info(f"Pas d'embeddings, utilisation de la méthode classique avec historique")
         
-        # Cache et méthode classique...
-        cache_key = hashlib.md5(f"{query}{len(items)}{json.dumps(analytics.get('basic_metrics', {}), sort_keys=True)}".encode()).hexdigest()[:12]
+        # Cache avec historique
+        history_hash = hashlib.md5(json.dumps(conversation_history, sort_keys=True).encode()).hexdigest()[:8]
+        cache_key = hashlib.md5(f"{query}{len(items)}{history_hash}{json.dumps(analytics.get('basic_metrics', {}), sort_keys=True)}".encode()).hexdigest()[:12]
         cached_response = smart_cache.get('ai_responses', cache_key)
         if cached_response:
             return cached_response
@@ -1717,10 +1743,10 @@ class PureOpenAIEngineWithRAG:
             # Construire le contexte complet
             context = self._build_complete_context(items, analytics)
             
-            # Prompt système unifié
-            system_prompt = """Tu es l'assistant IA expert de la collection BONVIN.
+            # Prompt système unifié avec mémoire conversationnelle
+            system_prompt = """Tu es l'assistant IA expert de la collection BONVIN avec mémoire conversationnelle.
 Tu as accès à toutes les données de la collection et tu fournis des analyses précises et contextualisées.
-Tu réponds TOUJOURS en français de manière STRUCTURÉE et CONCISE.
+Tu peux te référer à l'historique de la conversation pour contextualiser tes réponses.
 
 RÈGLES:
 1. Utilise TOUJOURS des données factuelles de la collection
@@ -1728,24 +1754,35 @@ RÈGLES:
 3. Sois PRÉCIS avec les chiffres et les détails
 4. Maximum 800 mots
 5. Pas de formules de politesse génériques
-6. Utilise ton intelligence pour comprendre et contextualiser les données"""
+6. Utilise ton intelligence pour comprendre et contextualiser les données
+7. Réfère-toi à l'historique de conversation quand c'est pertinent
+8. Évite de répéter des informations déjà données sauf si demandé"""
 
-            # Prompt utilisateur
+            # Construire les messages avec historique
+            messages = [{"role": "system", "content": system_prompt}]
+            
+            # Ajouter l'historique de conversation (limité à 10 messages pour éviter les tokens excessifs)
+            for msg in conversation_history[-10:]:
+                if msg.get('role') in ['user', 'assistant'] and msg.get('content'):
+                    messages.append({
+                        "role": msg['role'],
+                        "content": msg['content']
+                    })
+            
+            # Ajouter la question actuelle
             user_prompt = f"""QUESTION: {query}
 
 DONNÉES COLLECTION BONVIN:
 {context}
 
-Analyse cette question et fournis une réponse complète et contextualisée basée sur les données réelles de la collection.
-Si la question concerne des véhicules, utilise ton intelligence pour déterminer leurs caractéristiques.
-Sois créatif dans ton analyse tout en restant factuel."""
+Analyse cette question en tenant compte de l'historique de notre conversation et fournis une réponse complète et contextualisée basée sur les données réelles de la collection.
+Si la question fait référence à des éléments mentionnés précédemment, utilise cette information pour enrichir ta réponse."""
+
+            messages.append({"role": "user", "content": user_prompt})
 
             response = self.client.chat.completions.create(
                 model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
+                messages=messages,
                 temperature=0.2,
                 max_tokens=1000,
                 timeout=30
@@ -1762,11 +1799,16 @@ Sois créatif dans ton analyse tout en restant factuel."""
             logger.error(f"Erreur OpenAI: {e}")
             return "Moteur IA Indisponible"
     
-    def _generate_full_context_response(self, query: str, items: List[CollectionItem], analytics: Dict[str, Any]) -> str:
+    def _generate_full_context_response(self, query: str, items: List[CollectionItem], analytics: Dict[str, Any], is_concept_search: bool = False) -> str:
+        """Génère une réponse en donnant TOUTES les données à GPT-4 (pour petits datasets) - sans historique"""
+        return self._generate_full_context_response_with_history(query, items, analytics, [], is_concept_search)
+    
+    def _generate_full_context_response_with_history(self, query: str, items: List[CollectionItem], analytics: Dict[str, Any], conversation_history: List[Dict[str, str]], is_concept_search: bool = False) -> str:
         """Génère une réponse en donnant TOUTES les données à GPT-4 (pour petits datasets)"""
         try:
-            # Cache pour éviter les appels répétés
-            cache_key = hashlib.md5(f"{query}{len(items)}{json.dumps(analytics.get('basic_metrics', {}), sort_keys=True)}".encode()).hexdigest()[:12]
+            # Cache pour éviter les appels répétés (avec historique)
+            history_hash = hashlib.md5(json.dumps(conversation_history, sort_keys=True).encode()).hexdigest()[:8]
+            cache_key = hashlib.md5(f"{query}{len(items)}{history_hash}{json.dumps(analytics.get('basic_metrics', {}), sort_keys=True)}".encode()).hexdigest()[:12]
             cached_response = smart_cache.get('ai_responses', cache_key)
             if cached_response:
                 return cached_response
@@ -1774,49 +1816,100 @@ Sois créatif dans ton analyse tout en restant factuel."""
             # Construire le contexte COMPLET avec TOUS les objets
             complete_context = self._build_complete_dataset_context(items, analytics)
             
-            # Prompt système optimisé pour l'analyse complète
-            system_prompt = """Tu es l'assistant IA expert de la collection BONVIN avec accès COMPLET à toutes les données.
+            # Prompt système optimisé pour l'analyse complète avec recherche par concepts et mémoire conversationnelle
+            system_prompt = """Tu es l'assistant IA expert de la collection BONVIN avec mémoire conversationnelle.
 Tu as TOUS les objets de la collection et tu peux faire des analyses sophistiquées et détaillées.
+Tu peux te référer à l'historique de la conversation pour contextualiser tes réponses.
 
-POUVOIRS SPÉCIAUX POUR PETITS DATASETS:
-1. **Analyse complète** : Tu vois TOUS les objets, pas seulement une sélection
-2. **Recherche intelligente** : Tu peux chercher par nom, marque, catégorie, prix, année, etc.
-3. **Calculs avancés** : Totaux, moyennes, statistiques, tendances
-4. **Comparaisons** : Entre objets, catégories, périodes
-5. **Insights business** : Recommandations stratégiques basées sur les données complètes
-6. **Analyse de marché** : Évaluation des prix, opportunités, risques
+POUVOIRS SPÉCIAUX POUR RECHERCHE INTELLIGENTE:
+1. **Recherche par concepts** : Tu peux identifier les objets selon des concepts abstraits
+   - "voitures rapides" → Ferrari, Lamborghini, Porsche GT3, voitures électriques
+   - "investissements sûrs" → Actions stables (Nestlé), immobilier, montres de luxe
+   - "objets de luxe" → Montres premium, voitures haut de gamme, art
+   - "opportunités de croissance" → Actions tech, start-ups, objets sous-évalués
+
+2. **Recherche par caractéristiques** : Tu peux analyser les spécifications
+   - "voitures 4 places" → Analyser les descriptions et spécifications
+   - "objets en bon état" → Filtrer par condition (Excellent, Parfait)
+   - "investissements récents" → Analyser les dates d'acquisition
+   - "objets chers" → Analyser les prix demandés et d'acquisition
+
+3. **Recherche contextuelle** : Tu peux comprendre le contexte
+   - "tendances" → Analyser les acquisitions récentes et les prix
+   - "risques" → Identifier les investissements volatils
+   - "performance" → Analyser les plus-values et moins-values
+   - "diversification" → Analyser la répartition par catégorie
+
+4. **Analyse comparative** : Tu peux comparer intelligemment
+   - Entre marques, catégories, années, prix
+   - Performance relative des investissements
+   - Opportunités vs risques
+
+5. **Insights business** : Tu peux proposer des recommandations
+   - Objets à vendre ou acheter
+   - Stratégies d'investissement
+   - Optimisation du portefeuille
+
+6. **Mémoire conversationnelle** : Tu peux te référer à l'historique
+   - Utilise les informations précédentes pour enrichir tes réponses
+   - Évite de répéter des informations déjà données sauf si demandé
+   - Fais des liens avec les questions précédentes
 
 RÈGLES D'OR:
 1. **Précision absolue** : Utilise les données exactes de la collection
-2. **Réponses complètes** : Ne laisse rien de côté si c'est pertinent
-3. **Intelligence contextuelle** : Comprends l'intention derrière la question
-4. **Insights business** : Va au-delà des faits, propose des analyses
-5. **Structure claire** : Organise tes réponses de manière professionnelle
-6. **Calculs automatiques** : Fais les maths nécessaires (totaux, pourcentages, etc.)
+2. **Intelligence conceptuelle** : Utilise tes connaissances pour interpréter les concepts
+3. **Recherche complète** : Analyse TOUS les objets pertinents, pas seulement une sélection
+4. **Contextualisation** : Explique pourquoi chaque objet correspond au concept demandé
+5. **Insights business** : Va au-delà des faits, propose des analyses et recommandations
+6. **Structure claire** : Organise tes réponses de manière professionnelle
+7. **Mémoire conversationnelle** : Utilise l'historique pour enrichir tes réponses
 
-EXEMPLES DE CAPACITÉS:
-- "Combien de Mercedes ?" → Liste complète + analyse par modèle/année/prix
-- "Valeur totale" → Calcul précis + répartition par catégorie
-- "Objets en vente" → Analyse du pipeline + recommandations
-- "Performance actions" → Analyse boursière + conseils d'investissement
-- "Opportunités" → Identification d'objets sous-évalués ou de niches
-- "Tendances" → Analyse temporelle et prédictive"""
+EXEMPLES DE RECHERCHE PAR CONCEPTS:
+- "Montre-moi mes voitures rapides" → Identifier Ferrari, Lamborghini, Porsche GT3, voitures électriques
+- "Quels sont mes investissements sûrs ?" → Actions stables, immobilier, montres de luxe
+- "Opportunités de croissance" → Actions tech, start-ups, objets sous-évalués
+- "Objets de luxe" → Montres premium, voitures haut de gamme, art
+- "Risques dans mon portefeuille" → Actions volatiles, objets en mauvais état
+- "Tendances récentes" → Acquisitions récentes, évolution des prix"""
 
-            # Prompt utilisateur avec contexte complet
+            # Construire les messages avec historique
+            messages = [{"role": "system", "content": system_prompt}]
+            
+            # Ajouter l'historique de conversation (limité à 8 messages pour éviter les tokens excessifs)
+            for msg in conversation_history[-8:]:
+                if msg.get('role') in ['user', 'assistant'] and msg.get('content'):
+                    messages.append({
+                        "role": msg['role'],
+                        "content": msg['content']
+                    })
+            
+            # Prompt utilisateur avec contexte complet et recherche par concepts
             user_prompt = f"""QUESTION: {query}
 
 DONNÉES COMPLÈTES DE LA COLLECTION BONVIN:
 {complete_context}
 
-ANALYSEZ cette question avec TOUTES les données disponibles et fournissez une réponse COMPLÈTE et SOPHISTIQUÉE.
-Utilisez votre intelligence pour faire des connexions, des calculs et des insights business pertinents."""
+INSTRUCTIONS D'ANALYSE:
+1. **Analysez la question** : Comprenez l'intention et les concepts demandés
+2. **Recherche intelligente** : Identifiez TOUS les objets pertinents selon les concepts
+3. **Contextualisation** : Expliquez pourquoi chaque objet correspond au concept
+4. **Analyse comparative** : Comparez les objets trouvés entre eux
+5. **Insights business** : Proposez des recommandations et insights
+6. **Mémoire conversationnelle** : Utilisez l'historique pour enrichir votre réponse
+
+EXEMPLES DE RECHERCHE PAR CONCEPTS:
+- Si on demande "voitures rapides" → Cherchez Ferrari, Lamborghini, Porsche GT3, voitures électriques
+- Si on demande "investissements sûrs" → Cherchez actions stables, immobilier, montres de luxe
+- Si on demande "opportunités" → Cherchez objets sous-évalués, actions tech, start-ups
+- Si on demande "objets de luxe" → Cherchez montres premium, voitures haut de gamme, art
+
+Fournissez une réponse COMPLÈTE, STRUCTURÉE et CONTEXTUALISÉE basée sur votre analyse intelligente de toutes les données et l'historique de notre conversation."""
+
+            messages.append({"role": "user", "content": user_prompt})
 
             response = self.client.chat.completions.create(
                 model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
+                messages=messages,
                 temperature=0.2,
                 max_tokens=2000,  # Plus de tokens pour les analyses complètes
                 timeout=45
@@ -1827,8 +1920,12 @@ Utilisez votre intelligence pour faire des connexions, des calculs et des insigh
             # Cache la réponse
             smart_cache.set('ai_responses', ai_response, cache_key)
             
-            # Ajouter un indicateur de mode complet
-            ai_response = f"🧠 **Mode Analyse Complète** - Toutes les données analysées\n\n{ai_response}"
+            # Ajouter un indicateur de mode complet avec recherche par concepts et mémoire conversationnelle
+            memory_indicator = "💬 **Mémoire conversationnelle activée**" if conversation_history else ""
+            if is_concept_search:
+                ai_response = f"🧠 **Mode Recherche par Concepts** - IA intelligente activée\n{memory_indicator}\n\n{ai_response}"
+            else:
+                ai_response = f"🧠 **Mode Analyse Complète** - Toutes les données analysées\n{memory_indicator}\n\n{ai_response}"
             
             return ai_response
             
@@ -1837,6 +1934,10 @@ Utilisez votre intelligence pour faire des connexions, des calculs et des insigh
             return self._fallback_to_keyword_search(query, items)
     
     def _generate_semantic_response(self, query: str, items: List[CollectionItem], analytics: Dict[str, Any]) -> str:
+        """Génère une réponse via recherche sémantique (sans historique)"""
+        return self._generate_semantic_response_with_history(query, items, analytics, [])
+    
+    def _generate_semantic_response_with_history(self, query: str, items: List[CollectionItem], analytics: Dict[str, Any], conversation_history: List[Dict[str, str]]) -> str:
         """Génère une réponse en utilisant la recherche sémantique RAG"""
         try:
             # Vérifier d'abord si nous avons des embeddings
@@ -1866,9 +1967,10 @@ Utilisez votre intelligence pour faire des connexions, des calculs et des insigh
             # Construire le contexte RAG
             rag_context = self._build_rag_context(relevant_results, query)
             
-            # Prompt pour GPT avec contexte RAG
-            system_prompt = """Tu es l'assistant IA expert de la collection BONVIN avec capacités de recherche sémantique avancée.
+            # Prompt pour GPT avec contexte RAG et mémoire conversationnelle
+            system_prompt = """Tu es l'assistant IA expert de la collection BONVIN avec capacités de recherche sémantique avancée et mémoire conversationnelle.
 Tu utilises les résultats de recherche sémantique pour fournir des réponses précises et contextualisées.
+Tu peux te référer à l'historique de la conversation pour enrichir tes réponses.
 
 RÈGLES IMPORTANTES:
 1. Base-toi sur les objets trouvés par la recherche sémantique
@@ -1885,7 +1987,20 @@ RÈGLES IMPORTANTES:
 6. Si peu de résultats pertinents, élargis ta recherche
 7. Toujours donner le nombre exact trouvé
 8. Pour les questions de prix/valeur, additionne et calcule les totaux
-9. Pour les actions, mentionne le symbole boursier et la quantité si disponibles"""
+9. Pour les actions, mentionne le symbole boursier et la quantité si disponibles
+10. Utilise l'historique de conversation pour contextualiser tes réponses
+11. Évite de répéter des informations déjà données sauf si demandé"""
+
+            # Construire les messages avec historique
+            messages = [{"role": "system", "content": system_prompt}]
+            
+            # Ajouter l'historique de conversation (limité à 6 messages pour éviter les tokens excessifs)
+            for msg in conversation_history[-6:]:
+                if msg.get('role') in ['user', 'assistant'] and msg.get('content'):
+                    messages.append({
+                        "role": msg['role'],
+                        "content": msg['content']
+                    })
 
             user_prompt = f"""RECHERCHE DEMANDÉE: {query}
 
@@ -1897,15 +2012,15 @@ STATISTIQUES GLOBALES:
 - Objets trouvés par la recherche: {len(relevant_results)}
 - Score de pertinence moyen: {sum(score for _, score in relevant_results) / len(relevant_results):.2f}
 
-Analyse ces résultats et réponds à la recherche de l'utilisateur de manière complète et structurée.
-Si la recherche concerne des caractéristiques spécifiques (ex: "voitures 4 places"), utilise ton intelligence pour identifier ces caractéristiques."""
+Analyse ces résultats en tenant compte de l'historique de notre conversation et réponds à la recherche de l'utilisateur de manière complète et structurée.
+Si la recherche concerne des caractéristiques spécifiques (ex: "voitures 4 places"), utilise ton intelligence pour identifier ces caractéristiques.
+Utilise l'historique pour enrichir ta réponse et éviter les répétitions."""
+
+            messages.append({"role": "user", "content": user_prompt})
 
             response = self.client.chat.completions.create(
                 model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
+                messages=messages,
                 temperature=0.3,
                 max_tokens=1200,
                 timeout=30
@@ -1913,8 +2028,9 @@ Si la recherche concerne des caractéristiques spécifiques (ex: "voitures 4 pla
             
             ai_response = response.choices[0].message.content.strip()
             
-            # Ajouter un indicateur de recherche sémantique
-            ai_response = f"🔍 **Recherche intelligente activée**\n\n{ai_response}"
+            # Ajouter un indicateur de recherche sémantique avec mémoire conversationnelle
+            memory_indicator = "💬 **Mémoire conversationnelle activée**" if conversation_history else ""
+            ai_response = f"🔍 **Recherche intelligente activée**\n{memory_indicator}\n\n{ai_response}"
             
             return ai_response
             
@@ -2000,16 +2116,21 @@ Si la recherche concerne des caractéristiques spécifiques (ex: "voitures 4 pla
                     matching_items.extend([item for item in items if brand.lower() in item.name.lower()])
                 break
         
-        # Recherche spécifique pour Mercedes
-        if 'mercedes' in query_lower:
-            matching_items = [item for item in items if 'mercedes' in item.name.lower()]
+        # Recherche spécifique pour les marques de voitures individuelles
+        car_brands_specific = ['porsche', 'mercedes', 'bmw', 'ferrari', 'lamborghini', 'audi', 'volkswagen']
+        found_specific_brand = False
+        for brand in car_brands_specific:
+            if brand in query_lower:
+                matching_items = [item for item in items if brand.lower() in item.name.lower()]
+                found_specific_brand = True
+                break
         
         # Recherche spécifique pour les actions
-        elif 'action' in query_lower or 'bourse' in query_lower or 'portefeuille' in query_lower:
+        if not found_specific_brand and ('action' in query_lower or 'bourse' in query_lower or 'portefeuille' in query_lower):
             matching_items = [item for item in items if item.category == "Actions"]
         
         # Recherche par mots-clés standard si pas de correspondance spécifique
-        else:
+        elif not found_specific_brand:
             keywords = query_lower.split()
             for item in items:
                 item_text = f"{item.name} {item.category} {item.description or ''} {item.status}".lower()
@@ -2024,10 +2145,10 @@ Si la recherche concerne des caractéristiques spécifiques (ex: "voitures 4 pla
 
 Je n'ai trouvé aucun objet correspondant à votre recherche "{query}".
 
-            f"💡 **Note importante:** Il semble que les embeddings ne soient pas correctement configurés." 
+💡 **Note importante:** Il semble que les embeddings ne soient pas correctement configurés.
 Pour une recherche intelligente optimale, assurez-vous que tous les objets ont des embeddings générés.
 
-            f"📊 **Statistiques rapides:**"
+📊 **Statistiques rapides:**
 - Total objets: {len(items)}
 - Catégories disponibles: {', '.join(set(i.category for i in items if i.category))}
 """
@@ -3161,7 +3282,7 @@ Réponds en JSON avec:
 
 @app.route("/api/chatbot", methods=["POST"])
 def chatbot():
-    """Chatbot utilisant OpenAI GPT-4 avec recherche sémantique RAG"""
+    """Chatbot utilisant OpenAI GPT-4 avec recherche sémantique RAG et mémoire conversationnelle"""
     try:
         data = request.get_json()
         if not data:
@@ -3171,15 +3292,17 @@ def chatbot():
         if not query:
             return jsonify({"error": "Message requis"}), 400
         
+        # Récupération de l'historique de conversation
+        conversation_history = data.get("history", [])
+        logger.info(f"🎯 Requête: '{query}' avec {len(conversation_history)} messages d'historique")
+        
         # Récupération des données
         items = AdvancedDataManager.fetch_all_items()
         analytics = AdvancedDataManager.calculate_advanced_analytics(items)
         
-        logger.info(f"🎯 Requête: '{query}'")
-        
         if ai_engine:
-            # Génération de réponse via OpenAI avec RAG
-            response = ai_engine.generate_response(query, items, analytics)
+            # Génération de réponse via OpenAI avec RAG et historique
+            response = ai_engine.generate_response_with_history(query, items, analytics, conversation_history)
             
             # Détecter si la recherche sémantique a été utilisée
             search_type = "semantic" if "🔍 **Recherche intelligente activée**" in response else "standard"
@@ -3192,7 +3315,8 @@ def chatbot():
                     "mode": "pure_with_semantic_search",
                     "search_type": search_type,
                     "embeddings_available": sum(1 for item in items if item.embedding),
-                    "stocks_count": len([i for i in items if i.category == "Actions"])
+                    "stocks_count": len([i for i in items if i.category == "Actions"]),
+                    "conversation_history_length": len(conversation_history)
                 }
             })
         else:
