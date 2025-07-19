@@ -76,8 +76,8 @@ function updateStatistics() {
             const actionValue = item.current_price * item.stock_quantity;
             console.log(`Action ${item.name}: ${item.current_price} × ${item.stock_quantity} = ${actionValue}`);
             return sum + actionValue;
-        } else if (item.status === 'Available' && item.asking_price) {
-            return sum + item.asking_price;
+        } else if (item.status === 'Available' && item.current_value) {
+            return sum + item.current_value;
         }
         return sum;
     }, 0);
@@ -171,8 +171,8 @@ function updateChart() {
             if (item.category === 'Actions' && item.current_price && item.stock_quantity) {
                 value = item.current_price * item.stock_quantity;
                 console.log(`Treemap - Action ${item.name}: ${item.current_price} × ${item.stock_quantity} = ${value}`);
-            } else if (item.status === 'Available' && item.asking_price) {
-                value = item.asking_price;
+            } else if (item.status === 'Available' && item.current_value) {
+                value = item.current_value;
             }
             
             categoryData[item.category] += value;
@@ -319,8 +319,8 @@ function updateChart() {
         
         if (item.category === 'Actions' && item.current_price && item.stock_quantity) {
             return sum + (item.current_price * item.stock_quantity);
-        } else if (item.status === 'Available' && item.asking_price) {
-            return sum + item.asking_price;
+        } else if (item.status === 'Available' && item.current_value) {
+            return sum + item.current_value;
         }
         return sum;
     }, 0);
@@ -339,8 +339,8 @@ function updateTopCategories() {
         let value = 0;
         if (item.category === 'Actions' && item.current_price && item.stock_quantity) {
             value = item.current_price * item.stock_quantity;
-        } else if (item.status === 'Available' && item.asking_price) {
-            value = item.asking_price;
+        } else if (item.status === 'Available' && item.current_value) {
+            value = item.current_value;
         }
         
         if (!categoryValues[item.category]) {

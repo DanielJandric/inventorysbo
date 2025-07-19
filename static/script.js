@@ -257,7 +257,7 @@ function calculateStats(items) {
     const vendus = items.filter(item => item.status === 'Sold').length;
     const disponibles = items.filter(item => item.status === 'Available').length;
     const valeur_vente = items.filter(item => item.status === 'Sold').reduce((sum, item) => sum + (item.sold_price || 0), 0);
-    const valeur_disponible = items.filter(item => item.status === 'Available').reduce((sum, item) => sum + (item.asking_price || 0), 0);
+    const valeur_disponible = items.filter(item => item.status === 'Available').reduce((sum, item) => sum + (item.current_value || 0), 0);
     const currentYear = new Date().getFullYear();
     const years = items.filter(item => item.construction_year).map(item => item.construction_year);
     const age_moyen = years.length > 0 ? Math.round(years.reduce((sum, year) => sum + (currentYear - year), 0) / years.length) : 0;
@@ -489,7 +489,7 @@ async function updateStockPrices(forceRefresh = false) {
                 
                 // Mettre à jour l'objet en mémoire
                 item.current_price = data.price_chf;
-                item.asking_price = totalValue;
+                item.current_value = totalValue;
                 item.last_price_update = data.last_update;
                 
                 // Réinitialiser le compteur d'erreur pour ce symbole
@@ -846,7 +846,7 @@ function createItemCardHTML(item) {
                     <div>Catégorie: ${item.category || 'N/A'}</div>
                     ${item.construction_year ? `<div>Année: ${item.construction_year}</div>` : ''}
                     ${item.condition ? `<div>État: ${item.condition}</div>` : ''}
-                    ${item.status === 'Available' && item.asking_price ? `<div>Prix: ${formatPrice(item.asking_price)}</div>` : ''}
+                    ${item.status === 'Available' && item.current_value ? `<div>Prix: ${formatPrice(item.current_value)}</div>` : ''}
                     ${item.current_offer ? `<div>Offre: ${formatPrice(item.current_offer)}</div>` : ''}
                     ${item.status === 'Sold' && item.sold_price ? `<div>Vendu: ${formatPrice(item.sold_price)}</div>` : ''}
                     ${item.sale_progress ? `<div class="text-xs text-cyan-300">${item.sale_progress.substring(0, 50)}${item.sale_progress.length > 50 ? '...' : ''}</div>` : ''}
@@ -898,7 +898,7 @@ function createItemListHTML(item) {
                 </span>
             </td>
             <td class="p-4 hidden lg:table-cell text-slate-400">
-                ${formatPrice(item.status === 'Available' ? item.asking_price : item.sold_price)}
+                ${formatPrice(item.status === 'Available' ? item.current_value : item.sold_price)}
                 ${item.current_offer ? `<br><small class="text-orange-300">Offre: ${formatPrice(item.current_offer)}</small>` : ''}
             </td>
             <td class="p-4">
@@ -1071,7 +1071,7 @@ async function handleFormSubmit(e) {
         surface_m2: parseFloat(document.getElementById('item-surface')?.value) || null,
         rental_income_chf: parseFloat(document.getElementById('item-rental-income')?.value) || null,
         acquisition_price: parseFloat(document.getElementById('item-acquisition-price')?.value) || null,
-        asking_price: parseFloat(document.getElementById('item-asking-price')?.value) || null,
+        current_value: parseFloat(document.getElementById('item-asking-price')?.value) || null,
         sold_price: parseFloat(document.getElementById('item-sold-price')?.value) || null,
         description: document.getElementById('item-description')?.value?.trim() || null,
         for_sale: document.getElementById('item-for-sale')?.checked || false,

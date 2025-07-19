@@ -61,7 +61,7 @@ class CollectionItem:
     construction_year: Optional[int] = None
     condition: Optional[str] = None
     description: Optional[str] = None
-    asking_price: Optional[float] = None
+    current_value: Optional[float] = None
     sold_price: Optional[float] = None
     acquisition_price: Optional[float] = None
     for_sale: bool = False
@@ -858,10 +858,10 @@ class GmailNotificationManager:
             status_label = self._get_sale_status_label_text(item_data['sale_status'])
             details_rows.append(f'<tr><td>Statut vente:</td><td><span class="status-sale-progress">{status_label}</span></td></tr>')
         
-        # Prix demandé
-        if item_data.get('asking_price'):
-            price_formatted = f"{item_data['asking_price']:,.0f} CHF"
-            details_rows.append(f'<tr><td>Prix demandé:</td><td><span class="price-highlight">{price_formatted}</span></td></tr>')
+        # Valeur actuelle
+        if item_data.get('current_value'):
+            price_formatted = f"{item_data['current_value']:,.0f} CHF"
+            details_rows.append(f'<tr><td>Valeur actuelle:</td><td><span class="price-highlight">{price_formatted}</span></td></tr>')
         
         # Offre actuelle
         if item_data.get('current_offer'):
@@ -956,8 +956,8 @@ Statut: {item_data.get('status', 'N/A')}
                 text_content += f"En vente: Oui\n"
             if item_data.get('sale_status'):
                 text_content += f"Statut vente: {self._get_sale_status_label_text(item_data.get('sale_status', ''))}\n"
-            if item_data.get('asking_price'):
-                text_content += f"Prix demandé: {item_data.get('asking_price', 0):,.0f} CHF\n"
+            if item_data.get('current_value'):
+                text_content += f"Valeur actuelle: {item_data.get('current_value', 0):,.0f} CHF\n"
             if item_data.get('current_offer'):
                 text_content += f"Offre actuelle: {item_data.get('current_offer', 0):,.0f} CHF\n"
             if item_data.get('sold_price'):
@@ -1042,12 +1042,12 @@ L'objet "<strong>{item_data.get('name', 'N/A')}</strong>" de la catégorie "<str
         """Notification pour une nouvelle offre"""
         subject = f"Nouvelle offre: {item_data.get('name', 'Objet')}"
         
-        asking_price = item_data.get('asking_price', 0)
-        percentage = (offer_amount / asking_price * 100) if asking_price > 0 else 0
+        current_value = item_data.get('current_value', 0)
+        percentage = (offer_amount / current_value * 100) if current_value > 0 else 0
         
         if percentage >= 90:
             quality = "<strong>Excellente offre !</strong>"
-            advice = "Cette offre est très proche de votre prix demandé. Considérez sérieusement cette proposition."
+            advice = "Cette offre est très proche de votre valeur actuelle. Considérez sérieusement cette proposition."
         elif percentage >= 75:
             quality = "<strong>Offre interessante</strong>"
             advice = "Cette offre mérite une analyse approfondie. Vous pouvez négocier ou accepter."
@@ -1056,14 +1056,14 @@ L'objet "<strong>{item_data.get('name', 'N/A')}</strong>" de la catégorie "<str
             advice = "Cette offre est en dessous de vos attentes. Contre-proposez ou négociez."
         else:
             quality = "<strong>Offre faible</strong>"
-            advice = "Cette offre est significativement en dessous du prix demandé. Évaluez si une négociation est pertinente."
+            advice = "Cette offre est significativement en dessous de la valeur actuelle. Évaluez si une négociation est pertinente."
         
         content = f"""
         f"Une nouvelle offre vient d'etre recue pour cet objet !"
 
 <strong>Montant de l'offre:</strong> {offer_amount:,.0f} CHF
-<strong>Prix demandé:</strong> {asking_price:,.0f} CHF  
-<strong>Pourcentage:</strong> {percentage:.1f}% du prix demandé
+<strong>Valeur actuelle:</strong> {current_value:,.0f} CHF  
+<strong>Pourcentage:</strong> {percentage:.1f}% de la valeur actuelle
 
 {quality}
 
@@ -1112,9 +1112,9 @@ L'objet "<strong>{item_data.get('name', 'N/A')}</strong>" de la catégorie "<str
             if new_data.get('current_offer'):
                 changes.append(f"💰 <strong>Nouvelle offre:</strong> {new_data.get('current_offer', 0):,.0f} CHF")
         
-        # Changement de prix
-        if old_data.get('asking_price') != new_data.get('asking_price'):
-            changes.append(f"<strong>Prix demandé:</strong> {old_data.get('asking_price', 0):,.0f} CHF → {new_data.get('asking_price', 0):,.0f} CHF")
+        # Changement de valeur
+        if old_data.get('current_value') != new_data.get('current_value'):
+            changes.append(f"<strong>Valeur actuelle:</strong> {old_data.get('current_value', 0):,.0f} CHF → {new_data.get('current_value', 0):,.0f} CHF")
         
         # Prix de vente final
         if old_data.get('sold_price') != new_data.get('sold_price'):
@@ -1325,7 +1325,7 @@ class AdvancedDataManager:
     @staticmethod
     def _financial_metrics(items: List[CollectionItem]) -> Dict[str, Any]:
         """Métriques financières avancées"""
-        total_asking = sum(i.asking_price or 0 for i in items if i.status == 'Available' and i.asking_price)
+        total_current = sum(i.current_value or 0 for i in items if i.status == 'Available' and i.current_value)
         total_sold = sum(i.sold_price or 0 for i in items if i.status == 'Sold' and i.sold_price)
         total_acquisition = sum(i.acquisition_price or 0 for i in items if i.acquisition_price)
         
@@ -1345,7 +1345,7 @@ class AdvancedDataManager:
             'total_acquisition_cost': total_acquisition,
             'total_profit': total_profit,
             'roi_percentage': roi_percentage,
-            'average_item_value': total_asking / len([i for i in items if i.asking_price]) if any(i.asking_price for i in items) else 0,
+            'average_item_value': total_current / len([i for i in items if i.current_value]) if any(i.current_value for i in items) else 0,
             'profit_margin': (total_profit / total_sold * 100) if total_sold > 0 else 0
         }
     
@@ -1373,7 +1373,7 @@ class AdvancedDataManager:
             if item.for_sale:
                 stats['for_sale'] += 1
             
-            value = item.asking_price or item.sold_price or 0
+            value = item.current_value or item.sold_price or 0
             stats['total_value'] += value
         
         # Calculer les moyennes
@@ -1404,13 +1404,13 @@ class AdvancedDataManager:
         
         for stage_key, stage_name in pipeline_stages.items():
             stage_items = [i for i in items if i.for_sale and i.sale_status == stage_key]
-            stage_value = sum(i.asking_price or 0 for i in stage_items)
+            stage_value = sum(i.current_value or 0 for i in stage_items)
             
             pipeline_data[stage_key] = {
                 'name': stage_name,
                 'count': len(stage_items),
                 'total_value': stage_value,
-                'items': [{'name': i.name, 'value': i.asking_price} for i in stage_items]
+                'items': [{'name': i.name, 'value': i.current_value} for i in stage_items]
             }
             total_value += stage_value
         
@@ -1430,8 +1430,8 @@ class AdvancedDataManager:
             reverse=True
         )[:5]
         
-        # Distribution des prix
-        prices = [i.sold_price or i.asking_price for i in items if i.sold_price or i.asking_price]
+                # Distribution des prix
+        prices = [i.sold_price or i.current_value for i in items if i.sold_price or i.current_value]
         price_ranges = {
             'under_100k': len([p for p in prices if p < 100000]),
             '100k_500k': len([p for p in prices if 100000 <= p < 500000]),
@@ -1485,7 +1485,7 @@ class AdvancedDataManager:
             }
         
         total_shares = sum(i.stock_quantity or 0 for i in stock_items)
-        total_value = sum(i.asking_price or 0 for i in stock_items)
+        total_value = sum(i.current_value or 0 for i in stock_items)
         
         # Grouper par bourse
         by_exchange = {}
@@ -1494,12 +1494,12 @@ class AdvancedDataManager:
             if exchange not in by_exchange:
                 by_exchange[exchange] = {'count': 0, 'value': 0}
             by_exchange[exchange]['count'] += 1
-            by_exchange[exchange]['value'] += item.asking_price or 0
+            by_exchange[exchange]['value'] += item.current_value or 0
         
         # Top holdings par valeur
         top_holdings = sorted(
             stock_items,
-            key=lambda x: x.asking_price or 0,
+            key=lambda x: x.current_value or 0,
             reverse=True
         )[:5]
         
@@ -1514,7 +1514,7 @@ class AdvancedDataManager:
                     'symbol': h.stock_symbol,
                     'name': h.name,
                     'quantity': h.stock_quantity,
-                    'value': h.asking_price
+                    'value': h.current_value
                 }
                 for h in top_holdings
             ]
@@ -1611,8 +1611,8 @@ class SemanticSearchRAG:
         if item.sale_status:
             text_parts.append(f"Statut de vente: {item.sale_status}")
         
-        if item.asking_price:
-            text_parts.append(f"Prix demandé: {item.asking_price} CHF")
+        if item.current_value:
+            text_parts.append(f"valeur actuelle: {item.current_value} CHF")
         
         if item.sold_price:
             text_parts.append(f"Prix de vente: {item.sold_price} CHF")
@@ -1942,8 +1942,8 @@ Réponds de manière concise et directe."""
             if item.condition:
                 context_parts.append(f"   - État: {item.condition}")
             
-            if item.asking_price is not None:
-                context_parts.append(f"   - Prix demandé: {item.asking_price:,.0f} CHF")
+            if item.current_value is not None:
+                context_parts.append(f"   - valeur actuelle: {item.current_value:,.0f} CHF")
             
             if item.sold_price is not None:
                 context_parts.append(f"   - Prix de vente: {item.sold_price:,.0f} CHF")
@@ -2002,8 +2002,8 @@ Réponds de manière concise et directe."""
                 category_stats[item.category] = {'count': 0, 'value': 0, 'items': []}
             category_stats[item.category]['count'] += 1
             category_stats[item.category]['items'].append(item)
-            if item.asking_price is not None:
-                category_stats[item.category]['value'] += item.asking_price
+            if item.current_value is not None:
+                category_stats[item.category]['value'] += item.current_value
             elif item.sold_price is not None:
                 category_stats[item.category]['value'] += item.sold_price
         
@@ -2040,8 +2040,8 @@ Réponds de manière concise et directe."""
             if item.condition:
                 context_parts.append(f"   État: {item.condition}")
             
-            if item.asking_price is not None:
-                context_parts.append(f"   Prix demandé: {item.asking_price:,.0f} CHF")
+            if item.current_value is not None:
+                context_parts.append(f"   valeur actuelle: {item.current_value:,.0f} CHF")
             
             if item.sold_price is not None:
                 context_parts.append(f"   Prix de vente: {item.sold_price:,.0f} CHF")
@@ -2085,8 +2085,8 @@ Réponds de manière concise et directe."""
             context_parts.append("\n=== PIPELINE DE VENTE ===")
             for item in items_for_sale:
                 sale_status = item.sale_status or 'En vente'
-                if item.asking_price is not None:
-                    context_parts.append(f"- {item.name}: {sale_status} - {item.asking_price:,.0f} CHF")
+                if item.current_value is not None:
+                    context_parts.append(f"- {item.name}: {sale_status} - {item.current_value:,.0f} CHF")
                 else:
                     context_parts.append(f"- {item.name}: {sale_status} - Prix non disponible")
         
@@ -2183,8 +2183,8 @@ Réponds de manière concise et directe."""
                 context_parts.append("EN VENTE:")
                 for item in for_sale:
                     context_parts.append(f"- {item.name} ({item.construction_year or 'N/A'})")
-                    if item.asking_price:
-                        context_parts.append(f"  Prix: {item.asking_price:,.0f} CHF")
+                    if item.current_value:
+                        context_parts.append(f"  Prix: {item.current_value:,.0f} CHF")
                     if item.sale_status:
                         context_parts.append(f"  Statut: {item.sale_status}")
                     if item.current_offer:
@@ -2979,12 +2979,12 @@ def market_price(item_id):
         
         # Analyse de marché avec objets similaires
         similar_items = [i for i in items if i.category == target_item.category and i.id != item_id]
-        comparable_prices = [i.sold_price or i.asking_price for i in similar_items if i.sold_price or i.asking_price]
+        comparable_prices = [i.sold_price or i.current_value for i in similar_items if i.sold_price or i.current_value]
         
         # Tri des objets similaires par pertinence
         similar_items_with_prices = [
             i for i in similar_items 
-            if (i.sold_price or i.asking_price) and i.construction_year
+            if (i.sold_price or i.current_value) and i.construction_year
         ]
         
         # Calcul de score de similarité basé sur l'année et la catégorie
@@ -3009,8 +3009,8 @@ def market_price(item_id):
         if top_3_similar:
             similar_context = "\n\nOBJETS SIMILAIRES DANS LA COLLECTION:"
             for i, similar_item in enumerate(top_3_similar, 1):
-                price = similar_item.sold_price or similar_item.asking_price
-                status = "Vendu" if similar_item.sold_price else "Prix demandé"
+                price = similar_item.sold_price or similar_item.current_value
+                status = "Vendu" if similar_item.sold_price else "valeur actuelle"
                 similar_context += f"\n{i}. {similar_item.name} ({similar_item.construction_year or 'N/A'}) - {status}: {price:,.0f} CHF"
                 if similar_item.description:
                     similar_context += f" - {similar_item.description[:80]}..."
@@ -3097,7 +3097,7 @@ Réponds en JSON avec:
                 {
                     'name': item.name,
                     'year': item.construction_year,
-                    'price': item.sold_price or item.asking_price,
+                    'price': item.sold_price or item.current_value,
                     'status': 'sold' if item.sold_price else 'asking'
                 }
                 for item in top_3_similar
@@ -3263,7 +3263,7 @@ def test_email():
                 {
                     'name': 'Test Lamborghini Aventador',
                     'category': 'Voitures',
-                    'asking_price': 500000,
+                    'current_value': 500000,
                     'construction_year': 2023,
                     'for_sale': True,
                     'sale_progress': 'Négociation avancée avec 2 acheteurs sérieux. Visites programmées cette semaine.'
@@ -3279,7 +3279,7 @@ def test_email():
                 {
                     'name': 'Test Ferrari 488 GTB',
                     'category': 'Voitures',
-                    'asking_price': 300000,
+                    'current_value': 300000,
                     'construction_year': 2022,
                     'for_sale': True,
                     'description': 'Ferrari 488 GTB en parfait état, entretien complet, historique certifié.'
@@ -3294,7 +3294,7 @@ def test_email():
                 'name': 'Test Patek Philippe Nautilus',
                 'category': 'Montres',
                 'for_sale': False,
-                'asking_price': 180000,
+                'current_value': 180000,
                 'construction_year': 2022,
                 'status': 'Available'
             })
@@ -3376,8 +3376,8 @@ def generate_portfolio_pdf():
                 continue
             if item.category == 'Actions' and item.current_price and item.stock_quantity:
                 total_value += item.current_price * item.stock_quantity
-            elif item.status == 'Available' and item.asking_price:
-                total_value += item.asking_price
+            elif item.status == 'Available' and item.current_value:
+                total_value += item.current_value
         
         # Organiser les données par catégorie
         categories_data = {}
@@ -3630,8 +3630,8 @@ def generate_asset_class_report(asset_class_name):
             value = 0
             if item.category == 'Actions' and item.current_price and item.stock_quantity:
                 value = item.current_price * item.stock_quantity
-            elif item.status == 'Available' and item.asking_price:
-                value = item.asking_price
+            elif item.status == 'Available' and item.current_value:
+                value = item.current_value
             
             # Ajouter les données formatées
             asset_data = {
@@ -3661,7 +3661,7 @@ def generate_asset_class_report(asset_class_name):
         
         total_value = sum([
             item.current_price * item.stock_quantity if item.category == 'Actions' and item.current_price and item.stock_quantity
-            else item.asking_price if item.status == 'Available' and item.asking_price
+            else item.current_value if item.status == 'Available' and item.current_value
             else 0
             for item in asset_class_items
         ])
@@ -3841,8 +3841,8 @@ def generate_all_asset_classes_report():
             value = 0
             if item.category == 'Actions' and item.current_price and item.stock_quantity:
                 value = item.current_price * item.stock_quantity
-            elif item.status == 'Available' and item.asking_price:
-                value = item.asking_price
+            elif item.status == 'Available' and item.current_value:
+                value = item.current_value
             
             asset_classes_data[bank_class]['items'].append(item)
             asset_classes_data[bank_class]['total_value'] += value
@@ -3881,8 +3881,8 @@ def generate_all_asset_classes_report():
                     value = 0
                     if item.category == 'Actions' and item.current_price and item.stock_quantity:
                         value = item.current_price * item.stock_quantity
-                    elif item.status == 'Available' and item.asking_price:
-                        value = item.asking_price
+                    elif item.status == 'Available' and item.current_value:
+                        value = item.current_value
                     
                     subcategory_value += value
                     
@@ -4029,7 +4029,7 @@ def clean_update_data(data: Dict[str, Any]) -> Dict[str, Any]:
     
     # Champs numériques (INCLUT stock_purchase_price et current_price)
     numeric_fields = [
-        'asking_price', 'sold_price', 'acquisition_price', 
+        'current_value', 'sold_price', 'acquisition_price', 
         'current_offer', 'commission_rate', 'surface_m2', 
         'rental_income_chf', 'stock_purchase_price', 'current_price',
         'stock_pe_ratio', 'stock_52_week_high', 'stock_52_week_low',

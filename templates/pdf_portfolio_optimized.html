@@ -87,8 +87,8 @@
                 {% if item.acquisition_price %}
                 <strong>Prix d'acquisition:</strong> <span class="price">{{ item.acquisition_price|format_price }}</span><br>
                 {% endif %}
-                {% if item.asking_price %}
-                <strong>Prix de vente:</strong> <span class="price">{{ item.asking_price|format_price }}</span><br>
+                {% if item.current_value %}
+                <strong>Prix de vente:</strong> <span class="price">{{ item.current_value|format_price }}</span><br>
                 {% endif %}
                 {% if item.description %}
                 <strong>Description:</strong> {{ item.description }}<br>

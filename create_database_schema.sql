@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS collection_items (
     construction_year INTEGER,
     condition VARCHAR(100),
     description TEXT,
-    asking_price DECIMAL(12,2),
+    current_value DECIMAL(12,2),
     sold_price DECIMAL(12,2),
     acquisition_price DECIMAL(12,2),
     for_sale BOOLEAN DEFAULT FALSE,
@@ -62,7 +62,7 @@ ALTER TABLE collection_items
 ADD CONSTRAINT chk_status CHECK (status IN ('Available', 'Sold', 'Reserved')),
 ADD CONSTRAINT chk_category CHECK (category IN ('Voitures', 'Montres', 'Actions', 'Appartements / maison', 'Art', 'Vins', 'Bijoux', 'Autres')),
 ADD CONSTRAINT chk_sale_status CHECK (sale_status IN ('initial', 'presentation', 'intermediary', 'inquiries', 'viewing', 'negotiation', 'offer_received', 'offer_accepted', 'paperwork', 'completed')),
-ADD CONSTRAINT chk_prices CHECK (asking_price >= 0 AND sold_price >= 0 AND acquisition_price >= 0 AND current_price >= 0),
+ADD CONSTRAINT chk_prices CHECK (current_value >= 0 AND sold_price >= 0 AND acquisition_price >= 0 AND current_price >= 0),
 ADD CONSTRAINT chk_stock_quantity CHECK (stock_quantity > 0),
 ADD CONSTRAINT chk_surface CHECK (surface_m2 > 0),
 ADD CONSTRAINT chk_rental_income CHECK (rental_income_chf >= 0);
@@ -72,7 +72,7 @@ COMMENT ON TABLE collection_items IS 'Table principale pour la collection BONVIN
 COMMENT ON COLUMN collection_items.name IS 'Nom de l''objet de collection';
 COMMENT ON COLUMN collection_items.category IS 'Catégorie de l''objet (Voitures, Montres, Actions, etc.)';
 COMMENT ON COLUMN collection_items.status IS 'Statut actuel (Available, Sold, Reserved)';
-COMMENT ON COLUMN collection_items.asking_price IS 'Prix de vente demandé en CHF';
+COMMENT ON COLUMN collection_items.current_value IS 'Prix de vente demandé en CHF';
 COMMENT ON COLUMN collection_items.sold_price IS 'Prix de vente final en CHF';
 COMMENT ON COLUMN collection_items.acquisition_price IS 'Prix d''acquisition en CHF';
 COMMENT ON COLUMN collection_items.for_sale IS 'Indique si l''objet est en vente';

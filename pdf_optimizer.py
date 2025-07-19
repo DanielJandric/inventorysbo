@@ -377,8 +377,8 @@ def create_item_card_html(item: Dict[str, Any]) -> str:
     if item.get('acquisition_price'):
         html += f'<strong>Prix d\'acquisition:</strong> <span class="price">{format_price_for_pdf(item["acquisition_price"])}</span><br>'
     
-    if item.get('asking_price'):
-        html += f'<strong>Prix de vente:</strong> <span class="price">{format_price_for_pdf(item["asking_price"])}</span><br>'
+    if item.get('current_value'):
+        html += f'<strong>Prix de vente:</strong> <span class="price">{format_price_for_pdf(item["current_value"])}</span><br>'
     
     if item.get('current_price') and item.get('stock_quantity'):
         total_value = item['current_price'] * item['stock_quantity']

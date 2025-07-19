@@ -178,7 +178,7 @@ CREATE TABLE items (
     surface_m2 DECIMAL(10,2),
     rental_income_chf DECIMAL(15,2),
     acquisition_price DECIMAL(15,2),
-    asking_price DECIMAL(15,2),
+    current_value DECIMAL(15,2),
     sold_price DECIMAL(15,2),
     status VARCHAR(20) DEFAULT 'Available',
     for_sale BOOLEAN DEFAULT FALSE,
@@ -227,7 +227,7 @@ CREATE TABLE items (
     surface_m2 DECIMAL(10,2),                -- Surface en m² (immobilier)
     rental_income_chf DECIMAL(15,2),         -- Revenus locatifs CHF/mois
     acquisition_price DECIMAL(15,2),         -- Prix d'acquisition
-    asking_price DECIMAL(15,2),              -- Prix demandé
+    current_value DECIMAL(15,2),              -- valeur actuelle
     sold_price DECIMAL(15,2),                -- Prix de vente final
     status VARCHAR(20) DEFAULT 'Available',  -- Statut : Available/Sold
     for_sale BOOLEAN DEFAULT FALSE,          -- En vente (objets disponibles)

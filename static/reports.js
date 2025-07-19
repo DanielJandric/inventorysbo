@@ -157,8 +157,8 @@ function processAssetClasses() {
         let value = 0;
         if (item.category === 'Actions' && item.current_price && item.stock_quantity) {
             value = item.current_price * item.stock_quantity;
-        } else if (item.status === 'Available' && item.asking_price) {
-            value = item.asking_price;
+        } else if (item.status === 'Available' && item.current_value) {
+            value = item.current_value;
         }
         
         assetClassData[bankClass].totalValue += value;
@@ -191,8 +191,8 @@ function updateStatistics() {
         
         if (item.category === 'Actions' && item.current_price && item.stock_quantity) {
             return sum + (item.current_price * item.stock_quantity);
-        } else if (item.status === 'Available' && item.asking_price) {
-            return sum + item.asking_price;
+        } else if (item.status === 'Available' && item.current_value) {
+            return sum + item.current_value;
         }
         return sum;
     }, 0);
@@ -344,8 +344,8 @@ function showAssetClassDetails(assetClassName) {
             let value = 0;
             if (item.category === 'Actions' && item.current_price && item.stock_quantity) {
                 value = item.current_price * item.stock_quantity;
-            } else if (item.status === 'Available' && item.asking_price) {
-                value = item.asking_price;
+            } else if (item.status === 'Available' && item.current_value) {
+                value = item.current_value;
             }
             
             detailsHTML += `

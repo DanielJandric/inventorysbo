@@ -349,7 +349,7 @@
                 <div class="category-card">
                     <div class="category-header">
                         <div class="category-name">{{ item.name }}</div>
-                        <div class="category-value">{{ item.asking_price or item.acquisition_price or 'N/A' }} CHF</div>
+                        <div class="category-value">{{ item.current_value or item.acquisition_price or 'N/A' }} CHF</div>
                     </div>
                     <ul class="item-list">
                         {% if item.construction_year %}

@@ -107,8 +107,8 @@ def generate_embedding_text(item: Dict) -> str:
         parts.append(f"État: {item['condition']}")
     
     # Prix et valeur
-    if item.get('status') == 'Available' and item.get('asking_price'):
-        parts.append(f"Prix demandé: {item['asking_price']:,.0f} CHF")
+    if item.get('status') == 'Available' and item.get('current_value'):
+        parts.append(f"valeur actuelle: {item['current_value']:,.0f} CHF")
         if item.get('current_offer'):
             parts.append(f"Offre actuelle: {item['current_offer']:,.0f} CHF")
     elif item.get('sold_price'):
