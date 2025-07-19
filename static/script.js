@@ -554,6 +554,7 @@ async function forceUpdateStockPrices() {
 
 async function updateSingleStockPrice(symbol, itemId) {
     try {
+        console.log(`🔄 Début mise à jour ${symbol} (ID: ${itemId})`);
         showNotification(`Mise à jour de ${symbol} en cours...`, false);
         
         const response = await fetch(`/api/stock-price/${symbol}?force_refresh=true`, {
@@ -565,12 +566,15 @@ async function updateSingleStockPrice(symbol, itemId) {
         
         if (response.ok) {
             const data = await response.json();
-            showSuccess(`${symbol} mis à jour: ${formatPrice(data.price)} CHF`);
+            console.log(`✅ Données reçues pour ${symbol}:`, data);
+            showSuccess(`${symbol} mis à jour: ${formatPrice(data.price_chf)} CHF`);
             
             // Mettre à jour l'affichage de la carte
+            console.log(`🔄 Appel updateStockCardDisplay pour ${itemId}`);
             updateStockCardDisplay(itemId, data);
         } else {
             const error = await response.json();
+            console.error(`❌ Erreur API pour ${symbol}:`, error);
             showError(`Erreur ${symbol}: ${error.error || 'Erreur serveur'}`);
         }
     } catch (error) {
@@ -939,13 +943,24 @@ async function showCacheStatus() {
 
 // Fonction pour mettre à jour l'affichage d'une carte action
 function updateStockCardDisplay(itemId, stockData) {
+    console.log(`🔄 Mise à jour carte action ${itemId}:`, stockData);
+    
     const card = document.querySelector(`[data-item-id="${itemId}"]`);
-    if (!card) return;
+    if (!card) {
+        console.warn(`⚠️ Carte non trouvée pour l'ID ${itemId}`);
+        return;
+    }
     
     // Ajouter un indicateur de prix en temps réel
     const priceElement = card.querySelector('.stock-price-live');
-    if (priceElement) {
-        const changeClass = stockData.change_percent > 0 ? 'text-green-400' : 'text-red-400';
+    if (!priceElement) {
+        console.warn(`⚠️ Élément .stock-price-live non trouvé dans la carte ${itemId}`);
+        return;
+    }
+    
+    console.log(`✅ Éléments trouvés pour la carte ${itemId}`);
+    
+    const changeClass = stockData.change_percent > 0 ? 'text-green-400' : 'text-red-400';
         const arrow = stockData.change_percent > 0 ? '↑' : '↓';
         
         // Formater les volumes
@@ -1326,6 +1341,21 @@ function editItem(id) {
     const title = document.getElementById('modal-title');
     if (title) title.textContent = 'Modifier l\'Objet';
     
+    const form = document.getElementById('item-form');
+    if (form) {
+        // Marquer qu'il n'y a pas de changements non sauvegardés au début
+        form.dataset.hasUnsavedChanges = 'false';
+        
+        // Supprimer les anciens event listeners
+        const inputs = form.querySelectorAll('input, select, textarea');
+        inputs.forEach(input => {
+            input.removeEventListener('input', markFormChanged);
+            input.removeEventListener('change', markFormChanged);
+            input.addEventListener('input', markFormChanged);
+            input.addEventListener('change', markFormChanged);
+        });
+    }
+    
     // Remplir le formulaire avec les champs existants
     Object.keys(item).forEach(key => {
         const element = document.getElementById(`item-${key.replace(/_/g, '-')}`);
@@ -1394,20 +1424,48 @@ function editItem(id) {
     }
 }
 
-function closeModal() {
+async function closeModal() {
     const modal = document.getElementById('item-modal');
+    const form = document.getElementById('item-form');
+    
+    // Vérifier si le formulaire a des données non sauvegardées
+    if (form && form.dataset.hasUnsavedChanges === 'true') {
+        const shouldSave = confirm('Vous avez des modifications non sauvegardées. Voulez-vous les sauvegarder avant de fermer ?');
+        
+        if (shouldSave) {
+            // Sauvegarder les données
+            try {
+                await handleFormSubmit(new Event('submit'));
+                showSuccess('Données sauvegardées avec succès');
+            } catch (error) {
+                console.error('Erreur lors de la sauvegarde:', error);
+                showError('Erreur lors de la sauvegarde');
+                return; // Ne pas fermer le modal si la sauvegarde échoue
+            }
+        }
+    }
+    
     if (modal) {
         modal.classList.add('hidden');
         modal.classList.remove('flex');
     }
     
     // Nettoyer le formulaire quand on ferme le modal
-    const form = document.getElementById('item-form');
-    if (form) form.reset();
+    if (form) {
+        form.reset();
+        form.dataset.hasUnsavedChanges = 'false';
+    }
     
     // Réinitialiser explicitement le champ location
     const locationField = document.getElementById('item-location');
     if (locationField) locationField.value = '';
+}
+
+function markFormChanged() {
+    const form = document.getElementById('item-form');
+    if (form) {
+        form.dataset.hasUnsavedChanges = 'true';
+    }
 }
 
 function closeEstimationModal() {
@@ -1654,6 +1712,12 @@ async function handleFormSubmit(e) {
         });
         
         if (response.ok) {
+            // Marquer que les changements ont été sauvegardés
+            const form = document.getElementById('item-form');
+            if (form) {
+                form.dataset.hasUnsavedChanges = 'false';
+            }
+            
             closeModal();
             await loadItems();
             showSuccess(`Objet ${isEditing ? 'modifié' : 'créé'} avec succès`);
