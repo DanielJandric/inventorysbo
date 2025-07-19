@@ -355,6 +355,15 @@
             animation: float 3s ease-in-out infinite;
             box-shadow: 0 10px 30px rgba(0, 229, 255, 0.4);
         }
+        
+        /* Classe pour cacher le bouton chat */
+        #chatbot-button.chat-hidden {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+            transform: scale(0) !important;
+        }
         @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
         #chatbot-button:hover { transform: scale(1.1); box-shadow: 0 15px 40px rgba(0, 229, 255, 0.6); }
         

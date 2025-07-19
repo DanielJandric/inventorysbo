@@ -1321,11 +1321,17 @@ function streamText(element, text, onComplete, speed = 10) {
 
 function toggleChatbot() {
     const chatWindow = document.getElementById('chatbot-window');
+    const chatButton = document.getElementById('chatbot-button');
     if (!chatWindow) return;
     
     chatWindow.classList.toggle('is-open');
 
     if (chatWindow.classList.contains('is-open')) {
+        // Cacher le bouton chat quand le chat est ouvert
+        if (chatButton) {
+            chatButton.classList.add('chat-hidden');
+        }
+        
         const input = document.getElementById('chatbot-input');
         if (input) input.focus();
         
@@ -1333,6 +1339,11 @@ function toggleChatbot() {
         const messages = document.getElementById('chatbot-messages');
         if (messages && messages.children.length === 1) {
             addWelcomeMessage();
+        }
+    } else {
+        // Montrer le bouton chat quand le chat est fermé
+        if (chatButton) {
+            chatButton.classList.remove('chat-hidden');
         }
     }
 }
