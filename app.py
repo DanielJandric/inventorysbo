@@ -2897,13 +2897,23 @@ def generate_portfolio_pdf():
         # Rendre le template HTML
         html_content = render_template('portfolio_pdf.html', **template_data)
         
-        # Générer le PDF avec WeasyPrint
+        # Générer le PDF avec pdfkit
         try:
-            import weasyprint
+            import pdfkit
             
-            # Créer le PDF avec une approche plus simple
-            html_doc = weasyprint.HTML(string=html_content)
-            pdf = html_doc.write_pdf()
+            # Options pour pdfkit
+            options = {
+                'page-size': 'A4',
+                'margin-top': '0.75in',
+                'margin-right': '0.75in',
+                'margin-bottom': '0.75in',
+                'margin-left': '0.75in',
+                'encoding': "UTF-8",
+                'no-outline': None
+            }
+            
+            # Créer le PDF
+            pdf = pdfkit.from_string(html_content, False, options=options)
             
             # Retourner le PDF
             from flask import Response
@@ -2914,9 +2924,9 @@ def generate_portfolio_pdf():
             return response
             
         except ImportError:
-            logger.error("❌ WeasyPrint non installé")
+            logger.error("❌ pdfkit non installé")
             return jsonify({
-                "error": "WeasyPrint non installé. Installez avec: pip install weasyprint"
+                "error": "pdfkit non installé. Installez avec: pip install pdfkit"
             }), 500
             
     except Exception as e:
@@ -3015,6 +3025,15 @@ def generate_asset_class_report(asset_class_name):
                 "error": f"Aucun actif trouvé pour la classe '{asset_class_name}'"
             }), 404
         
+        # Fonction pour formater les prix
+        def format_price(price):
+            if not price or price == 0:
+                return '0 CHF'
+            try:
+                return f"{price:,.0f} CHF"
+            except:
+                return '0 CHF'
+        
         # Organiser par sous-catégorie
         assets_by_subcategory = {}
         subcategories_summary = {}
@@ -3082,13 +3101,23 @@ def generate_asset_class_report(asset_class_name):
         # Rendre le template HTML
         html_content = render_template('bank_report_pdf.html', **template_data)
         
-        # Générer le PDF avec WeasyPrint
+        # Générer le PDF avec pdfkit
         try:
-            import weasyprint
+            import pdfkit
             
-            # Créer le PDF avec une approche plus simple
-            html_doc = weasyprint.HTML(string=html_content)
-            pdf = html_doc.write_pdf()
+            # Options pour pdfkit
+            options = {
+                'page-size': 'A4',
+                'margin-top': '0.75in',
+                'margin-right': '0.75in',
+                'margin-bottom': '0.75in',
+                'margin-left': '0.75in',
+                'encoding': "UTF-8",
+                'no-outline': None
+            }
+            
+            # Créer le PDF
+            pdf = pdfkit.from_string(html_content, False, options=options)
             
             response = Response(pdf, mimetype='application/pdf')
             response.headers['Content-Disposition'] = f'attachment; filename=bonvin_{asset_class_name.replace(" ", "_").lower()}_{datetime.now().strftime("%Y%m%d_%H%M")}.pdf'
@@ -3097,9 +3126,9 @@ def generate_asset_class_report(asset_class_name):
             return response
             
         except ImportError:
-            logger.error("❌ WeasyPrint non installé")
+            logger.error("❌ pdfkit non installé")
             return jsonify({
-                "error": "WeasyPrint non installé. Installez avec: pip install weasyprint"
+                "error": "pdfkit non installé. Installez avec: pip install pdfkit"
             }), 500
             
     except Exception as e:
@@ -3134,6 +3163,15 @@ def generate_all_asset_classes_report():
             'Be Capital Activities': {'bankClass': 'Private Equity / Venture Capital', 'subCategory': 'Sociétés de e-commerce (participations non cotées)'},
             'IB': {'bankClass': 'Immobilier direct ou indirect', 'subCategory': 'Actif immobilier (précision non fournie)'}
         }
+        
+        # Fonction pour formater les prix
+        def format_price(price):
+            if not price or price == 0:
+                return '0 CHF'
+            try:
+                return f"{price:,.0f} CHF"
+            except:
+                return '0 CHF'
         
         # Organiser par classe d'actif
         asset_classes_data = {}
@@ -3230,12 +3268,23 @@ def generate_all_asset_classes_report():
         # Combiner tous les HTML
         full_html = '\n'.join(html_parts)
         
-        # Générer le PDF
+        # Générer le PDF avec pdfkit
         try:
-            import weasyprint
+            import pdfkit
             
-            html_doc = weasyprint.HTML(string=full_html)
-            pdf = html_doc.write_pdf()
+            # Options pour pdfkit
+            options = {
+                'page-size': 'A4',
+                'margin-top': '0.75in',
+                'margin-right': '0.75in',
+                'margin-bottom': '0.75in',
+                'margin-left': '0.75in',
+                'encoding': "UTF-8",
+                'no-outline': None
+            }
+            
+            # Créer le PDF
+            pdf = pdfkit.from_string(full_html, False, options=options)
             
             response = Response(pdf, mimetype='application/pdf')
             response.headers['Content-Disposition'] = f'attachment; filename=bonvin_all_asset_classes_{datetime.now().strftime("%Y%m%d_%H%M")}.pdf'
@@ -3244,9 +3293,9 @@ def generate_all_asset_classes_report():
             return response
             
         except ImportError:
-            logger.error("❌ WeasyPrint non installé")
+            logger.error("❌ pdfkit non installé")
             return jsonify({
-                "error": "WeasyPrint non installé. Installez avec: pip install weasyprint"
+                "error": "pdfkit non installé. Installez avec: pip install pdfkit"
             }), 500
             
     except Exception as e:
