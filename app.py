@@ -1988,13 +1988,13 @@ Utilise l'historique pour enrichir ta réponse et éviter les répétitions."""
             if item.condition:
                 context_parts.append(f"   - État: {item.condition}")
             
-            if item.asking_price:
+            if item.asking_price is not None:
                 context_parts.append(f"   - Prix demandé: {item.asking_price:,.0f} CHF")
             
-            if item.sold_price:
+            if item.sold_price is not None:
                 context_parts.append(f"   - Prix de vente: {item.sold_price:,.0f} CHF")
             
-            if item.current_offer:
+            if item.current_offer is not None:
                 context_parts.append(f"   - Offre actuelle: {item.current_offer:,.0f} CHF")
             
             # Informations spécifiques aux actions
@@ -2005,9 +2005,9 @@ Utilise l'historique pour enrichir ta réponse et éviter les répétitions."""
                     context_parts.append(f"   - Quantité: {item.stock_quantity} actions")
                 if item.stock_exchange:
                     context_parts.append(f"   - Bourse: {item.stock_exchange}")
-                if item.stock_purchase_price:
+                if item.stock_purchase_price is not None:
                     context_parts.append(f"   - Prix d'achat unitaire: {item.stock_purchase_price:,.0f} CHF")
-                if item.current_price:
+                if item.current_price is not None:
                     context_parts.append(f"   - Prix actuel: {item.current_price:,.0f} CHF/action")
             
             if item.description:
@@ -2015,10 +2015,10 @@ Utilise l'historique pour enrichir ta réponse et éviter les répétitions."""
                 desc_preview = item.description[:150] + "..." if len(item.description) > 150 else item.description
                 context_parts.append(f"   - Description: {desc_preview}")
             
-            # Informations spécifiques selon la catégorie
-            if item.category == "Appartements / maison" and item.surface_m2:
+                        # Informations spécifiques selon la catégorie
+            if item.category == "Appartements / maison" and item.surface_m2 is not None:
                 context_parts.append(f"   - Surface: {item.surface_m2} m²")
-                if item.rental_income_chf:
+                if item.rental_income_chf is not None:
                     context_parts.append(f"   - Revenus locatifs: {item.rental_income_chf:,.0f} CHF/mois")
         
         return "\n".join(context_parts)
@@ -2032,7 +2032,11 @@ Utilise l'historique pour enrichir ta réponse et éviter les répétitions."""
         # Statistiques globales
         context_parts.append("=== STATISTIQUES GLOBALES ===")
         context_parts.append(f"Total objets: {len(items)}")
-        context_parts.append(f"Valeur totale estimée: {analytics.get('basic_metrics', {}).get('total_value', 0):,.0f} CHF")
+        total_value = analytics.get('basic_metrics', {}).get('total_value', 0)
+        if total_value is not None:
+            context_parts.append(f"Valeur totale estimée: {total_value:,.0f} CHF")
+        else:
+            context_parts.append("Valeur totale estimée: Non disponible")
         context_parts.append(f"Objets en vente: {len([i for i in items if i.for_sale])}")
         context_parts.append(f"Objets vendus: {len([i for i in items if i.status == 'Sold'])}")
         
@@ -2044,16 +2048,19 @@ Utilise l'historique pour enrichir ta réponse et éviter les répétitions."""
                 category_stats[item.category] = {'count': 0, 'value': 0, 'items': []}
             category_stats[item.category]['count'] += 1
             category_stats[item.category]['items'].append(item)
-            if item.asking_price:
+            if item.asking_price is not None:
                 category_stats[item.category]['value'] += item.asking_price
-            elif item.sold_price:
+            elif item.sold_price is not None:
                 category_stats[item.category]['value'] += item.sold_price
         
         for category, stats in category_stats.items():
             category_name = category.upper() if category else "AUTRE"
             context_parts.append(f"\n{category_name}:")
             context_parts.append(f"  - Nombre: {stats['count']}")
-            context_parts.append(f"  - Valeur: {stats['value']:,.0f} CHF")
+            if stats['value'] is not None:
+                context_parts.append(f"  - Valeur: {stats['value']:,.0f} CHF")
+            else:
+                context_parts.append("  - Valeur: Non disponible")
             context_parts.append(f"  - Objets: {', '.join([item.name for item in stats['items'][:5]])}")
             if len(stats['items']) > 5:
                 context_parts.append(f"    ... et {len(stats['items']) - 5} autres")
@@ -2070,7 +2077,7 @@ Utilise l'historique pour enrichir ta réponse et éviter les répétitions."""
                 context_parts.append(f"   🔥 EN VENTE")
                 if item.sale_status:
                     context_parts.append(f"   Progression: {item.sale_status}")
-                if item.current_offer:
+                if item.current_offer is not None:
                     context_parts.append(f"   Offre actuelle: {item.current_offer:,.0f} CHF")
             
             if item.construction_year:
@@ -2079,13 +2086,13 @@ Utilise l'historique pour enrichir ta réponse et éviter les répétitions."""
             if item.condition:
                 context_parts.append(f"   État: {item.condition}")
             
-            if item.asking_price:
+            if item.asking_price is not None:
                 context_parts.append(f"   Prix demandé: {item.asking_price:,.0f} CHF")
             
-            if item.sold_price:
+            if item.sold_price is not None:
                 context_parts.append(f"   Prix de vente: {item.sold_price:,.0f} CHF")
             
-            if item.acquisition_price:
+            if item.acquisition_price is not None:
                 context_parts.append(f"   Prix d'acquisition: {item.acquisition_price:,.0f} CHF")
             
             # Informations spécifiques aux actions
@@ -2096,22 +2103,22 @@ Utilise l'historique pour enrichir ta réponse et éviter les répétitions."""
                     context_parts.append(f"   Quantité: {item.stock_quantity} actions")
                 if item.stock_exchange:
                     context_parts.append(f"   Bourse: {item.stock_exchange}")
-                if item.stock_purchase_price:
+                if item.stock_purchase_price is not None:
                     context_parts.append(f"   Prix d'achat unitaire: {item.stock_purchase_price:,.0f} CHF")
-                if item.current_price:
+                if item.current_price is not None:
                     context_parts.append(f"   Prix actuel: {item.current_price:,.0f} CHF/action")
-                    if item.stock_quantity and item.stock_purchase_price:
+                    if item.stock_quantity is not None and item.stock_purchase_price is not None:
                         total_invested = item.stock_quantity * item.stock_purchase_price
                         current_value = item.stock_quantity * item.current_price
                         gain_loss = current_value - total_invested
                         gain_loss_pct = (gain_loss / total_invested * 100) if total_invested > 0 else 0
                         context_parts.append(f"   Performance: {gain_loss:+,.0f} CHF ({gain_loss_pct:+.1f}%)")
             
-            # Informations immobilières
+                        # Informations immobilières
             if item.category == "Appartements / maison":
-                if item.surface_m2:
+                if item.surface_m2 is not None:
                     context_parts.append(f"   Surface: {item.surface_m2} m²")
-                if item.rental_income_chf:
+                if item.rental_income_chf is not None:
                     context_parts.append(f"   Revenus locatifs: {item.rental_income_chf:,.0f} CHF/mois")
             
             if item.description:
@@ -2123,7 +2130,11 @@ Utilise l'historique pour enrichir ta réponse et éviter les répétitions."""
         if items_for_sale:
             context_parts.append("\n=== PIPELINE DE VENTE ===")
             for item in items_for_sale:
-                context_parts.append(f"- {item.name}: {item.sale_status or 'En vente'} - {item.asking_price:,.0f} CHF")
+                sale_status = item.sale_status or 'En vente'
+                if item.asking_price is not None:
+                    context_parts.append(f"- {item.name}: {sale_status} - {item.asking_price:,.0f} CHF")
+                else:
+                    context_parts.append(f"- {item.name}: {sale_status} - Prix non disponible")
         
         # Actions boursières
         stocks = [item for item in items if item.category == 'Actions']
@@ -2131,11 +2142,14 @@ Utilise l'historique pour enrichir ta réponse et éviter les répétitions."""
             context_parts.append("\n=== PORTEFEUILLE ACTIONS ===")
             total_stock_value = 0
             for stock in stocks:
-                if stock.current_price and stock.stock_quantity:
+                if stock.current_price is not None and stock.stock_quantity is not None:
                     stock_value = stock.current_price * stock.stock_quantity
                     total_stock_value += stock_value
                     context_parts.append(f"- {stock.stock_symbol}: {stock.stock_quantity} actions @ {stock.current_price:,.0f} CHF = {stock_value:,.0f} CHF")
-            context_parts.append(f"Valeur totale actions: {total_stock_value:,.0f} CHF")
+            if total_stock_value > 0:
+                context_parts.append(f"Valeur totale actions: {total_stock_value:,.0f} CHF")
+            else:
+                context_parts.append("Valeur totale actions: Non disponible")
         
         return "\n".join(context_parts)
     
@@ -2154,10 +2168,30 @@ Utilise l'historique pour enrichir ta réponse et éviter les répétitions."""
         # Métriques financières
         financial = analytics.get('financial_metrics', {})
         context_parts.append(f"\n=== MÉTRIQUES FINANCIÈRES ===")
-        context_parts.append(f"Valeur portefeuille: {financial.get('portfolio_value', 0):,.0f} CHF")
-        context_parts.append(f"CA réalisé: {financial.get('realized_sales', 0):,.0f} CHF")
-        context_parts.append(f"ROI: {financial.get('roi_percentage', 0):.1f}%")
-        context_parts.append(f"Profit total: {financial.get('total_profit', 0):,.0f} CHF")
+        portfolio_value = financial.get('portfolio_value', 0)
+        realized_sales = financial.get('realized_sales', 0)
+        roi_percentage = financial.get('roi_percentage', 0)
+        total_profit = financial.get('total_profit', 0)
+        
+        if portfolio_value is not None:
+            context_parts.append(f"Valeur portefeuille: {portfolio_value:,.0f} CHF")
+        else:
+            context_parts.append("Valeur portefeuille: Non disponible")
+            
+        if realized_sales is not None:
+            context_parts.append(f"CA réalisé: {realized_sales:,.0f} CHF")
+        else:
+            context_parts.append("CA réalisé: Non disponible")
+            
+        if roi_percentage is not None:
+            context_parts.append(f"ROI: {roi_percentage:.1f}%")
+        else:
+            context_parts.append("ROI: Non disponible")
+            
+        if total_profit is not None:
+            context_parts.append(f"Profit total: {total_profit:,.0f} CHF")
+        else:
+            context_parts.append("Profit total: Non disponible")
         
         # Analytics actions si disponibles
         stock_analytics = analytics.get('stock_analytics', {})
@@ -2165,7 +2199,11 @@ Utilise l'historique pour enrichir ta réponse et éviter les répétitions."""
             context_parts.append(f"\n=== PORTEFEUILLE ACTIONS ===")
             context_parts.append(f"Nombre d'actions différentes: {stock_analytics.get('total_stocks', 0)}")
             context_parts.append(f"Total actions détenues: {stock_analytics.get('total_shares', 0)}")
-            context_parts.append(f"Valeur totale: {stock_analytics.get('total_value', 0):,.0f} CHF")
+            total_stock_value = stock_analytics.get('total_value', 0)
+            if total_stock_value is not None:
+                context_parts.append(f"Valeur totale: {total_stock_value:,.0f} CHF")
+            else:
+                context_parts.append("Valeur totale: Non disponible")
         
         # Liste détaillée des objets
         context_parts.append(f"\n=== INVENTAIRE DÉTAILLÉ ===")
