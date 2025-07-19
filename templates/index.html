@@ -205,6 +205,27 @@
             border: 1px solid rgba(234, 88, 12, 0.15);
         }
         
+        /* CARTES D'ACTIONS - GRIS DORÉ SUBTIL */
+        .card-stock {
+            background: rgba(120, 113, 108, 0.12);
+            border: 1px solid rgba(168, 162, 158, 0.25);
+            box-shadow: 0 25px 50px -12px rgba(120, 113, 108, 0.2);
+            backdrop-filter: blur(15px);
+        }
+        .card-stock::before {
+            background: radial-gradient(circle at 50% 50%, rgba(168, 162, 158, 0.08), transparent 70%);
+        }
+        .card-stock:hover {
+            background: rgba(120, 113, 108, 0.18);
+            border-color: rgba(168, 162, 158, 0.35);
+            box-shadow: 0 45px 70px -15px rgba(120, 113, 108, 0.3);
+            transform: translateY(-5px);
+        }
+        .card-stock .stock-price-live {
+            background: rgba(120, 113, 108, 0.15);
+            border: 1px solid rgba(168, 162, 158, 0.2);
+        }
+        
         .floating-card {
             box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
             transform: perspective(1000px); cursor: pointer;

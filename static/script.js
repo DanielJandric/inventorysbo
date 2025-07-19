@@ -737,8 +737,12 @@ function displayItemsAsList(container, items) {
 function createItemCardHTML(item) {
     const isForSale = item.status === 'Available' && item.for_sale === true;
     const isSold = item.status === 'Sold';
+    const isStock = item.category === 'Actions';
     
     let cardClass = isForSale ? 'card-for-sale' : isSold ? 'card-sold' : '';
+    if (isStock) {
+        cardClass = cardClass ? `${cardClass} card-stock` : 'card-stock';
+    }
     
     // Statut de progression de vente
     let saleStatusBadge = '';
