@@ -7,14 +7,14 @@
       "change": 0.30999755859375,
       "change_percent": 0.1470088517911114,
       "volume": 48939500,
-      "market_cap": null,
-      "pe_ratio": null,
-      "dividend_yield": null,
-      "high_52_week": 211.7899932861328,
-      "low_52_week": 209.6999969482422,
-      "timestamp": "2025-07-20T20:41:15.427671"
+      "market_cap": 3154142035968,
+      "pe_ratio": 32.89408,
+      "dividend_yield": 0.51,
+      "high_52_week": 260.1,
+      "low_52_week": 169.21,
+      "timestamp": "2025-07-20T20:48:40.814786"
     },
-    "timestamp": 1753036875.4286711
+    "timestamp": 1753037320.8167849
   },
   "NOVN.SW": {
     "data": {
@@ -41,14 +41,14 @@
       "change": -4.42999267578125,
       "change_percent": -0.8610622072689829,
       "volume": 21203400,
-      "market_cap": null,
-      "pe_ratio": null,
-      "dividend_yield": null,
-      "high_52_week": 514.6400146484375,
-      "low_52_week": 507.42999267578125,
-      "timestamp": "2025-07-20T20:41:16.843224"
+      "market_cap": 3790967144448,
+      "pe_ratio": 39.35571,
+      "dividend_yield": 0.67,
+      "high_52_week": 514.64,
+      "low_52_week": 344.79,
+      "timestamp": "2025-07-20T20:49:10.098632"
     },
-    "timestamp": 1753036876.8452346
+    "timestamp": 1753037350.0996337
   },
   "GOOGL": {
     "data": {

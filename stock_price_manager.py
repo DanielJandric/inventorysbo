@@ -13,7 +13,7 @@ from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, asdict
 import yfinance as yf
 import pandas as pd
-from yahoo_finance_auth import YahooFinanceAuth
+from yahoo_finance_api import YahooFinanceAPI
 
 logger = logging.getLogger(__name__)
 
@@ -54,10 +54,10 @@ class StockPriceManager:
         
         # Initialiser l'authentification Yahoo Finance
         try:
-            self.yahoo_auth = YahooFinanceAuth()
+            self.yahoo_auth = YahooFinanceAPI()
             logger.info("✅ Module d'authentification Yahoo Finance initialisé")
         except Exception as e:
-            logger.error(f"❌ Erreur initialisation Yahoo Finance Auth: {e}")
+            logger.error(f"❌ Erreur initialisation Yahoo Finance API: {e}")
             self.yahoo_auth = None
         
         # Charger les données existantes
