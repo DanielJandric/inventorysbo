@@ -368,3 +368,26 @@ class StockPriceManager:
         
         logger.info(f"✅ Mise à jour terminée: {len(results['success'])} symboles traités, {results['requests_used']} requêtes utilisées")
         return results 
+
+    def reset_daily_requests(self):
+        """Réinitialise manuellement le compteur de requêtes quotidiennes"""
+        self.daily_requests = 0
+        self.last_request_date = datetime.now().strftime('%Y-%m-%d')
+        self._save_daily_requests()
+        logger.info("✅ Compteur de requêtes quotidiennes réinitialisé")
+        return {
+            'status': 'success',
+            'message': 'Compteur de requêtes réinitialisé',
+            'requests': self.daily_requests,
+            'date': self.last_request_date
+        }
+
+    def get_daily_requests_status(self) -> Dict[str, Any]:
+        """Retourne le statut des requêtes quotidiennes"""
+        return {
+            'requests_used': self.daily_requests,
+            'max_requests': self.max_daily_requests,
+            'remaining_requests': self.max_daily_requests - self.daily_requests,
+            'last_request_date': self.last_request_date,
+            'can_make_request': self._can_make_request()
+        } 

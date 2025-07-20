@@ -2600,6 +2600,20 @@ def get_stock_price_cache_status():
             "error": str(e)
         }), 500
 
+@app.route("/api/stock-price/reset-requests", methods=["POST"])
+def reset_daily_requests():
+    """Réinitialise le compteur de requêtes quotidiennes"""
+    try:
+        result = stock_price_manager.reset_daily_requests()
+        logger.info("✅ Compteur de requêtes quotidiennes réinitialisé via API")
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Erreur réinitialisation requêtes: {e}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
 @app.route("/api/stock-price/history/<symbol>")
 def get_stock_price_history(symbol):
     """Récupère l'historique des prix d'une action"""

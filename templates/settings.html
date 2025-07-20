@@ -157,10 +157,19 @@
                 <!-- Clear Cache -->
                 <div>
                     <h4 class="text-lg font-medium mb-3">Gestion du Cache</h4>
-                    <button id="clear-cache" class="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors">
-                        🗑️ Vider le Cache
-                    </button>
+                    <div class="space-y-3">
+                        <button id="clear-cache" class="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors">
+                            🗑️ Vider le Cache
+                        </button>
+                        <button id="reset-requests" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors">
+                            🔄 Réinitialiser Compteur Requêtes
+                        </button>
+                        <div class="text-xs text-gray-400 text-center">
+                            En cas d'erreur 429 (Too Many Requests)
+                        </div>
+                    </div>
                     <div id="clear-status" class="mt-3 text-sm text-gray-300"></div>
+                    <div id="reset-status" class="mt-3 text-sm text-gray-300"></div>
                 </div>
             </div>
 
@@ -563,6 +572,39 @@
             } finally {
                 button.disabled = false;
                 button.textContent = '🗑️ Vider le Cache';
+            }
+        });
+
+        // Reset Requests Counter
+        document.getElementById('reset-requests').addEventListener('click', async function() {
+            const button = this;
+            const statusDiv = document.getElementById('reset-status');
+            
+            if (!confirm('Êtes-vous sûr de vouloir réinitialiser le compteur de requêtes ? Cela permettra de faire de nouvelles requêtes API.')) {
+                return;
+            }
+            
+            button.disabled = true;
+            button.textContent = '🔄 Réinitialisation en cours...';
+            statusDiv.textContent = 'Réinitialisation du compteur en cours...';
+            
+            try {
+                const response = await fetch('/api/stock-price/reset-requests', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    statusDiv.innerHTML = '<span class="text-green-400">✅ Compteur réinitialisé avec succès</span>';
+                    await loadCacheStatus(); // Refresh cache status
+                } else {
+                    statusDiv.innerHTML = `<span class="text-red-400">❌ Erreur: ${data.message}</span>`;
+                }
+            } catch (error) {
+                statusDiv.innerHTML = '<span class="text-red-400">❌ Erreur de connexion</span>';
+            } finally {
+                button.disabled = false;
+                button.textContent = '🔄 Réinitialiser Compteur Requêtes';
             }
         });
 
