@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings - BONVIN Collection</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'bonvin-blue': '#1e3a8a',
+                        'bonvin-gold': '#f59e0b'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .glassmorphism {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .glassmorphism-dark {
+            background: rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-bonvin-blue via-blue-900 to-black min-h-screen text-white">
+    <!-- Navigation -->
+    <nav class="glassmorphism-dark p-4 mb-8">
+        <div class="container mx-auto flex justify-between items-center">
+            <div class="flex items-center space-x-4">
+                <img src="/static/BONVIN_120x120.png" alt="BONVIN" class="w-12 h-12">
+                <h1 class="text-2xl font-bold text-bonvin-gold">BONVIN Collection</h1>
+            </div>
+            
+            <!-- Hamburger Menu -->
+            <div class="relative">
+                <button id="hamburger" class="text-white hover:text-bonvin-gold transition-colors">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                    </svg>
+                </button>
+                
+                <!-- Menu Dropdown -->
+                <div id="menu" class="absolute right-0 mt-2 w-64 glassmorphism-dark rounded-lg shadow-xl hidden z-50">
+                    <div class="p-4 space-y-2">
+                        <a href="/" class="block px-4 py-2 text-white hover:bg-white hover:bg-opacity-10 rounded transition-colors">
+                            📊 Dashboard
+                        </a>
+                        <a href="/analytics" class="block px-4 py-2 text-white hover:bg-white hover:bg-opacity-10 rounded transition-colors">
+                            📈 Analytics
+                        </a>
+                        <a href="/markets" class="block px-4 py-2 text-white hover:bg-white hover:bg-opacity-10 rounded transition-colors">
+                            📰 Update Marchés
+                        </a>
+                        <a href="/reports" class="block px-4 py-2 text-white hover:bg-white hover:bg-opacity-10 rounded transition-colors">
+                            📋 Reports
+                        </a>
+                        <a href="/settings" class="block px-4 py-2 text-bonvin-gold bg-white bg-opacity-10 rounded transition-colors">
+                            ⚙️ Settings
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="container mx-auto px-4">
+        <div class="mb-8">
+            <h2 class="text-3xl font-bold text-bonvin-gold mb-2">⚙️ Settings</h2>
+            <p class="text-gray-300">Configuration et statut du système</p>
+        </div>
+
+        <!-- Settings Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            
+            <!-- Market Updates Section -->
+            <div class="glassmorphism rounded-xl p-6">
+                <h3 class="text-xl font-semibold text-bonvin-gold mb-4">📰 Market Updates</h3>
+                
+                <!-- Scheduler Status -->
+                <div class="mb-6">
+                    <h4 class="text-lg font-medium mb-3">Scheduler Status</h4>
+                    <div id="scheduler-status" class="bg-black bg-opacity-30 rounded-lg p-4">
+                        <div class="flex items-center justify-between">
+                            <span class="text-gray-300">Chargement...</span>
+                            <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-bonvin-gold"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Manual Trigger -->
+                <div class="mb-6">
+                    <h4 class="text-lg font-medium mb-3">Déclenchement Manuel</h4>
+                    <button id="trigger-market-update" class="w-full bg-bonvin-gold hover:bg-yellow-600 text-black font-semibold py-3 px-4 rounded-lg transition-colors">
+                        🚀 Générer Update Marchés
+                    </button>
+                    <div id="trigger-status" class="mt-3 text-sm text-gray-300"></div>
+                </div>
+
+                <!-- Recent Updates -->
+                <div>
+                    <h4 class="text-lg font-medium mb-3">Derniers Updates</h4>
+                    <div id="recent-updates" class="bg-black bg-opacity-30 rounded-lg p-4 max-h-64 overflow-y-auto">
+                        <div class="text-gray-300">Chargement...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stock Prices Section -->
+            <div class="glassmorphism rounded-xl p-6">
+                <h3 class="text-xl font-semibold text-bonvin-gold mb-4">📊 Stock Prices</h3>
+                
+                <!-- Yahoo Finance Status -->
+                <div class="mb-6">
+                    <h4 class="text-lg font-medium mb-3">Yahoo Finance Status</h4>
+                    <div id="yahoo-status" class="bg-black bg-opacity-30 rounded-lg p-4">
+                        <div class="flex items-center justify-between">
+                            <span class="text-gray-300">Chargement...</span>
+                            <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-bonvin-gold"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Cache Status -->
+                <div class="mb-6">
+                    <h4 class="text-lg font-medium mb-3">Cache Status</h4>
+                    <div id="cache-status" class="bg-black bg-opacity-30 rounded-lg p-4">
+                        <div class="flex items-center justify-between">
+                            <span class="text-gray-300">Chargement...</span>
+                            <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-bonvin-gold"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Manual Update -->
+                <div class="mb-6">
+                    <h4 class="text-lg font-medium mb-3">Mise à Jour Manuelle</h4>
+                    <button id="update-all-stocks" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors">
+                        🔄 Mettre à Jour Tous les Prix
+                    </button>
+                    <div id="update-status" class="mt-3 text-sm text-gray-300"></div>
+                </div>
+
+                <!-- Clear Cache -->
+                <div>
+                    <h4 class="text-lg font-medium mb-3">Gestion du Cache</h4>
+                    <button id="clear-cache" class="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors">
+                        🗑️ Vider le Cache
+                    </button>
+                    <div id="clear-status" class="mt-3 text-sm text-gray-300"></div>
+                </div>
+            </div>
+
+            <!-- Email Configuration -->
+            <div class="glassmorphism rounded-xl p-6">
+                <h3 class="text-xl font-semibold text-bonvin-gold mb-4">📧 Email Configuration</h3>
+                
+                <!-- Email Status -->
+                <div class="mb-6">
+                    <h4 class="text-lg font-medium mb-3">Configuration Email</h4>
+                    <div id="email-config" class="bg-black bg-opacity-30 rounded-lg p-4">
+                        <div class="flex items-center justify-between">
+                            <span class="text-gray-300">Chargement...</span>
+                            <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-bonvin-gold"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Test Email -->
+                <div>
+                    <h4 class="text-lg font-medium mb-3">Test Email</h4>
+                    <button id="test-email" class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors">
+                        📤 Envoyer Email de Test
+                    </button>
+                    <div id="test-email-status" class="mt-3 text-sm text-gray-300"></div>
+                </div>
+            </div>
+
+            <!-- System Status -->
+            <div class="glassmorphism rounded-xl p-6">
+                <h3 class="text-xl font-semibold text-bonvin-gold mb-4">🔧 System Status</h3>
+                
+                <!-- API Endpoints -->
+                <div class="mb-6">
+                    <h4 class="text-lg font-medium mb-3">API Endpoints</h4>
+                    <div id="api-endpoints" class="bg-black bg-opacity-30 rounded-lg p-4 max-h-48 overflow-y-auto">
+                        <div class="text-gray-300">Chargement...</div>
+                    </div>
+                </div>
+
+                <!-- System Health -->
+                <div>
+                    <h4 class="text-lg font-medium mb-3">System Health</h4>
+                    <div id="system-health" class="bg-black bg-opacity-30 rounded-lg p-4">
+                        <div class="flex items-center justify-between">
+                            <span class="text-gray-300">Chargement...</span>
+                            <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-bonvin-gold"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Hamburger Menu
+        document.getElementById('hamburger').addEventListener('click', function() {
+            document.getElementById('menu').classList.toggle('hidden');
+        });
+
+        // Close menu when clicking outside
+        document.addEventListener('click', function(event) {
+            const menu = document.getElementById('menu');
+            const hamburger = document.getElementById('hamburger');
+            if (!menu.contains(event.target) && !hamburger.contains(event.target)) {
+                menu.classList.add('hidden');
+            }
+        });
+
+        // Load all status data
+        async function loadAllStatus() {
+            await Promise.all([
+                loadSchedulerStatus(),
+                loadRecentUpdates(),
+                loadYahooStatus(),
+                loadCacheStatus(),
+                loadEmailConfig(),
+                loadApiEndpoints(),
+                loadSystemHealth()
+            ]);
+        }
+
+        // Scheduler Status
+        async function loadSchedulerStatus() {
+            try {
+                const response = await fetch('/api/market-updates/scheduler-status');
+                const data = await response.json();
+                
+                const statusDiv = document.getElementById('scheduler-status');
+                statusDiv.innerHTML = `
+                    <div class="space-y-2">
+                        <div class="flex justify-between">
+                            <span class="text-gray-300">Status:</span>
+                            <span class="${data.is_running ? 'text-green-400' : 'text-red-400'} font-semibold">
+                                ${data.is_running ? '✅ Actif' : '❌ Inactif'}
+                            </span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-300">Prochaine exécution:</span>
+                            <span class="text-white">${data.next_run || 'N/A'}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-300">Heure configurée:</span>
+                            <span class="text-white">${data.scheduled_time}</span>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                document.getElementById('scheduler-status').innerHTML = `
+                    <div class="text-red-400">Erreur de chargement</div>
+                `;
+            }
+        }
+
+        // Recent Updates
+        async function loadRecentUpdates() {
+            try {
+                const response = await fetch('/api/market-updates');
+                const data = await response.json();
+                
+                const updatesDiv = document.getElementById('recent-updates');
+                if (data.updates && data.updates.length > 0) {
+                    updatesDiv.innerHTML = data.updates.slice(0, 5).map(update => `
+                        <div class="border-b border-gray-600 pb-2 mb-2">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <div class="text-white font-medium">${update.title}</div>
+                                    <div class="text-gray-400 text-sm">${new Date(update.created_at).toLocaleString('fr-FR')}</div>
+                                </div>
+                                <span class="text-xs bg-blue-600 px-2 py-1 rounded">${update.status}</span>
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    updatesDiv.innerHTML = '<div class="text-gray-400">Aucun update récent</div>';
+                }
+            } catch (error) {
+                document.getElementById('recent-updates').innerHTML = `
+                    <div class="text-red-400">Erreur de chargement</div>
+                `;
+            }
+        }
+
+        // Yahoo Finance Status
+        async function loadYahooStatus() {
+            try {
+                const response = await fetch('/api/yahoo-finance/status');
+                const data = await response.json();
+                
+                const statusDiv = document.getElementById('yahoo-status');
+                statusDiv.innerHTML = `
+                    <div class="space-y-2">
+                        <div class="flex justify-between">
+                            <span class="text-gray-300">Status:</span>
+                            <span class="${data.available ? 'text-green-400' : 'text-red-400'} font-semibold">
+                                ${data.available ? '✅ Opérationnel' : '❌ Indisponible'}
+                            </span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-300">Test:</span>
+                            <span class="text-white">${data.test_symbol || 'N/A'}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-300">Prix test:</span>
+                            <span class="text-white">${data.test_price || 'N/A'}</span>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                document.getElementById('yahoo-status').innerHTML = `
+                    <div class="text-red-400">Erreur de chargement</div>
+                `;
+            }
+        }
+
+        // Cache Status
+        async function loadCacheStatus() {
+            try {
+                const response = await fetch('/api/stock-price/cache/status');
+                const data = await response.json();
+                
+                const statusDiv = document.getElementById('cache-status');
+                statusDiv.innerHTML = `
+                    <div class="space-y-2">
+                        <div class="flex justify-between">
+                            <span class="text-gray-300">Taille cache:</span>
+                            <span class="text-white">${data.cache_size} entrées</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-300">Historique:</span>
+                            <span class="text-white">${data.history_size} symboles</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-300">Requêtes/jour:</span>
+                            <span class="text-white">${data.daily_requests}/${data.max_daily_requests}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-300">Peut requêter:</span>
+                            <span class="${data.can_make_request ? 'text-green-400' : 'text-red-400'} font-semibold">
+                                ${data.can_make_request ? '✅ Oui' : '❌ Non'}
+                            </span>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                document.getElementById('cache-status').innerHTML = `
+                    <div class="text-red-400">Erreur de chargement</div>
+                `;
+            }
+        }
+
+        // Email Config
+        async function loadEmailConfig() {
+            try {
+                const response = await fetch('/api/email-config');
+                const data = await response.json();
+                
+                const configDiv = document.getElementById('email-config');
+                configDiv.innerHTML = `
+                    <div class="space-y-2">
+                        <div class="flex justify-between">
+                            <span class="text-gray-300">Host:</span>
+                            <span class="text-white">${data.host || 'N/A'}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-300">Port:</span>
+                            <span class="text-white">${data.port || 'N/A'}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-300">User:</span>
+                            <span class="text-white">${data.user ? '✅ Configuré' : '❌ Non configuré'}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-300">Destinataires:</span>
+                            <span class="text-white">${data.recipients_count || 0}</span>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                document.getElementById('email-config').innerHTML = `
+                    <div class="text-red-400">Erreur de chargement</div>
+                `;
+            }
+        }
+
+        // API Endpoints
+        async function loadApiEndpoints() {
+            try {
+                const response = await fetch('/api/endpoints');
+                const data = await response.json();
+                
+                const endpointsDiv = document.getElementById('api-endpoints');
+                endpointsDiv.innerHTML = `
+                    <div class="space-y-1 text-sm">
+                        ${data.endpoints.map(endpoint => `
+                            <div class="flex justify-between">
+                                <span class="text-gray-300">${endpoint.method}</span>
+                                <span class="text-white">${endpoint.route}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            } catch (error) {
+                document.getElementById('api-endpoints').innerHTML = `
+                    <div class="text-red-400">Erreur de chargement</div>
+                `;
+            }
+        }
+
+        // System Health
+        async function loadSystemHealth() {
+            try {
+                const response = await fetch('/health');
+                const data = await response.json();
+                
+                const healthDiv = document.getElementById('system-health');
+                healthDiv.innerHTML = `
+                    <div class="space-y-2">
+                        <div class="flex justify-between">
+                            <span class="text-gray-300">Status:</span>
+                            <span class="text-green-400 font-semibold">✅ Opérationnel</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-300">Version:</span>
+                            <span class="text-white">${data.version || 'N/A'}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-300">Timestamp:</span>
+                            <span class="text-white">${new Date(data.timestamp).toLocaleString('fr-FR')}</span>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                document.getElementById('system-health').innerHTML = `
+                    <div class="text-red-400">Erreur de chargement</div>
+                `;
+            }
+        }
+
+        // Manual Trigger Market Update
+        document.getElementById('trigger-market-update').addEventListener('click', async function() {
+            const button = this;
+            const statusDiv = document.getElementById('trigger-status');
+            
+            button.disabled = true;
+            button.textContent = '🔄 Génération en cours...';
+            statusDiv.textContent = 'Génération de l\'update en cours...';
+            
+            try {
+                const response = await fetch('/api/market-updates/trigger', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    statusDiv.innerHTML = '<span class="text-green-400">✅ Update généré avec succès!</span>';
+                    await loadRecentUpdates(); // Refresh the list
+                } else {
+                    statusDiv.innerHTML = `<span class="text-red-400">❌ Erreur: ${data.error}</span>`;
+                }
+            } catch (error) {
+                statusDiv.innerHTML = '<span class="text-red-400">❌ Erreur de connexion</span>';
+            } finally {
+                button.disabled = false;
+                button.textContent = '🚀 Générer Update Marchés';
+            }
+        });
+
+        // Update All Stocks
+        document.getElementById('update-all-stocks').addEventListener('click', async function() {
+            const button = this;
+            const statusDiv = document.getElementById('update-status');
+            
+            button.disabled = true;
+            button.textContent = '🔄 Mise à jour en cours...';
+            statusDiv.textContent = 'Mise à jour des prix en cours...';
+            
+            try {
+                const response = await fetch('/api/stock-price/update-all', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    statusDiv.innerHTML = `<span class="text-green-400">✅ ${data.updated_count} prix mis à jour</span>`;
+                    await loadCacheStatus(); // Refresh cache status
+                } else {
+                    statusDiv.innerHTML = `<span class="text-red-400">❌ Erreur: ${data.error}</span>`;
+                }
+            } catch (error) {
+                statusDiv.innerHTML = '<span class="text-red-400">❌ Erreur de connexion</span>';
+            } finally {
+                button.disabled = false;
+                button.textContent = '🔄 Mettre à Jour Tous les Prix';
+            }
+        });
+
+        // Clear Cache
+        document.getElementById('clear-cache').addEventListener('click', async function() {
+            const button = this;
+            const statusDiv = document.getElementById('clear-status');
+            
+            if (!confirm('Êtes-vous sûr de vouloir vider le cache ?')) {
+                return;
+            }
+            
+            button.disabled = true;
+            button.textContent = '🗑️ Vidage en cours...';
+            statusDiv.textContent = 'Vidage du cache en cours...';
+            
+            try {
+                const response = await fetch('/api/stock-price/cache/clear', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    statusDiv.innerHTML = '<span class="text-green-400">✅ Cache vidé avec succès</span>';
+                    await loadCacheStatus(); // Refresh cache status
+                } else {
+                    statusDiv.innerHTML = `<span class="text-red-400">❌ Erreur: ${data.error}</span>`;
+                }
+            } catch (error) {
+                statusDiv.innerHTML = '<span class="text-red-400">❌ Erreur de connexion</span>';
+            } finally {
+                button.disabled = false;
+                button.textContent = '🗑️ Vider le Cache';
+            }
+        });
+
+        // Test Email
+        document.getElementById('test-email').addEventListener('click', async function() {
+            const button = this;
+            const statusDiv = document.getElementById('test-email-status');
+            
+            button.disabled = true;
+            button.textContent = '📤 Envoi en cours...';
+            statusDiv.textContent = 'Envoi de l\'email de test...';
+            
+            try {
+                const response = await fetch('/api/test-email', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    statusDiv.innerHTML = '<span class="text-green-400">✅ Email de test envoyé!</span>';
+                } else {
+                    statusDiv.innerHTML = `<span class="text-red-400">❌ Erreur: ${data.error}</span>`;
+                }
+            } catch (error) {
+                statusDiv.innerHTML = '<span class="text-red-400">❌ Erreur de connexion</span>';
+            } finally {
+                button.disabled = false;
+                button.textContent = '📤 Envoyer Email de Test';
+            }
+        });
+
+        // Auto-refresh every 30 seconds
+        setInterval(loadAllStatus, 30000);
+
+        // Initial load
+        loadAllStatus();
+    </script>
+</body>
+</html> 

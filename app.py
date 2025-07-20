@@ -2224,6 +2224,11 @@ def markets():
     """Page des updates de marchés financiers"""
     return render_template('markets.html')
 
+@app.route("/settings")
+def settings():
+    """Page des paramètres et configuration"""
+    return render_template('settings.html')
+
 @app.route("/health")
 def health():
     """Health check"""
