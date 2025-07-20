@@ -191,9 +191,26 @@ class StockPriceManager:
             logger.info(f"Récupération prix pour {formatted_symbol} via Yahoo Finance (requête #{self.daily_requests + 1})")
             ticker = yf.Ticker(formatted_symbol)
             
-            # Récupérer les informations actuelles
-            info = ticker.info
-            hist = ticker.history(period="1d")
+            # Récupérer les informations actuelles avec gestion d'erreur améliorée
+            try:
+                info = ticker.info
+                hist = ticker.history(period="1d")
+            except Exception as api_error:
+                error_str = str(api_error)
+                if "Invalid Crumb" in error_str or "Unauthorized" in error_str:
+                    logger.error(f"Erreur d'authentification Yahoo Finance pour {formatted_symbol}: {api_error}")
+                    logger.info("Tentative de récupération avec délai...")
+                    
+                    # Attendre un peu et réessayer
+                    time.sleep(2)
+                    try:
+                        info = ticker.info
+                        hist = ticker.history(period="1d")
+                    except Exception as retry_error:
+                        logger.error(f"Échec de la deuxième tentative pour {formatted_symbol}: {retry_error}")
+                        return None
+                else:
+                    raise api_error
             
             if hist.empty:
                 logger.error(f"Aucune donnée trouvée pour {formatted_symbol}")
