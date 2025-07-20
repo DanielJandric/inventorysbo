@@ -173,7 +173,7 @@
                 </div>
                 
                 <!-- Hamburger Menu -->
-                <div class="relative">
+                <div class="relative z-50">
                     <button id="hamburger-btn" class="glass p-3 rounded-xl hover:bg-cyan-900/20 transition-all">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
@@ -181,7 +181,7 @@
                     </button>
                     
                     <!-- Menu déroulant -->
-                    <div id="hamburger-dropdown" class="hamburger-dropdown glowing-element absolute top-full right-0 mt-3 rounded-2xl p-4 min-w-64 transform scale-95 opacity-0 pointer-events-none transition-all duration-300 origin-top-right">
+                    <div id="hamburger-dropdown" class="hamburger-dropdown glowing-element absolute top-full right-0 mt-3 rounded-2xl p-4 min-w-64 transform scale-95 opacity-0 pointer-events-none transition-all duration-300 origin-top-right z-50">
                         <div class="space-y-3">
                             <a href="/" class="menu-item">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -221,50 +221,22 @@
         </header>
         
         <main class="p-6">
-            <!-- Status Section -->
+            <!-- Info Section -->
             <section class="glass-dark p-6 mb-8 glowing-element">
                 <div class="flex items-center justify-between mb-4">
-                    <h2 class="text-xl font-bold">Statut du Scheduler</h2>
-                    <button onclick="checkSchedulerStatus()" class="glass px-4 py-2 rounded-lg text-sm font-medium transition-all hover:scale-105">
-                        <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                        </svg>
-                        Actualiser
-                    </button>
-                </div>
-                <div id="scheduler-status" class="space-y-3">
-                    <div class="flex items-center">
-                        <span class="status-indicator status-scheduled"></span>
-                        <span class="text-sm">Scheduler configuré pour 21h30 CEST</span>
-                    </div>
-                    <div class="flex items-center">
-                        <span class="status-indicator status-completed"></span>
-                        <span class="text-sm">Dernière exécution: <span id="last-execution">-</span></span>
-                    </div>
-                    <div class="flex items-center">
-                        <span class="status-indicator status-scheduled"></span>
-                        <span class="text-sm">Prochaine exécution: <span id="next-execution">-</span></span>
-                    </div>
-                    <div class="flex items-center">
-                        <span class="status-indicator status-completed"></span>
-                        <span class="text-sm">📧 Envoi automatique par email activé</span>
+                    <h2 class="text-xl font-bold">📊 Briefings de Marché</h2>
+                    <div class="flex gap-2">
+                        <a href="/settings" class="glass px-4 py-2 rounded-lg text-sm font-medium transition-all hover:scale-105">
+                            <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                            </svg>
+                            Gérer dans Settings
+                        </a>
                     </div>
                 </div>
-            </section>
-            
-            <!-- Manual Trigger Section -->
-            <section class="glass-dark p-6 mb-8 glowing-element">
-                <div class="flex items-center justify-between mb-4">
-                    <h2 class="text-xl font-bold">Déclenchement Manuel</h2>
-                    <button onclick="triggerMarketUpdate()" id="trigger-btn" class="glass px-6 py-3 rounded-lg font-medium transition-all hover:scale-105 bg-cyan-900/20 hover:bg-cyan-900/30">
-                        <svg class="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-                        </svg>
-                        Générer Update
-                    </button>
-                </div>
-                <p class="text-slate-400 text-sm">Déclenchez manuellement la génération d'un briefing de marché avec les données actuelles.</p>
-                <p class="text-cyan-400 text-sm mt-2">📧 Le briefing sera automatiquement envoyé par email aux destinataires configurés.</p>
+                <p class="text-slate-400 text-sm">Consultez l'historique des briefings de marché générés automatiquement ou manuellement.</p>
+                <p class="text-cyan-400 text-sm mt-2">⚙️ La gestion du scheduler et des déclenchements manuels se fait dans la page Settings.</p>
             </section>
             
             <!-- Market Updates Section -->
@@ -317,7 +289,6 @@
         // Load market updates on page load
         document.addEventListener('DOMContentLoaded', () => {
             loadMarketUpdates();
-            checkSchedulerStatus();
         });
         
         async function loadMarketUpdates() {
@@ -348,60 +319,29 @@
             }
             
             container.innerHTML = updates.map(update => `
-                <div class="market-update p-6 glowing-element">
+                <div class="glass-dark p-6 glowing-element">
                     <div class="flex items-center justify-between mb-4">
-                        <div class="market-date">${update.date}</div>
-                        <div class="text-sm text-slate-400">${update.time}</div>
+                        <div class="flex items-center gap-3">
+                            <span class="text-lg font-bold text-cyan-400">📊</span>
+                            <div>
+                                <div class="text-lg font-semibold">Briefing du ${update.date}</div>
+                                <div class="text-sm text-slate-400">Généré à ${update.time} (${update.trigger_type === 'manual' ? 'Manuel' : 'Automatique'})</div>
+                            </div>
+                        </div>
+                        <div class="text-xs bg-cyan-900/30 px-3 py-1 rounded-full text-cyan-400">
+                            ${update.trigger_type === 'manual' ? '🔄 Manuel' : '⏰ Auto'}
+                        </div>
                     </div>
-                    <div class="market-content">
-                        ${update.content}
+                    <div class="market-content prose prose-invert max-w-none">
+                        <div class="whitespace-pre-wrap text-slate-300 leading-relaxed">
+                            ${update.content}
+                        </div>
                     </div>
                 </div>
             `).join('');
         }
         
-        async function triggerMarketUpdate() {
-            const btn = document.getElementById('trigger-btn');
-            const originalText = btn.innerHTML;
-            
-            btn.innerHTML = '<div class="loading-spinner w-4 h-4 inline mr-2"></div>Génération en cours...';
-            btn.disabled = true;
-            
-            try {
-                const response = await fetch('/api/market-updates/trigger', {
-                    method: 'POST'
-                });
-                const data = await response.json();
-                
-                if (data.success) {
-                    // Reload updates after successful generation
-                    await loadMarketUpdates();
-                    alert('Briefing de marché généré avec succès !');
-                } else {
-                    alert('Erreur lors de la génération: ' + data.error);
-                }
-            } catch (error) {
-                console.error('Erreur:', error);
-                alert('Erreur lors de la génération du briefing');
-            } finally {
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-            }
-        }
-        
-        async function checkSchedulerStatus() {
-            try {
-                const response = await fetch('/api/market-updates/scheduler-status');
-                const data = await response.json();
-                
-                if (data.success) {
-                    document.getElementById('last-execution').textContent = data.last_execution || 'Jamais';
-                    document.getElementById('next-execution').textContent = data.next_execution || 'Non programmé';
-                }
-            } catch (error) {
-                console.error('Erreur lors de la vérification du statut:', error);
-            }
-        }
+
     </script>
 </body>
 </html> 

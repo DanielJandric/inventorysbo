@@ -13,6 +13,7 @@ from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, asdict
 import yfinance as yf
 import pandas as pd
+from yahoo_finance_auth import YahooFinanceAuth
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,14 @@ class StockPriceManager:
         # Limites de l'API - 10 requêtes par jour maximum
         self.max_daily_requests = 10
         self.cache_duration = 86400  # 24 heures de cache (pas de temps réel)
+        
+        # Initialiser l'authentification Yahoo Finance
+        try:
+            self.yahoo_auth = YahooFinanceAuth()
+            logger.info("✅ Module d'authentification Yahoo Finance initialisé")
+        except Exception as e:
+            logger.error(f"❌ Erreur initialisation Yahoo Finance Auth: {e}")
+            self.yahoo_auth = None
         
         # Charger les données existantes
         self._load_cache()
@@ -187,8 +196,66 @@ class StockPriceManager:
             return None
         
         try:
-            # Récupérer les données via Yahoo Finance
-            logger.info(f"Récupération prix pour {formatted_symbol} via Yahoo Finance (requête #{self.daily_requests + 1})")
+            # Utiliser le nouveau module d'authentification si disponible
+            if self.yahoo_auth:
+                logger.info(f"Récupération prix pour {formatted_symbol} via Yahoo Finance Auth (requête #{self.daily_requests + 1})")
+                
+                # Récupérer les données via le module d'authentification
+                yahoo_data = self.yahoo_auth.get_stock_data(formatted_symbol)
+                
+                if yahoo_data:
+                    # Créer l'objet de données
+                    price_data = StockPriceData(
+                        symbol=formatted_symbol,
+                        price=float(yahoo_data['price']),
+                        currency=yahoo_data['currency'],
+                        change=float(yahoo_data.get('price', 0) - yahoo_data.get('open', yahoo_data['price'])),
+                        change_percent=float(((yahoo_data.get('price', 0) - yahoo_data.get('open', yahoo_data['price'])) / yahoo_data.get('open', yahoo_data['price'])) * 100 if yahoo_data.get('open') else 0),
+                        volume=int(yahoo_data.get('volume', 0)),
+                        market_cap=None,  # Pas disponible dans l'API chart
+                        pe_ratio=None,    # Pas disponible dans l'API chart
+                        dividend_yield=None,  # Pas disponible dans l'API chart
+                        high_52_week=yahoo_data.get('high'),
+                        low_52_week=yahoo_data.get('low'),
+                        timestamp=yahoo_data.get('timestamp', datetime.now().isoformat())
+                    )
+                    
+                    # Incrémenter le compteur de requêtes
+                    self._increment_request_count()
+                    
+                    # Sauvegarder dans le cache
+                    self.price_cache[formatted_symbol] = {
+                        'data': price_data.to_dict(),
+                        'timestamp': time.time()
+                    }
+                    self._save_cache()
+                    
+                    # Sauvegarder dans l'historique
+                    if formatted_symbol not in self.price_history:
+                        self.price_history[formatted_symbol] = []
+                    
+                    self.price_history[formatted_symbol].append({
+                        'date': datetime.now().strftime('%Y-%m-%d'),
+                        'time': datetime.now().strftime('%H:%M'),
+                        'price': float(yahoo_data['price']),
+                        'change': float(yahoo_data.get('price', 0) - yahoo_data.get('open', yahoo_data['price'])),
+                        'change_percent': float(((yahoo_data.get('price', 0) - yahoo_data.get('open', yahoo_data['price'])) / yahoo_data.get('open', yahoo_data['price'])) * 100 if yahoo_data.get('open') else 0),
+                        'volume': int(yahoo_data.get('volume', 0))
+                    })
+                    
+                    # Garder seulement les 30 derniers jours
+                    if len(self.price_history[formatted_symbol]) > 30:
+                        self.price_history[formatted_symbol] = self.price_history[formatted_symbol][-30:]
+                    
+                    self._save_history()
+                    
+                    logger.info(f"✅ Données mises à jour pour {formatted_symbol}: {yahoo_data['price']} {yahoo_data['currency']}")
+                    return price_data
+                else:
+                    logger.warning(f"Aucune donnée récupérée pour {formatted_symbol} via Yahoo Finance Auth")
+            
+            # Fallback vers yfinance si le module d'authentification échoue
+            logger.info(f"Fallback vers yfinance pour {formatted_symbol}")
             ticker = yf.Ticker(formatted_symbol)
             
             # Récupérer les informations actuelles avec gestion d'erreur améliorée

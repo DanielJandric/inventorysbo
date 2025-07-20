@@ -4590,12 +4590,18 @@ def trigger_market_update():
 def get_scheduler_status():
     """Récupère le statut du scheduler"""
     try:
+        # Vérifier si le scheduler est actif
+        is_running = hasattr(app, 'scheduler') and app.scheduler.running
+        
         # Calculer la prochaine exécution
         now = datetime.now()
-        next_execution = now.replace(hour=21, minute=30, second=0, microsecond=0)
+        scheduled_time = datetime.strptime(MARKET_UPDATE_TIME, "%H:%M").time()
+        next_run = datetime.combine(now.date(), scheduled_time)
         
-        if now.time() >= next_execution.time():
-            next_execution += timedelta(days=1)
+        if next_run <= now:
+            next_run = next_run + timedelta(days=1)
+        
+        next_execution = next_run.strftime("%d/%m/%Y %H:%M")
         
         # Récupérer la dernière exécution depuis la base
         last_execution = None
@@ -4606,10 +4612,10 @@ def get_scheduler_status():
         
         return jsonify({
             "success": True,
-            "scheduler_active": True,
-            "next_execution": next_execution.strftime("%Y-%m-%d %H:%M"),
+            "is_running": is_running,
+            "scheduled_time": MARKET_UPDATE_TIME,
             "last_execution": last_execution,
-            "update_time": MARKET_UPDATE_TIME
+            "next_run": next_execution
         })
         
     except Exception as e:

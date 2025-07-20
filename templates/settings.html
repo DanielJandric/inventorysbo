@@ -102,6 +102,9 @@
                     <button id="trigger-market-update" class="w-full bg-bonvin-gold hover:bg-yellow-600 text-black font-semibold py-3 px-4 rounded-lg transition-colors">
                         🚀 Générer Update Marchés
                     </button>
+                    <div class="text-xs text-gray-400 mt-2 text-center">
+                        Génération avec recherche web ChatGPT (données temps réel)
+                    </div>
                     <div id="trigger-status" class="mt-3 text-sm text-gray-300"></div>
                 </div>
 
@@ -295,11 +298,14 @@
                     updatesDiv.innerHTML = data.updates.slice(0, 5).map(update => `
                         <div class="border-b border-gray-600 pb-2 mb-2">
                             <div class="flex justify-between items-start">
-                                <div>
-                                    <div class="text-white font-medium">${update.title}</div>
-                                    <div class="text-gray-400 text-sm">${new Date(update.created_at).toLocaleString('fr-FR')}</div>
+                                <div class="flex-1">
+                                    <div class="text-white font-medium">Briefing du ${update.date}</div>
+                                    <div class="text-gray-400 text-sm">${update.time} (${update.trigger_type === 'manual' ? 'Manuel' : 'Auto'})</div>
+                                    <div class="text-gray-500 text-xs mt-1 line-clamp-2">${update.content.substring(0, 100)}...</div>
                                 </div>
-                                <span class="text-xs bg-blue-600 px-2 py-1 rounded">${update.status}</span>
+                                <span class="text-xs ${update.trigger_type === 'manual' ? 'bg-yellow-600' : 'bg-blue-600'} px-2 py-1 rounded ml-2">
+                                    ${update.trigger_type === 'manual' ? '🔄' : '⏰'}
+                                </span>
                             </div>
                         </div>
                     `).join('');
