@@ -20,6 +20,7 @@ import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 from dotenv import load_dotenv
 import requests
+import schedule
 
 # Load environment variables from .env file
 load_dotenv()
@@ -148,6 +149,10 @@ AUTO_UPDATE_TIMES = [
     "17:00",  # Fermeture bourse suisse
     "21:30"   # Soirée (après les marchés US)
 ]
+
+# Configuration Market Updates
+MARKET_UPDATE_TIME = "21:30"  # Heure de génération automatique
+MARKET_UPDATE_TIMEZONE = "Europe/Paris"  # Timezone pour les updates
 
 # Configuration FreeCurrency (pour conversion USD/EUR vers CHF)
 FREECURRENCY_API_KEY = os.getenv("FREECURRENCY_API_KEY", "fca_live_MhoTdTd6auvKD1Dr5kVQ7ua9SwgGPApjylr3CrRe")
@@ -2213,6 +2218,11 @@ def analytics():
 def reports():
     """Page des rapports bancaires par classe d'actif"""
     return render_template('reports.html')
+
+@app.route("/markets")
+def markets():
+    """Page des updates de marchés financiers"""
+    return render_template('markets.html')
 
 @app.route("/health")
 def health():
@@ -4543,6 +4553,254 @@ def clean_update_data(data: Dict[str, Any]) -> Dict[str, Any]:
     
     return cleaned
 
+# Market Updates API Endpoints
+@app.route("/api/market-updates", methods=["GET"])
+def get_market_updates():
+    """Récupère tous les briefings de marché"""
+    try:
+        if not supabase:
+            return jsonify({"error": "Supabase non connecté"}), 500
+        
+        response = supabase.table("market_updates").select("*").order("created_at", desc=True).limit(10).execute()
+        
+        if response.data:
+            return jsonify({
+                "success": True,
+                "updates": response.data
+            })
+        else:
+            return jsonify({
+                "success": True,
+                "updates": []
+            })
+            
+    except Exception as e:
+        logger.error(f"Erreur récupération market updates: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/market-updates/trigger", methods=["POST"])
+def trigger_market_update():
+    """Déclenche manuellement la génération d'un briefing de marché"""
+    try:
+        if not openai_client:
+            return jsonify({"error": "OpenAI non configuré"}), 500
+        
+        # Générer le briefing
+        briefing = generate_market_briefing()
+        
+        if not briefing:
+            return jsonify({"error": "Impossible de générer le briefing"}), 500
+        
+        # Sauvegarder en base
+        if supabase:
+            update_data = {
+                "content": briefing,
+                "date": datetime.now().strftime("%Y-%m-%d"),
+                "time": datetime.now().strftime("%H:%M"),
+                "created_at": datetime.now().isoformat(),
+                "trigger_type": "manual"
+            }
+            
+            response = supabase.table("market_updates").insert(update_data).execute()
+            
+            if response.data:
+                logger.info("✅ Briefing de marché généré et sauvegardé")
+                return jsonify({
+                    "success": True,
+                    "message": "Briefing généré avec succès",
+                    "update": response.data[0]
+                })
+        
+        # Notification par email si configuré
+        if gmail_manager.enabled:
+            email_subject = f"📊 Briefing de Marché - {datetime.now().strftime('%d/%m/%Y')} (Manuel)"
+            email_content = f"""
+            <div style="font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto;">
+                <h2 style="color: #00d4ff; border-bottom: 2px solid #00d4ff; padding-bottom: 10px;">
+                    📊 Briefing de Marché - {datetime.now().strftime('%d/%m/%Y')}
+                </h2>
+                
+                <div style="background: #fff3cd; padding: 20px; border-radius: 10px; margin: 20px 0; border-left: 4px solid #ffc107;">
+                    <p style="margin: 0; color: #856404; font-size: 14px;">
+                        <strong>⚠️ Généré manuellement à {datetime.now().strftime('%H:%M')} CEST</strong>
+                    </p>
+                </div>
+                
+                <div style="line-height: 1.7; text-align: justify; color: #333;">
+                    {briefing.replace(chr(10), '<br>')}
+                </div>
+                
+                <div style="margin-top: 30px; padding: 15px; background: #e3f2fd; border-radius: 8px; border-left: 4px solid #2196f3;">
+                    <p style="margin: 0; font-size: 14px; color: #1976d2;">
+                        💡 Ce briefing est généré par l'IA de BONVIN Collection.
+                        <br>Consultez l'application pour plus de détails et d'analyses.
+                    </p>
+                </div>
+            </div>
+            """
+            
+            gmail_manager.send_notification_async(email_subject, email_content)
+        
+        return jsonify({
+            "success": True,
+            "message": "Briefing généré avec succès",
+            "content": briefing
+        })
+        
+    except Exception as e:
+        logger.error(f"Erreur génération market update: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/market-updates/scheduler-status", methods=["GET"])
+def get_scheduler_status():
+    """Récupère le statut du scheduler"""
+    try:
+        # Calculer la prochaine exécution
+        now = datetime.now()
+        next_execution = now.replace(hour=21, minute=30, second=0, microsecond=0)
+        
+        if now.time() >= next_execution.time():
+            next_execution += timedelta(days=1)
+        
+        # Récupérer la dernière exécution depuis la base
+        last_execution = None
+        if supabase:
+            response = supabase.table("market_updates").select("created_at").order("created_at", desc=True).limit(1).execute()
+            if response.data:
+                last_execution = response.data[0]["created_at"]
+        
+        return jsonify({
+            "success": True,
+            "scheduler_active": True,
+            "next_execution": next_execution.strftime("%Y-%m-%d %H:%M"),
+            "last_execution": last_execution,
+            "update_time": MARKET_UPDATE_TIME
+        })
+        
+    except Exception as e:
+        logger.error(f"Erreur statut scheduler: {e}")
+        return jsonify({"error": str(e)}), 500
+
+def generate_market_briefing():
+    """Génère un briefing de marché avec GPT-4o"""
+    try:
+        if not openai_client:
+            return None
+        
+        # Prompt pour GPT-4o
+        prompt = """Tu es un stratégiste financier expérimenté. Génère un briefing narratif fluide, concis et structuré sur la séance des marchés financiers du jour.
+
+Format exigé :
+- Ton narratif, comme un stratégiste qui me parle directement
+- Concision : pas de blabla, mais du fond
+- Structure logique intégrée dans le récit (pas de titres) :
+  * Actions (USA, Europe, Suisse, autres zones si mouvement marquant)
+  * Obligations souveraines (US 10Y, Bund, OAT, BTP, Confédération…)
+  * Cryptoactifs (BTC, ETH, capitalisation globale, régulation, flux)
+  * Macro, banques centrales et géopolitique (stats, décisions, tensions)
+- Termine par une synthèse rapide intégrée à la narration, avec ce que je dois retenir en une phrase, et signale tout signal faible ou rupture de tendance à surveiller
+
+Utilise uniquement les données de clôture ou disponibles à 21h30 CEST. Si une classe d'actif n'a pas bougé, dis-le clairement sans meubler.
+
+Génère un briefing pour aujourd'hui basé sur les données de marché actuelles."""
+
+        response = openai_client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "Tu es un expert en marchés financiers avec une expertise particulière en analyse macro et technique."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=1500,
+            temperature=0.7
+        )
+        
+        return response.choices[0].message.content
+        
+    except Exception as e:
+        logger.error(f"Erreur génération briefing: {e}")
+        return None
+
+def schedule_market_updates():
+    """Configure le scheduler pour les updates de marché"""
+    try:
+        schedule.every().day.at(MARKET_UPDATE_TIME).do(generate_scheduled_market_update)
+        logger.info(f"✅ Scheduler market updates configuré pour {MARKET_UPDATE_TIME}")
+        
+        # Démarrer le scheduler dans un thread séparé
+        def run_scheduler():
+            while True:
+                schedule.run_pending()
+                time.sleep(60)  # Vérifier toutes les minutes
+        
+        scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
+        scheduler_thread.start()
+        logger.info("✅ Thread scheduler market updates démarré")
+        
+    except Exception as e:
+        logger.error(f"Erreur configuration scheduler market updates: {e}")
+
+def generate_scheduled_market_update():
+    """Fonction appelée automatiquement par le scheduler"""
+    try:
+        logger.info("🔄 Début génération automatique briefing de marché")
+        
+        briefing = generate_market_briefing()
+        if not briefing:
+            logger.error("❌ Impossible de générer le briefing automatique")
+            return
+        
+        # Sauvegarder en base
+        if supabase:
+            update_data = {
+                "content": briefing,
+                "date": datetime.now().strftime("%Y-%m-%d"),
+                "time": datetime.now().strftime("%H:%M"),
+                "created_at": datetime.now().isoformat(),
+                "trigger_type": "scheduled"
+            }
+            
+            response = supabase.table("market_updates").insert(update_data).execute()
+            
+            if response.data:
+                logger.info("✅ Briefing automatique généré et sauvegardé")
+                
+                # Notification par email si configuré
+                if gmail_manager.enabled:
+                    email_subject = f"📊 Briefing de Marché - {datetime.now().strftime('%d/%m/%Y')}"
+                    email_content = f"""
+                    <div style="font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto;">
+                        <h2 style="color: #00d4ff; border-bottom: 2px solid #00d4ff; padding-bottom: 10px;">
+                            📊 Briefing de Marché - {datetime.now().strftime('%d/%m/%Y')}
+                        </h2>
+                        
+                        <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin: 20px 0;">
+                            <p style="margin: 0; color: #666; font-size: 14px;">
+                                <strong>Généré automatiquement à {datetime.now().strftime('%H:%M')} CEST</strong>
+                            </p>
+                        </div>
+                        
+                        <div style="line-height: 1.7; text-align: justify; color: #333;">
+                            {briefing.replace(chr(10), '<br>')}
+                        </div>
+                        
+                        <div style="margin-top: 30px; padding: 15px; background: #e3f2fd; border-radius: 8px; border-left: 4px solid #2196f3;">
+                            <p style="margin: 0; font-size: 14px; color: #1976d2;">
+                                💡 Ce briefing est généré automatiquement par l'IA de BONVIN Collection.
+                                <br>Consultez l'application pour plus de détails et d'analyses.
+                            </p>
+                        </div>
+                    </div>
+                    """
+                    
+                    gmail_manager.send_notification_async(email_subject, email_content)
+            else:
+                logger.error("❌ Erreur sauvegarde briefing automatique")
+        else:
+            logger.warning("⚠️ Supabase non disponible pour sauvegarde")
+            
+    except Exception as e:
+        logger.error(f"Erreur génération automatique briefing: {e}")
+
 # Gestion d'erreurs
 @app.errorhandler(404)
 def not_found(error):
@@ -4807,11 +5065,17 @@ if __name__ == "__main__":
     logger.info("=" * 60)
     
     try:
-        # Démarrer le scheduler de mise à jour automatique
+        # Démarrer le scheduler de mise à jour automatique des prix
         try:
             schedule_auto_stock_updates()
         except Exception as e:
-            logger.error(f"Erreur démarrage scheduler: {e}")
+            logger.error(f"Erreur démarrage scheduler prix: {e}")
+        
+        # Démarrer le scheduler de market updates
+        try:
+            schedule_market_updates()
+        except Exception as e:
+            logger.error(f"Erreur démarrage scheduler market updates: {e}")
         
         app.run(debug=False, host=host, port=port)
     except Exception as e:

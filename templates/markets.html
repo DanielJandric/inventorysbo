@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="fr" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BONVIN - Update Marchés</title>
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/Bonvin_180x180.png">
+    <link rel="apple-touch-icon" sizes="152x152" href="/static/BONVIN_152X152 (1).PNG">
+    <link rel="apple-touch-icon" sizes="120x120" href="/static/BONVIN_120X120.PNG">
+    
+    <!-- Icône par défaut pour navigateurs -->
+    <link rel="icon" href="/static/Bonvin_180x180.png">
+    
+    <!-- Configuration iOS -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="BONVIN">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0A232A;
+            --glass-bg: rgba(10, 50, 60, 0.25);
+            --glass-border: rgba(0, 200, 220, 0.2);
+            --glass-glow: rgba(0, 220, 255, 0.15);
+            --text-primary: #e0e6e7;
+            --text-secondary: #88a0a8;
+        }
+        html { scroll-behavior: smooth; }
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+        }
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            background: radial-gradient(circle at 15% 25%, rgba(0, 220, 255, 0.2), transparent 40%),
+                        radial-gradient(circle at 85% 75%, rgba(10, 50, 60, 0.3), transparent 40%);
+            z-index: -1;
+            animation: moveGradient 20s linear infinite alternate;
+            filter: blur(50px);
+        }
+        @keyframes moveGradient {
+            from { transform: translate(0, 0); }
+            to { transform: translate(5vw, -5vh); }
+        }
+        .glowing-element { position: relative; transition: all 0.4s ease; }
+        .glowing-element::before {
+            content: ''; position: absolute; left: 0; top: 0;
+            width: 100%; height: 100%;
+            border-radius: inherit;
+            background: radial-gradient(circle at 50% 50%, var(--glass-glow), transparent 70%);
+            filter: blur(30px); opacity: 0.6; z-index: -1;
+            transition: opacity 0.4s ease, transform 0.4s ease;
+        }
+        .glowing-element:hover::before, .glowing-element.is-active::before { opacity: 1; }
+        
+        .glass {
+            background: var(--glass-bg);
+            backdrop-filter: blur(15px);
+            border: 1px solid var(--glass-border);
+            border-radius: 1.5rem;
+        }
+        .glass-dark {
+            background: rgba(10, 40, 50, 0.4);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            border-radius: 1.5rem;
+        }
+        .glass-subtle {
+            background: rgba(10, 35, 45, 0.3);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: 1.5rem;
+        }
+        
+        /* Menu styles */
+        .menu-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem 1rem;
+            border-radius: 0.75rem;
+            transition: all 0.3s ease;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .menu-item:hover {
+            background: rgba(0, 200, 220, 0.1);
+            color: var(--text-primary);
+            transform: translateX(4px);
+        }
+        .menu-item.active {
+            background: rgba(0, 200, 220, 0.2);
+            color: #00d4ff;
+            border: 1px solid rgba(0, 200, 220, 0.3);
+        }
+        
+        /* Hamburger menu */
+        .hamburger-dropdown {
+            background: rgba(10, 40, 50, 0.95);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            border-radius: 1.5rem;
+        }
+        
+        /* Market update styles */
+        .market-update {
+            background: rgba(10, 50, 60, 0.25);
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(0, 200, 220, 0.2);
+            border-radius: 1.5rem;
+            transition: all 0.3s ease;
+        }
+        .market-update:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0, 200, 220, 0.15);
+        }
+        
+        .market-date {
+            color: #00d4ff;
+            font-weight: 600;
+        }
+        
+        .market-content {
+            line-height: 1.7;
+            text-align: justify;
+        }
+        
+        .loading-spinner {
+            border: 2px solid rgba(0, 200, 220, 0.3);
+            border-top: 2px solid #00d4ff;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .status-scheduled { background: #fbbf24; }
+        .status-running { background: #10b981; }
+        .status-completed { background: #3b82f6; }
+        .status-error { background: #ef4444; }
+    </style>
+</head>
+<body class="h-full">
+    <div class="min-h-screen">
+        <!-- Header -->
+        <header class="p-6">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center gap-4">
+                    <img src="/static/Bonvin_180x180.png" alt="BONVIN" class="w-12 h-12 rounded-full">
+                    <div>
+                        <h1 class="text-2xl font-bold">BONVIN</h1>
+                        <p class="text-slate-400">Update Marchés</p>
+                    </div>
+                </div>
+                
+                <!-- Hamburger Menu -->
+                <div class="relative">
+                    <button id="hamburger-btn" class="glass p-3 rounded-xl hover:bg-cyan-900/20 transition-all">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                        </svg>
+                    </button>
+                    
+                    <!-- Menu déroulant -->
+                    <div id="hamburger-dropdown" class="hamburger-dropdown glowing-element absolute top-full right-0 mt-3 rounded-2xl p-4 min-w-64 transform scale-95 opacity-0 pointer-events-none transition-all duration-300 origin-top-right">
+                        <div class="space-y-3">
+                            <a href="/" class="menu-item">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+                                </svg>
+                                <span>Collection</span>
+                            </a>
+                            <a href="/analytics" class="menu-item">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                                </svg>
+                                <span>Analytics</span>
+                            </a>
+                            <a href="/markets" class="menu-item active">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                                </svg>
+                                <span>Update Marchés</span>
+                            </a>
+                            <a href="/reports" class="menu-item">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                </svg>
+                                <span>Rapports</span>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+        
+        <main class="p-6">
+            <!-- Status Section -->
+            <section class="glass-dark p-6 mb-8 glowing-element">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-xl font-bold">Statut du Scheduler</h2>
+                    <button onclick="checkSchedulerStatus()" class="glass px-4 py-2 rounded-lg text-sm font-medium transition-all hover:scale-105">
+                        <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                        Actualiser
+                    </button>
+                </div>
+                <div id="scheduler-status" class="space-y-3">
+                    <div class="flex items-center">
+                        <span class="status-indicator status-scheduled"></span>
+                        <span class="text-sm">Scheduler configuré pour 21h30 CEST</span>
+                    </div>
+                    <div class="flex items-center">
+                        <span class="status-indicator status-completed"></span>
+                        <span class="text-sm">Dernière exécution: <span id="last-execution">-</span></span>
+                    </div>
+                    <div class="flex items-center">
+                        <span class="status-indicator status-scheduled"></span>
+                        <span class="text-sm">Prochaine exécution: <span id="next-execution">-</span></span>
+                    </div>
+                    <div class="flex items-center">
+                        <span class="status-indicator status-completed"></span>
+                        <span class="text-sm">📧 Envoi automatique par email activé</span>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Manual Trigger Section -->
+            <section class="glass-dark p-6 mb-8 glowing-element">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-xl font-bold">Déclenchement Manuel</h2>
+                    <button onclick="triggerMarketUpdate()" id="trigger-btn" class="glass px-6 py-3 rounded-lg font-medium transition-all hover:scale-105 bg-cyan-900/20 hover:bg-cyan-900/30">
+                        <svg class="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                        </svg>
+                        Générer Update
+                    </button>
+                </div>
+                <p class="text-slate-400 text-sm">Déclenchez manuellement la génération d'un briefing de marché avec les données actuelles.</p>
+                <p class="text-cyan-400 text-sm mt-2">📧 Le briefing sera automatiquement envoyé par email aux destinataires configurés.</p>
+            </section>
+            
+            <!-- Market Updates Section -->
+            <section class="mb-8">
+                <div class="flex items-center justify-between mb-6">
+                    <h2 class="text-2xl font-bold">Briefings de Marché</h2>
+                    <div class="flex gap-2">
+                        <button onclick="loadMarketUpdates()" class="glass px-4 py-2 rounded-lg text-sm font-medium transition-all hover:scale-105">
+                            <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                            </svg>
+                            Actualiser
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="market-updates-container" class="space-y-6">
+                    <div class="flex justify-center py-12">
+                        <div class="loading-spinner"></div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+    
+    <script>
+        // Hamburger menu functionality
+        const hamburgerBtn = document.getElementById('hamburger-btn');
+        const hamburgerDropdown = document.getElementById('hamburger-dropdown');
+        
+        hamburgerBtn.addEventListener('click', () => {
+            const isOpen = hamburgerDropdown.classList.contains('opacity-0');
+            if (isOpen) {
+                hamburgerDropdown.classList.remove('opacity-0', 'pointer-events-none', 'scale-95');
+                hamburgerDropdown.classList.add('opacity-100', 'scale-100');
+            } else {
+                hamburgerDropdown.classList.add('opacity-0', 'pointer-events-none', 'scale-95');
+                hamburgerDropdown.classList.remove('opacity-100', 'scale-100');
+            }
+        });
+        
+        // Close dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!hamburgerBtn.contains(e.target) && !hamburgerDropdown.contains(e.target)) {
+                hamburgerDropdown.classList.add('opacity-0', 'pointer-events-none', 'scale-95');
+                hamburgerDropdown.classList.remove('opacity-100', 'scale-100');
+            }
+        });
+        
+        // Load market updates on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            loadMarketUpdates();
+            checkSchedulerStatus();
+        });
+        
+        async function loadMarketUpdates() {
+            const container = document.getElementById('market-updates-container');
+            container.innerHTML = '<div class="flex justify-center py-12"><div class="loading-spinner"></div></div>';
+            
+            try {
+                const response = await fetch('/api/market-updates');
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayMarketUpdates(data.updates);
+                } else {
+                    container.innerHTML = '<div class="text-center py-12 text-slate-400">Aucun briefing de marché disponible</div>';
+                }
+            } catch (error) {
+                console.error('Erreur lors du chargement des updates:', error);
+                container.innerHTML = '<div class="text-center py-12 text-red-400">Erreur lors du chargement</div>';
+            }
+        }
+        
+        function displayMarketUpdates(updates) {
+            const container = document.getElementById('market-updates-container');
+            
+            if (!updates || updates.length === 0) {
+                container.innerHTML = '<div class="text-center py-12 text-slate-400">Aucun briefing de marché disponible</div>';
+                return;
+            }
+            
+            container.innerHTML = updates.map(update => `
+                <div class="market-update p-6 glowing-element">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="market-date">${update.date}</div>
+                        <div class="text-sm text-slate-400">${update.time}</div>
+                    </div>
+                    <div class="market-content">
+                        ${update.content}
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        async function triggerMarketUpdate() {
+            const btn = document.getElementById('trigger-btn');
+            const originalText = btn.innerHTML;
+            
+            btn.innerHTML = '<div class="loading-spinner w-4 h-4 inline mr-2"></div>Génération en cours...';
+            btn.disabled = true;
+            
+            try {
+                const response = await fetch('/api/market-updates/trigger', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Reload updates after successful generation
+                    await loadMarketUpdates();
+                    alert('Briefing de marché généré avec succès !');
+                } else {
+                    alert('Erreur lors de la génération: ' + data.error);
+                }
+            } catch (error) {
+                console.error('Erreur:', error);
+                alert('Erreur lors de la génération du briefing');
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }
+        
+        async function checkSchedulerStatus() {
+            try {
+                const response = await fetch('/api/market-updates/scheduler-status');
+                const data = await response.json();
+                
+                if (data.success) {
+                    document.getElementById('last-execution').textContent = data.last_execution || 'Jamais';
+                    document.getElementById('next-execution').textContent = data.next_execution || 'Non programmé';
+                }
+            } catch (error) {
+                console.error('Erreur lors de la vérification du statut:', error);
+            }
+        }
+    </script>
+</body>
+</html> 
