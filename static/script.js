@@ -40,7 +40,7 @@ function showSuccess(message) {
 }
 
 // --- Initialisation sécurisée ---
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
     console.log('Application démarrée');
     
     try {
@@ -86,7 +86,10 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         // Charger les données
-        loadItems();
+        await loadItems();
+        
+        // Forcer la mise à jour des prix des actions au démarrage
+        await forceUpdateStockPrices();
         
         // Initialiser les filtres simplifiés
         filterByMainStatus('all');
@@ -94,6 +97,20 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Ajouter les actions rapides du chatbot
         setTimeout(addQuickActions, 1000);
+        
+        // Écouter les événements de refresh/visibility change
+        document.addEventListener('visibilitychange', async function() {
+            if (!document.hidden) {
+                console.log('Page redevenue visible - mise à jour des prix...');
+                await forceUpdateStockPrices();
+            }
+        });
+        
+        // Écouter les événements de focus (retour sur l'onglet)
+        window.addEventListener('focus', async function() {
+            console.log('Onglet refocusé - mise à jour des prix...');
+            await forceUpdateStockPrices();
+        });
         
         // Charger automatiquement les données boursières au démarrage
         setTimeout(() => {
@@ -265,7 +282,21 @@ function calculateStats(items) {
     const vendus = items.filter(item => item.status === 'Sold').length;
     const disponibles = items.filter(item => item.status === 'Available').length;
     const valeur_vente = items.filter(item => item.status === 'Sold').reduce((sum, item) => sum + (item.sold_price || 0), 0);
-    const valeur_disponible = items.filter(item => item.status === 'Available').reduce((sum, item) => sum + (item.current_value || 0), 0);
+    
+    // Calculer la valeur disponible en incluant les actions
+    const valeur_disponible = items.filter(item => item.status === 'Available').reduce((sum, item) => {
+        if (item.category === 'Actions' && item.current_price && item.stock_quantity) {
+            // Pour les actions : prix actuel × quantité
+            const actionValue = item.current_price * item.stock_quantity;
+            console.log(`Action ${item.name}: ${item.current_price} × ${item.stock_quantity} = ${actionValue}`);
+            return sum + actionValue;
+        } else if (item.current_value) {
+            // Pour les autres objets : valeur actuelle
+            return sum + item.current_value;
+        }
+        return sum;
+    }, 0);
+    
     const currentYear = new Date().getFullYear();
     const years = items.filter(item => item.construction_year).map(item => item.construction_year);
     const age_moyen = years.length > 0 ? Math.round(years.reduce((sum, year) => sum + (currentYear - year), 0) / years.length) : 0;
@@ -527,8 +558,10 @@ async function updateStockPrices(forceRefresh = false) {
                 
                 // Mettre à jour l'objet en mémoire
                 item.current_price = data.price_chf;
-                item.current_value = totalValue;
+                item.current_value = totalValue; // Mettre à jour current_value pour l'agrégation
                 item.last_price_update = data.last_update;
+                
+                console.log(`✅ ${item.stock_symbol} mis à jour: ${data.price_chf} CHF × ${item.stock_quantity} = ${totalValue} CHF`);
                 
                 // Réinitialiser le compteur d'erreur pour ce symbole
                 delete stockPriceUpdateErrors[item.stock_symbol];
@@ -562,6 +595,9 @@ async function forceUpdateStockPrices() {
     
     // Lancer la mise à jour immédiatement avec force_refresh=true
     await updateStockPrices(true);
+    
+    // Mettre à jour les statistiques après la mise à jour des prix
+    updateStatistics();
     
     showNotification('Prix mis à jour !', false);
 }
@@ -2393,8 +2429,10 @@ async function loadStockPricesOnStartup() {
                 
                 // Mettre à jour l'objet en mémoire
                 item.current_price = data.price_chf;
-                item.current_value = totalValue;
+                item.current_value = totalValue; // Mettre à jour current_value pour l'agrégation
                 item.last_price_update = data.last_update;
+                
+                console.log(`✅ ${item.stock_symbol} chargé: ${data.price_chf} CHF × ${item.stock_quantity} = ${totalValue} CHF`);
                 
                 // Mettre à jour l'affichage de la carte
                 updateStockCardDisplay(item.id, data);
