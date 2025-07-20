@@ -8,6 +8,7 @@ import os
 import json
 import time
 import logging
+import threading
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, asdict
@@ -44,7 +45,7 @@ class StockPriceData:
         return asdict(self)
 
 class StockPriceManager:
-    """Gestionnaire de prix d'actions avec stockage local"""
+    """Gestionnaire de prix d'actions avec stockage local et gestion robuste des erreurs"""
     
     def __init__(self, data_dir: str = "stock_data"):
         self.data_dir = data_dir
@@ -58,6 +59,10 @@ class StockPriceManager:
         # Limites de l'API - 10 requêtes par jour maximum
         self.max_daily_requests = 10
         self.cache_duration = 86400  # 24 heures de cache (pas de temps réel)
+        
+        # Verrou pour éviter les conflits en webapp
+        self._lock = threading.Lock()
+        self._request_locks = {}  # Verrous par symbole
         
         # Initialiser l'authentification Yahoo Finance
         try:
@@ -82,6 +87,12 @@ class StockPriceManager:
         self._load_cache()
         self._load_history()
         self._load_daily_requests()
+    
+    def _get_symbol_lock(self, symbol: str) -> threading.Lock:
+        """Obtient ou crée un verrou pour un symbole spécifique"""
+        if symbol not in self._request_locks:
+            self._request_locks[symbol] = threading.Lock()
+        return self._request_locks[symbol]
     
     def _load_cache(self):
         """Charge le cache des prix"""
@@ -192,9 +203,17 @@ class StockPriceManager:
         return symbol
     
     def get_stock_price(self, symbol: str, exchange: Optional[str] = None, force_refresh: bool = False) -> Optional[StockPriceData]:
-        """Récupère le prix d'une action avec gestion optimisée des requêtes"""
+        """Récupère le prix d'une action avec gestion optimisée des requêtes et verrouillage"""
         formatted_symbol = self._format_symbol(symbol, exchange)
         
+        # Utiliser un verrou par symbole pour éviter les conflits
+        symbol_lock = self._get_symbol_lock(formatted_symbol)
+        
+        with symbol_lock:
+            return self._get_stock_price_internal(formatted_symbol, force_refresh)
+    
+    def _get_stock_price_internal(self, formatted_symbol: str, force_refresh: bool = False) -> Optional[StockPriceData]:
+        """Méthode interne pour récupérer le prix d'une action"""
         # Vérifier le cache en priorité (pas de temps réel)
         if formatted_symbol in self.price_cache:
             cached_data = self.price_cache[formatted_symbol]
@@ -227,14 +246,14 @@ class StockPriceManager:
                         symbol=formatted_symbol,
                         price=float(yahoo_data['price']),
                         currency=yahoo_data['currency'],
-                        change=float(yahoo_data.get('price', 0) - yahoo_data.get('open', yahoo_data['price'])),
-                        change_percent=float(((yahoo_data.get('price', 0) - yahoo_data.get('open', yahoo_data['price'])) / yahoo_data.get('open', yahoo_data['price'])) * 100 if yahoo_data.get('open') else 0),
+                        change=float(yahoo_data.get('change', 0)),
+                        change_percent=float(yahoo_data.get('change_percent', 0)),
                         volume=int(yahoo_data.get('volume', 0)),
-                        market_cap=None,  # Pas disponible dans l'API chart
-                        pe_ratio=None,    # Pas disponible dans l'API chart
-                        dividend_yield=None,  # Pas disponible dans l'API chart
-                        high_52_week=yahoo_data.get('high'),
-                        low_52_week=yahoo_data.get('low'),
+                        market_cap=yahoo_data.get('market_cap'),
+                        pe_ratio=yahoo_data.get('pe_ratio'),
+                        dividend_yield=yahoo_data.get('dividend_yield'),
+                        high_52_week=yahoo_data.get('high_52_week'),
+                        low_52_week=yahoo_data.get('low_52_week'),
                         timestamp=yahoo_data.get('timestamp', datetime.now().isoformat())
                     )
                     
@@ -256,8 +275,8 @@ class StockPriceManager:
                         'date': datetime.now().strftime('%Y-%m-%d'),
                         'time': datetime.now().strftime('%H:%M'),
                         'price': float(yahoo_data['price']),
-                        'change': float(yahoo_data.get('price', 0) - yahoo_data.get('open', yahoo_data['price'])),
-                        'change_percent': float(((yahoo_data.get('price', 0) - yahoo_data.get('open', yahoo_data['price'])) / yahoo_data.get('open', yahoo_data['price'])) * 100 if yahoo_data.get('open') else 0),
+                        'change': float(yahoo_data.get('change', 0)),
+                        'change_percent': float(yahoo_data.get('change_percent', 0)),
                         'volume': int(yahoo_data.get('volume', 0))
                     })
                     
@@ -448,104 +467,72 @@ class StockPriceManager:
     
     def clear_cache(self):
         """Vide le cache"""
-        self.price_cache.clear()
-        self._save_cache()
-        logger.info("Cache des prix vidé")
+        with self._lock:
+            self.price_cache.clear()
+            self._save_cache()
+            logger.info("Cache des prix vidé")
     
     def update_all_stocks(self, symbols: List[str]) -> Dict[str, Any]:
-        """Met à jour tous les prix d'actions avec optimisation des 10 requêtes quotidiennes"""
+        """Met à jour tous les prix d'actions avec gestion optimisée"""
         results = {
             'success': [],
-            'errors': [],
+            'failed': [],
             'skipped': [],
-            'requests_used': 0
+            'requests_used': 0,
+            'cache_used': 0
         }
         
-        # Trier les symboles : d'abord ceux qui ne sont pas en cache ou cache expiré
-        symbols_to_update = []
-        symbols_cached = []
-        
-        for symbol in symbols:
-            formatted_symbol = self._format_symbol(symbol)
-            if formatted_symbol in self.price_cache:
-                cached_data = self.price_cache[formatted_symbol]
-                cache_age = time.time() - cached_data.get('timestamp', 0)
-                if cache_age < self.cache_duration:
-                    # Utiliser le cache
-                    symbols_cached.append(symbol)
-                    continue
-            
-            # Nécessite une mise à jour
-            symbols_to_update.append(symbol)
-        
-        logger.info(f"Mise à jour: {len(symbols_to_update)} symboles à actualiser, {len(symbols_cached)} depuis le cache")
-        
-        # Traiter d'abord les symboles nécessitant une mise à jour
-        for symbol in symbols_to_update:
-            try:
-                if not self._can_make_request():
-                    results['skipped'].append({
-                        'symbol': symbol,
-                        'reason': f'Limite quotidienne atteinte ({self.max_daily_requests} requêtes)'
-                    })
-                    continue
-                
-                price_data = self.get_stock_price(symbol, force_refresh=True)
-                if price_data:
-                    results['success'].append({
-                        'symbol': symbol,
-                        'price': price_data.price,
-                        'currency': price_data.currency,
-                        'source': 'Yahoo Finance'
-                    })
-                    results['requests_used'] += 1
-                else:
-                    results['errors'].append({
-                        'symbol': symbol,
-                        'reason': 'Données non disponibles'
-                    })
+        with self._lock:
+            for symbol in symbols:
+                try:
+                    # Vérifier si on peut faire une requête
+                    if not self._can_make_request():
+                        logger.warning(f"Limite quotidienne atteinte, arrêt de la mise à jour")
+                        results['skipped'].extend(symbols[symbols.index(symbol):])
+                        break
                     
-            except Exception as e:
-                results['errors'].append({
-                    'symbol': symbol,
-                    'reason': str(e)
-                })
+                    # Récupérer le prix
+                    price_data = self.get_stock_price(symbol, force_refresh=True)
+                    
+                    if price_data:
+                        results['success'].append({
+                            'symbol': symbol,
+                            'price': price_data.price,
+                            'currency': price_data.currency,
+                            'change_percent': price_data.change_percent,
+                            'volume': price_data.volume
+                        })
+                        results['requests_used'] += 1
+                    else:
+                        results['failed'].append(symbol)
+                        
+                except Exception as e:
+                    logger.error(f"Erreur mise à jour {symbol}: {e}")
+                    results['failed'].append(symbol)
         
-        # Ajouter les symboles depuis le cache
-        for symbol in symbols_cached:
-            formatted_symbol = self._format_symbol(symbol)
-            cached_data = self.price_cache[formatted_symbol]
-            price_data = StockPriceData(**cached_data['data'])
-            
-            results['success'].append({
-                'symbol': symbol,
-                'price': price_data.price,
-                'currency': price_data.currency,
-                'source': 'Cache'
-            })
-        
-        logger.info(f"✅ Mise à jour terminée: {len(results['success'])} symboles traités, {results['requests_used']} requêtes utilisées")
-        return results 
-
+        return results
+    
     def reset_daily_requests(self):
-        """Réinitialise manuellement le compteur de requêtes quotidiennes"""
-        self.daily_requests = 0
-        self.last_request_date = datetime.now().strftime('%Y-%m-%d')
-        self._save_daily_requests()
-        logger.info("✅ Compteur de requêtes quotidiennes réinitialisé")
-        return {
-            'status': 'success',
-            'message': 'Compteur de requêtes réinitialisé',
-            'requests': self.daily_requests,
-            'date': self.last_request_date
-        }
-
+        """Réinitialise le compteur de requêtes quotidiennes"""
+        with self._lock:
+            self.daily_requests = 0
+            self.last_request_date = datetime.now().strftime('%Y-%m-%d')
+            self._save_daily_requests()
+            logger.info("✅ Compteur de requêtes quotidiennes réinitialisé")
+            
+            return {
+                'status': 'success',
+                'message': 'Compteur de requêtes réinitialisé',
+                'daily_requests': self.daily_requests,
+                'last_request_date': self.last_request_date
+            }
+    
     def get_daily_requests_status(self) -> Dict[str, Any]:
         """Retourne le statut des requêtes quotidiennes"""
         return {
-            'requests_used': self.daily_requests,
-            'max_requests': self.max_daily_requests,
-            'remaining_requests': self.max_daily_requests - self.daily_requests,
+            'daily_requests': self.daily_requests,
+            'max_daily_requests': self.max_daily_requests,
             'last_request_date': self.last_request_date,
-            'can_make_request': self._can_make_request()
+            'can_make_request': self._can_make_request(),
+            'remaining_requests': max(0, self.max_daily_requests - self.daily_requests)
         } 
