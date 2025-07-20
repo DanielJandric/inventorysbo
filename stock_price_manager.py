@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Gestionnaire de prix d'actions avec Yahoo Finance API
-Stockage local des prix historiques et gestion intelligente des limites
+Gestionnaire de prix d'actions avec Yahoo Finance API - Version sans limitation
+Stockage local des prix historiques et gestion intelligente du cache
 """
 
 import os
@@ -45,20 +45,18 @@ class StockPriceData:
         return asdict(self)
 
 class StockPriceManager:
-    """Gestionnaire de prix d'actions avec stockage local et gestion robuste des erreurs"""
+    """Gestionnaire de prix d'actions avec cache intelligent et métriques fondamentales"""
     
     def __init__(self, data_dir: str = "stock_data"):
         self.data_dir = data_dir
         self.cache_file = os.path.join(data_dir, "price_cache.json")
         self.history_file = os.path.join(data_dir, "price_history.json")
-        self.daily_requests_file = os.path.join(data_dir, "daily_requests.json")
         
         # Créer le répertoire de données s'il n'existe pas
         os.makedirs(data_dir, exist_ok=True)
         
-        # Limites de l'API - 10 requêtes par jour maximum
-        self.max_daily_requests = 10
-        self.cache_duration = 86400  # 24 heures de cache (pas de temps réel)
+        # Cache duration - 24 heures de cache
+        self.cache_duration = 86400  # 24 heures
         
         # Verrou pour éviter les conflits en webapp
         self._lock = threading.Lock()
@@ -86,7 +84,6 @@ class StockPriceManager:
         # Charger les données existantes
         self._load_cache()
         self._load_history()
-        self._load_daily_requests()
     
     def _get_symbol_lock(self, symbol: str) -> threading.Lock:
         """Obtient ou crée un verrou pour un symbole spécifique"""
@@ -136,51 +133,6 @@ class StockPriceManager:
         except Exception as e:
             logger.error(f"Erreur sauvegarde historique: {e}")
     
-    def _load_daily_requests(self):
-        """Charge le compteur de requêtes quotidiennes"""
-        try:
-            if os.path.exists(self.daily_requests_file):
-                with open(self.daily_requests_file, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    self.daily_requests = data.get('requests', 0)
-                    self.last_request_date = data.get('date', '')
-                
-                # Réinitialiser si c'est un nouveau jour
-                today = datetime.now().strftime('%Y-%m-%d')
-                if self.last_request_date != today:
-                    self.daily_requests = 0
-                    self.last_request_date = today
-                    self._save_daily_requests()
-            else:
-                self.daily_requests = 0
-                self.last_request_date = datetime.now().strftime('%Y-%m-%d')
-        except Exception as e:
-            logger.error(f"Erreur chargement requêtes quotidiennes: {e}")
-            self.daily_requests = 0
-            self.last_request_date = datetime.now().strftime('%Y-%m-%d')
-    
-    def _save_daily_requests(self):
-        """Sauvegarde le compteur de requêtes quotidiennes"""
-        try:
-            data = {
-                'requests': self.daily_requests,
-                'date': self.last_request_date
-            }
-            with open(self.daily_requests_file, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=2)
-        except Exception as e:
-            logger.error(f"Erreur sauvegarde requêtes quotidiennes: {e}")
-    
-    def _can_make_request(self) -> bool:
-        """Vérifie si on peut faire une requête API"""
-        return self.daily_requests < self.max_daily_requests
-    
-    def _increment_request_count(self):
-        """Incrémente le compteur de requêtes"""
-        self.daily_requests += 1
-        self._save_daily_requests()
-        logger.info(f"Requête API #{self.daily_requests}/{self.max_daily_requests}")
-    
     def _format_symbol(self, symbol: str, exchange: Optional[str] = None) -> str:
         """Formate le symbole pour Yahoo Finance"""
         # Nettoyer le symbole
@@ -202,8 +154,39 @@ class StockPriceManager:
         
         return symbol
     
+    def _get_fundamental_metrics(self, symbol: str) -> Dict[str, Any]:
+        """Récupère les métriques fondamentales via yfinance"""
+        try:
+            ticker = yf.Ticker(symbol)
+            info = ticker.info
+            
+            return {
+                'market_cap': info.get('marketCap'),
+                'pe_ratio': info.get('trailingPE'),
+                'dividend_yield': info.get('dividendYield'),
+                'high_52_week': info.get('fiftyTwoWeekHigh'),
+                'low_52_week': info.get('fiftyTwoWeekLow')
+            }
+        except Exception as e:
+            error_str = str(e)
+            if "429" in error_str or "Too Many Requests" in error_str:
+                logger.warning(f"Rate limit yfinance atteint pour {symbol}, utilisation du cache")
+                # Retourner les données du cache si disponibles
+                if symbol in self.price_cache:
+                    cached_data = self.price_cache[symbol]['data']
+                    return {
+                        'market_cap': cached_data.get('market_cap'),
+                        'pe_ratio': cached_data.get('pe_ratio'),
+                        'dividend_yield': cached_data.get('dividend_yield'),
+                        'high_52_week': cached_data.get('high_52_week'),
+                        'low_52_week': cached_data.get('low_52_week')
+                    }
+            else:
+                logger.warning(f"Erreur récupération métriques fondamentales pour {symbol}: {e}")
+            return {}
+    
     def get_stock_price(self, symbol: str, exchange: Optional[str] = None, force_refresh: bool = False) -> Optional[StockPriceData]:
-        """Récupère le prix d'une action avec gestion optimisée des requêtes et verrouillage"""
+        """Récupère le prix d'une action avec gestion optimisée et verrouillage"""
         formatted_symbol = self._format_symbol(symbol, exchange)
         
         # Utiliser un verrou par symbole pour éviter les conflits
@@ -224,24 +207,19 @@ class StockPriceManager:
                 logger.info(f"Prix depuis le cache pour {formatted_symbol} (âge: {cache_age/3600:.1f}h)")
                 return StockPriceData(**cached_data['data'])
         
-        # Vérifier les limites de l'API
-        if not self._can_make_request():
-            logger.warning(f"Limite quotidienne atteinte ({self.max_daily_requests} requêtes). Utilisation du cache.")
-            if formatted_symbol in self.price_cache:
-                cached_data = self.price_cache[formatted_symbol]
-                return StockPriceData(**cached_data['data'])
-            return None
-        
         try:
             # Utiliser le nouveau module d'authentification si disponible
             if self.yahoo_auth:
-                logger.info(f"Récupération prix pour {formatted_symbol} via Yahoo Finance Auth (requête #{self.daily_requests + 1})")
+                logger.info(f"Récupération prix pour {formatted_symbol} via Yahoo Finance Auth")
                 
                 # Récupérer les données via le module d'authentification
                 yahoo_data = self.yahoo_auth.get_stock_data(formatted_symbol)
                 
                 if yahoo_data:
-                    # Créer l'objet de données
+                    # Récupérer les métriques fondamentales via yfinance
+                    fundamental_data = self._get_fundamental_metrics(formatted_symbol)
+                    
+                    # Créer l'objet de données en combinant les données
                     price_data = StockPriceData(
                         symbol=formatted_symbol,
                         price=float(yahoo_data['price']),
@@ -249,16 +227,13 @@ class StockPriceManager:
                         change=float(yahoo_data.get('change', 0)),
                         change_percent=float(yahoo_data.get('change_percent', 0)),
                         volume=int(yahoo_data.get('volume', 0)),
-                        market_cap=yahoo_data.get('market_cap'),
-                        pe_ratio=yahoo_data.get('pe_ratio'),
-                        dividend_yield=yahoo_data.get('dividend_yield'),
-                        high_52_week=yahoo_data.get('high_52_week'),
-                        low_52_week=yahoo_data.get('low_52_week'),
+                        market_cap=fundamental_data.get('market_cap') or yahoo_data.get('market_cap'),
+                        pe_ratio=fundamental_data.get('pe_ratio') or yahoo_data.get('pe_ratio'),
+                        dividend_yield=fundamental_data.get('dividend_yield') or yahoo_data.get('dividend_yield'),
+                        high_52_week=yahoo_data.get('high_52_week') or fundamental_data.get('high_52_week'),
+                        low_52_week=yahoo_data.get('low_52_week') or fundamental_data.get('low_52_week'),
                         timestamp=yahoo_data.get('timestamp', datetime.now().isoformat())
                     )
-                    
-                    # Incrémenter le compteur de requêtes
-                    self._increment_request_count()
                     
                     # Sauvegarder dans le cache
                     self.price_cache[formatted_symbol] = {
@@ -313,9 +288,6 @@ class StockPriceManager:
                         timestamp=yahooquery_data.get('timestamp', datetime.now().isoformat())
                     )
                     
-                    # Incrémenter le compteur de requêtes
-                    self._increment_request_count()
-                    
                     # Sauvegarder dans le cache
                     self.price_cache[formatted_symbol] = {
                         'data': price_data.to_dict(),
@@ -357,7 +329,14 @@ class StockPriceManager:
                 hist = ticker.history(period="1d")
             except Exception as api_error:
                 error_str = str(api_error)
-                if "Invalid Crumb" in error_str or "Unauthorized" in error_str:
+                if "429" in error_str or "Too Many Requests" in error_str:
+                    logger.warning(f"Rate limit yfinance atteint pour {formatted_symbol}, utilisation du cache")
+                    # Retourner les données du cache si disponibles
+                    if formatted_symbol in self.price_cache:
+                        cached_data = self.price_cache[formatted_symbol]
+                        return StockPriceData(**cached_data['data'])
+                    return None
+                elif "Invalid Crumb" in error_str or "Unauthorized" in error_str:
                     logger.error(f"Erreur d'authentification Yahoo Finance pour {formatted_symbol}: {api_error}")
                     logger.info("Tentative de récupération avec délai...")
                     
@@ -407,9 +386,6 @@ class StockPriceManager:
                 timestamp=datetime.now().isoformat()
             )
             
-            # Incrémenter le compteur de requêtes
-            self._increment_request_count()
-            
             # Sauvegarder dans le cache
             self.price_cache[formatted_symbol] = {
                 'data': price_data.to_dict(),
@@ -454,14 +430,10 @@ class StockPriceManager:
         return []
     
     def get_cache_status(self) -> Dict[str, Any]:
-        """Retourne le statut du cache et des requêtes"""
+        """Retourne le statut du cache"""
         return {
             'cache_size': len(self.price_cache),
             'history_size': len(self.price_history),
-            'daily_requests': self.daily_requests,
-            'max_daily_requests': self.max_daily_requests,
-            'last_request_date': self.last_request_date,
-            'can_make_request': self._can_make_request(),
             'cache_duration': self.cache_duration
         }
     
@@ -473,7 +445,7 @@ class StockPriceManager:
             logger.info("Cache des prix vidé")
     
     def update_all_stocks(self, symbols: List[str]) -> Dict[str, Any]:
-        """Met à jour tous les prix d'actions avec gestion optimisée"""
+        """Met à jour tous les prix d'actions"""
         results = {
             'success': [],
             'failed': [],
@@ -485,12 +457,6 @@ class StockPriceManager:
         with self._lock:
             for symbol in symbols:
                 try:
-                    # Vérifier si on peut faire une requête
-                    if not self._can_make_request():
-                        logger.warning(f"Limite quotidienne atteinte, arrêt de la mise à jour")
-                        results['skipped'].extend(symbols[symbols.index(symbol):])
-                        break
-                    
                     # Récupérer le prix
                     price_data = self.get_stock_price(symbol, force_refresh=True)
                     
@@ -512,27 +478,11 @@ class StockPriceManager:
         
         return results
     
-    def reset_daily_requests(self):
-        """Réinitialise le compteur de requêtes quotidiennes"""
-        with self._lock:
-            self.daily_requests = 0
-            self.last_request_date = datetime.now().strftime('%Y-%m-%d')
-            self._save_daily_requests()
-            logger.info("✅ Compteur de requêtes quotidiennes réinitialisé")
-            
-            return {
-                'status': 'success',
-                'message': 'Compteur de requêtes réinitialisé',
-                'daily_requests': self.daily_requests,
-                'last_request_date': self.last_request_date
-            }
-    
     def get_daily_requests_status(self) -> Dict[str, Any]:
-        """Retourne le statut des requêtes quotidiennes"""
+        """Retourne le statut des requêtes (maintenant illimité)"""
         return {
-            'daily_requests': self.daily_requests,
-            'max_daily_requests': self.max_daily_requests,
-            'last_request_date': self.last_request_date,
-            'can_make_request': self._can_make_request(),
-            'remaining_requests': max(0, self.max_daily_requests - self.daily_requests)
+            'daily_requests': 0,
+            'max_daily_requests': 'unlimited',
+            'can_make_request': True,
+            'remaining_requests': 'unlimited'
         } 

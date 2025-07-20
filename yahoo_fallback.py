@@ -52,6 +52,11 @@ class YahooQueryFallback:
             # Récupérer les prix
             price_data = ticker.price
             
+            # Vérifier que price_data est un dictionnaire
+            if not isinstance(price_data, dict):
+                logger.error(f"❌ yahooquery retourne un type invalide pour {symbol}: {type(price_data)}")
+                return None
+            
             if symbol in price_data and price_data[symbol]:
                 price_info = price_data[symbol]
                 
@@ -99,6 +104,13 @@ class YahooQueryFallback:
             
             # Récupérer les prix
             price_data = ticker.price
+            
+            # Vérifier que price_data est un dictionnaire
+            if not isinstance(price_data, dict):
+                logger.error(f"❌ yahooquery retourne un type invalide pour les symboles multiples: {type(price_data)}")
+                for symbol in symbols:
+                    results[symbol] = None
+                return results
             
             for symbol in symbols:
                 if symbol in price_data and price_data[symbol]:
