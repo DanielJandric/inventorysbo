@@ -2793,30 +2793,15 @@ def get_stock_price_chatgpt(symbol: str, item: Optional[CollectionItem], cache_k
         ticker = symbol
         
         prompt = f"""
-Tu es un expert en analyse financière. Je recherche les données boursières actuelles pour {company_name} (ticker {ticker}).
+Tu es un expert en analyse financière. Donne-moi le prix approximatif actuel de {company_name} ({ticker}) basé sur tes connaissances récentes.
 
-RÈGLES STRICTES :
-- Utilise des sources fiables (Yahoo Finance, Google Finance, etc.)
-- Retourne les prix dans la devise NATIVE de l'action :
-  * Actions américaines (NYSE, NASDAQ) : prix en USD
-  * Actions suisses (SIX) : prix en CHF
-  * Actions européennes : prix en EUR
-- Le current_price DOIT être un nombre positif
-- Vérifie que le prix est raisonnable (entre 0.01 et 1000000)
-- Si une donnée n'est pas disponible, utilise null
+RÈGLES :
+- Utilise tes connaissances récentes (délai acceptable de 15-20 minutes)
+- Prix dans la devise native : USD pour actions US, CHF pour actions suisses, EUR pour actions européennes
+- Le current_price DOIT être un nombre positif entre 0.01 et 1000000
+- Si tu ne connais pas une donnée, utilise null
 
-Récupère et retourne UNIQUEMENT un JSON avec les données suivantes :
-- current_price: prix actuel dans la devise native (OBLIGATOIRE, nombre positif)
-- currency: devise du prix (USD, CHF, EUR, etc.)
-- daily_volume: volume d'échange du jour (nombre entier positif)
-- average_volume: volume d'échange moyen (30 jours, nombre entier positif)
-- fifty_two_week_high: plus haut des 52 semaines dans la devise native (nombre positif)
-- fifty_two_week_low: plus bas des 52 semaines dans la devise native (nombre positif)
-- pe_ratio: ratio P/E (TTM) (nombre positif ou null)
-- daily_change: variation du jour dans la devise native (positif ou négatif)
-- daily_change_percent: variation du jour en pourcentage
-
-Format de réponse JSON uniquement, sans texte supplémentaire :
+Retourne UNIQUEMENT un JSON valide :
 {{
     "current_price": 125.50,
     "currency": "USD",
@@ -2829,7 +2814,7 @@ Format de réponse JSON uniquement, sans texte supplémentaire :
     "daily_change_percent": 1.87
 }}
 
-IMPORTANT : Le current_price est OBLIGATOIRE et doit être un nombre positif valide dans la devise native de l'action.
+IMPORTANT : current_price est OBLIGATOIRE et doit être un nombre positif.
 """
         
         # Appeler ChatGPT-4o
@@ -2858,6 +2843,8 @@ IMPORTANT : Le current_price est OBLIGATOIRE et doit être un nombre positif val
             
             # Validation des données avec plus de robustesse
             current_price = data.get('current_price')
+            logger.info(f"Réponse ChatGPT pour {symbol}: {data}")
+            
             if not current_price or current_price <= 0:
                 logger.error(f"Prix invalide reçu de ChatGPT pour {symbol}: {current_price}")
                 logger.error(f"Données complètes reçues: {data}")

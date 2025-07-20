@@ -1032,7 +1032,6 @@ function updateStockCardDisplay(itemId, stockData) {
         
         // Retirer l'animation de chargement
         priceElement.classList.remove('animate-pulse');
-    }
 }
 
 function displaySkeletonCards() {
