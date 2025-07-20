@@ -48,7 +48,7 @@ class StockPriceManager:
         os.makedirs(data_dir, exist_ok=True)
         
         # Limites de l'API
-        self.max_daily_requests = 5  # Maximum 5 requêtes par jour
+        self.max_daily_requests = 10  # Maximum 10 requêtes par jour
         self.cache_duration = 3600  # 1 heure de cache
         
         # Charger les données existantes

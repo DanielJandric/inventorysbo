@@ -12,8 +12,8 @@ Remplacer l'ancienne logique de prix d'actions basée sur ChatGPT par une soluti
   - Récupération de prix via Yahoo Finance API
   - Cache intelligent (1 heure)
   - Stockage local des prix historiques (30 jours)
-  - Limite de 5 requêtes par jour
-  - Gestion automatique des symboles par bourse
+      - Limite de 10 requêtes par jour
+    - Gestion automatique des symboles par bourse
 
 ### 2. **Stockage Local des Données**
 - **Répertoire**: `stock_data/`
@@ -81,7 +81,7 @@ GET /api/yahoo-finance/status
 - Réduction des appels API
 
 ### ✅ **Contrôle des Coûts**
-- Limite de 5 requêtes par jour
+- Limite de 10 requêtes par jour
 - Gestion automatique des quotas
 - Fallback vers le cache
 
@@ -119,7 +119,7 @@ fetch('/api/stock-price/AAPL?force_refresh=true')
 ### Mise à Jour Automatique
 - **Fréquence**: 5 fois par jour
 - **Heures**: 09:00, 11:00, 13:00, 15:00, 17:00, 21:30
-- **Limite**: Maximum 5 requêtes par jour
+- **Limite**: Maximum 10 requêtes par jour
 
 ### Historique des Prix
 ```javascript
@@ -182,7 +182,7 @@ fetch('/api/stock-price/history/AAPL?days=7')
   "can_make_request": false,
   "cache_duration": 3600,
   "source": "Yahoo Finance",
-  "api_limit_warning": "⚠️ Limite quotidienne: 5/5 requêtes"
+              "api_limit_warning": "⚠️ Limite quotidienne: 10/10 requêtes"
 }
 ```
 
@@ -211,7 +211,7 @@ fetch('/api/stock-price/history/AAPL?days=7')
 La logique des prix d'actions est maintenant :
 - **Fiable** : Données réelles de Yahoo Finance
 - **Efficace** : Cache intelligent et stockage local
-- **Contrôlée** : Limite de 5 requêtes par jour
+- **Contrôlée** : Limite de 10 requêtes par jour
 - **Complète** : Historique et métriques détaillées
 - **Maintenable** : Code modulaire et documenté
 
