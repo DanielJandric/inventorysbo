@@ -4617,27 +4617,21 @@ def get_scheduler_status():
         return jsonify({"error": str(e)}), 500
 
 def generate_market_briefing():
-    """Génère un briefing de marché avec GPT-4o"""
+    """Génère un briefing de marché avec GPT-4o et données réelles"""
     try:
         if not openai_client:
             return None
         
-        # Prompt pour GPT-4o
-        prompt = """Tu es un stratégiste financier expérimenté. Génère un briefing narratif fluide, concis et structuré sur la séance des marchés financiers du jour.
+        # Récupérer les données de marché actuelles
+        market_data = get_current_market_data()
+        
+        # Prompt pour GPT-4o avec données réelles
+        prompt = f"""Tu es un stratégiste financier expérimenté. Génère un briefing narratif fluide, concis et structuré sur la séance des marchés financiers du jour. Format exigé : - Ton narratif, comme un stratégiste qui me parle directement - Concision : pas de blabla, mais du fond - Structure logique intégrée dans le récit (pas de titres) : * Actions (USA, Europe, Suisse, autres zones si mouvement marquant) * Obligations souveraines (US 10Y, Bund, OAT, BTP, Confédération…) * Cryptoactifs (BTC, ETH, capitalisation globale, régulation, flux) * Macro, banques centrales et géopolitique (stats, décisions, tensions) - Termine par une synthèse rapide intégrée à la narration, avec ce que je dois retenir en une phrase, et signale tout signal faible ou rupture de tendance à surveiller. Si une classe d'actif n'a pas bougé, dis-le clairement sans meubler.
 
-Format exigé :
-- Ton narratif, comme un stratégiste qui me parle directement
-- Concision : pas de blabla, mais du fond
-- Structure logique intégrée dans le récit (pas de titres) :
-  * Actions (USA, Europe, Suisse, autres zones si mouvement marquant)
-  * Obligations souveraines (US 10Y, Bund, OAT, BTP, Confédération…)
-  * Cryptoactifs (BTC, ETH, capitalisation globale, régulation, flux)
-  * Macro, banques centrales et géopolitique (stats, décisions, tensions)
-- Termine par une synthèse rapide intégrée à la narration, avec ce que je dois retenir en une phrase, et signale tout signal faible ou rupture de tendance à surveiller
+Données de marché actuelles à utiliser :
+{market_data}
 
-Utilise uniquement les données de clôture ou disponibles à 21h30 CEST. Si une classe d'actif n'a pas bougé, dis-le clairement sans meubler.
-
-Génère un briefing pour aujourd'hui basé sur les données de marché actuelles."""
+Génère un briefing pour aujourd'hui basé sur ces données de marché réelles."""
 
         response = openai_client.chat.completions.create(
             model="gpt-4o",
@@ -4654,6 +4648,66 @@ Génère un briefing pour aujourd'hui basé sur les données de marché actuelle
     except Exception as e:
         logger.error(f"Erreur génération briefing: {e}")
         return None
+
+def get_current_market_data():
+    """Récupère les données de marché actuelles pour le briefing"""
+    try:
+        import yfinance as yf
+        from datetime import datetime
+        
+        # Symboles clés pour le briefing (mis à jour avec des symboles valides)
+        symbols = {
+            'actions_usa': ['^GSPC', '^IXIC', '^DJI'],  # S&P 500, NASDAQ, Dow Jones
+            'actions_europe': ['^STOXX50E', '^GDAXI', '^FCHI'],  # Euro Stoxx 50, DAX, CAC 40
+            'actions_suisse': ['^SSMI'],  # Swiss Market Index (symbole corrigé)
+            'obligations': ['^TNX', '^BUND10Y', '^TYX'],  # US 10Y, Bund 10Y, US 30Y
+            'crypto': ['BTC-USD', 'ETH-USD'],  # Bitcoin, Ethereum
+            'forex': ['EURUSD=X', 'USDCHF=X', 'GBPUSD=X'],  # EUR/USD, USD/CHF, GBP/USD
+            'commodities': ['GC=F', 'CL=F', 'SI=F']  # Or, Pétrole, Argent
+        }
+        
+        market_data = []
+        current_time = datetime.now().strftime('%d/%m/%Y %H:%M CEST')
+        
+        market_data.append(f"📊 Données de marché - {current_time}")
+        market_data.append("=" * 50)
+        
+        for category, symbol_list in symbols.items():
+            market_data.append(f"\n{category.upper().replace('_', ' ')}:")
+            
+            for symbol in symbol_list:
+                try:
+                    ticker = yf.Ticker(symbol)
+                    hist = ticker.history(period="1d")
+                    
+                    if not hist.empty:
+                        current_price = hist['Close'].iloc[-1]
+                        open_price = hist['Open'].iloc[0]
+                        change = current_price - open_price
+                        change_percent = (change / open_price) * 100 if open_price > 0 else 0
+                        
+                        # Nom du symbole
+                        symbol_name = {
+                            '^GSPC': 'S&P 500', '^IXIC': 'NASDAQ', '^DJI': 'Dow Jones',
+                            '^STOXX50E': 'Euro Stoxx 50', '^GDAXI': 'DAX', '^FCHI': 'CAC 40',
+                            '^SSMI': 'Swiss Market Index', '^TNX': 'US 10Y', '^BUND10Y': 'Bund 10Y',
+                            '^TYX': 'US 30Y', 'BTC-USD': 'Bitcoin', 'ETH-USD': 'Ethereum',
+                            'EURUSD=X': 'EUR/USD', 'USDCHF=X': 'USD/CHF', 'GBPUSD=X': 'GBP/USD',
+                            'GC=F': 'Or', 'CL=F': 'Pétrole WTI', 'SI=F': 'Argent'
+                        }.get(symbol, symbol)
+                        
+                        market_data.append(f"  {symbol_name}: {current_price:.2f} ({change_percent:+.2f}%)")
+                    else:
+                        market_data.append(f"  {symbol}: Données non disponibles")
+                        
+                except Exception as e:
+                    market_data.append(f"  {symbol}: Erreur - {str(e)[:50]}")
+        
+        return "\n".join(market_data)
+        
+    except Exception as e:
+        logger.error(f"Erreur récupération données marché: {e}")
+        return "Données de marché non disponibles"
 
 def schedule_market_updates():
     """Configure le scheduler pour les updates de marché"""
