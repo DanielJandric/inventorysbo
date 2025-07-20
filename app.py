@@ -137,8 +137,8 @@ EMAIL_RECIPIENTS = os.getenv("EMAIL_RECIPIENTS", "").split(",")
 
 FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY")
 
-# Configuration ChatGPT-4o pour données boursières
-# Remplace les APIs boursières traditionnelles
+# Configuration Yahoo Finance pour données boursières
+# API boursière principale pour les prix d'actions
 
 # Configuration mise à jour automatique des prix (6x/jour)
 AUTO_UPDATE_TIMES = [
@@ -2695,15 +2695,23 @@ def update_all_stock_prices():
                     'currency': success_item['currency']
                 })
         
+        # Calculer les statistiques d'optimisation
+        requests_used = results.get('requests_used', 0)
+        cache_used = len([item for item in results['success'] if item.get('source') == 'Cache'])
+        skipped_count = len(results['skipped'])
+        
         return jsonify({
             "success": True,
-            "message": f"Mise à jour terminée: {len(results['success'])} actions mises à jour via Yahoo Finance",
+            "message": f"Mise à jour optimisée terminée: {len(results['success'])} symboles traités",
             "updated_count": len(results['success']),
             "total_actions": len(action_items),
+            "requests_used": requests_used,
+            "cache_used": cache_used,
+            "skipped_count": skipped_count,
             "errors": results['errors'],
             "skipped": results['skipped'],
             "updated_data": updated_data,
-            "source": "Yahoo Finance"
+            "source": "Yahoo Finance (optimisé 10 requêtes/jour)"
         })
         
     except Exception as e:
@@ -2717,30 +2725,44 @@ def update_all_stock_prices():
 
 def schedule_auto_stock_updates():
     """
-    Planifie les mises à jour automatiques des prix des actions 5 fois par jour
+    Planifie les mises à jour automatiques des prix des actions avec optimisation des 10 requêtes quotidiennes
     """
     import schedule
     import time
     from threading import Thread
     
     def auto_update_stock_prices():
-        """Fonction de mise à jour automatique"""
+        """Fonction de mise à jour automatique optimisée"""
         try:
             logger.info("🔄 Début mise à jour automatique des prix via Yahoo Finance")
+            
+            # Vérifier le statut du cache
+            cache_status = stock_price_manager.get_cache_status()
+            logger.info(f"📊 Statut cache: {cache_status['cache_size']} entrées, {cache_status['daily_requests']}/{cache_status['max_daily_requests']} requêtes utilisées")
+            
+            # Si on a déjà utilisé toutes les requêtes, on ne fait rien
+            if not cache_status['can_make_request']:
+                logger.info("⚠️ Limite quotidienne atteinte, pas de mise à jour automatique")
+                return []
+            
             items = AdvancedDataManager.fetch_all_items()
             stock_items = [item for item in items if item.category == 'Actions' and item.stock_symbol]
             
             if not stock_items:
                 logger.info("Aucune action trouvée pour mise à jour automatique")
-                return
+                return []
             
             # Extraire les symboles
             symbols = [item.stock_symbol for item in stock_items]
             
-            # Utiliser le gestionnaire pour mettre à jour tous les prix
+            # Utiliser le gestionnaire optimisé pour mettre à jour tous les prix
             results = stock_price_manager.update_all_stocks(symbols)
             
-            logger.info(f"✅ Mise à jour automatique terminée: {len(results['success'])}/{len(stock_items)} actions mises à jour")
+            logger.info(f"✅ Mise à jour automatique terminée:")
+            logger.info(f"   - {len(results['success'])} symboles traités")
+            logger.info(f"   - {results['requests_used']} requêtes utilisées")
+            logger.info(f"   - {len(results['errors'])} erreurs")
+            logger.info(f"   - {len(results['skipped'])} ignorés (limite atteinte)")
             
             # Retourner les données mises à jour pour l'affichage
             return results['success']
@@ -2749,10 +2771,9 @@ def schedule_auto_stock_updates():
             logger.error(f"❌ Erreur mise à jour automatique globale: {e}")
             return []
     
-    # Planifier les mises à jour aux heures définies
-    for update_time in AUTO_UPDATE_TIMES:
-        schedule.every().day.at(update_time).do(auto_update_stock_prices)
-        logger.info(f"📅 Mise à jour automatique planifiée à {update_time}")
+    # Planifier une seule mise à jour par jour à 9h00 (optimisation des 10 requêtes)
+    schedule.every().day.at("09:00").do(auto_update_stock_prices)
+    logger.info("📅 Mise à jour automatique planifiée à 09:00 (optimisation 10 requêtes/jour)")
     
     # Fonction pour exécuter le scheduler en arrière-plan
     def run_scheduler():
@@ -2763,165 +2784,88 @@ def schedule_auto_stock_updates():
     # Démarrer le scheduler dans un thread séparé
     scheduler_thread = Thread(target=run_scheduler, daemon=True)
     scheduler_thread.start()
-    logger.info("🚀 Scheduler de mise à jour automatique démarré")
+    logger.info("🚀 Scheduler de mise à jour automatique démarré (optimisé 10 requêtes/jour)")
 
-def get_stock_price_chatgpt(symbol: str, item: Optional[CollectionItem], cache_key: str, force_refresh=False):
+def get_stock_price_yahoo(symbol: str, item: Optional[CollectionItem], cache_key: str, force_refresh=False):
     """
-    Récupère les données boursières via ChatGPT-4o en recherchant sur internet.
-    Remplace les APIs boursières traditionnelles.
+    Récupère les données boursières via Yahoo Finance API.
+    API boursière principale pour les prix d'actions.
     """
-    if not openai_client:
-        return jsonify({"error": "Moteur IA indisponible"}), 503
-
     try:
-        logger.info(f"Interrogation ChatGPT-4o pour le symbole : {symbol}")
+        logger.info(f"Récupération prix Yahoo Finance pour le symbole : {symbol}")
         
-        # Construire le prompt avec les variables
-        company_name = item.name if item else symbol
-        ticker = symbol
-        
-        prompt = f"""
-Tu es un expert en analyse financière. Donne-moi le prix approximatif actuel de {company_name} ({ticker}) basé sur tes connaissances récentes.
-
-RÈGLES :
-- Utilise tes connaissances récentes (délai acceptable de 15-20 minutes)
-- Prix dans la devise native : USD pour actions US, CHF pour actions suisses, EUR pour actions européennes
-- Le current_price DOIT être un nombre positif entre 0.01 et 1000000
-- Si tu ne connais pas une donnée, utilise null
-
-Retourne UNIQUEMENT un JSON valide :
-{{
-    "current_price": 125.50,
-    "currency": "USD",
-    "daily_volume": 876,
-    "average_volume": 3150,
-    "fifty_two_week_high": 128.50,
-    "fifty_two_week_low": 103.50,
-    "pe_ratio": 6.5,
-    "daily_change": 2.30,
-    "daily_change_percent": 1.87
-}}
-
-IMPORTANT : current_price est OBLIGATOIRE et doit être un nombre positif.
-"""
-        
-        # Appeler ChatGPT-4o
-        response = openai_client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "Tu es un expert en analyse financière. Tu recherches des données boursières précises et actuelles sur internet. Tu réponds UNIQUEMENT en JSON valide, sans texte supplémentaire."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.1,
-            max_tokens=500
+        # Utiliser le gestionnaire de prix d'actions
+        price_data = stock_price_manager.get_stock_price(
+            symbol=symbol,
+            exchange=item.stock_exchange if item else None,
+            force_refresh=force_refresh
         )
         
-        # Parser la réponse JSON
-        try:
-            import json
-            response_text = response.choices[0].message.content.strip()
-            
-            # Nettoyer la réponse (enlever les backticks si présents)
-            if response_text.startswith('```json'):
-                response_text = response_text[7:]
-            if response_text.endswith('```'):
-                response_text = response_text[:-3]
-            
-            data = json.loads(response_text)
-            
-            # Validation des données avec plus de robustesse
-            current_price = data.get('current_price')
-            logger.info(f"Réponse ChatGPT pour {symbol}: {data}")
-            
-            if not current_price or current_price <= 0:
-                logger.error(f"Prix invalide reçu de ChatGPT pour {symbol}: {current_price}")
-                logger.error(f"Données complètes reçues: {data}")
-                raise Exception(f"Prix invalide reçu de ChatGPT: {current_price}")
-            
-            # Convertir en float si c'est une string
-            if isinstance(current_price, str):
-                try:
-                    current_price = float(current_price.replace(',', '').replace('$', '').replace('CHF', '').strip())
-                except ValueError:
-                    raise Exception(f"Impossible de convertir le prix en nombre: {current_price}")
-            
-            # Vérifier que le prix est raisonnable (entre 0.01 et 1000000)
-            if current_price < 0.01 or current_price > 1000000:
-                raise Exception(f"Prix hors limites: {current_price}")
-            
-            # Récupérer la devise - garder le prix dans sa devise d'origine
-            original_currency = data.get('currency', 'CHF')
-            original_price = current_price
-            
-            # Pour l'affichage, on garde le prix dans sa devise d'origine
-            # La conversion CHF ne se fait que pour le calcul de la fortune totale
-            price_chf = original_price  # Prix d'origine pour l'affichage
-            
-            # Formater les données pour l'affichage
-            result = {
-                "symbol": symbol,
-                "price": original_price,
-                "price_chf": original_price,  # Même prix pour l'affichage (pas de conversion automatique)
-                "currency": original_currency,
-                "company_name": company_name,
-                "last_update": datetime.now().isoformat(),
-                "source": f"ChatGPT-4o ({original_currency})",
-                "change": format_stock_value(data.get('daily_change', 0), is_price=True),
-                "change_percent": format_stock_value(data.get('daily_change_percent', 0), is_percent=True),
-                "volume": format_stock_value(data.get('daily_volume', 0), is_volume=True),
-                "average_volume": format_stock_value(data.get('average_volume', 0), is_volume=True),
-                "pe_ratio": str(data.get('pe_ratio', 'N/A')) if data.get('pe_ratio') else 'N/A',
-                "fifty_two_week_high": format_stock_value(data.get('fifty_two_week_high', 0), is_price=True),
-                "fifty_two_week_low": format_stock_value(data.get('fifty_two_week_low', 0), is_price=True)
-            }
-            
-            logger.info(f"✅ Données ChatGPT récupérées pour {symbol}: {result['price']} CHF")
-            
-            # Mettre en cache
-            stock_price_cache[cache_key] = {'data': result, 'timestamp': time.time()}
-            
-            # Mettre à jour le prix dans la DB si c'est une action existante
-            if item and item.id:
-                try:
-                    # Garder le prix dans sa devise d'origine
-                    # La conversion CHF se fera uniquement pour le calcul de la fortune totale
-                    total_value_original = original_price * (item.stock_quantity or 1)
-                    
-                    update_data = {
-                        'current_price': original_price,  # Prix dans sa devise d'origine
-                        'current_value': total_value_original,  # Valeur totale dans la devise d'origine
-                        'last_price_update': datetime.now().isoformat(),
-                        'stock_volume': data.get('daily_volume'),
-                        'stock_pe_ratio': data.get('pe_ratio'),
-                        'stock_52_week_high': data.get('fifty_two_week_high'),
-                        'stock_52_week_low': data.get('fifty_two_week_low'),
-                        'stock_change': data.get('daily_change'),
-                        'stock_change_percent': data.get('daily_change_percent'),
-                        'stock_average_volume': data.get('average_volume')
-                    }
-                    
-                    # Mettre à jour dans Supabase
-                    if supabase:
-                        response = supabase.table('items').update(update_data).eq('id', item.id).execute()
-                        if response.data:
-                            logger.info(f"✅ Prix et métriques mis à jour dans DB pour action {item.name} (ID: {item.id})")
-                            logger.info(f"💰 Prix: {original_price} {original_currency} (prix d'origine conservé)")
-                            logger.info(f"💼 Valeur totale: {total_value_original:.2f} {original_currency} ({item.stock_quantity or 1} actions)")
-                            logger.info(f"📊 Métriques: Volume={update_data['stock_volume']}, PE={update_data['stock_pe_ratio']}, 52W-H={update_data['stock_52_week_high']}, 52W-L={update_data['stock_52_week_low']}")
-                        else:
-                            logger.warning(f"⚠️ Échec mise à jour DB pour action {item.name} (ID: {item.id})")
-                except Exception as e:
-                    logger.error(f"❌ Erreur mise à jour DB pour action {item.name}: {e}")
-            
-            return jsonify(result)
-            
-        except json.JSONDecodeError as e:
-            logger.error(f"Erreur parsing JSON ChatGPT pour {symbol}: {e}")
-            logger.error(f"Réponse reçue: {response_text}")
-            raise Exception("Réponse ChatGPT invalide")
+        if not price_data:
+            logger.error(f"Aucune donnée trouvée pour {symbol}")
+            return jsonify({
+                "error": "Données non disponibles via Yahoo Finance", 
+                "details": "Symbole non trouvé ou API indisponible",
+                "message": "Veuillez mettre à jour le prix manuellement."
+            }), 404
+        
+        # Formater les données pour l'affichage
+        result = {
+            "symbol": price_data.symbol,
+            "price": price_data.price,
+            "currency": price_data.currency,
+            "company_name": item.name if item else symbol,
+            "last_update": price_data.timestamp or datetime.now().isoformat(),
+            "source": f"Yahoo Finance ({price_data.currency})",
+            "change": format_stock_value(price_data.change, is_price=True),
+            "change_percent": format_stock_value(price_data.change_percent, is_percent=True),
+            "volume": format_stock_value(price_data.volume, is_volume=True),
+            "average_volume": format_stock_value(price_data.volume, is_volume=True),  # Utiliser le volume actuel
+            "pe_ratio": str(price_data.pe_ratio) if price_data.pe_ratio else 'N/A',
+            "fifty_two_week_high": format_stock_value(price_data.high_52_week, is_price=True),
+            "fifty_two_week_low": format_stock_value(price_data.low_52_week, is_price=True)
+        }
+        
+        logger.info(f"✅ Données Yahoo Finance récupérées pour {symbol}: {result['price']} {result['currency']}")
+        
+        # Mettre en cache
+        stock_price_cache[cache_key] = {'data': result, 'timestamp': time.time()}
+        
+        # Mettre à jour le prix dans la DB si c'est une action existante
+        if item and item.id:
+            try:
+                total_value = price_data.price * (item.stock_quantity or 1)
+                
+                update_data = {
+                    'current_price': price_data.price,
+                    'current_value': total_value,
+                    'last_price_update': datetime.now().isoformat(),
+                    'stock_volume': price_data.volume,
+                    'stock_pe_ratio': price_data.pe_ratio,
+                    'stock_52_week_high': price_data.high_52_week,
+                    'stock_52_week_low': price_data.low_52_week,
+                    'stock_change': price_data.change,
+                    'stock_change_percent': price_data.change_percent,
+                    'stock_average_volume': price_data.volume
+                }
+                
+                # Mettre à jour dans Supabase
+                if supabase:
+                    response = supabase.table('items').update(update_data).eq('id', item.id).execute()
+                    if response.data:
+                        logger.info(f"✅ Prix et métriques mis à jour dans DB pour action {item.name} (ID: {item.id})")
+                        logger.info(f"💰 Prix: {price_data.price} {price_data.currency}")
+                        logger.info(f"💼 Valeur totale: {total_value:.2f} {price_data.currency} ({item.stock_quantity or 1} actions)")
+                        logger.info(f"📊 Métriques: Volume={update_data['stock_volume']}, PE={update_data['stock_pe_ratio']}, 52W-H={update_data['stock_52_week_high']}, 52W-L={update_data['stock_52_week_low']}")
+                    else:
+                        logger.warning(f"⚠️ Échec mise à jour DB pour action {item.name} (ID: {item.id})")
+            except Exception as e:
+                logger.error(f"❌ Erreur mise à jour DB pour action {item.name}: {e}")
+        
+        return jsonify(result)
         
     except Exception as e:
-        logger.error(f"Erreur ChatGPT pour {symbol}: {e}")
+        logger.error(f"Erreur Yahoo Finance pour {symbol}: {e}")
         
         # Utiliser le cache si disponible
         if cache_key in stock_price_cache:
@@ -2929,7 +2873,7 @@ IMPORTANT : current_price est OBLIGATOIRE et doit être un nombre positif.
             return jsonify(stock_price_cache[cache_key]['data'])
         
         return jsonify({
-            "error": "Données non disponibles via ChatGPT", 
+            "error": "Données non disponibles via Yahoo Finance", 
             "details": str(e),
             "message": "Veuillez mettre à jour le prix manuellement."
         }), 500
@@ -5026,8 +4970,8 @@ if __name__ == "__main__":
     logger.info(f"📧 Gmail: {'✅' if gmail_manager.enabled else '❌'}")
     if gmail_manager.enabled:
         logger.info(f"📬 Destinataires: {len(gmail_manager.recipients)}")
-    logger.info(f"💾 Cache: ✅ Multi-niveaux avec embeddings")
-    logger.info(f"📈 Support Actions: ✅ Complet avec ChatGPT-4o")
+        logger.info(f"💾 Cache: ✅ Multi-niveaux avec embeddings")
+    logger.info(f"📈 Support Actions: ✅ Complet avec Yahoo Finance")
     logger.info("=" * 60)
     logger.info("MODE: OpenAI Pure avec Recherche Sémantique RAG")
     logger.info("✅ GPT-4o avec recherche intelligente")
@@ -5036,7 +4980,7 @@ if __name__ == "__main__":
     logger.info("✅ Détection d'intention de requête")
     logger.info("✅ Génération automatique d'embeddings")
     logger.info("✅ Cache intelligent pour les embeddings")
-    logger.info("✅ Données boursières via ChatGPT-4o")
+    logger.info("✅ Données boursières via Yahoo Finance")
     logger.info("✅ Mise à jour automatique 6x/jour")
     logger.info("✅ Prix manuel pour les actions")
     logger.info("=" * 60)

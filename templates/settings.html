@@ -143,9 +143,14 @@
                 <!-- Manual Update -->
                 <div class="mb-6">
                     <h4 class="text-lg font-medium mb-3">Mise à Jour Manuelle</h4>
-                    <button id="update-all-stocks" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors">
-                        🔄 Mettre à Jour Tous les Prix
-                    </button>
+                    <div class="space-y-3">
+                        <button id="update-all-stocks" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors">
+                            🔄 Mettre à Jour Tous les Prix
+                        </button>
+                        <div class="text-xs text-gray-400 text-center">
+                            Mise à jour optimisée avec les 10 requêtes quotidiennes disponibles
+                        </div>
+                    </div>
                     <div id="update-status" class="mt-3 text-sm text-gray-300"></div>
                 </div>
 
@@ -491,7 +496,7 @@
             
             button.disabled = true;
             button.textContent = '🔄 Mise à jour en cours...';
-            statusDiv.textContent = 'Mise à jour des prix en cours...';
+            statusDiv.textContent = 'Mise à jour optimisée des prix en cours...';
             
             try {
                 const response = await fetch('/api/stock-price/update-all', {
@@ -500,7 +505,22 @@
                 const data = await response.json();
                 
                 if (data.success) {
-                    statusDiv.innerHTML = `<span class="text-green-400">✅ ${data.updated_count} prix mis à jour</span>`;
+                    let statusHTML = `<span class="text-green-400">✅ Mise à jour terminée</span><br>`;
+                    statusHTML += `<span class="text-gray-300 text-xs">• ${data.updated_count} symboles traités</span><br>`;
+                    
+                    if (data.requests_used !== undefined) {
+                        statusHTML += `<span class="text-blue-400 text-xs">• ${data.requests_used} requêtes utilisées</span><br>`;
+                    }
+                    
+                    if (data.cache_used !== undefined) {
+                        statusHTML += `<span class="text-amber-400 text-xs">• ${data.cache_used} depuis le cache</span><br>`;
+                    }
+                    
+                    if (data.skipped_count !== undefined && data.skipped_count > 0) {
+                        statusHTML += `<span class="text-orange-400 text-xs">• ${data.skipped_count} ignorés (limite atteinte)</span>`;
+                    }
+                    
+                    statusDiv.innerHTML = statusHTML;
                     await loadCacheStatus(); // Refresh cache status
                 } else {
                     statusDiv.innerHTML = `<span class="text-red-400">❌ Erreur: ${data.error}</span>`;

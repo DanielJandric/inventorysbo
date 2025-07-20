@@ -300,6 +300,16 @@ function formatPrice(price) {
     }).format(price);
 }
 
+function formatPriceInCurrency(price, currency = 'CHF') {
+    if (price === null || price === undefined) return 'N/A';
+    return new Intl.NumberFormat('fr-CH', { 
+        style: 'currency', 
+        currency: currency, 
+        minimumFractionDigits: 2, 
+        maximumFractionDigits: 2 
+    }).format(price);
+}
+
 // --- FILTRES SIMPLIFIÉS (4 filtres uniquement) ---
 function filterByMainStatus(status) {
     currentMainFilter = status;
@@ -965,77 +975,77 @@ function updateStockCardDisplay(itemId, stockData) {
     console.log(`✅ Éléments trouvés pour la carte ${itemId}`);
     
     const changeClass = stockData.change_percent > 0 ? 'text-green-400' : 'text-red-400';
-        const arrow = stockData.change_percent > 0 ? '↑' : '↓';
-        
-        // Formater les volumes
-        const formatVolume = (volume) => {
-            if (volume === 'N/A' || !volume) return 'N/A';
-            if (volume > 1e9) return `${(volume/1e9).toFixed(2)}B`;
-            if (volume > 1e6) return `${(volume/1e6).toFixed(2)}M`;
-            if (volume > 1e3) return `${(volume/1e3).toFixed(2)}K`;
-            return volume.toString();
-        };
-        
-        // Formater les prix
-        const formatPriceValue = (price) => {
-            if (price === 'N/A' || !price) return 'N/A';
-            return parseFloat(price).toFixed(2);
-        };
-        
-        priceElement.innerHTML = `
-            <div class="space-y-3">
-                <!-- Prix principal -->
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-2">
-                        <span class="text-lg font-bold text-amber-200">${formatPrice(stockData.price)}</span>
-                        <span class="text-xs text-amber-300/70 font-medium">${stockData.currency}</span>
-                    </div>
-                    <span class="${changeClass} text-sm font-semibold">
+    const arrow = stockData.change_percent > 0 ? '↑' : '↓';
+    
+    // Formater les volumes
+    const formatVolume = (volume) => {
+        if (volume === 'N/A' || !volume) return 'N/A';
+        if (volume > 1e9) return `${(volume/1e9).toFixed(2)}B`;
+        if (volume > 1e6) return `${(volume/1e6).toFixed(2)}M`;
+        if (volume > 1e3) return `${(volume/1e3).toFixed(2)}K`;
+        return volume.toString();
+    };
+    
+    // Formater les prix dans la monnaie d'origine
+    const formatPriceValue = (price) => {
+        if (price === 'N/A' || !price) return 'N/A';
+        return formatPriceInCurrency(parseFloat(price), stockData.currency);
+    };
+    
+    // Formater la variation dans la monnaie d'origine
+    const formatChange = (change) => {
+        if (change === 'N/A' || !change) return 'N/A';
+        const value = parseFloat(change);
+        const formattedValue = formatPriceInCurrency(Math.abs(value), stockData.currency);
+        return value > 0 ? `+${formattedValue}` : `-${formattedValue}`;
+    };
+    
+    priceElement.innerHTML = `
+        <div class="space-y-3">
+            <!-- Prix principal -->
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <span class="text-lg font-bold text-amber-200">${formatPriceInCurrency(stockData.price, stockData.currency)}</span>
+                </div>
+                <div class="text-right">
+                    <div class="${changeClass} text-sm font-semibold">
                         ${arrow} ${Math.abs(stockData.change_percent).toFixed(2)}%
-                    </span>
-                </div>
-                
-                <!-- Informations supplémentaires sans tableaux -->
-                <div class="space-y-2 text-xs">
-                    <div class="flex justify-between">
-                        <span class="text-amber-300/80 font-medium">Volume:</span>
-                        <span class="text-amber-200/90">${formatVolume(stockData.volume)}</span>
                     </div>
-                    <div class="flex justify-between">
-                        <span class="text-amber-300/80 font-medium">Volume moyen:</span>
-                        <span class="text-amber-200/90">${formatVolume(stockData.average_volume)}</span>
+                    <div class="${changeClass} text-xs">
+                        ${formatChange(stockData.change)}
                     </div>
-                    <div class="flex justify-between">
-                        <span class="text-amber-300/80 font-medium">P/E Ratio:</span>
-                        <span class="text-amber-200/90">${stockData.pe_ratio !== 'N/A' ? parseFloat(stockData.pe_ratio).toFixed(1) : 'N/A'}</span>
-                    </div>
-                    <div class="flex justify-between">
-                        <span class="text-amber-300/80 font-medium">52W High:</span>
-                        <span class="text-amber-200/90">${formatPriceValue(stockData.fifty_two_week_high)}</span>
-                    </div>
-                    <div class="flex justify-between">
-                        <span class="text-amber-300/80 font-medium">52W Low:</span>
-                        <span class="text-amber-200/90">${formatPriceValue(stockData.fifty_two_week_low)}</span>
-                    </div>
-                </div>
-                
-                <!-- Source et timestamp -->
-                <div class="text-xs text-amber-300/60 text-center pt-1 border-t border-amber-300/20">
-                    ChatGPT-4o • ${new Date(stockData.last_update).toLocaleTimeString()}
-                </div>
-                
-                <!-- Bouton de mise à jour manuelle -->
-                <div class="mt-2 text-center">
-                    <button onclick="updateSingleStockPrice('${stockData.symbol}', ${itemId})" 
-                            class="text-xs px-3 py-1 glass rounded-lg text-amber-300 hover:text-white hover:scale-105 transition-all">
-                        🔄 Mettre à jour
-                    </button>
                 </div>
             </div>
-        `;
-        
-        // Retirer l'animation de chargement
-        priceElement.classList.remove('animate-pulse');
+            
+            <!-- Informations détaillées -->
+            <div class="space-y-2 text-xs">
+                <div class="flex justify-between">
+                    <span class="text-amber-300/80 font-medium">Volume:</span>
+                    <span class="text-amber-200/90">${formatVolume(stockData.volume)}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-amber-300/80 font-medium">P/E Ratio:</span>
+                    <span class="text-amber-200/90">${stockData.pe_ratio !== 'N/A' ? parseFloat(stockData.pe_ratio).toFixed(1) : 'N/A'}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-amber-300/80 font-medium">52W High:</span>
+                    <span class="text-amber-200/90">${formatPriceValue(stockData.fifty_two_week_high)}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-amber-300/80 font-medium">52W Low:</span>
+                    <span class="text-amber-200/90">${formatPriceValue(stockData.fifty_two_week_low)}</span>
+                </div>
+            </div>
+            
+            <!-- Source et timestamp -->
+            <div class="text-xs text-amber-300/60 text-center pt-1 border-t border-amber-300/20">
+                Yahoo Finance • ${new Date(stockData.last_update).toLocaleTimeString()}
+            </div>
+        </div>
+    `;
+    
+    // Retirer l'animation de chargement
+    priceElement.classList.remove('animate-pulse');
 }
 
 function displaySkeletonCards() {
@@ -1161,10 +1171,6 @@ function createItemCardHTML(item) {
                                 <span class="text-amber-200/90 animate-pulse">--</span>
                             </div>
                             <div class="flex justify-between">
-                                <span class="text-amber-300/80 font-medium">Volume moyen:</span>
-                                <span class="text-amber-200/90 animate-pulse">--</span>
-                            </div>
-                            <div class="flex justify-between">
                                 <span class="text-amber-300/80 font-medium">P/E Ratio:</span>
                                 <span class="text-amber-200/90 animate-pulse">--</span>
                             </div>
@@ -1180,15 +1186,7 @@ function createItemCardHTML(item) {
                         
                         <!-- Source et timestamp -->
                         <div class="text-xs text-amber-300/60 text-center pt-1 border-t border-amber-300/20">
-                            Chargement via ChatGPT-4o...
-                        </div>
-                        
-                        <!-- Bouton de mise à jour manuelle -->
-                        <div class="mt-2 text-center">
-                            <button onclick="updateSingleStockPrice('${item.stock_symbol}', ${item.id})" 
-                                    class="text-xs px-3 py-1 glass rounded-lg text-amber-300 hover:text-white hover:scale-105 transition-all">
-                                🔄 Mettre à jour
-                            </button>
+                            Chargement via Yahoo Finance...
                         </div>
                     </div>
                 </div>
@@ -1213,7 +1211,7 @@ function createItemCardHTML(item) {
                     <div>Catégorie: ${item.category || 'N/A'}</div>
                     ${item.construction_year ? `<div>Année: ${item.construction_year}</div>` : ''}
                     ${item.condition ? `<div>État: ${item.condition}</div>` : ''}
-                    ${item.status === 'Available' && item.current_value ? `<div>Prix: ${formatPrice(item.current_value)}</div>` : ''}
+                    ${item.status === 'Available' && item.current_value ? `<div>Votre Total: ${formatPrice(item.current_value)}</div>` : ''}
                     ${item.current_offer ? `<div>Offre: ${formatPrice(item.current_offer)}</div>` : ''}
                     ${item.status === 'Sold' && item.sold_price ? `<div>Vendu: ${formatPrice(item.sold_price)}</div>` : ''}
                     ${item.sale_progress ? `<div class="text-xs text-cyan-300">${item.sale_progress.substring(0, 50)}${item.sale_progress.length > 50 ? '...' : ''}</div>` : ''}

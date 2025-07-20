@@ -47,9 +47,9 @@ class StockPriceManager:
         # Créer le répertoire de données s'il n'existe pas
         os.makedirs(data_dir, exist_ok=True)
         
-        # Limites de l'API
-        self.max_daily_requests = 10  # Maximum 10 requêtes par jour
-        self.cache_duration = 3600  # 1 heure de cache
+        # Limites de l'API - 10 requêtes par jour maximum
+        self.max_daily_requests = 10
+        self.cache_duration = 86400  # 24 heures de cache (pas de temps réel)
         
         # Charger les données existantes
         self._load_cache()
@@ -165,16 +165,17 @@ class StockPriceManager:
         return symbol
     
     def get_stock_price(self, symbol: str, exchange: Optional[str] = None, force_refresh: bool = False) -> Optional[StockPriceData]:
-        """Récupère le prix d'une action"""
+        """Récupère le prix d'une action avec gestion optimisée des requêtes"""
         formatted_symbol = self._format_symbol(symbol, exchange)
         
-        # Vérifier le cache si pas de refresh forcé
-        if not force_refresh and formatted_symbol in self.price_cache:
+        # Vérifier le cache en priorité (pas de temps réel)
+        if formatted_symbol in self.price_cache:
             cached_data = self.price_cache[formatted_symbol]
             cache_age = time.time() - cached_data.get('timestamp', 0)
             
-            if cache_age < self.cache_duration:
-                logger.info(f"Prix depuis le cache pour {formatted_symbol}")
+            # Utiliser le cache si moins de 24h ou si pas de refresh forcé
+            if cache_age < self.cache_duration and not force_refresh:
+                logger.info(f"Prix depuis le cache pour {formatted_symbol} (âge: {cache_age/3600:.1f}h)")
                 return StockPriceData(**cached_data['data'])
         
         # Vérifier les limites de l'API
@@ -187,7 +188,7 @@ class StockPriceManager:
         
         try:
             # Récupérer les données via Yahoo Finance
-            logger.info(f"Récupération prix pour {formatted_symbol} via Yahoo Finance")
+            logger.info(f"Récupération prix pour {formatted_symbol} via Yahoo Finance (requête #{self.daily_requests + 1})")
             ticker = yf.Ticker(formatted_symbol)
             
             # Récupérer les informations actuelles
@@ -206,6 +207,13 @@ class StockPriceManager:
             change = current_price - open_price
             change_percent = (change / open_price) * 100 if open_price > 0 else 0
             
+            # Récupérer les métriques supplémentaires
+            market_cap = info.get('marketCap')
+            pe_ratio = info.get('trailingPE')
+            dividend_yield = info.get('dividendYield')
+            high_52_week = info.get('fiftyTwoWeekHigh')
+            low_52_week = info.get('fiftyTwoWeekLow')
+            
             # Créer l'objet de données
             price_data = StockPriceData(
                 symbol=formatted_symbol,
@@ -214,13 +222,16 @@ class StockPriceManager:
                 change=float(change),
                 change_percent=float(change_percent),
                 volume=volume,
-                market_cap=info.get('marketCap'),
-                pe_ratio=info.get('trailingPE'),
-                dividend_yield=info.get('dividendYield'),
-                high_52_week=info.get('fiftyTwoWeekHigh'),
-                low_52_week=info.get('fiftyTwoWeekLow'),
+                market_cap=market_cap,
+                pe_ratio=pe_ratio,
+                dividend_yield=dividend_yield,
+                high_52_week=high_52_week,
+                low_52_week=low_52_week,
                 timestamp=datetime.now().isoformat()
             )
+            
+            # Incrémenter le compteur de requêtes
+            self._increment_request_count()
             
             # Sauvegarder dans le cache
             self.price_cache[formatted_symbol] = {
@@ -248,10 +259,7 @@ class StockPriceManager:
             
             self._save_history()
             
-            # Incrémenter le compteur de requêtes
-            self._increment_request_count()
-            
-            logger.info(f"✅ Prix récupéré pour {formatted_symbol}: {current_price} {info.get('currency', 'USD')}")
+            logger.info(f"✅ Données mises à jour pour {formatted_symbol}: {current_price} {info.get('currency', 'USD')}")
             return price_data
             
         except Exception as e:
@@ -287,19 +295,40 @@ class StockPriceManager:
         logger.info("Cache des prix vidé")
     
     def update_all_stocks(self, symbols: List[str]) -> Dict[str, Any]:
-        """Met à jour tous les prix d'actions"""
+        """Met à jour tous les prix d'actions avec optimisation des 10 requêtes quotidiennes"""
         results = {
             'success': [],
             'errors': [],
-            'skipped': []
+            'skipped': [],
+            'requests_used': 0
         }
         
+        # Trier les symboles : d'abord ceux qui ne sont pas en cache ou cache expiré
+        symbols_to_update = []
+        symbols_cached = []
+        
         for symbol in symbols:
+            formatted_symbol = self._format_symbol(symbol)
+            if formatted_symbol in self.price_cache:
+                cached_data = self.price_cache[formatted_symbol]
+                cache_age = time.time() - cached_data.get('timestamp', 0)
+                if cache_age < self.cache_duration:
+                    # Utiliser le cache
+                    symbols_cached.append(symbol)
+                    continue
+            
+            # Nécessite une mise à jour
+            symbols_to_update.append(symbol)
+        
+        logger.info(f"Mise à jour: {len(symbols_to_update)} symboles à actualiser, {len(symbols_cached)} depuis le cache")
+        
+        # Traiter d'abord les symboles nécessitant une mise à jour
+        for symbol in symbols_to_update:
             try:
                 if not self._can_make_request():
                     results['skipped'].append({
                         'symbol': symbol,
-                        'reason': 'Limite quotidienne atteinte'
+                        'reason': f'Limite quotidienne atteinte ({self.max_daily_requests} requêtes)'
                     })
                     continue
                 
@@ -308,8 +337,10 @@ class StockPriceManager:
                     results['success'].append({
                         'symbol': symbol,
                         'price': price_data.price,
-                        'currency': price_data.currency
+                        'currency': price_data.currency,
+                        'source': 'Yahoo Finance'
                     })
+                    results['requests_used'] += 1
                 else:
                     results['errors'].append({
                         'symbol': symbol,
@@ -322,4 +353,18 @@ class StockPriceManager:
                     'reason': str(e)
                 })
         
+        # Ajouter les symboles depuis le cache
+        for symbol in symbols_cached:
+            formatted_symbol = self._format_symbol(symbol)
+            cached_data = self.price_cache[formatted_symbol]
+            price_data = StockPriceData(**cached_data['data'])
+            
+            results['success'].append({
+                'symbol': symbol,
+                'price': price_data.price,
+                'currency': price_data.currency,
+                'source': 'Cache'
+            })
+        
+        logger.info(f"✅ Mise à jour terminée: {len(results['success'])} symboles traités, {results['requests_used']} requêtes utilisées")
         return results 
