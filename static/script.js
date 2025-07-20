@@ -135,12 +135,16 @@ function toggleStockFields() {
     
     const stockFields = document.getElementById('stock-fields');
     const currentPriceField = document.getElementById('current-price-field');
+    const stockMetricsField = document.getElementById('stock-metrics-field');
     
     if (stockFields) {
         stockFields.style.display = isStock ? 'block' : 'none';
     }
     if (currentPriceField) {
         currentPriceField.style.display = isStock ? 'block' : 'none';
+    }
+    if (stockMetricsField) {
+        stockMetricsField.style.display = isStock ? 'block' : 'none';
     }
 }
 
@@ -1376,11 +1380,36 @@ function editItem(id) {
         const stockPurchasePrice = document.getElementById('item-stock-purchase-price');
         if (stockPurchasePrice) stockPurchasePrice.value = item.stock_purchase_price || '';
         
+        const stockCurrency = document.getElementById('item-stock-currency');
+        if (stockCurrency) stockCurrency.value = item.stock_currency || 'CHF';
+        
         const stockExchange = document.getElementById('item-stock-exchange');
         if (stockExchange) stockExchange.value = item.stock_exchange || '';
         
         const currentPrice = document.getElementById('item-current-price');
         if (currentPrice) currentPrice.value = item.current_price || '';
+        
+        // Métriques boursières
+        const stockVolume = document.getElementById('item-stock-volume');
+        if (stockVolume) stockVolume.value = item.stock_volume || '';
+        
+        const stockAverageVolume = document.getElementById('item-stock-average-volume');
+        if (stockAverageVolume) stockAverageVolume.value = item.stock_average_volume || '';
+        
+        const stockPeRatio = document.getElementById('item-stock-pe-ratio');
+        if (stockPeRatio) stockPeRatio.value = item.stock_pe_ratio || '';
+        
+        const stock52WeekHigh = document.getElementById('item-stock-52-week-high');
+        if (stock52WeekHigh) stock52WeekHigh.value = item.stock_52_week_high || '';
+        
+        const stock52WeekLow = document.getElementById('item-stock-52-week-low');
+        if (stock52WeekLow) stock52WeekLow.value = item.stock_52_week_low || '';
+        
+        const stockChange = document.getElementById('item-stock-change');
+        if (stockChange) stockChange.value = item.stock_change || '';
+        
+        const stockChangePercent = document.getElementById('item-stock-change-percent');
+        if (stockChangePercent) stockChangePercent.value = item.stock_change_percent || '';
     }
 
     // Remplir les champs de suivi des ventes
@@ -1675,7 +1704,17 @@ async function handleFormSubmit(e) {
         stock_quantity: parseInt(document.getElementById('item-stock-quantity')?.value) || null,
         stock_purchase_price: parseFloat(document.getElementById('item-stock-purchase-price')?.value) || null,
         stock_exchange: document.getElementById('item-stock-exchange')?.value || null,
+        stock_currency: document.getElementById('item-stock-currency')?.value || 'CHF',
         current_price: parseFloat(document.getElementById('item-current-price')?.value) || null,
+        
+        // Métriques boursières
+        stock_volume: parseInt(document.getElementById('item-stock-volume')?.value) || null,
+        stock_average_volume: parseInt(document.getElementById('item-stock-average-volume')?.value) || null,
+        stock_pe_ratio: parseFloat(document.getElementById('item-stock-pe-ratio')?.value) || null,
+        stock_52_week_high: parseFloat(document.getElementById('item-stock-52-week-high')?.value) || null,
+        stock_52_week_low: parseFloat(document.getElementById('item-stock-52-week-low')?.value) || null,
+        stock_change: parseFloat(document.getElementById('item-stock-change')?.value) || null,
+        stock_change_percent: parseFloat(document.getElementById('item-stock-change-percent')?.value) || null,
 
         // Champs de suivi des ventes
         sale_status: document.getElementById('item-sale-status')?.value || 'initial',

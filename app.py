@@ -85,6 +85,7 @@ class CollectionItem:
     stock_quantity: Optional[int] = None
     stock_purchase_price: Optional[float] = None
     stock_exchange: Optional[str] = None
+    stock_currency: Optional[str] = None
     current_price: Optional[float] = None
     last_price_update: Optional[str] = None
     # Métriques boursières supplémentaires
@@ -4471,7 +4472,7 @@ def clean_update_data(data: Dict[str, Any]) -> Dict[str, Any]:
     text_fields = [
         'name', 'category', 'description', 'sale_progress', 
         'buyer_contact', 'intermediary', 'status', 'condition', 
-        'sale_status', 'stock_symbol', 'stock_exchange', 'location'
+        'sale_status', 'stock_symbol', 'stock_exchange', 'stock_currency', 'location'
     ]
     for field in text_fields:
         if field in data:
