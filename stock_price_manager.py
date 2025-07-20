@@ -15,6 +15,13 @@ import yfinance as yf
 import pandas as pd
 from yahoo_finance_api import YahooFinanceAPI
 
+# Import du fallback yahooquery
+try:
+    from yahoo_fallback import YahooQueryFallback
+    YAHOOQUERY_AVAILABLE = True
+except ImportError:
+    YAHOOQUERY_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 @dataclass
@@ -59,6 +66,17 @@ class StockPriceManager:
         except Exception as e:
             logger.error(f"❌ Erreur initialisation Yahoo Finance API: {e}")
             self.yahoo_auth = None
+        
+        # Initialiser le fallback yahooquery
+        self.yahoo_fallback = None
+        if YAHOOQUERY_AVAILABLE:
+            try:
+                self.yahoo_fallback = YahooQueryFallback()
+                logger.info("✅ Module de fallback yahooquery initialisé")
+            except Exception as e:
+                logger.error(f"❌ Erreur initialisation yahooquery fallback: {e}")
+        else:
+            logger.warning("⚠️ yahooquery non disponible pour le fallback")
         
         # Charger les données existantes
         self._load_cache()
@@ -254,7 +272,63 @@ class StockPriceManager:
                 else:
                     logger.warning(f"Aucune donnée récupérée pour {formatted_symbol} via Yahoo Finance Auth")
             
-            # Fallback vers yfinance si le module d'authentification échoue
+            # Fallback vers yahooquery si disponible
+            if self.yahoo_fallback:
+                logger.info(f"Fallback vers yahooquery pour {formatted_symbol}")
+                yahooquery_data = self.yahoo_fallback.get_stock_data(formatted_symbol)
+                
+                if yahooquery_data:
+                    # Créer l'objet de données
+                    price_data = StockPriceData(
+                        symbol=formatted_symbol,
+                        price=float(yahooquery_data['price']),
+                        currency=yahooquery_data['currency'],
+                        change=float(yahooquery_data.get('change', 0)),
+                        change_percent=float(yahooquery_data.get('change_percent', 0)),
+                        volume=int(yahooquery_data.get('volume', 0)),
+                        market_cap=yahooquery_data.get('market_cap'),
+                        pe_ratio=yahooquery_data.get('pe_ratio'),
+                        dividend_yield=yahooquery_data.get('dividend_yield'),
+                        high_52_week=yahooquery_data.get('high_52_week'),
+                        low_52_week=yahooquery_data.get('low_52_week'),
+                        timestamp=yahooquery_data.get('timestamp', datetime.now().isoformat())
+                    )
+                    
+                    # Incrémenter le compteur de requêtes
+                    self._increment_request_count()
+                    
+                    # Sauvegarder dans le cache
+                    self.price_cache[formatted_symbol] = {
+                        'data': price_data.to_dict(),
+                        'timestamp': time.time()
+                    }
+                    self._save_cache()
+                    
+                    # Sauvegarder dans l'historique
+                    if formatted_symbol not in self.price_history:
+                        self.price_history[formatted_symbol] = []
+                    
+                    self.price_history[formatted_symbol].append({
+                        'date': datetime.now().strftime('%Y-%m-%d'),
+                        'time': datetime.now().strftime('%H:%M'),
+                        'price': float(yahooquery_data['price']),
+                        'change': float(yahooquery_data.get('change', 0)),
+                        'change_percent': float(yahooquery_data.get('change_percent', 0)),
+                        'volume': int(yahooquery_data.get('volume', 0))
+                    })
+                    
+                    # Garder seulement les 30 derniers jours
+                    if len(self.price_history[formatted_symbol]) > 30:
+                        self.price_history[formatted_symbol] = self.price_history[formatted_symbol][-30:]
+                    
+                    self._save_history()
+                    
+                    logger.info(f"✅ Données mises à jour via yahooquery pour {formatted_symbol}: {yahooquery_data['price']} {yahooquery_data['currency']}")
+                    return price_data
+                else:
+                    logger.warning(f"Aucune donnée récupérée pour {formatted_symbol} via yahooquery")
+            
+            # Fallback vers yfinance si yahooquery échoue
             logger.info(f"Fallback vers yfinance pour {formatted_symbol}")
             ticker = yf.Ticker(formatted_symbol)
             
