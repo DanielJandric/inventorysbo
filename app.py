@@ -21,6 +21,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from dotenv import load_dotenv
 import requests
 import schedule
+from stock_price_manager import StockPriceManager
 
 # Load environment variables from .env file
 load_dotenv()
@@ -46,9 +47,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Cache pour les prix des actions avec expiration
-stock_price_cache = {}
-STOCK_PRICE_CACHE_DURATION = 300  # 5 minutes (pour des mises à jour plus fréquentes)
+# Gestionnaire de prix d'actions avec Yahoo Finance
+stock_price_manager = StockPriceManager()
 
 
 
@@ -2511,43 +2511,46 @@ def get_exchange_rate_route(from_currency: str, to_currency: str = 'CHF'):
 @app.route("/api/stock-price/<symbol>")
 def get_stock_price(symbol):
     """
-    Récupère le prix d'une action via ChatGPT-4o en recherchant sur internet.
+    Récupère le prix d'une action via Yahoo Finance API.
     """
-    # Vérifier si on force le refresh (ignore le cache)
+    # Vérifier si on force le refresh
     force_refresh = request.args.get('force_refresh', 'false').lower() == 'true'
     
     items = AdvancedDataManager.fetch_all_items()
     item = next((i for i in items if i.stock_symbol == symbol), None)
 
     if not item:
-        logger.warning(f"Aucun item trouvé pour le symbole {symbol}. L'API pourrait utiliser des hypothèses par défaut.")
-
-    # Formater le symbole correctement selon la bourse
-    formatted_symbol = symbol
-    if item and item.stock_exchange and item.stock_exchange.upper() in ['SWX', 'SIX', 'SWISS', 'CH']:
-        # Pour les actions suisses, s'assurer d'avoir le suffixe .SW
-        if not symbol.endswith('.SW'):
-            formatted_symbol = f"{symbol}.SW"
-            logger.info(f"Formatage du symbole suisse: {symbol} -> {formatted_symbol}")
-
-    cache_key = f"stock_price_{symbol}"
-    
-    # Si on ne force pas le refresh, vérifier le cache
-    if not force_refresh and cache_key in stock_price_cache:
-        cached_data = stock_price_cache[cache_key]
-        
-        if time.time() - cached_data['timestamp'] < STOCK_PRICE_CACHE_DURATION:
-            logger.info(f"Prix depuis le cache pour {symbol}")
-            return jsonify(cached_data['data'])
-    
-    # Si on force le refresh, logger l'action
-    if force_refresh:
-        logger.info(f"Refresh forcé pour {symbol} - cache ignoré")
+        logger.warning(f"Aucun item trouvé pour le symbole {symbol}")
 
     try:
-        # Utiliser ChatGPT-4o pour récupérer les données
-        logger.info(f"Récupération des données boursières via ChatGPT-4o pour {formatted_symbol}")
-        return get_stock_price_chatgpt(formatted_symbol, item, cache_key, force_refresh)
+        # Utiliser le gestionnaire de prix d'actions
+        price_data = stock_price_manager.get_stock_price(
+            symbol=symbol,
+            exchange=item.stock_exchange if item else None,
+            force_refresh=force_refresh
+        )
+        
+        if price_data:
+            # Convertir en format compatible avec l'interface
+            response_data = {
+                'symbol': price_data.symbol,
+                'price': price_data.price,
+                'currency': price_data.currency,
+                'change': price_data.change,
+                'change_percent': price_data.change_percent,
+                'volume': price_data.volume,
+                'market_cap': price_data.market_cap,
+                'pe_ratio': price_data.pe_ratio,
+                'dividend_yield': price_data.dividend_yield,
+                'high_52_week': price_data.high_52_week,
+                'low_52_week': price_data.low_52_week,
+                'timestamp': price_data.timestamp,
+                'source': 'Yahoo Finance'
+            }
+            
+            return jsonify(response_data)
+        else:
+            return jsonify({"error": "Prix non disponible", "details": "Données non trouvées"}), 404
 
     except Exception as e:
         logger.error(f"Erreur get_stock_price pour {symbol}: {e}")
@@ -2560,15 +2563,11 @@ def clear_stock_price_cache():
     Vide complètement le cache des prix des actions
     """
     try:
-        global stock_price_cache
-        cache_size = len(stock_price_cache)
-        stock_price_cache.clear()
-        logger.info(f"Cache des prix des actions vidé ({cache_size} entrées supprimées)")
+        stock_price_manager.clear_cache()
         return jsonify({
             "success": True,
-            "message": f"Cache vidé avec succès ({cache_size} entrées supprimées)",
-            "cache_size_before": cache_size,
-            "cache_size_after": 0
+            "message": "Cache des prix vidé avec succès",
+            "source": "Yahoo Finance"
         })
     except Exception as e:
         logger.error(f"Erreur lors du vidage du cache: {e}")
@@ -2584,27 +2583,11 @@ def get_stock_price_cache_status():
     Retourne le statut du cache des prix des actions
     """
     try:
-        cache_size = len(stock_price_cache)
-        cache_keys = list(stock_price_cache.keys())
-        
-        # Calculer l'âge des entrées en cache
-        current_time = time.time()
-        cache_ages = {}
-        expired_entries = 0
-        
-        for key, data in stock_price_cache.items():
-            age = current_time - data['timestamp']
-            cache_ages[key] = age
-            if age > STOCK_PRICE_CACHE_DURATION:
-                expired_entries += 1
-        
+        status = stock_price_manager.get_cache_status()
         return jsonify({
-            "cache_size": cache_size,
-            "cache_duration": STOCK_PRICE_CACHE_DURATION,
-            "expired_entries": expired_entries,
-            "cache_keys": cache_keys,
-            "cache_ages": cache_ages,
-            "eodhd_quota_warning": "⚠️ Quota EODHD probablement dépassé (20 req/jour). Utilisez les prix manuels."
+            **status,
+            "source": "Yahoo Finance",
+            "api_limit_warning": f"⚠️ Limite quotidienne: {status['daily_requests']}/{status['max_daily_requests']} requêtes"
         })
     except Exception as e:
         logger.error(f"Erreur lors de la récupération du statut du cache: {e}")
@@ -2612,52 +2595,69 @@ def get_stock_price_cache_status():
             "error": str(e)
         }), 500
 
-@app.route("/api/chatgpt/status")
-def check_chatgpt_status():
-    """Vérifie le statut de ChatGPT-4o pour les données boursières"""
+@app.route("/api/stock-price/history/<symbol>")
+def get_stock_price_history(symbol):
+    """Récupère l'historique des prix d'une action"""
     try:
-        if not openai_client:
-            return jsonify({
-                "available": False,
-                "message": "ChatGPT-4o non configuré",
-                "suggestion": "Vérifiez la configuration OpenAI"
-            })
+        days = request.args.get('days', 30, type=int)
+        items = AdvancedDataManager.fetch_all_items()
+        item = next((i for i in items if i.stock_symbol == symbol), None)
         
-        # Test simple avec ChatGPT
-        test_response = openai_client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "user", "content": "Test de connexion - réponds juste 'OK'"}
-            ],
-            max_tokens=10
+        history = stock_price_manager.get_price_history(
+            symbol=symbol,
+            exchange=item.stock_exchange if item else None,
+            days=days
         )
         
-        if test_response.choices[0].message.content:
+        return jsonify({
+            "symbol": symbol,
+            "history": history,
+            "days": days,
+            "source": "Yahoo Finance"
+        })
+        
+    except Exception as e:
+        logger.error(f"Erreur récupération historique pour {symbol}: {e}")
+        return jsonify({
+            "error": "Historique non disponible",
+            "details": str(e)
+        }), 500
+
+@app.route("/api/yahoo-finance/status")
+def check_yahoo_finance_status():
+    """Vérifie le statut de Yahoo Finance API"""
+    try:
+        # Test simple avec une action connue
+        test_symbol = "AAPL"
+        price_data = stock_price_manager.get_stock_price(test_symbol, force_refresh=False)
+        
+        if price_data:
             return jsonify({
                 "available": True,
-                "message": "ChatGPT-4o opérationnel",
-                "model": "gpt-4o",
-                "source": "Recherche internet pour données boursières"
+                "message": "Yahoo Finance API opérationnel",
+                "test_symbol": test_symbol,
+                "test_price": price_data.price,
+                "source": "Yahoo Finance"
             })
         else:
             return jsonify({
                 "available": False,
-                "message": "Réponse ChatGPT invalide",
-                "error": "Pas de contenu dans la réponse"
+                "message": "Test Yahoo Finance échoué",
+                "error": "Aucune donnée récupérée"
             })
             
     except Exception as e:
-        logger.error(f"Erreur vérification ChatGPT: {e}")
+        logger.error(f"Erreur vérification Yahoo Finance: {e}")
         return jsonify({
             "available": False,
-            "message": "Erreur de connexion ChatGPT",
+            "message": "Erreur de connexion Yahoo Finance",
             "error": str(e)
         }), 500
 
 
 @app.route("/api/stock-price/update-all", methods=["POST"])
 def update_all_stock_prices():
-    """Met à jour tous les prix d'actions via ChatGPT-4o et retourne les données mises à jour"""
+    """Met à jour tous les prix d'actions via Yahoo Finance et retourne les données mises à jour"""
     try:
         items = AdvancedDataManager.fetch_all_items()
         action_items = [item for item in items if item.category == 'Actions' and item.stock_symbol]
@@ -2670,52 +2670,43 @@ def update_all_stock_prices():
                 "updated_data": []
             })
         
-        logger.info(f"Mise à jour de {len(action_items)} actions via ChatGPT-4o")
+        logger.info(f"Mise à jour de {len(action_items)} actions via Yahoo Finance")
         
-        updated_count = 0
-        errors = []
+        # Extraire les symboles
+        symbols = [item.stock_symbol for item in action_items]
+        
+        # Utiliser le gestionnaire pour mettre à jour tous les prix
+        results = stock_price_manager.update_all_stocks(symbols)
+        
+        # Préparer les données de réponse
         updated_data = []
-        
-        for item in action_items:
-            try:
-                cache_key = f"stock_price_{item.stock_symbol}"
-                # Forcer le refresh via ChatGPT
-                result = get_stock_price_chatgpt(item.stock_symbol, item, cache_key, force_refresh=True)
-                
-                if hasattr(result, 'json'):
-                    data = result.json
-                    if isinstance(data, dict) and 'price' in data:
-                        updated_count += 1
-                        updated_data.append({
-                            'item_id': item.id,
-                            'symbol': item.stock_symbol,
-                            'data': data
-                        })
-                        logger.info(f"✅ Prix mis à jour pour {item.name} via ChatGPT: {data['price']} CHF")
-                    else:
-                        errors.append(f"Données invalides pour {item.name}")
-                else:
-                    errors.append(f"Réponse invalide pour {item.name}")
-                    
-            except Exception as e:
-                error_msg = f"Erreur pour {item.name}: {str(e)}"
-                errors.append(error_msg)
-                logger.error(f"❌ {error_msg}")
+        for success_item in results['success']:
+            item = next((i for i in action_items if i.stock_symbol == success_item['symbol']), None)
+            if item:
+                updated_data.append({
+                    'item_id': item.id,
+                    'symbol': item.stock_symbol,
+                    'price': success_item['price'],
+                    'currency': success_item['currency']
+                })
         
         return jsonify({
             "success": True,
-            "message": f"Mise à jour terminée: {updated_count} actions mises à jour via ChatGPT-4o",
-            "updated_count": updated_count,
+            "message": f"Mise à jour terminée: {len(results['success'])} actions mises à jour via Yahoo Finance",
+            "updated_count": len(results['success']),
             "total_actions": len(action_items),
-            "errors": errors,
-            "updated_data": updated_data
+            "errors": results['errors'],
+            "skipped": results['skipped'],
+            "updated_data": updated_data,
+            "source": "Yahoo Finance"
         })
         
     except Exception as e:
         logger.error(f"❌ Erreur mise à jour globale: {e}")
         return jsonify({
             "success": False,
-            "error": str(e)
+            "error": str(e),
+            "source": "Yahoo Finance"
         }), 500
 
 
@@ -2730,7 +2721,7 @@ def schedule_auto_stock_updates():
     def auto_update_stock_prices():
         """Fonction de mise à jour automatique"""
         try:
-            logger.info("🔄 Début mise à jour automatique des prix via ChatGPT-4o")
+            logger.info("🔄 Début mise à jour automatique des prix via Yahoo Finance")
             items = AdvancedDataManager.fetch_all_items()
             stock_items = [item for item in items if item.category == 'Actions' and item.stock_symbol]
             
@@ -2738,35 +2729,16 @@ def schedule_auto_stock_updates():
                 logger.info("Aucune action trouvée pour mise à jour automatique")
                 return
             
-            updated_count = 0
-            updated_data = []
+            # Extraire les symboles
+            symbols = [item.stock_symbol for item in stock_items]
             
-            for item in stock_items:
-                try:
-                    cache_key = f"stock_price_{item.stock_symbol}"
-                    result = get_stock_price_chatgpt(item.stock_symbol, item, cache_key, force_refresh=True)
-                    
-                    if result.status_code == 200:
-                        # Récupérer les données pour l'affichage
-                        data = result.json
-                        if isinstance(data, dict) and 'price' in data:
-                            updated_count += 1
-                            updated_data.append({
-                                'item_id': item.id,
-                                'symbol': item.stock_symbol,
-                                'data': data
-                            })
-                            logger.info(f"✅ Mise à jour auto: {item.name} ({item.stock_symbol}) - {data.get('price', 'N/A')} CHF")
-                    else:
-                        logger.warning(f"⚠️ Échec mise à jour auto: {item.name} ({item.stock_symbol})")
-                        
-                except Exception as e:
-                    logger.error(f"❌ Erreur mise à jour auto {item.name}: {e}")
+            # Utiliser le gestionnaire pour mettre à jour tous les prix
+            results = stock_price_manager.update_all_stocks(symbols)
             
-            logger.info(f"✅ Mise à jour automatique terminée: {updated_count}/{len(stock_items)} actions mises à jour")
+            logger.info(f"✅ Mise à jour automatique terminée: {len(results['success'])}/{len(stock_items)} actions mises à jour")
             
             # Retourner les données mises à jour pour l'affichage
-            return updated_data
+            return results['success']
             
         except Exception as e:
             logger.error(f"❌ Erreur mise à jour automatique globale: {e}")

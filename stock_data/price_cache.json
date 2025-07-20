@@ -1,0 +1,70 @@
+{
+  "AAPL": {
+    "data": {
+      "symbol": "AAPL",
+      "price": 211.17999267578125,
+      "currency": "USD",
+      "change": 0.30999755859375,
+      "change_percent": 0.1470088517911114,
+      "volume": 48939500,
+      "market_cap": 3154142035968,
+      "pe_ratio": 32.89408,
+      "dividend_yield": 0.51,
+      "high_52_week": 260.1,
+      "low_52_week": 169.21,
+      "timestamp": "2025-07-20T15:34:12.508148"
+    },
+    "timestamp": 1753018452.5081484
+  },
+  "NOVN.SW": {
+    "data": {
+      "symbol": "NOVN.SW",
+      "price": 92.29000091552734,
+      "currency": "CHF",
+      "change": -0.05999755859375,
+      "change_percent": -0.06496757940993675,
+      "volume": 3757934,
+      "market_cap": 192788283392,
+      "pe_ratio": 16.810566,
+      "dividend_yield": 3.64,
+      "high_52_week": 102.72,
+      "low_52_week": 81.1,
+      "timestamp": "2025-07-20T15:34:12.323073"
+    },
+    "timestamp": 1753018452.3230736
+  },
+  "MSFT": {
+    "data": {
+      "symbol": "MSFT",
+      "price": 510.04998779296875,
+      "currency": "USD",
+      "change": -4.42999267578125,
+      "change_percent": -0.8610622072689829,
+      "volume": 21203400,
+      "market_cap": 3790967144448,
+      "pe_ratio": 39.35571,
+      "dividend_yield": 0.67,
+      "high_52_week": 514.64,
+      "low_52_week": 344.79,
+      "timestamp": "2025-07-20T15:34:12.910895"
+    },
+    "timestamp": 1753018452.9108953
+  },
+  "GOOGL": {
+    "data": {
+      "symbol": "GOOGL",
+      "price": 185.05999755859375,
+      "currency": "USD",
+      "change": -0.339996337890625,
+      "change_percent": -0.1833853015553266,
+      "volume": 33966100,
+      "market_cap": 2250459316224,
+      "pe_ratio": 20.654018,
+      "dividend_yield": 0.48,
+      "high_52_week": 207.05,
+      "low_52_week": 140.53,
+      "timestamp": "2025-07-20T15:34:13.256111"
+    },
+    "timestamp": 1753018453.2561114
+  }
+}
