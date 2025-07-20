@@ -554,14 +554,14 @@ async function updateStockPrices(forceRefresh = false) {
                 const data = await response.json();
                 
                 // Calculer la valeur totale
-                const totalValue = data.price_chf * (item.stock_quantity || 1);
+                const totalValue = data.price * (item.stock_quantity || 1);
                 
                 // Mettre à jour l'objet en mémoire
-                item.current_price = data.price_chf;
+                item.current_price = data.price;
                 item.current_value = totalValue; // Mettre à jour current_value pour l'agrégation
                 item.last_price_update = data.last_update;
                 
-                console.log(`✅ ${item.stock_symbol} mis à jour: ${data.price_chf} CHF × ${item.stock_quantity} = ${totalValue} CHF`);
+                console.log(`✅ ${item.stock_symbol} mis à jour: ${data.price} ${data.currency} × ${item.stock_quantity} = ${totalValue} ${data.currency}`);
                 
                 // Réinitialiser le compteur d'erreur pour ce symbole
                 delete stockPriceUpdateErrors[item.stock_symbol];
@@ -994,6 +994,32 @@ async function showCacheStatus() {
 // Fonction pour mettre à jour l'affichage d'une carte action
 function updateStockCardDisplay(itemId, stockData) {
     console.log(`🔄 Mise à jour carte action ${itemId}:`, stockData);
+    
+    // Mettre à jour les données dans allItems
+    const itemIndex = allItems.findIndex(item => item.id == itemId);
+    if (itemIndex !== -1) {
+        const item = allItems[itemIndex];
+        
+        // Mettre à jour les données de l'action
+        item.current_price = stockData.price;
+        item.current_value = stockData.price * (item.stock_quantity || 1);
+        item.last_price_update = stockData.last_update;
+        
+        // Mettre à jour les métriques boursières
+        item.stock_volume = stockData.volume;
+        item.stock_pe_ratio = stockData.pe_ratio;
+        item.stock_52_week_high = stockData.fifty_two_week_high;
+        item.stock_52_week_low = stockData.fifty_two_week_low;
+        item.stock_change = stockData.change;
+        item.stock_change_percent = stockData.change_percent;
+        
+        console.log(`✅ Données mises à jour pour ${item.name}: prix=${stockData.price}, valeur=${item.current_value}`);
+        
+        // Recalculer les statistiques
+        updateStatistics();
+    } else {
+        console.warn(`⚠️ Item non trouvé dans allItems pour l'ID ${itemId}`);
+    }
     
     const card = document.querySelector(`[data-item-id="${itemId}"]`);
     if (!card) {
