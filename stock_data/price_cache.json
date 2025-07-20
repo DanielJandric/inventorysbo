@@ -12,9 +12,9 @@
       "dividend_yield": null,
       "high_52_week": 260.1,
       "low_52_week": 169.21,
-      "timestamp": "2025-07-20T21:06:41.913183"
+      "timestamp": "2025-07-20T21:15:22.131636"
     },
-    "timestamp": 1753038401.9142475
+    "timestamp": 1753038922.1326027
   },
   "NOVN.SW": {
     "data": {
@@ -80,9 +80,9 @@
       "dividend_yield": null,
       "high_52_week": 488.54,
       "low_52_week": 182.0,
-      "timestamp": "2025-07-20T21:06:43.040532"
+      "timestamp": "2025-07-20T21:15:23.199257"
     },
-    "timestamp": 1753038403.0405328
+    "timestamp": 1753038923.2000394
   },
   "AMZN": {
     "data": {

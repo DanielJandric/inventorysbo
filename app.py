@@ -2713,6 +2713,7 @@ def update_all_stock_prices():
         requests_used = results.get('requests_used', 0)
         cache_used = len([item for item in results['success'] if item.get('source') == 'Cache'])
         skipped_count = len(results['skipped'])
+        failed_count = len(results['failed'])
         
         return jsonify({
             "success": True,
@@ -2722,7 +2723,8 @@ def update_all_stock_prices():
             "requests_used": requests_used,
             "cache_used": cache_used,
             "skipped_count": skipped_count,
-            "errors": results['errors'],
+            "failed_count": failed_count,
+            "failed": results['failed'],
             "skipped": results['skipped'],
             "updated_data": updated_data,
             "source": "Yahoo Finance (optimisé 10 requêtes/jour)"
@@ -2775,7 +2777,7 @@ def schedule_auto_stock_updates():
             logger.info(f"✅ Mise à jour automatique terminée:")
             logger.info(f"   - {len(results['success'])} symboles traités")
             logger.info(f"   - {results['requests_used']} requêtes utilisées")
-            logger.info(f"   - {len(results['errors'])} erreurs")
+            logger.info(f"   - {len(results['failed'])} échecs")
             logger.info(f"   - {len(results['skipped'])} ignorés (limite atteinte)")
             
             # Retourner les données mises à jour pour l'affichage
