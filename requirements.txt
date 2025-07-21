@@ -2,7 +2,7 @@ Flask==3.0.3
 flask-cors==4.0.0
 supabase>=2.5.0
 openai>=1.30.0
-google-genai>=1.3.0
+google-genai>=1.3.0  # SDK officiel Gemini
 gunicorn==21.2.0
 numpy>=1.26.0
 scikit-learn>=1.4.0
