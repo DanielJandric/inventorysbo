@@ -2553,6 +2553,36 @@ def get_stock_price(symbol):
             )
         
         if price_data:
+            # Mettre à jour la base de données si c'est une action existante
+            try:
+                items = AdvancedDataManager.fetch_all_items()
+                item = next((i for i in items if i.stock_symbol == symbol), None)
+                
+                if item and item.id:
+                    total_value = price_data.price * (item.stock_quantity or 1)
+                    
+                    update_data = {
+                        'current_price': price_data.price,
+                        'current_value': total_value,
+                        'last_price_update': datetime.now().isoformat(),
+                        'stock_volume': price_data.volume,
+                        'stock_52_week_high': price_data.high_52_week,
+                        'stock_52_week_low': price_data.low_52_week,
+                        'stock_change': price_data.change,
+                        'stock_change_percent': price_data.change_percent,
+                        'stock_average_volume': price_data.volume
+                    }
+                    
+                    # Mettre à jour dans Supabase
+                    if supabase:
+                        response = supabase.table('items').update(update_data).eq('id', item.id).execute()
+                        if response.data:
+                            logger.info(f"✅ Prix Manus mis à jour dans DB pour {symbol}: {price_data.price} {price_data.currency}")
+                        else:
+                            logger.warning(f"⚠️ Échec mise à jour DB pour {symbol}")
+            except Exception as e:
+                logger.error(f"❌ Erreur mise à jour DB pour {symbol}: {e}")
+            
             # Convertir en format compatible avec l'interface
             response_data = {
                 'symbol': price_data.symbol,
@@ -2567,7 +2597,7 @@ def get_stock_price(symbol):
                 'high_52_week': price_data.high_52_week,
                 'low_52_week': price_data.low_52_week,
                 'timestamp': price_data.timestamp,
-                'source': 'Yahoo Finance'
+                'source': 'Manus API' if price_data == manus_stock_manager.get_stock_price(symbol) else 'Yahoo Finance'
             }
             
             return jsonify(response_data)
@@ -2763,11 +2793,37 @@ def update_all_stock_prices():
             results['requests_used'] += yahoo_results.get('requests_used', 0)
             results['source'] = 'Manus API + Yahoo Finance'
         
-        # Préparer les données de réponse
+        # Préparer les données de réponse et mettre à jour la base de données
         updated_data = []
         for success_item in results['success']:
             item = next((i for i in action_items if i.stock_symbol == success_item['symbol']), None)
             if item:
+                # Mettre à jour la base de données
+                try:
+                    total_value = success_item['price'] * (item.stock_quantity or 1)
+                    
+                    update_data = {
+                        'current_price': success_item['price'],
+                        'current_value': total_value,
+                        'last_price_update': datetime.now().isoformat(),
+                        'stock_volume': success_item.get('volume', 0),
+                        'stock_52_week_high': success_item.get('fifty_two_week_high', 0),
+                        'stock_52_week_low': success_item.get('fifty_two_week_low', 0),
+                        'stock_change': success_item.get('change', 0),
+                        'stock_change_percent': success_item.get('change_percent', 0),
+                        'stock_average_volume': success_item.get('volume', 0)
+                    }
+                    
+                    # Mettre à jour dans Supabase
+                    if supabase:
+                        response = supabase.table('items').update(update_data).eq('id', item.id).execute()
+                        if response.data:
+                            logger.info(f"✅ Prix mis à jour dans DB pour {item.stock_symbol}: {success_item['price']} {success_item['currency']}")
+                        else:
+                            logger.warning(f"⚠️ Échec mise à jour DB pour {item.stock_symbol}")
+                except Exception as e:
+                    logger.error(f"❌ Erreur mise à jour DB pour {item.stock_symbol}: {e}")
+                
                 updated_data.append({
                     'item_id': item.id,
                     'symbol': item.stock_symbol,
@@ -4741,15 +4797,15 @@ def get_scheduler_status():
         return jsonify({"error": str(e)}), 500
 
 def generate_market_briefing():
-    """Génère un briefing de marché avec Gemini ou fallback OpenAI"""
+    """Génère un briefing de marché avec API Manus + GPT-4o"""
     try:
-        # Essayer Gemini en premier
-        scraper_briefing = generate_market_briefing_with_scraper()
-        if scraper_briefing:
-            logger.info("✅ Briefing généré avec Reuters Scraper + GPT-4o")
-            return scraper_briefing
+        # Utiliser l'API Manus pour les données de marché
+        manus_briefing = generate_market_briefing_with_manus()
+        if manus_briefing:
+            logger.info("✅ Briefing généré avec API Manus + GPT-4o")
+            return manus_briefing
         
-        # Fallback vers OpenAI si Gemini échoue
+        # Fallback vers OpenAI si Manus échoue
         if openai_client:
             logger.info("🔄 Fallback vers OpenAI")
             return generate_market_briefing_with_openai()
@@ -5128,75 +5184,90 @@ if __name__ == "__main__":
 
 # Fonction Google Custom Search supprimée - Remplacée par Gemini 2.0 Flash
 
-def generate_market_briefing_with_scraper():
+def generate_market_briefing_with_manus():
     """
-    Génère un briefing financier avec Reuters Scraper + GPT-4o
+    Génère un briefing financier avec données Manus + GPT-4o
     """
     try:
         current_date = datetime.now().strftime('%d/%m/%Y')
-        
-        # 1. Récupérer les données via Reuters Scraper
-        logger.info("📊 Récupération des données via Reuters Scraper...")
-        
+
+        # 1. Récupérer les données via API Manus
+        logger.info("📊 Récupération des données via API Manus...")
+
         try:
-            from reuters_scraper import ReutersScraper
-            scraper = ReutersScraper()
+            # Récupérer les indices principaux
+            indices = ['^GSPC', '^IXIC', '^DJI', '^FCHI', '^GDAXI', '^SSMI']
+            market_data = manus_stock_manager.get_multiple_stock_prices(indices)
             
-            # Récupérer les données de marché
-            market_data = scraper.get_market_data()
-            market_formatted = scraper.format_market_data(market_data)
+            # Récupérer les crypto
+            crypto = ['BTC-USD', 'ETH-USD']
+            crypto_data = manus_stock_manager.get_multiple_stock_prices(crypto)
             
-            # Récupérer les actualités
-            news_data = scraper.get_financial_news(max_news=12)
-            news_formatted = scraper.format_news_data(news_data)
+            # Récupérer les obligations (via Yahoo fallback)
+            bonds = ['^TNX', '^BUND']
+            bond_data = {}
+            for bond in bonds:
+                bond_info = stock_price_manager.get_stock_price(bond)
+                if bond_info:
+                    bond_data[bond] = bond_info
+
+            # Formater les données
+            market_formatted = "📈 INDICES PRINCIPAUX:\n"
+            for symbol, data in market_data.items():
+                market_formatted += f"   {symbol}: {data.price:.2f} {data.currency} ({data.change_percent:+.2f}%)\n"
             
+            crypto_formatted = "🪙 CRYPTOACTIFS:\n"
+            for symbol, data in crypto_data.items():
+                crypto_formatted += f"   {symbol}: {data.price:.2f} {data.currency} ({data.change_percent:+.2f}%)\n"
+            
+            bond_formatted = "📊 OBLIGATIONS:\n"
+            for symbol, data in bond_data.items():
+                bond_formatted += f"   {symbol}: {data.price:.2f}% ({data.change_percent:+.2f}%)\n"
+
             # Combiner les données
-            real_data = f"{market_formatted}\n\n{news_formatted}"
-            
-            if not market_data and not news_data:
-                logger.error("❌ Aucune donnée récupérée du scraper")
+            real_data = f"{market_formatted}\n{crypto_formatted}\n{bond_formatted}"
+
+            if not market_data and not crypto_data and not bond_data:
+                logger.error("❌ Aucune donnée récupérée de Manus")
                 return None
-                
-        except ImportError:
-            logger.error("❌ Reuters Scraper non disponible")
-            return None
+
         except Exception as e:
-            logger.error(f"❌ Erreur Reuters Scraper: {e}")
+            logger.error(f"❌ Erreur API Manus: {e}")
             return None
-        
+
         # 2. Créer le prompt pour GPT-4o
         prompt = f"""Tu es un analyste financier expérimenté. Génère un briefing financier détaillé pour {current_date}.
 
-DONNÉES RÉELLES DISPONIBLES :
-{real_data}
+        DONNÉES RÉELLES DISPONIBLES :
+        {real_data}
 
-RÉDIGE un rapport complet incluant :
+        RÉDIGE un rapport complet incluant :
 
-1. MARCHÉS ACTIONS (analyse uniquement les données fournies)
-2. CRYPTOACTIFS (analyse uniquement les données fournies)  
-3. OBLIGATIONS (analyse uniquement les données fournies)
-4. ACTUALITÉS ET CONTEXTE (synthétise les actualités fournies)
+        1. MARCHÉS ACTIONS (analyse uniquement les données fournies)
+        2. CRYPTOACTIFS (analyse uniquement les données fournies)
+        3. OBLIGATIONS (analyse uniquement les données fournies)
+        4. CONTEXTE ET PERSPECTIVES (basé sur les données)
 
-IMPORTANT : 
-- Utilise UNIQUEMENT les données réelles fournies ci-dessus
-- Ne pas inventer de prix, de données ou d'actualités
-- Ne pas utiliser tes connaissances générales
-- Analyse uniquement ce qui est fourni dans les données
-- Sois détaillé et professionnel avec les données disponibles
-- Si une section n'a pas de données, indique-le clairement
+        IMPORTANT :
+        - Utilise UNIQUEMENT les données réelles fournies ci-dessus
+        - Ne pas inventer de prix, de données ou d'actualités
+        - Ne pas utiliser tes connaissances générales
+        - Analyse uniquement ce qui est fourni dans les données
+        - Sois détaillé et professionnel avec les données disponibles
+        - Si une section n'a pas de données, indique-le clairement
 
-FORMAT EXIGÉ POUR LES ACTUALITÉS :
-- Synthétise les actualités par thème/topic
-- Pour chaque topic traité, cite les sources avec les liens
-- Exemple : "Topic X : [synthèse] - Sources : [Reuters] [NZZ] [AP News]"
-- Organise les actualités par importance et pertinence financière"""
+        FORMAT :
+        - Analyse technique des mouvements
+        - Contexte des variations
+        - Perspectives à court terme
+        - Sources : API Manus (données live)"""
 
         logger.info("🔍 Appel GPT-4o pour synthèse...")
-        
+
         if not openai_client:
             logger.error("❌ OpenAI client non configuré")
             return None
-        
+
         response = openai_client.chat.completions.create(
             model="gpt-4o",
             messages=[
@@ -5206,15 +5277,15 @@ FORMAT EXIGÉ POUR LES ACTUALITÉS :
             max_tokens=4000,
             temperature=0.3
         )
-        
+
         if response.choices and response.choices[0].message.content:
             content = response.choices[0].message.content
-            logger.info("✅ Briefing généré : Reuters Scraper + GPT-4o")
+            logger.info("✅ Briefing généré : API Manus + GPT-4o")
             return content.strip()
-        
+
         logger.error("Réponse GPT-4o invalide")
         return None
-            
+
     except Exception as e:
         logger.error(f"Erreur génération briefing avec GPT-4o: {e}")
         return None
