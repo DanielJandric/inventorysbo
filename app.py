@@ -192,20 +192,8 @@ except Exception as e:
 # ──────────────────────────────────────────────────────────
 # Gemini 2.5 client (SDK google-genai)
 # ──────────────────────────────────────────────────────────
-try:
-    from google import genai
-    
-    # accepte GEMINI_API_KEY **ou** GOOGLE_API_KEY
-    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-    if not GEMINI_API_KEY:
-        logger.warning("⚠️ Clé Gemini absente – fallback OpenAI")
-        gemini_client = None
-    else:
-        gemini_client = genai.Client(api_key=GEMINI_API_KEY)
-        logger.info("✅ Gemini 2.5 Flash connecté avec SDK officiel")
-except Exception as e:
-    logger.warning(f"⚠️ Gemini non disponible: {e}")
-    gemini_client = None
+# Configuration Gemini - SUPPRIMÉ
+gemini_client = None
 
 # CSS optimisé pour PDFs noir et blanc professionnels
 def get_optimized_pdf_css():
@@ -4537,7 +4525,7 @@ def trigger_market_update():
     """Déclenche manuellement la génération d'un briefing de marché"""
     try:
         # Vérifier si Gemini ou OpenAI est configuré
-        gemini_configured = os.getenv('GEMINI_API_KEY') is not None
+        gemini_configured = False  # Gemini supprimé
         openai_configured = openai_client is not None
         
         if not gemini_configured and not openai_configured:
@@ -4654,10 +4642,10 @@ def generate_market_briefing():
     """Génère un briefing de marché avec Gemini ou fallback OpenAI"""
     try:
         # Essayer Gemini en premier
-        gemini_briefing = generate_market_briefing_with_gemini()
-        if gemini_briefing:
-            logger.info("✅ Briefing généré avec Gemini")
-            return gemini_briefing
+        scraper_briefing = generate_market_briefing_with_scraper()
+        if scraper_briefing:
+            logger.info("✅ Briefing généré avec Reuters Scraper + GPT-4o")
+            return scraper_briefing
         
         # Fallback vers OpenAI si Gemini échoue
         if openai_client:
@@ -5038,140 +5026,98 @@ if __name__ == "__main__":
 
 # Fonction Google Custom Search supprimée - Remplacée par Gemini 2.0 Flash
 
-def generate_market_briefing_with_gemini():
+def generate_market_briefing_with_scraper():
     """
-    Retourne un briefing de marché hybride : Yahoo Finance (prix réels) + Gemini (analyse)
+    Génère un briefing financier avec Reuters Scraper + GPT-4o
     """
-    if not gemini_client:
-        logger.warning("Client Gemini non configuré")
-        return None
-
     try:
         current_date = datetime.now().strftime('%d/%m/%Y')
         
-        # 1. Récupérer les prix réels via Yahoo Finance
-        logger.info("📊 Récupération des prix réels via Yahoo Finance...")
-        real_prices = get_real_market_prices()
+        # 1. Récupérer les données via Reuters Scraper
+        logger.info("📊 Récupération des données via Reuters Scraper...")
         
-        # 2. Créer le prompt avec les données réelles
-        prompt = f"""Tu es un analyste financier expérimenté. Analyse ces données de marché réelles pour {current_date} et génère un briefing financier détaillé.
+        try:
+            from reuters_scraper import ReutersScraper
+            scraper = ReutersScraper()
+            
+            # Récupérer les données de marché
+            market_data = scraper.get_market_data()
+            market_formatted = scraper.format_market_data(market_data)
+            
+            # Récupérer les actualités
+            news_data = scraper.get_financial_news(max_news=12)
+            news_formatted = scraper.format_news_data(news_data)
+            
+            # Combiner les données
+            real_data = f"{market_formatted}\n\n{news_formatted}"
+            
+            if not market_data and not news_data:
+                logger.error("❌ Aucune donnée récupérée du scraper")
+                return None
+                
+        except ImportError:
+            logger.error("❌ Reuters Scraper non disponible")
+            return None
+        except Exception as e:
+            logger.error(f"❌ Erreur Reuters Scraper: {e}")
+            return None
+        
+        # 2. Créer le prompt pour GPT-4o
+        prompt = f"""Tu es un analyste financier expérimenté. Génère un briefing financier détaillé pour {current_date}.
 
-DONNÉES RÉELLES ACTUELLES :
-{real_prices}
+DONNÉES RÉELLES DISPONIBLES :
+{real_data}
 
 RÉDIGE un rapport complet incluant :
 
-1. MARCHÉS ACTIONS (analyse des données réelles ci-dessus)
-2. CRYPTOACTIFS (analyse des données réelles ci-dessus)  
-3. OBLIGATIONS (analyse des données réelles ci-dessus)
-4. ACTUALITÉS ET CONTEXTE (utilise tes connaissances pour le contexte)
+1. MARCHÉS ACTIONS (analyse uniquement les données fournies)
+2. CRYPTOACTIFS (analyse uniquement les données fournies)  
+3. OBLIGATIONS (analyse uniquement les données fournies)
+4. ACTUALITÉS ET CONTEXTE (synthétise les actualités fournies)
 
 IMPORTANT : 
 - Utilise UNIQUEMENT les données réelles fournies ci-dessus
-- Ne pas inventer de prix ou de données
-- Ajoute du contexte et de l'analyse qualitative
-- Sois détaillé et précis"""
+- Ne pas inventer de prix, de données ou d'actualités
+- Ne pas utiliser tes connaissances générales
+- Analyse uniquement ce qui est fourni dans les données
+- Sois détaillé et professionnel avec les données disponibles
+- Si une section n'a pas de données, indique-le clairement
 
-        logger.info("🔍 Appel Gemini 2.5 Flash pour analyse...")
+FORMAT EXIGÉ POUR LES ACTUALITÉS :
+- Synthétise les actualités par thème/topic
+- Pour chaque topic traité, cite les sources avec les liens
+- Exemple : "Topic X : [synthèse] - Sources : [Reuters] [NZZ] [AP News]"
+- Organise les actualités par importance et pertinence financière"""
+
+        logger.info("🔍 Appel GPT-4o pour synthèse...")
         
-        # API HTTP directe (plus fiable)
-        url = "https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent"
-        headers = {
-            'Content-Type': 'application/json',
-            'X-goog-api-key': GEMINI_API_KEY
-        }
+        if not openai_client:
+            logger.error("❌ OpenAI client non configuré")
+            return None
         
-        data = {
-            "contents": [
-                {
-                    "parts": [
-                        {
-                            "text": prompt
-                        }
-                    ]
-                }
+        response = openai_client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "Tu es un analyste financier expert. Analyse uniquement les données fournies sans inventer."},
+                {"role": "user", "content": prompt}
             ],
-            "generationConfig": {
-                "temperature": 0.3,
-                "maxOutputTokens": 4000
-            }
-        }
+            max_tokens=4000,
+            temperature=0.3
+        )
         
-        import requests
-        response = requests.post(url, headers=headers, json=data, timeout=30)
+        if response.choices and response.choices[0].message.content:
+            content = response.choices[0].message.content
+            logger.info("✅ Briefing généré : Reuters Scraper + GPT-4o")
+            return content.strip()
         
-        if response.status_code == 200:
-            result = response.json()
-            if 'candidates' in result and len(result['candidates']) > 0:
-                candidate = result['candidates'][0]
-                if 'content' in candidate and 'parts' in candidate['content']:
-                    content = candidate['content']['parts'][0]['text']
-                    logger.info("✅ Briefing hybride généré : Yahoo Finance + Gemini")
-                    return content.strip()
-        
-        logger.error("Réponse Gemini invalide")
+        logger.error("Réponse GPT-4o invalide")
         return None
             
     except Exception as e:
-        logger.error(f"Erreur génération briefing avec Gemini: {e}")
+        logger.error(f"Erreur génération briefing avec GPT-4o: {e}")
         return None
 
-def get_real_market_prices():
-    """
-    Récupère les prix réels des marchés via Yahoo Finance
-    """
-    try:
-        import yfinance as yf
-        
-        # Symboles à surveiller
-        symbols = {
-            'S&P 500': '^GSPC',
-            'NASDAQ': '^IXIC', 
-            'Dow Jones': '^DJI',
-            'CAC 40': '^FCHI',
-            'DAX': '^GDAXI',
-            'SMI': '^SSMI',
-            'Bitcoin': 'BTC-USD',
-            'Ethereum': 'ETH-USD',
-            'US 10Y': '^TNX',
-            'Bund 10Y': '^BUND'
-        }
-        
-        prices_data = []
-        
-        for name, symbol in symbols.items():
-            try:
-                ticker = yf.Ticker(symbol)
-                # Utiliser history() pour obtenir le dernier prix
-                hist = ticker.history(period="1d")
-                
-                if not hist.empty:
-                    current_price = hist['Close'].iloc[-1]
-                    prev_price = hist['Open'].iloc[0]
-                    change = current_price - prev_price
-                    change_percent = (change / prev_price) * 100
-                    
-                    prices_data.append(f"{name}: ${current_price:.2f} ({change:+.2f}, {change_percent:+.2f}%)")
-                else:
-                    # Fallback sur info si history échoue
-                    info = ticker.info
-                    if 'currentPrice' in info and info['currentPrice']:
-                        price = info['currentPrice']
-                        change = info.get('regularMarketChange', 0)
-                        change_percent = info.get('regularMarketChangePercent', 0)
-                        prices_data.append(f"{name}: ${price:.2f} ({change:+.2f}, {change_percent:+.2f}%)")
-                    else:
-                        prices_data.append(f"{name}: Données non disponibles")
-                    
-            except Exception as e:
-                prices_data.append(f"{name}: Erreur - {str(e)}")
-        
-        return "\n".join(prices_data)
-        
-    except ImportError:
-        return "Yahoo Finance non disponible - données manquantes"
-    except Exception as e:
-        return f"Erreur récupération prix: {str(e)}"
+
 
 def generate_market_briefing_with_openai():
     """Génère un briefing de marché avec OpenAI GPT-4o (fallback)"""
