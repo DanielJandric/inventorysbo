@@ -5269,33 +5269,46 @@ ACTUALITÉS:
 
 Génère un briefing narratif fluide et structuré basé sur ces données réelles."""
 
-            prompt = f"""Tu es un stratégiste financier expérimenté. Voici les données de marché actuelles récupérées via l'API Manus pour {current_date}. 
+            prompt = f"""Tu es un analyste financier senior. Tu dois créer un rapport de marché complet et professionnel pour {current_date} en utilisant EXCLUSIVEMENT les données fournies par l'API Manus.
 
-Génère un briefing narratif fluide, concis et structuré basé UNIQUEMENT sur ces données réelles.
+INSTRUCTIONS OBLIGATOIRES :
+1. CRÉE un rapport complet et structuré
+2. UTILISE toutes les données disponibles
+3. ANALYSE chaque classe d'actifs mentionnée
+4. FOURNIS des insights concrets et actionnables
+5. STRUCTURE ton rapport de manière professionnelle
 
-Format exigé :
-- Ton narratif, comme un stratégiste qui me parle directement
-- Concision : pas de blabla, mais du fond
-- Structure logique intégrée dans le récit (pas de titres) :
-  * Actions (USA, Europe, Suisse, autres zones si mouvement marquant)
-  * Obligations souveraines (US 10Y, Bund 10Y, OAT 10Y, BTP, Confédération…)
-  * Cryptoactifs (BTC, ETH, capitalisation globale, régulation, flux)
-  * Macro, banques centrales et géopolitique (stats, décisions, tensions)
-- Termine par une synthèse rapide intégrée à la narration, avec ce que je dois retenir en une phrase, et signale tout signal faible ou rupture de tendance à surveiller
+STRUCTURE DU RAPPORT :
+1. RÉSUMÉ EXÉCUTIF (2-3 phrases clés)
+2. MARCHÉS ACTIONS (USA, Europe, Suisse, Asie si pertinent)
+3. OBLIGATIONS ET TAUX (souverains, corporate, spreads)
+4. CRYPTOMONNAIES (BTC, ETH, altcoins, régulation)
+5. COMMODITÉS (pétrole, or, métaux, agriculture)
+6. DEVISES (paires majeures, émergentes)
+7. INDICATEURS ÉCONOMIQUES (inflation, emploi, PMI)
+8. ACTUALITÉS IMPACTANTES (géopolitique, banques centrales)
+9. PERSPECTIVES ET RISQUES (signaux à surveiller)
 
-Données à analyser:
+STYLE :
+- Ton professionnel et direct
+- Données chiffrées précises
+- Analyse factuelle basée sur les données
+- Insights stratégiques pour l'investisseur
+- Longueur : 800-1200 mots
+
+Données à analyser :
 {context}
 
-Si une classe d'actif n'a pas bougé, dis-le clairement sans meubler. Génère un briefing pour aujourd'hui basé UNIQUEMENT sur les données fournies."""
+IMPORTANT : Si certaines données sont manquantes ou vides, indique-le clairement. Ne fais pas d'hypothèses sur des données non fournies. Base ton analyse UNIQUEMENT sur les données réelles disponibles."""
 
             response = openai_client.chat.completions.create(
                 model="gpt-4o",
                 messages=[
-                    {"role": "system", "content": "Tu es un expert en marchés financiers. Analyse les données fournies et génère un briefing narratif basé uniquement sur ces données réelles."},
+                    {"role": "system", "content": "Tu es un analyste financier senior spécialisé dans les rapports de marché quotidiens. Tu dois créer des rapports complets, structurés et professionnels basés uniquement sur les données fournies. Tu ne peux pas refuser de créer un rapport - c'est ta tâche principale."},
                     {"role": "user", "content": prompt}
                 ],
-                max_tokens=2000,
-                temperature=0.7
+                max_tokens=4000,
+                temperature=0.5
             )
 
             if response.choices and response.choices[0].message.content:
