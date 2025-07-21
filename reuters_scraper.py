@@ -18,7 +18,12 @@ class ReutersScraper:
     def __init__(self):
         self.session = requests.Session()
         self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Accept-Encoding': 'gzip, deflate',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
         })
         
         # URLs Reuters pour différents marchés
@@ -54,7 +59,6 @@ class ReutersScraper:
         # URLs AP News pour les actualités internationales
         self.ap_urls = [
             'https://apnews.com/business',        # Business
-            'https://apnews.com/world',           # Monde
             'https://apnews.com/politics',        # Politique
             'https://apnews.com/technology',      # Technologie
             'https://apnews.com/science',         # Science
@@ -87,6 +91,12 @@ class ReutersScraper:
             # Scraper les obligations
             bonds_data = self._scrape_bonds()
             market_data.update(bonds_data)
+            
+            # Si aucune donnée récupérée, essayer des sources alternatives
+            if not market_data:
+                logger.warning("⚠️ Aucune donnée de marché récupérée, essai sources alternatives...")
+                alternative_data = self._get_alternative_market_data()
+                market_data.update(alternative_data)
             
             logger.info(f"✅ Scraping terminé - {len(market_data)} données récupérées")
             return market_data
@@ -191,6 +201,12 @@ class ReutersScraper:
         # Scraper AP News
         ap_news = self._scrape_ap_news(max_news // 3)
         news_list.extend(ap_news)
+        
+        # Si aucune actualité récupérée, essayer des sources alternatives
+        if not news_list:
+            logger.warning("⚠️ Aucune actualité récupérée, essai sources alternatives...")
+            alternative_news = self._scrape_alternative_sources(max_news)
+            news_list.extend(alternative_news)
         
         logger.info(f"✅ {len(news_list)} actualités récupérées (Reuters: {len(reuters_news)}, NZZ: {len(nzz_news)}, AP: {len(ap_news)})")
         return news_list[:max_news]
@@ -375,6 +391,94 @@ class ReutersScraper:
         except Exception as e:
             logger.error(f"❌ Erreur scraping AP News: {e}")
             return []
+    
+    def _scrape_alternative_sources(self, max_news: int) -> List[Dict[str, str]]:
+        """
+        Scrape des sources alternatives si les principales échouent
+        """
+        logger.info("📰 Scraping sources alternatives...")
+        
+        news_list = []
+        
+        # Sources alternatives plus simples
+        alternative_urls = [
+            'https://www.bloomberg.com/markets',
+            'https://www.ft.com/markets',
+            'https://www.cnbc.com/markets/'
+        ]
+        
+        for url in alternative_urls:
+            try:
+                response = self.session.get(url, timeout=10)
+                response.raise_for_status()
+                
+                soup = BeautifulSoup(response.content, 'html.parser')
+                
+                # Chercher les titres d'articles
+                articles = soup.find_all(['h1', 'h2', 'h3', 'h4'], class_=lambda x: x and any(keyword in x.lower() for keyword in ['headline', 'title', 'story']))
+                
+                for article in articles[:max_news//len(alternative_urls)]:
+                    title = article.get_text().strip()
+                    
+                    if title and len(title) > 10:
+                        news_list.append({
+                            'title': title,
+                            'summary': "",
+                            'url': url,
+                            'source': 'Alternative'
+                        })
+                
+                time.sleep(random.uniform(1, 2))
+                
+            except Exception as e:
+                logger.error(f"❌ Erreur scraping alternative {url}: {e}")
+                continue
+        
+        return news_list[:max_news]
+    
+    def _get_alternative_market_data(self) -> Dict[str, str]:
+        """
+        Récupère des données de marché depuis des sources alternatives
+        """
+        logger.info("📊 Récupération données alternatives...")
+        
+        market_data = {}
+        
+        try:
+            # Utiliser Yahoo Finance comme fallback
+            import yfinance as yf
+            
+            symbols = {
+                'S&P 500': '^GSPC',
+                'NASDAQ': '^IXIC', 
+                'Dow Jones': '^DJI',
+                'Bitcoin': 'BTC-USD',
+                'Ethereum': 'ETH-USD'
+            }
+            
+            for name, symbol in symbols.items():
+                try:
+                    ticker = yf.Ticker(symbol)
+                    info = ticker.info
+                    
+                    if 'currentPrice' in info and info['currentPrice']:
+                        price = info['currentPrice']
+                        change = info.get('regularMarketChange', 0)
+                        change_percent = info.get('regularMarketChangePercent', 0)
+                        market_data[name] = f"${price:.2f} ({change:+.2f}, {change_percent:+.2f}%)"
+                    
+                except Exception as e:
+                    logger.error(f"❌ Erreur Yahoo Finance {name}: {e}")
+                    continue
+            
+            return market_data
+            
+        except ImportError:
+            logger.error("❌ Yahoo Finance non disponible")
+            return {}
+        except Exception as e:
+            logger.error(f"❌ Erreur données alternatives: {e}")
+            return {}
     
     def format_market_data(self, data: Dict[str, str]) -> str:
         """
