@@ -5067,7 +5067,7 @@ INSTRUCTIONS :
 - Sois détaillé et complet"""
 
         # Appel à l'API Gemini avec outils de grounding
-        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
         
         headers = {
             'Content-Type': 'application/json',
@@ -5104,7 +5104,7 @@ INSTRUCTIONS :
             result = response.json()
             if 'candidates' in result and len(result['candidates']) > 0:
                 content = result['candidates'][0]['content']['parts'][0]['text']
-                logger.info("✅ Briefing généré avec Gemini 1.5 Flash + Google Search")
+                logger.info("✅ Briefing généré avec Gemini 2.0 Flash + Google Search")
                 return content
             else:
                 logger.error(f"Réponse Gemini invalide: {result}")
