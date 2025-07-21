@@ -169,6 +169,7 @@ logger.info("Variables d'environnement validees")
 # Connexions avec gestion d'erreurs
 supabase = None
 openai_client = None
+gemini_client = None
 
 try:
     from supabase import create_client
@@ -187,6 +188,18 @@ try:
         logger.warning("⚠️ OpenAI non configuré")
 except Exception as e:
     logger.warning(f"⚠️ OpenAI non disponible: {e}")
+
+try:
+    GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+    if GEMINI_API_KEY:
+        import google.generativeai as genai
+        genai.configure(api_key=GEMINI_API_KEY)
+        gemini_client = genai.GenerativeModel('gemini-2.0-flash-exp')
+        logger.info("✅ Gemini connecté avec la bibliothèque officielle")
+    else:
+        logger.warning("⚠️ Gemini non configuré")
+except Exception as e:
+    logger.warning(f"⚠️ Gemini non disponible: {e}")
 
 # CSS optimisé pour PDFs noir et blanc professionnels
 def get_optimized_pdf_css():
@@ -4979,6 +4992,7 @@ if __name__ == "__main__":
     logger.info(f"🔗 App URL: {APP_URL}")
     logger.info(f"🗄️ Supabase: {'✅' if supabase else '❌'}")
     logger.info(f"🤖 OpenAI: {'✅' if openai_client else '❌'}")
+    logger.info(f"🤖 Gemini: {'✅' if gemini_client else '❌'}")
     logger.info(f"🧠 IA Engine: {'✅ GPT-4 avec RAG' if ai_engine else '❌'}")
     logger.info(f"📧 Gmail: {'✅' if gmail_manager.enabled else '❌'}")
     if gmail_manager.enabled:
@@ -5019,71 +5033,60 @@ if __name__ == "__main__":
 # Fonction Google Custom Search supprimée - Remplacée par Gemini 2.0 Flash
 
 def generate_market_briefing_with_gemini():
-    """Génère un briefing de marché avec Gemini 1.5 Flash et outils de grounding"""
+    """Génère un briefing de marché avec Gemini via la bibliothèque officielle"""
     try:
-        gemini_api_key = os.getenv('GEMINI_API_KEY')
-
-        if not gemini_api_key:
-            logger.warning("Variable GEMINI_API_KEY non configurée")
+        if not gemini_client:
+            logger.warning("Client Gemini non configuré")
             return None
 
-        # Prompt pour Gemini avec recherche web forcée
+        # Prompt pour Gemini avec recherche web
         current_date = datetime.now().strftime('%d/%m/%Y')
-        prompt = f"""Utilise la recherche web pour obtenir les données de marché actuelles et génère un briefing financier pour {current_date}.
+        prompt = f"""Tu es un analyste financier expérimenté. Utilise la recherche web pour obtenir les données de marché actuelles et génère un briefing financier détaillé pour {current_date}.
 
-Donne-moi un résumé des marchés financiers d'aujourd'hui avec :
-- Indices boursiers principaux (S&P 500, NASDAQ, CAC 40, DAX, SMI)
-- Prix du Bitcoin et Ethereum
-- Taux d'intérêt (US 10Y, Bund 10Y)
-- Actualités importantes du jour
+RECHERCHE ET RÉDIGE un rapport complet incluant :
 
-Sois concis mais informatif. Utilise des données réelles trouvées via la recherche web."""
+1. MARCHÉS ACTIONS (avec chiffres exacts) :
+   - S&P 500, NASDAQ, Dow Jones
+   - CAC 40, DAX, FTSE 100
+   - Swiss Market Index (SMI)
+   - Variations en % et points
 
-        # Appel à l'API Gemini avec outils de grounding
-        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+2. CRYPTOACTIFS :
+   - Bitcoin (BTC) - prix actuel et variation
+   - Ethereum (ETH) - prix actuel et variation
+   - Capitalisation globale crypto
+
+3. OBLIGATIONS :
+   - US Treasury 10Y
+   - Bund allemand 10Y
+   - Spreads importants
+
+4. ACTUALITÉS DU JOUR :
+   - Événements macroéconomiques
+   - Décisions de banques centrales
+   - Tensions géopolitiques
+
+IMPORTANT : Utilise EXCLUSIVEMENT des données trouvées via la recherche web. Cite tes sources. Sois détaillé et précis."""
+
+        logger.info("🔍 Appel Gemini via bibliothèque officielle...")
         
-        headers = {
-            'Content-Type': 'application/json',
-            'X-goog-api-key': gemini_api_key
-        }
-        
-        data = {
-            "contents": [
-                {
-                    "parts": [
-                        {
-                            "text": prompt
-                        }
-                    ]
-                }
-            ],
-            "tools": [
-                {
-                    "googleSearch": {}
-                }
-            ],
-            "generationConfig": {
+        # Utilisation de la bibliothèque officielle avec recherche web
+        response = gemini_client.generate_content(
+            prompt,
+            tools=[{"googleSearch": {}}],
+            generation_config={
                 "temperature": 0.3,
-                "topK": 40,
-                "topP": 0.8,
-                "maxOutputTokens": 4000
+                "top_k": 40,
+                "top_p": 0.8,
+                "max_output_tokens": 4000
             }
-        }
+        )
 
-        logger.info(f"🔍 Appel API Gemini avec clé: {gemini_api_key[:10]}...")
-        response = requests.post(url, headers=headers, json=data, timeout=30)
-
-        if response.status_code == 200:
-            result = response.json()
-            if 'candidates' in result and len(result['candidates']) > 0:
-                content = result['candidates'][0]['content']['parts'][0]['text']
-                logger.info("✅ Briefing généré avec Gemini 2.0 Flash + Google Search")
-                return content
-            else:
-                logger.error(f"Réponse Gemini invalide: {result}")
-                return None
+        if response and response.text:
+            logger.info("✅ Briefing généré avec Gemini 2.0 Flash + Google Search (bibliothèque officielle)")
+            return response.text
         else:
-            logger.error(f"Erreur API Gemini: {response.status_code} - {response.text}")
+            logger.error("Réponse Gemini vide")
             return None
 
     except Exception as e:
