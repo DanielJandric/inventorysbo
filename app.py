@@ -5009,39 +5009,45 @@ def generate_market_briefing_with_gemini():
 
         # Prompt pour Gemini avec recherche web forcée
         current_date = datetime.now().strftime('%d/%m/%Y')
-        prompt = f"""IMPORTANT: Utilise tes capacités de recherche web pour obtenir les données de marché ACTUELLES d'aujourd'hui ({current_date}).
+        prompt = f"""Recherche en temps réel les données de marché d'aujourd'hui ({current_date}) et génère un briefing complet.
 
-Ne pas utiliser tes connaissances d'entraînement. Recherche en temps réel les données de marché du jour.
+Fais-moi un briefing narratif détaillé et structuré sur la séance des marchés financiers du jour ({current_date}).
 
-Fais-moi un briefing narratif concis et structuré sur la séance des marchés financiers du jour ({current_date}).
+STRUCTURE OBLIGATOIRE :
 
-Format souhaité :
+1. MARCHÉS ACTIONS
+- USA (S&P 500, NASDAQ, Dow Jones)
+- Europe (CAC 40, DAX, FTSE 100)
+- Suisse (SMI)
+- Autres zones si mouvement significatif
 
-Ton narratif, comme un stratégiste qui me parle directement ;
+2. OBLIGATIONS SOUVERAINES
+- US 10Y, Bund, OAT, BTP
+- Confédération suisse
+- Spreads et mouvements
 
-Concision, mais sans sacrifier la clarté ;
+3. CRYPTOACTIFS
+- BTC, ETH
+- Capitalisation globale
+- Mouvements liés à la régulation ou aux flux
 
-Structuration logique :
+4. MACROÉCONOMIE & BANQUES CENTRALES
+- Statistiques importantes
+- Commentaires des banquiers centraux
+- Tensions géopolitiques
 
-Marchés actions (USA, Europe, Suisse — autres zones si mouvement significatif)
+5. RÉSUMÉ & POINTS DE SURVEILLANCE
+- Bullet points clairs
+- Signaux faibles ou ruptures de tendance à surveiller
 
-Obligations souveraines (US 10Y, Bund, OAT, BTP, Confédération…)
-
-Cryptoactifs (BTC, ETH, capitalisation globale, mouvements liés à la régulation ou aux flux)
-
-Macroéconomie, banques centrales, géopolitique (statistiques, commentaires, tensions)
-
-Résumé final clair et bullet points + signal faible ou rupture de tendance à surveiller
-
-INSTRUCTIONS STRICTES:
-- Recherche en temps réel les données de marché d'aujourd'hui
-- Cite les sources spécifiques des données utilisées
-- Mentionne les chiffres exacts trouvés
-- Si une donnée n'est pas disponible aujourd'hui, dis "pas d'information disponible"
-- Ne jamais utiliser tes connaissances d'entraînement pour les données de marché"""
+INSTRUCTIONS :
+- Utilise tes capacités de recherche web pour des données ACTUELLES
+- Cite les sources spécifiques
+- Donne des chiffres exacts
+- Sois détaillé et complet"""
 
         # Appel à l'API Gemini avec outils de grounding
-        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent"
         
         headers = {
             'Content-Type': 'application/json',
@@ -5064,10 +5070,10 @@ INSTRUCTIONS STRICTES:
                 }
             ],
             "generationConfig": {
-                "temperature": 0.1,
-                "topK": 1,
-                "topP": 0.1,
-                "maxOutputTokens": 3000
+                "temperature": 0.3,
+                "topK": 40,
+                "topP": 0.8,
+                "maxOutputTokens": 4000
             }
         }
 
