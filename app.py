@@ -5040,8 +5040,7 @@ if __name__ == "__main__":
 
 def generate_market_briefing_with_gemini():
     """
-    Retourne un briefing de marché (texte brut) via Gemini 2.5 Flash.
-    Fallback GPT-4o si l'appel échoue.
+    Retourne un briefing de marché hybride : Yahoo Finance (prix réels) + Gemini (analyse)
     """
     if not gemini_client:
         logger.warning("Client Gemini non configuré")
@@ -5049,34 +5048,31 @@ def generate_market_briefing_with_gemini():
 
     try:
         current_date = datetime.now().strftime('%d/%m/%Y')
-        prompt = f"""Tu es un analyste financier expérimenté. Utilise la recherche web pour obtenir les données de marché actuelles et génère un briefing financier détaillé pour {current_date}.
+        
+        # 1. Récupérer les prix réels via Yahoo Finance
+        logger.info("📊 Récupération des prix réels via Yahoo Finance...")
+        real_prices = get_real_market_prices()
+        
+        # 2. Créer le prompt avec les données réelles
+        prompt = f"""Tu es un analyste financier expérimenté. Analyse ces données de marché réelles pour {current_date} et génère un briefing financier détaillé.
 
-RECHERCHE ET RÉDIGE un rapport complet incluant :
+DONNÉES RÉELLES ACTUELLES :
+{real_prices}
 
-1. MARCHÉS ACTIONS (avec chiffres exacts) :
-   - S&P 500, NASDAQ, Dow Jones
-   - CAC 40, DAX, FTSE 100
-   - Swiss Market Index (SMI)
-   - Variations en % et points
+RÉDIGE un rapport complet incluant :
 
-2. CRYPTOACTIFS :
-   - Bitcoin (BTC) - prix actuel et variation
-   - Ethereum (ETH) - prix actuel et variation
-   - Capitalisation globale crypto
+1. MARCHÉS ACTIONS (analyse des données réelles ci-dessus)
+2. CRYPTOACTIFS (analyse des données réelles ci-dessus)  
+3. OBLIGATIONS (analyse des données réelles ci-dessus)
+4. ACTUALITÉS ET CONTEXTE (utilise tes connaissances pour le contexte)
 
-3. OBLIGATIONS :
-   - US Treasury 10Y
-   - Bund allemand 10Y
-   - Spreads importants
+IMPORTANT : 
+- Utilise UNIQUEMENT les données réelles fournies ci-dessus
+- Ne pas inventer de prix ou de données
+- Ajoute du contexte et de l'analyse qualitative
+- Sois détaillé et précis"""
 
-4. ACTUALITÉS DU JOUR :
-   - Événements macroéconomiques
-   - Décisions de banques centrales
-   - Tensions géopolitiques
-
-IMPORTANT : Utilise EXCLUSIVEMENT des données trouvées via la recherche web. Cite tes sources. Sois détaillé et précis."""
-
-        logger.info("🔍 Appel Gemini 2.5 Flash avec recherche web...")
+        logger.info("🔍 Appel Gemini 2.5 Flash pour analyse...")
         
         # API HTTP directe (plus fiable)
         url = "https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent"
@@ -5110,7 +5106,7 @@ IMPORTANT : Utilise EXCLUSIVEMENT des données trouvées via la recherche web. C
                 candidate = result['candidates'][0]
                 if 'content' in candidate and 'parts' in candidate['content']:
                     content = candidate['content']['parts'][0]['text']
-                    logger.info("✅ Briefing généré avec Gemini 2.5 Flash + Google Search")
+                    logger.info("✅ Briefing hybride généré : Yahoo Finance + Gemini")
                     return content.strip()
         
         logger.error("Réponse Gemini invalide")
@@ -5119,6 +5115,63 @@ IMPORTANT : Utilise EXCLUSIVEMENT des données trouvées via la recherche web. C
     except Exception as e:
         logger.error(f"Erreur génération briefing avec Gemini: {e}")
         return None
+
+def get_real_market_prices():
+    """
+    Récupère les prix réels des marchés via Yahoo Finance
+    """
+    try:
+        import yfinance as yf
+        
+        # Symboles à surveiller
+        symbols = {
+            'S&P 500': '^GSPC',
+            'NASDAQ': '^IXIC', 
+            'Dow Jones': '^DJI',
+            'CAC 40': '^FCHI',
+            'DAX': '^GDAXI',
+            'SMI': '^SSMI',
+            'Bitcoin': 'BTC-USD',
+            'Ethereum': 'ETH-USD',
+            'US 10Y': '^TNX',
+            'Bund 10Y': '^BUND'
+        }
+        
+        prices_data = []
+        
+        for name, symbol in symbols.items():
+            try:
+                ticker = yf.Ticker(symbol)
+                # Utiliser history() pour obtenir le dernier prix
+                hist = ticker.history(period="1d")
+                
+                if not hist.empty:
+                    current_price = hist['Close'].iloc[-1]
+                    prev_price = hist['Open'].iloc[0]
+                    change = current_price - prev_price
+                    change_percent = (change / prev_price) * 100
+                    
+                    prices_data.append(f"{name}: ${current_price:.2f} ({change:+.2f}, {change_percent:+.2f}%)")
+                else:
+                    # Fallback sur info si history échoue
+                    info = ticker.info
+                    if 'currentPrice' in info and info['currentPrice']:
+                        price = info['currentPrice']
+                        change = info.get('regularMarketChange', 0)
+                        change_percent = info.get('regularMarketChangePercent', 0)
+                        prices_data.append(f"{name}: ${price:.2f} ({change:+.2f}, {change_percent:+.2f}%)")
+                    else:
+                        prices_data.append(f"{name}: Données non disponibles")
+                    
+            except Exception as e:
+                prices_data.append(f"{name}: Erreur - {str(e)}")
+        
+        return "\n".join(prices_data)
+        
+    except ImportError:
+        return "Yahoo Finance non disponible - données manquantes"
+    except Exception as e:
+        return f"Erreur récupération prix: {str(e)}"
 
 def generate_market_briefing_with_openai():
     """Génère un briefing de marché avec OpenAI GPT-4o (fallback)"""
