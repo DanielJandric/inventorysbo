@@ -4633,9 +4633,17 @@ def generate_market_briefing():
         
         # Construire le prompt avec ou sans données de marché
         if market_data:
-            prompt = f"""Fais-moi un briefing narratif concis et structuré sur la séance des marchés financiers du jour (date du jour).
+            prompt = f"""IMPORTANT: Utilise UNIQUEMENT les données de marché fournies ci-dessous pour générer ton briefing. Ne pas inventer ou utiliser tes connaissances d'entraînement.
 
+DONNÉES RÉELLES DU JOUR ({datetime.now().strftime('%d/%m/%Y')}):
 {market_data}
+
+INSTRUCTIONS STRICTES:
+- Utilise EXCLUSIVEMENT les données réelles fournies ci-dessus
+- Cite les sources spécifiques des données utilisées
+- Mentionne les chiffres exacts trouvés
+- Si une donnée n'est pas dans la liste, dis "pas d'information disponible"
+- Ne pas inventer de données ou utiliser tes connaissances d'entraînement
 
 Format souhaité :
 
@@ -4655,7 +4663,7 @@ Macroéconomie, banques centrales, géopolitique (statistiques, commentaires, te
 
 Résumé final clair et bullet points + signal faible ou rupture de tendance à surveiller
 
-Utilise les données de marché fournies ci-dessus pour générer un briefing précis et actualisé."""
+VALIDATION: Assure-toi que chaque information mentionnée provient des données réelles fournies."""
         else:
             prompt = """Fais-moi un briefing narratif concis et structuré sur la séance des marchés financiers du jour (date du jour).
 
@@ -4680,11 +4688,11 @@ Résumé final clair et bullet points + signal faible ou rupture de tendance à 
         response = openai_client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "Tu es un expert en marchés financiers avec une expertise particulière en analyse macro et technique."},
+                {"role": "system", "content": "Tu es un expert en marchés financiers. Tu DOIS utiliser UNIQUEMENT les données fournies par l'utilisateur. Ne jamais inventer ou utiliser tes connaissances d'entraînement."},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=1500,
-            temperature=0.7
+            max_tokens=2500,
+            temperature=0.3
         )
         
         return response.choices[0].message.content
@@ -5111,11 +5119,14 @@ def get_market_data_from_google_search():
         
         if all_results:
             # Formater les résultats pour le prompt
-            formatted_results = "Données de marché récentes trouvées :\n\n"
+            formatted_results = f"DONNÉES DE MARCHÉ ACTUELLES ({datetime.now().strftime('%d/%m/%Y')}):\n\n"
             for i, result in enumerate(all_results[:10], 1):  # Limiter à 10 résultats
-                formatted_results += f"{i}. {result['title']}\n"
-                formatted_results += f"   {result['snippet']}\n"
-                formatted_results += f"   Source: {result['link']}\n\n"
+                formatted_results += f"SOURCE {i}:\n"
+                formatted_results += f"Titre: {result['title']}\n"
+                formatted_results += f"Contenu: {result['snippet']}\n"
+                formatted_results += f"URL: {result['link']}\n"
+                formatted_results += f"Requête: {result['query']}\n"
+                formatted_results += "-" * 50 + "\n\n"
             
             logger.info(f"✅ {len(all_results)} résultats Google Search récupérés")
             return formatted_results
