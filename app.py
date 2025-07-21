@@ -4517,14 +4517,23 @@ def get_market_updates():
 def trigger_market_update():
     """Déclenche manuellement la génération d'un briefing de marché"""
     try:
-        if not openai_client:
-            return jsonify({"error": "OpenAI non configuré"}), 500
+        # Vérifier si Gemini ou OpenAI est configuré
+        gemini_configured = os.getenv('GEMINI_API_KEY') is not None
+        openai_configured = openai_client is not None
+        
+        if not gemini_configured and not openai_configured:
+            return jsonify({"error": "Aucune API IA configurée (Gemini ou OpenAI)"}), 500
         
         # Générer le briefing
         briefing = generate_market_briefing()
         
         if not briefing:
-            return jsonify({"error": "Impossible de générer le briefing"}), 500
+            error_msg = "Impossible de générer le briefing"
+            if gemini_configured:
+                error_msg += " - Vérifiez la clé Gemini"
+            elif openai_configured:
+                error_msg += " - Vérifiez la clé OpenAI"
+            return jsonify({"error": error_msg}), 500
         
         # Sauvegarder en base
         if supabase:
@@ -4623,10 +4632,21 @@ def get_scheduler_status():
         return jsonify({"error": str(e)}), 500
 
 def generate_market_briefing():
-    """Génère un briefing de marché avec Gemini 2.0 Flash"""
+    """Génère un briefing de marché avec Gemini ou fallback OpenAI"""
     try:
-        # Utiliser Gemini au lieu d'OpenAI
-        return generate_market_briefing_with_gemini()
+        # Essayer Gemini en premier
+        gemini_briefing = generate_market_briefing_with_gemini()
+        if gemini_briefing:
+            logger.info("✅ Briefing généré avec Gemini")
+            return gemini_briefing
+        
+        # Fallback vers OpenAI si Gemini échoue
+        if openai_client:
+            logger.info("🔄 Fallback vers OpenAI")
+            return generate_market_briefing_with_openai()
+        else:
+            logger.error("❌ Aucune API IA disponible")
+            return None
         
     except Exception as e:
         logger.error(f"Erreur génération briefing: {e}")
@@ -5095,4 +5115,57 @@ INSTRUCTIONS :
 
     except Exception as e:
         logger.error(f"Erreur génération briefing avec Gemini: {e}")
+        return None
+
+def generate_market_briefing_with_openai():
+    """Génère un briefing de marché avec OpenAI GPT-4o (fallback)"""
+    try:
+        if not openai_client:
+            logger.error("OpenAI client non configuré")
+            return None
+
+        current_date = datetime.now().strftime('%d/%m/%Y')
+        prompt = f"""Tu es un stratégiste financier expérimenté. Utilise ta fonction de recherche web pour récupérer les données de marché actuelles et génères un briefing narratif fluide, concis et structuré sur la séance des marchés financiers du jour ({current_date}).
+
+Format exigé :
+- Ton narratif, comme un stratégiste qui me parle directement
+- Concision : pas de blabla, mais du fond
+- Structure logique intégrée dans le récit (pas de titres) :
+  * Actions (USA, Europe, Suisse, autres zones si mouvement marquant)
+  * Obligations souveraines (US 10Y, Bund 10Y, OAT 10Y, BTP, Confédération…)
+  * Cryptoactifs (BTC, ETH, capitalisation globale, régulation, flux)
+  * Macro, banques centrales et géopolitique (stats, décisions, tensions)
+- Termine par une synthèse rapide intégrée à la narration, avec ce que je dois retenir en une phrase, et signale tout signal faible ou rupture de tendance à surveiller
+
+Recherche les données de marché actuelles pour :
+- Indices boursiers (S&P 500, NASDAQ, Dow Jones, Euro Stoxx 50, DAX, CAC 40, Swiss Market Index)
+- Rendements obligataires (US 10Y, Bund 10Y, OAT 10Y, BTP 10Y)
+- Cryptoactifs (Bitcoin, Ethereum, capitalisation globale)
+- Devises (EUR/USD, USD/CHF, GBP/USD)
+- Commodities (Or, Pétrole)
+- Actualités macro et géopolitiques importantes
+
+Si une classe d'actif n'a pas bougé, dis-le clairement sans meubler. Génère un briefing pour aujourd'hui basé sur les données de marché réelles trouvées."""
+
+        response = openai_client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "Tu es un expert en marchés financiers. Utilise la recherche web pour des données actuelles."},
+                {"role": "user", "content": prompt}
+            ],
+            tools=[{"type": "web_search"}],
+            max_tokens=2000,
+            temperature=0.7
+        )
+
+        if response.choices and response.choices[0].message.content:
+            content = response.choices[0].message.content
+            logger.info("✅ Briefing généré avec OpenAI GPT-4o + Web Search")
+            return content
+        else:
+            logger.error("Réponse OpenAI invalide")
+            return None
+
+    except Exception as e:
+        logger.error(f"Erreur génération briefing avec OpenAI: {e}")
         return None
