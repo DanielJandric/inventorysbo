@@ -8,12 +8,14 @@ import json
 logger = logging.getLogger(__name__)
 
 class StockPriceData:
-    """Données de prix d'une action"""
+    """Données de prix d'action"""
+    
     def __init__(self, symbol: str, price: float, currency: str = "USD", 
                  change: float = 0, change_percent: float = 0, volume: int = 0,
                  day_high: float = 0, day_low: float = 0, 
                  fifty_two_week_high: float = 0, fifty_two_week_low: float = 0,
-                 exchange: str = "", name: str = "", timestamp: str = ""):
+                 exchange: str = "", name: str = "", timestamp: str = "",
+                 pe_ratio: float = 0):
         self.symbol = symbol
         self.price = price
         self.currency = currency
@@ -26,9 +28,11 @@ class StockPriceData:
         self.fifty_two_week_low = fifty_two_week_low
         self.exchange = exchange
         self.name = name
-        self.timestamp = timestamp or datetime.now().isoformat()
+        self.timestamp = timestamp
+        self.pe_ratio = pe_ratio
     
     def to_dict(self) -> Dict[str, Any]:
+        """Convertit en dictionnaire"""
         return {
             'symbol': self.symbol,
             'price': self.price,
@@ -42,7 +46,8 @@ class StockPriceData:
             'fifty_two_week_low': self.fifty_two_week_low,
             'exchange': self.exchange,
             'name': self.name,
-            'timestamp': self.timestamp
+            'timestamp': self.timestamp,
+            'pe_ratio': self.pe_ratio
         }
 
 class ManusStockManager:
@@ -128,7 +133,8 @@ class ManusStockManager:
                     fifty_two_week_low=stock_data.get('fifty_two_week_low', 0),
                     exchange=stock_data.get('exchange', exchange or ''),
                     name=stock_data.get('name', ''),
-                    timestamp=stock_data.get('timestamp', datetime.now().isoformat())
+                    timestamp=stock_data.get('timestamp', datetime.now().isoformat()),
+                    pe_ratio=stock_data.get('pe_ratio', 0)
                 )
                 
                 # Mettre en cache
@@ -192,7 +198,8 @@ class ManusStockManager:
                         fifty_two_week_low=stock_data.get('fifty_two_week_low', 0),
                         exchange=stock_data.get('exchange', exchange or ''),
                         name=stock_data.get('name', ''),
-                        timestamp=stock_data.get('timestamp', datetime.now().isoformat())
+                        timestamp=stock_data.get('timestamp', datetime.now().isoformat()),
+                        pe_ratio=stock_data.get('pe_ratio', 0)
                     )
                     
                     results[symbol] = price_data
@@ -218,16 +225,16 @@ class ManusStockManager:
         # Nettoyer le symbole
         symbol = symbol.strip().upper()
         
-        # Gestion des suffixes d'exchange
+        # Gestion des suffixes d'exchange - seulement si pas déjà présent
         if exchange == 'SWX' or exchange == 'SW':
-            if not symbol.endswith('.SW'):
-                symbol = symbol.replace('.SW', '') + '.SW'
+            if not symbol.endswith('.SW') and not symbol.endswith('.SWX'):
+                symbol = symbol.replace('.SW', '').replace('.SWX', '') + '.SW'
         elif exchange == 'LSE':
-            if not symbol.endswith('.L'):
-                symbol = symbol.replace('.L', '') + '.L'
+            if not symbol.endswith('.L') and not symbol.endswith('.LSE'):
+                symbol = symbol.replace('.L', '').replace('.LSE', '') + '.L'
         elif exchange == 'FRA':
-            if not symbol.endswith('.F'):
-                symbol = symbol.replace('.F', '') + '.F'
+            if not symbol.endswith('.F') and not symbol.endswith('.FRA'):
+                symbol = symbol.replace('.F', '').replace('.FRA', '') + '.F'
         
         return symbol
     

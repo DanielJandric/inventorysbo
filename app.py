@@ -2569,8 +2569,8 @@ def get_stock_price(symbol):
                         'current_value': total_value,
                         'last_price_update': datetime.now().isoformat(),
                         'stock_volume': price_data.volume,
-                        'stock_52_week_high': price_data.high_52_week,
-                        'stock_52_week_low': price_data.low_52_week,
+                        'stock_52_week_high': price_data.fifty_two_week_high,
+                        'stock_52_week_low': price_data.fifty_two_week_low,
                         'stock_change': price_data.change,
                         'stock_change_percent': price_data.change_percent,
                         'stock_average_volume': price_data.volume
@@ -2594,11 +2594,9 @@ def get_stock_price(symbol):
                 'change': price_data.change,
                 'change_percent': price_data.change_percent,
                 'volume': price_data.volume,
-                'market_cap': price_data.market_cap,
                 'pe_ratio': price_data.pe_ratio,
-                'dividend_yield': price_data.dividend_yield,
-                'high_52_week': price_data.high_52_week,
-                'low_52_week': price_data.low_52_week,
+                'high_52_week': price_data.fifty_two_week_high,
+                'low_52_week': price_data.fifty_two_week_low,
                 'timestamp': price_data.timestamp,
                 'source': 'API Manus'
             }
@@ -3004,8 +3002,8 @@ def get_stock_price_yahoo(symbol: str, item: Optional[CollectionItem], cache_key
             "volume": format_stock_value(price_data.volume, is_volume=True),
             "average_volume": format_stock_value(price_data.volume, is_volume=True),  # Utiliser le volume actuel
             "pe_ratio": str(price_data.pe_ratio) if price_data.pe_ratio else 'N/A',
-            "fifty_two_week_high": format_stock_value(price_data.high_52_week, is_price=True),
-            "fifty_two_week_low": format_stock_value(price_data.low_52_week, is_price=True)
+            "fifty_two_week_high": format_stock_value(price_data.fifty_two_week_high, is_price=True),
+            "fifty_two_week_low": format_stock_value(price_data.fifty_two_week_low, is_price=True)
         }
         
         logger.info(f"✅ Données API Manus récupérées pour {symbol}: {result['price']} {result['currency']}")
@@ -3024,8 +3022,8 @@ def get_stock_price_yahoo(symbol: str, item: Optional[CollectionItem], cache_key
                     'last_price_update': datetime.now().isoformat(),
                     'stock_volume': price_data.volume,
                     'stock_pe_ratio': price_data.pe_ratio,
-                    'stock_52_week_high': price_data.high_52_week,
-                    'stock_52_week_low': price_data.low_52_week,
+                    'stock_52_week_high': price_data.fifty_two_week_high,
+                    'stock_52_week_low': price_data.fifty_two_week_low,
                     'stock_change': price_data.change,
                     'stock_change_percent': price_data.change_percent,
                     'stock_average_volume': price_data.volume
@@ -5189,12 +5187,12 @@ if __name__ == "__main__":
 
 def generate_market_briefing_with_manus():
     """
-    Génère un briefing financier avec API Manus + GPT-4o
+    Génère un briefing financier avec API Manus (données) + OpenAI (narratif)
     """
     try:
         current_date = datetime.now().strftime('%Y-%m-%d')
         
-        logger.info("📊 Génération briefing avec API Manus...")
+        logger.info("📊 Génération briefing avec API Manus + OpenAI...")
         
         # 1. Collecter les données via API Manus
         try:
@@ -5205,66 +5203,122 @@ def generate_market_briefing_with_manus():
                 
             logger.info("✅ Données collectées via API Manus")
             
+            # Récupérer les données collectées
+            market_data = collect_response.json()
+            
         except Exception as e:
             logger.error(f"❌ Erreur connexion API Manus: {e}")
             return None
         
-        # 2. Générer le rapport IA via API Manus
+        # 2. Récupérer les données détaillées via API Manus
         try:
-            report_data = {
-                "date": current_date,
-                "force_refresh": False
-            }
+            # Récupérer les données financières
+            financial_response = requests.get(f"{MANUS_API_BASE_URL}/api/data/financial", timeout=30)
+            financial_data = financial_response.json() if financial_response.status_code == 200 else {}
             
-            report_response = requests.post(
-                f"{MANUS_API_BASE_URL}/api/ai/generate/complete",
-                json=report_data,
-                timeout=60
+            # Récupérer les données économiques
+            economic_response = requests.get(f"{MANUS_API_BASE_URL}/api/data/economic", timeout=30)
+            economic_data = economic_response.json() if economic_response.status_code == 200 else {}
+            
+            # Récupérer les actualités
+            news_response = requests.get(f"{MANUS_API_BASE_URL}/api/data/news", timeout=30)
+            news_data = news_response.json() if news_response.status_code == 200 else {}
+            
+            logger.info("✅ Données détaillées récupérées via API Manus")
+            
+        except Exception as e:
+            logger.error(f"❌ Erreur récupération données détaillées: {e}")
+            financial_data = {}
+            economic_data = {}
+            news_data = {}
+        
+        # 3. Générer le rapport narratif avec OpenAI
+        if not openai_client:
+            logger.error("❌ OpenAI client non configuré")
+            return None
+            
+        try:
+            # Construire le contexte avec les données Manus structurées
+            context = f"""Données de marché actuelles (API Manus) pour {current_date}:
+
+MARCHÉS FINANCIERS:
+{json.dumps(financial_data.get('financial_data', {}).get('markets', {}), indent=2, ensure_ascii=False)[:1000]}
+
+OBLIGATIONS:
+{json.dumps(financial_data.get('financial_data', {}).get('bonds', []), indent=2, ensure_ascii=False)[:500]}
+
+CRYPTOMONNAIES:
+{json.dumps(financial_data.get('crypto_data', {}).get('cryptocurrencies', []), indent=2, ensure_ascii=False)[:500]}
+
+COMMODITÉS:
+{json.dumps(financial_data.get('financial_data', {}).get('commodities', []), indent=2, ensure_ascii=False)[:500]}
+
+DEVISES:
+{json.dumps(financial_data.get('financial_data', {}).get('currencies', []), indent=2, ensure_ascii=False)[:500]}
+
+INDICATEURS ÉCONOMIQUES:
+{json.dumps(economic_data.get('economic_data', {}).get('indicators', {}), indent=2, ensure_ascii=False)[:1000]}
+
+ACTUALITÉS:
+{json.dumps(news_data.get('news_data', {}), indent=2, ensure_ascii=False)[:1000]}
+
+Génère un briefing narratif fluide et structuré basé sur ces données réelles."""
+
+            prompt = f"""Tu es un stratégiste financier expérimenté. Voici les données de marché actuelles récupérées via l'API Manus pour {current_date}. 
+
+Génère un briefing narratif fluide, concis et structuré basé UNIQUEMENT sur ces données réelles.
+
+Format exigé :
+- Ton narratif, comme un stratégiste qui me parle directement
+- Concision : pas de blabla, mais du fond
+- Structure logique intégrée dans le récit (pas de titres) :
+  * Actions (USA, Europe, Suisse, autres zones si mouvement marquant)
+  * Obligations souveraines (US 10Y, Bund 10Y, OAT 10Y, BTP, Confédération…)
+  * Cryptoactifs (BTC, ETH, capitalisation globale, régulation, flux)
+  * Macro, banques centrales et géopolitique (stats, décisions, tensions)
+- Termine par une synthèse rapide intégrée à la narration, avec ce que je dois retenir en une phrase, et signale tout signal faible ou rupture de tendance à surveiller
+
+Données à analyser:
+{context}
+
+Si une classe d'actif n'a pas bougé, dis-le clairement sans meubler. Génère un briefing pour aujourd'hui basé UNIQUEMENT sur les données fournies."""
+
+            response = openai_client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": "Tu es un expert en marchés financiers. Analyse les données fournies et génère un briefing narratif basé uniquement sur ces données réelles."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=2000,
+                temperature=0.7
             )
-            
-            if report_response.status_code != 200:
-                logger.error(f"❌ Erreur génération rapport IA: {report_response.status_code}")
-                return None
+
+            if response.choices and response.choices[0].message.content:
+                content = response.choices[0].message.content
                 
-            report = report_response.json()
-            
-            if not report.get('success') or not report.get('report'):
-                logger.error("❌ Réponse invalide de l'API Manus")
-                return None
-            
-            # Extraire le contenu du rapport
-            report_content = report['report']
-            
-            # Construire le briefing complet
-            briefing = f"""📊 BRIEFING FINANCIER QUOTIDIEN - {current_date}
+                # Construire le briefing complet
+                briefing = f"""📊 BRIEFING FINANCIER QUOTIDIEN - {current_date}
 
-🎯 RÉSUMÉ EXÉCUTIF
-{report_content.get('executive_summary', 'Non disponible')}
-
-📈 ANALYSE DES MARCHÉS
-{report_content.get('market_analysis', 'Non disponible')}
-
-🏛️ PERSPECTIVE ÉCONOMIQUE
-{report_content.get('economic_outlook', 'Non disponible')}
-
-⚠️ ÉVALUATION DES RISQUES
-{report_content.get('risk_assessment', 'Non disponible')}
+{content}
 
 📰 SOURCES
 • Données financières: API Manus (Yahoo Finance, CoinGecko)
 • Actualités: Sources multiples via API Manus
-• Analyse IA: OpenAI GPT-4 via API Manus
+• Analyse IA: OpenAI GPT-4o
 • Généré le: {datetime.now().strftime('%d/%m/%Y à %H:%M')}"""
 
-            logger.info("✅ Briefing généré : API Manus + IA")
-            return briefing.strip()
-            
+                logger.info("✅ Briefing généré : API Manus (données) + OpenAI (narratif)")
+                return briefing.strip()
+            else:
+                logger.error("❌ Réponse OpenAI invalide")
+                return None
+                
         except Exception as e:
-            logger.error(f"❌ Erreur génération rapport IA: {e}")
+            logger.error(f"❌ Erreur génération rapport OpenAI: {e}")
             return None
 
     except Exception as e:
-        logger.error(f"Erreur génération briefing avec API Manus: {e}")
+        logger.error(f"Erreur génération briefing avec API Manus + OpenAI: {e}")
         return None
 
 

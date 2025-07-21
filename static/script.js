@@ -1276,10 +1276,11 @@ function createItemCardHTML(item) {
         
         if (hasError && item.current_price) {
             // Si on a des erreurs mais un prix existant, l'afficher avec un avertissement
+            const currency = item.stock_currency || 'USD';
             stockPriceSection = `
                 <div class="stock-price-live mt-3 p-2 bg-black/20 rounded-lg">
                     <div class="flex items-center gap-2">
-                        <span class="text-lg font-bold">${formatPrice(item.current_price)}</span>
+                        <span class="text-lg font-bold">${formatPriceInCurrency(item.current_price, currency)}</span>
                         <span class="text-orange-400 text-xs">⚠️ Mise à jour indisponible</span>
                     </div>
                     <div class="text-xs text-gray-500">Dernier prix connu</div>
@@ -1300,20 +1301,23 @@ function createItemCardHTML(item) {
             const changeClass = item.stock_change_percent > 0 ? 'text-green-400' : 'text-red-400';
             const arrow = item.stock_change_percent > 0 ? '↑' : '↓';
             
+            // Utiliser la devise originale de l'action
+            const currency = item.stock_currency || 'USD';
+            
             stockPriceSection = `
                 <div class="stock-price-live mt-3 p-3 bg-black/20 rounded-lg">
                     <div class="space-y-3">
                         <!-- Prix principal -->
                         <div class="flex items-center justify-between">
                             <div class="flex items-center gap-2">
-                                <span class="text-lg font-bold text-amber-200">${formatPrice(item.current_price)}</span>
+                                <span class="text-lg font-bold text-amber-200">${formatPriceInCurrency(item.current_price, currency)}</span>
                             </div>
                             <div class="text-right">
                                 <div class="${changeClass} text-sm font-semibold">
                                     ${arrow} ${Math.abs(item.stock_change_percent || 0).toFixed(2)}%
                                 </div>
                                 <div class="${changeClass} text-xs">
-                                    ${item.stock_change ? (item.stock_change > 0 ? '+' : '') + formatPrice(item.stock_change) : '--'}
+                                    ${item.stock_change ? (item.stock_change > 0 ? '+' : '') + formatPriceInCurrency(item.stock_change, currency) : '--'}
                                 </div>
                             </div>
                         </div>
@@ -1330,11 +1334,11 @@ function createItemCardHTML(item) {
                             </div>
                             <div class="flex justify-between">
                                 <span class="text-amber-300/80 font-medium">52W High:</span>
-                                <span class="text-amber-200/90">${item.stock_52_week_high ? formatPrice(item.stock_52_week_high) : 'N/A'}</span>
+                                <span class="text-amber-200/90">${item.stock_52_week_high ? formatPriceInCurrency(item.stock_52_week_high, currency) : 'N/A'}</span>
                             </div>
                             <div class="flex justify-between">
                                 <span class="text-amber-300/80 font-medium">52W Low:</span>
-                                <span class="text-amber-200/90">${item.stock_52_week_low ? formatPrice(item.stock_52_week_low) : 'N/A'}</span>
+                                <span class="text-amber-200/90">${item.stock_52_week_low ? formatPriceInCurrency(item.stock_52_week_low, currency) : 'N/A'}</span>
                             </div>
                         </div>
                         
