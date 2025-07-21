@@ -2573,7 +2573,9 @@ def get_stock_price(symbol):
                         'stock_52_week_low': price_data.fifty_two_week_low,
                         'stock_change': price_data.change,
                         'stock_change_percent': price_data.change_percent,
-                        'stock_average_volume': price_data.volume
+                        'stock_average_volume': price_data.volume,
+                        'stock_pe_ratio': price_data.pe_ratio,
+                        'stock_currency': price_data.currency
                     }
                     
                     # Mettre à jour dans Supabase
@@ -2812,7 +2814,9 @@ def update_all_stock_prices():
                         'stock_52_week_low': success_item.get('fifty_two_week_low', 0),
                         'stock_change': success_item.get('change', 0),
                         'stock_change_percent': success_item.get('change_percent', 0),
-                        'stock_average_volume': success_item.get('volume', 0)
+                        'stock_average_volume': success_item.get('volume', 0),
+                        'stock_pe_ratio': success_item.get('pe_ratio', 0),
+                        'stock_currency': success_item.get('currency', 'USD')
                     }
                     
                     # Mettre à jour dans Supabase
@@ -3026,7 +3030,8 @@ def get_stock_price_yahoo(symbol: str, item: Optional[CollectionItem], cache_key
                     'stock_52_week_low': price_data.fifty_two_week_low,
                     'stock_change': price_data.change,
                     'stock_change_percent': price_data.change_percent,
-                    'stock_average_volume': price_data.volume
+                    'stock_average_volume': price_data.volume,
+                    'stock_currency': price_data.currency
                 }
                 
                 # Mettre à jour dans Supabase
