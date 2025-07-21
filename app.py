@@ -4999,14 +4999,14 @@ if __name__ == "__main__":
 # Fonction Google Custom Search supprimée - Remplacée par Gemini 2.0 Flash
 
 def generate_market_briefing_with_gemini():
-    """Génère un briefing de marché avec Gemini 2.0 Flash"""
+    """Génère un briefing de marché avec Gemini 2.5 Flash et outils de grounding"""
     try:
         gemini_api_key = os.getenv('GEMINI_API_KEY')
-        
+
         if not gemini_api_key:
             logger.warning("Variable GEMINI_API_KEY non configurée")
             return None
-        
+
         # Prompt pour Gemini avec recherche web forcée
         current_date = datetime.now().strftime('%d/%m/%Y')
         prompt = f"""IMPORTANT: Utilise tes capacités de recherche web pour obtenir les données de marché ACTUELLES d'aujourd'hui ({current_date}).
@@ -5039,9 +5039,9 @@ INSTRUCTIONS STRICTES:
 - Mentionne les chiffres exacts trouvés
 - Si une donnée n'est pas disponible aujourd'hui, dis "pas d'information disponible"
 - Ne jamais utiliser tes connaissances d'entraînement pour les données de marché"""
-        
-        # Appel à l'API Gemini avec recherche web
-        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent"
+
+        # Appel à l'API Gemini avec outils de grounding
+        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
         
         headers = {
             'Content-Type': 'application/json',
@@ -5058,22 +5058,26 @@ INSTRUCTIONS STRICTES:
                     ]
                 }
             ],
+            "tools": [
+                {
+                    "googleSearch": {}
+                }
+            ],
             "generationConfig": {
                 "temperature": 0.1,
                 "topK": 1,
                 "topP": 0.1,
                 "maxOutputTokens": 3000
-            },
-            "safetySettings": []
+            }
         }
-        
+
         response = requests.post(url, headers=headers, json=data, timeout=30)
-        
+
         if response.status_code == 200:
             result = response.json()
             if 'candidates' in result and len(result['candidates']) > 0:
                 content = result['candidates'][0]['content']['parts'][0]['text']
-                logger.info("✅ Briefing généré avec Gemini 2.0 Flash")
+                logger.info("✅ Briefing généré avec Gemini 2.5 Flash + Google Search")
                 return content
             else:
                 logger.error("Réponse Gemini invalide")
@@ -5081,7 +5085,7 @@ INSTRUCTIONS STRICTES:
         else:
             logger.error(f"Erreur API Gemini: {response.status_code} - {response.text}")
             return None
-            
+
     except Exception as e:
         logger.error(f"Erreur génération briefing avec Gemini: {e}")
         return None
