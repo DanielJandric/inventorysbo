@@ -4623,13 +4623,41 @@ def get_scheduler_status():
         return jsonify({"error": str(e)}), 500
 
 def generate_market_briefing():
-    """Génère un briefing de marché avec GPT-4o et recherche web"""
+    """Génère un briefing de marché avec GPT-4o et données Google Search"""
     try:
         if not openai_client:
             return None
         
-        # Prompt pour GPT-4o
-        prompt = """Fais-moi un briefing narratif concis et structuré sur la séance des marchés financiers du jour (date du jour).
+        # Récupérer des données de marché actuelles
+        market_data = get_market_data_from_google_search()
+        
+        # Construire le prompt avec ou sans données de marché
+        if market_data:
+            prompt = f"""Fais-moi un briefing narratif concis et structuré sur la séance des marchés financiers du jour (date du jour).
+
+{market_data}
+
+Format souhaité :
+
+Ton narratif, comme un stratégiste qui me parle directement ;
+
+Concision, mais sans sacrifier la clarté ;
+
+Structuration logique :
+
+Marchés actions (USA, Europe, Suisse — autres zones si mouvement significatif)
+
+Obligations souveraines (US 10Y, Bund, OAT, BTP, Confédération…)
+
+Cryptoactifs (BTC, ETH, capitalisation globale, mouvements liés à la régulation ou aux flux)
+
+Macroéconomie, banques centrales, géopolitique (statistiques, commentaires, tensions)
+
+Résumé final clair et bullet points + signal faible ou rupture de tendance à surveiller
+
+Utilise les données de marché fournies ci-dessus pour générer un briefing précis et actualisé."""
+        else:
+            prompt = """Fais-moi un briefing narratif concis et structuré sur la séance des marchés financiers du jour (date du jour).
 
 Format souhaité :
 
@@ -5028,3 +5056,73 @@ if __name__ == "__main__":
     except Exception as e:
         logger.error(f"❌ Erreur démarrage: {e}")
         raise
+
+def get_market_data_from_google_search():
+    """Récupère des données de marché actuelles via Google Custom Search API"""
+    try:
+        google_api_key = os.getenv('GOOGLE_CUSTOM_SEARCH_API_KEY')
+        google_search_engine_id = os.getenv('GOOGLE_CUSTOM_SEARCH_ENGINE_ID')
+        
+        if not google_api_key or not google_search_engine_id:
+            logger.warning("Variables Google Custom Search non configurées")
+            return None
+        
+        # Recherche ciblée pour les marchés financiers
+        queries = [
+            "S&P 500 NASDAQ Dow Jones market data today",
+            "European stocks DAX CAC 40 market update",
+            "Swiss Market Index SMI today",
+            "Bitcoin Ethereum crypto market today",
+            "US Treasury yields 10Y market data"
+        ]
+        
+        all_results = []
+        
+        for query in queries:
+            try:
+                url = "https://www.googleapis.com/customsearch/v1"
+                params = {
+                    'key': google_api_key,
+                    'cx': google_search_engine_id,
+                    'q': query,
+                    'num': 3,  # 3 résultats par requête
+                    'dateRestrict': 'd1'  # Résultats du dernier jour
+                }
+                
+                response = requests.get(url, params=params, timeout=10)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    if 'items' in data:
+                        for item in data['items']:
+                            all_results.append({
+                                'title': item.get('title', ''),
+                                'snippet': item.get('snippet', ''),
+                                'link': item.get('link', ''),
+                                'query': query
+                            })
+                
+                # Pause entre les requêtes pour éviter les limites
+                time.sleep(0.5)
+                
+            except Exception as e:
+                logger.warning(f"Erreur requête Google Search '{query}': {e}")
+                continue
+        
+        if all_results:
+            # Formater les résultats pour le prompt
+            formatted_results = "Données de marché récentes trouvées :\n\n"
+            for i, result in enumerate(all_results[:10], 1):  # Limiter à 10 résultats
+                formatted_results += f"{i}. {result['title']}\n"
+                formatted_results += f"   {result['snippet']}\n"
+                formatted_results += f"   Source: {result['link']}\n\n"
+            
+            logger.info(f"✅ {len(all_results)} résultats Google Search récupérés")
+            return formatted_results
+        else:
+            logger.warning("Aucun résultat Google Search trouvé")
+            return None
+            
+    except Exception as e:
+        logger.error(f"Erreur Google Custom Search: {e}")
+        return None

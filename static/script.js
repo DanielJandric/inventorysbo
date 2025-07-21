@@ -1177,7 +1177,7 @@ function displayItemsAsCards(container, items) {
     
     if (availableItems.length > 0) {
         html += '<div class="mb-8">';
-        html += '<h2 class="text-2xl font-bold text-cyan-400 mb-6 border-b border-cyan-500/30 pb-2">📦 Objets Disponibles</h2>';
+        html += '<h2 class="text-2xl font-bold text-cyan-400 mb-6 border-b border-cyan-500/30 pb-2">Objets Disponibles</h2>';
         html += '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">';
         html += availableItems.map(createItemCardHTML).join('');
         html += '</div>';
@@ -1195,7 +1195,7 @@ function displayItemsAsCards(container, items) {
     
     if (soldItems.length > 0) {
         html += '<div class="mt-12">';
-        html += '<h2 class="text-2xl font-bold text-gray-400 mb-6 border-b border-gray-500/30 pb-2">💰 Objets Vendus</h2>';
+        html += '<h2 class="text-2xl font-bold text-gray-400 mb-6 border-b border-gray-500/30 pb-2">Objets Vendus</h2>';
         html += '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">';
         html += soldItems.map(createItemCardHTML).join('');
         html += '</div>';
