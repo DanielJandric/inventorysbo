@@ -5243,29 +5243,29 @@ def generate_market_briefing_with_manus():
             return None
             
         try:
-            # Construire le contexte avec les données Manus structurées
+            # Construire le contexte avec les données Manus complètes (sans limitations)
             context = f"""Données de marché actuelles (API Manus) pour {current_date}:
 
 MARCHÉS FINANCIERS:
-{json.dumps(financial_data.get('financial_data', {}).get('markets', {}), indent=2, ensure_ascii=False)[:1000]}
+{json.dumps(financial_data.get('financial_data', {}).get('markets', {}), indent=2, ensure_ascii=False)}
 
 OBLIGATIONS:
-{json.dumps(financial_data.get('financial_data', {}).get('bonds', []), indent=2, ensure_ascii=False)[:500]}
+{json.dumps(financial_data.get('financial_data', {}).get('bonds', []), indent=2, ensure_ascii=False)}
 
 CRYPTOMONNAIES:
-{json.dumps(financial_data.get('crypto_data', {}).get('cryptocurrencies', []), indent=2, ensure_ascii=False)[:500]}
+{json.dumps(financial_data.get('crypto_data', {}).get('cryptocurrencies', []), indent=2, ensure_ascii=False)}
 
 COMMODITÉS:
-{json.dumps(financial_data.get('financial_data', {}).get('commodities', []), indent=2, ensure_ascii=False)[:500]}
+{json.dumps(financial_data.get('financial_data', {}).get('commodities', []), indent=2, ensure_ascii=False)}
 
 DEVISES:
-{json.dumps(financial_data.get('financial_data', {}).get('currencies', []), indent=2, ensure_ascii=False)[:500]}
+{json.dumps(financial_data.get('financial_data', {}).get('currencies', []), indent=2, ensure_ascii=False)}
 
 INDICATEURS ÉCONOMIQUES:
-{json.dumps(economic_data.get('economic_data', {}).get('indicators', {}), indent=2, ensure_ascii=False)[:1000]}
+{json.dumps(economic_data.get('economic_data', {}).get('indicators', {}), indent=2, ensure_ascii=False)}
 
 ACTUALITÉS:
-{json.dumps(news_data.get('news_data', {}), indent=2, ensure_ascii=False)[:1000]}
+{json.dumps(news_data.get('news_data', {}), indent=2, ensure_ascii=False)}
 
 Génère un briefing narratif fluide et structuré basé sur ces données réelles."""
 
