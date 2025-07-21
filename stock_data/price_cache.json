@@ -2,19 +2,19 @@
   "AAPL": {
     "data": {
       "symbol": "AAPL",
-      "price": 211.17999267578125,
+      "price": 212.47999572753906,
       "currency": "USD",
-      "change": 0.30999755859375,
-      "change_percent": 0.1470088517911114,
-      "volume": 48939500,
-      "market_cap": 3154142035968,
-      "pe_ratio": 32.89408,
+      "change": 0.42999267578125,
+      "change_percent": 0.20277890572644608,
+      "volume": 51064253,
+      "market_cap": 3173558779904,
+      "pe_ratio": 33.096573,
       "dividend_yield": 0.51,
       "high_52_week": 260.1,
       "low_52_week": 169.21,
-      "timestamp": "2025-07-20T21:47:52.781863"
+      "timestamp": "2025-07-22T00:36:59.292141"
     },
-    "timestamp": 1753040873.1830463
+    "timestamp": 1753137419.7372527
   },
   "NOVN.SW": {
     "data": {

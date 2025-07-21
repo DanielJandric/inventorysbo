@@ -22,6 +22,7 @@ from dotenv import load_dotenv
 import requests
 import schedule
 from stock_price_manager import StockPriceManager
+from manus_stock_manager import manus_stock_manager
 
 # Load environment variables from .env file
 load_dotenv()
@@ -2535,12 +2536,21 @@ def get_stock_price(symbol):
         logger.warning(f"Aucun item trouvé pour le symbole {symbol}")
 
     try:
-        # Utiliser le gestionnaire de prix d'actions
-        price_data = stock_price_manager.get_stock_price(
+        # Essayer d'abord l'API Manus
+        price_data = manus_stock_manager.get_stock_price(
             symbol=symbol,
             exchange=item.stock_exchange if item else None,
             force_refresh=force_refresh
         )
+        
+        # Fallback vers Yahoo si Manus échoue
+        if not price_data:
+            logger.info(f"🔄 Fallback Yahoo pour {symbol}")
+            price_data = stock_price_manager.get_stock_price(
+                symbol=symbol,
+                exchange=item.stock_exchange if item else None,
+                force_refresh=force_refresh
+            )
         
         if price_data:
             # Convertir en format compatible avec l'interface
@@ -2649,35 +2659,49 @@ def get_stock_price_history(symbol):
             "details": str(e)
         }), 500
 
-@app.route("/api/yahoo-finance/status")
-def check_yahoo_finance_status():
-    """Vérifie le statut de Yahoo Finance API"""
+@app.route("/api/stock-price/status")
+def check_stock_price_status():
+    """Vérifie le statut des APIs de cours de bourse (Manus + Yahoo)"""
     try:
-        # Test simple avec une action connue
+        # Tester avec un symbole simple
         test_symbol = "AAPL"
-        price_data = stock_price_manager.get_stock_price(test_symbol, force_refresh=False)
         
-        if price_data:
-            return jsonify({
-                "available": True,
-                "message": "Yahoo Finance API opérationnel",
-                "test_symbol": test_symbol,
-                "test_price": price_data.price,
-                "source": "Yahoo Finance"
-            })
-        else:
-            return jsonify({
-                "available": False,
-                "message": "Test Yahoo Finance échoué",
-                "error": "Aucune donnée récupérée"
-            })
+        # Test Manus API
+        manus_data = manus_stock_manager.get_stock_price(test_symbol, force_refresh=False)
+        manus_status = {
+            "available": manus_data is not None,
+            "test_symbol": test_symbol,
+            "test_price": manus_data.price if manus_data else None,
+            "test_currency": manus_data.currency if manus_data else None,
+            "cache_status": manus_stock_manager.get_cache_status()
+        }
+        
+        # Test Yahoo Finance (fallback)
+        yahoo_data = stock_price_manager.get_stock_price(test_symbol, force_refresh=False)
+        yahoo_status = {
+            "available": yahoo_data is not None,
+            "test_symbol": test_symbol,
+            "test_price": yahoo_data.price if yahoo_data else None,
+            "test_currency": yahoo_data.currency if yahoo_data else None,
+            "cache_status": stock_price_manager.get_cache_status()
+        }
+        
+        # Statut global
+        overall_status = {
+            "manus_api": manus_status,
+            "yahoo_finance": yahoo_status,
+            "primary_source": "Manus API",
+            "fallback_source": "Yahoo Finance",
+            "system_status": "Operational" if manus_status["available"] or yahoo_status["available"] else "Degraded"
+        }
+        
+        return jsonify(overall_status)
             
     except Exception as e:
-        logger.error(f"Erreur vérification Yahoo Finance: {e}")
+        logger.error(f"Erreur vérification APIs cours de bourse: {e}")
         return jsonify({
-            "available": False,
-            "message": "Erreur de connexion Yahoo Finance",
-            "error": str(e)
+            "error": str(e),
+            "system_status": "Error"
         }), 500
 
 
@@ -2701,8 +2725,43 @@ def update_all_stock_prices():
         # Extraire les symboles
         symbols = [item.stock_symbol for item in action_items]
         
-        # Utiliser le gestionnaire pour mettre à jour tous les prix
-        results = stock_price_manager.update_all_stocks(symbols)
+        # Essayer d'abord l'API Manus pour tous les symboles
+        logger.info("📊 Mise à jour via API Manus...")
+        manus_results = manus_stock_manager.get_multiple_stock_prices(symbols)
+        
+        # Préparer les résultats
+        results = {
+            'success': [],
+            'failed': [],
+            'skipped': [],
+            'requests_used': len(symbols),
+            'source': 'Manus API'
+        }
+        
+        # Traiter les résultats Manus
+        for symbol, price_data in manus_results.items():
+            results['success'].append({
+                'symbol': symbol,
+                'price': price_data.price,
+                'currency': price_data.currency,
+                'change': price_data.change,
+                'change_percent': price_data.change_percent,
+                'volume': price_data.volume,
+                'source': 'Manus API'
+            })
+        
+        # Pour les symboles non trouvés par Manus, essayer Yahoo
+        missing_symbols = [s for s in symbols if s not in manus_results]
+        if missing_symbols:
+            logger.info(f"🔄 Fallback Yahoo pour {len(missing_symbols)} symboles")
+            yahoo_results = stock_price_manager.update_all_stocks(missing_symbols)
+            
+            # Ajouter les résultats Yahoo
+            results['success'].extend(yahoo_results['success'])
+            results['failed'].extend(yahoo_results['failed'])
+            results['skipped'].extend(yahoo_results['skipped'])
+            results['requests_used'] += yahoo_results.get('requests_used', 0)
+            results['source'] = 'Manus API + Yahoo Finance'
         
         # Préparer les données de réponse
         updated_data = []
@@ -2759,12 +2818,11 @@ def schedule_auto_stock_updates():
         try:
             logger.info("🔄 Début mise à jour automatique des prix via Yahoo Finance")
             
-            # Vérifier le statut du cache
-            cache_status = stock_price_manager.get_cache_status()
-            logger.info(f"📊 Statut cache: {cache_status['cache_size']} entrées, système illimité optimisé")
-            
-            # Avec le système illimité, on peut toujours faire des requêtes
-            # Pas de vérification de limite nécessaire
+            # Vérifier le statut du cache Manus
+            manus_cache_status = manus_stock_manager.get_cache_status()
+            yahoo_cache_status = stock_price_manager.get_cache_status()
+            logger.info(f"📊 Cache Manus: {manus_cache_status['cache_size']} entrées")
+            logger.info(f"📊 Cache Yahoo: {yahoo_cache_status['cache_size']} entrées")
             
             items = AdvancedDataManager.fetch_all_items()
             stock_items = [item for item in items if item.category == 'Actions' and item.stock_symbol]
@@ -2776,8 +2834,43 @@ def schedule_auto_stock_updates():
             # Extraire les symboles
             symbols = [item.stock_symbol for item in stock_items]
             
-            # Utiliser le gestionnaire optimisé pour mettre à jour tous les prix
-            results = stock_price_manager.update_all_stocks(symbols)
+            # Essayer d'abord l'API Manus pour tous les symboles
+            logger.info("📊 Mise à jour automatique via API Manus...")
+            manus_results = manus_stock_manager.get_multiple_stock_prices(symbols)
+            
+            # Préparer les résultats
+            results = {
+                'success': [],
+                'failed': [],
+                'skipped': [],
+                'requests_used': len(symbols),
+                'source': 'Manus API'
+            }
+            
+            # Traiter les résultats Manus
+            for symbol, price_data in manus_results.items():
+                results['success'].append({
+                    'symbol': symbol,
+                    'price': price_data.price,
+                    'currency': price_data.currency,
+                    'change': price_data.change,
+                    'change_percent': price_data.change_percent,
+                    'volume': price_data.volume,
+                    'source': 'Manus API'
+                })
+            
+            # Pour les symboles non trouvés par Manus, essayer Yahoo
+            missing_symbols = [s for s in symbols if s not in manus_results]
+            if missing_symbols:
+                logger.info(f"🔄 Fallback Yahoo pour {len(missing_symbols)} symboles")
+                yahoo_results = stock_price_manager.update_all_stocks(missing_symbols)
+                
+                # Ajouter les résultats Yahoo
+                results['success'].extend(yahoo_results['success'])
+                results['failed'].extend(yahoo_results['failed'])
+                results['skipped'].extend(yahoo_results['skipped'])
+                results['requests_used'] += yahoo_results.get('requests_used', 0)
+                results['source'] = 'Manus API + Yahoo Finance'
             
             logger.info(f"✅ Mise à jour automatique terminée:")
             logger.info(f"   - {len(results['success'])} symboles traités")
@@ -2815,12 +2908,21 @@ def get_stock_price_yahoo(symbol: str, item: Optional[CollectionItem], cache_key
     try:
         logger.info(f"Récupération prix Yahoo Finance pour le symbole : {symbol}")
         
-        # Utiliser le gestionnaire de prix d'actions
-        price_data = stock_price_manager.get_stock_price(
+        # Essayer d'abord l'API Manus
+        price_data = manus_stock_manager.get_stock_price(
             symbol=symbol,
             exchange=item.stock_exchange if item else None,
             force_refresh=force_refresh
         )
+        
+        # Fallback vers Yahoo si Manus échoue
+        if not price_data:
+            logger.info(f"🔄 Fallback Yahoo pour {symbol}")
+            price_data = stock_price_manager.get_stock_price(
+                symbol=symbol,
+                exchange=item.stock_exchange if item else None,
+                force_refresh=force_refresh
+            )
         
         if not price_data:
             logger.error(f"Aucune donnée trouvée pour {symbol}")
