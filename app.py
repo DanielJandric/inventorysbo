@@ -193,7 +193,7 @@ except Exception as e:
 # Gemini 2.5 client (SDK google-genai)
 # ──────────────────────────────────────────────────────────
 try:
-    import google.generativeai as genai
+    from google import genai
     
     # accepte GEMINI_API_KEY **ou** GOOGLE_API_KEY
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
