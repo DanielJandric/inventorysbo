@@ -322,12 +322,12 @@ function animateValue(element, start, end, duration = 1500, isPrice = false, suf
 }
 
 function formatPrice(price) {
-    if (price === null || price === undefined) return 'N/A';
-    return new Intl.NumberFormat('fr-CH', { 
-        style: 'currency', 
-        currency: 'CHF', 
-        minimumFractionDigits: 0, 
-        maximumFractionDigits: 0 
+    if (price === null || price === undefined || isNaN(price)) return 'N/A';
+    return new Intl.NumberFormat('fr-CH', {
+        style: 'currency',
+        currency: 'CHF',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0
     }).format(price);
 }
 
@@ -339,6 +339,14 @@ function formatPriceInCurrency(price, currency = 'CHF') {
         minimumFractionDigits: 2, 
         maximumFractionDigits: 2 
     }).format(price);
+}
+
+function formatVolume(volume) {
+    if (volume === 'N/A' || !volume) return 'N/A';
+    if (volume > 1e9) return `${(volume/1e9).toFixed(2)}B`;
+    if (volume > 1e6) return `${(volume/1e6).toFixed(2)}M`;
+    if (volume > 1e3) return `${(volume/1e3).toFixed(2)}K`;
+    return volume.toString();
 }
 
 // --- FILTRES SIMPLIFIÉS (4 filtres uniquement) ---
@@ -1108,9 +1116,9 @@ function updateStockCardDisplay(itemId, stockData) {
                 </div>
             </div>
             
-            <!-- Source et timestamp -->
+            <!-- Dernière mise à jour -->
             <div class="text-xs text-amber-300/60 text-center pt-1 border-t border-amber-300/20">
-                Yahoo Finance • ${new Date(stockData.last_update).toLocaleTimeString()}
+                API Manus • ${new Date(stockData.last_update).toLocaleString('fr-FR')}
             </div>
         </div>
     `;
@@ -1287,6 +1295,56 @@ function createItemCardHTML(item) {
                     <div class="text-xs text-gray-500">Mise à jour manuelle requise</div>
                 </div>
             `;
+        } else if (item.current_price && item.stock_change_percent !== undefined) {
+            // Si on a des données réelles, les afficher
+            const changeClass = item.stock_change_percent > 0 ? 'text-green-400' : 'text-red-400';
+            const arrow = item.stock_change_percent > 0 ? '↑' : '↓';
+            
+            stockPriceSection = `
+                <div class="stock-price-live mt-3 p-3 bg-black/20 rounded-lg">
+                    <div class="space-y-3">
+                        <!-- Prix principal -->
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <span class="text-lg font-bold text-amber-200">${formatPrice(item.current_price)}</span>
+                            </div>
+                            <div class="text-right">
+                                <div class="${changeClass} text-sm font-semibold">
+                                    ${arrow} ${Math.abs(item.stock_change_percent || 0).toFixed(2)}%
+                                </div>
+                                <div class="${changeClass} text-xs">
+                                    ${item.stock_change ? (item.stock_change > 0 ? '+' : '') + formatPrice(item.stock_change) : '--'}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Informations détaillées -->
+                        <div class="space-y-2 text-xs">
+                            <div class="flex justify-between">
+                                <span class="text-amber-300/80 font-medium">Volume:</span>
+                                <span class="text-amber-200/90">${item.stock_volume ? formatVolume(item.stock_volume) : 'N/A'}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-amber-300/80 font-medium">P/E Ratio:</span>
+                                <span class="text-amber-200/90">${item.stock_pe_ratio ? parseFloat(item.stock_pe_ratio).toFixed(1) : 'N/A'}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-amber-300/80 font-medium">52W High:</span>
+                                <span class="text-amber-200/90">${item.stock_52_week_high ? formatPrice(item.stock_52_week_high) : 'N/A'}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-amber-300/80 font-medium">52W Low:</span>
+                                <span class="text-amber-200/90">${item.stock_52_week_low ? formatPrice(item.stock_52_week_low) : 'N/A'}</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Dernière mise à jour -->
+                        <div class="text-xs text-amber-300/60 text-center pt-1 border-t border-amber-300/20">
+                            API Manus • ${item.last_price_update ? new Date(item.last_price_update).toLocaleString('fr-FR') : 'Jamais'}
+                        </div>
+                    </div>
+                </div>
+            `;
         } else {
             // Cas normal - en attente ou avec prix
             stockPriceSection = `
@@ -1321,9 +1379,9 @@ function createItemCardHTML(item) {
                             </div>
                         </div>
                         
-                        <!-- Source et timestamp -->
+                        <!-- Dernière mise à jour -->
                         <div class="text-xs text-amber-300/60 text-center pt-1 border-t border-amber-300/20">
-                            Chargement via Yahoo Finance...
+                            Dernière mise à jour: ${item.last_price_update ? new Date(item.last_price_update).toLocaleString('fr-FR') : 'Jamais'}
                         </div>
                     </div>
                 </div>

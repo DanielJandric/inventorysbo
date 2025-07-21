@@ -2597,7 +2597,7 @@ def get_stock_price(symbol):
                 'high_52_week': price_data.high_52_week,
                 'low_52_week': price_data.low_52_week,
                 'timestamp': price_data.timestamp,
-                'source': 'Manus API' if price_data == manus_stock_manager.get_stock_price(symbol) else 'Yahoo Finance'
+                'source': 'API Manus'
             }
             
             return jsonify(response_data)
@@ -2619,7 +2619,7 @@ def clear_stock_price_cache():
         return jsonify({
             "success": True,
             "message": "Cache des prix vidé avec succès",
-            "source": "Yahoo Finance"
+            "source": "API Manus"
         })
     except Exception as e:
         logger.error(f"Erreur lors du vidage du cache: {e}")
@@ -2638,7 +2638,7 @@ def get_stock_price_cache_status():
         status = stock_price_manager.get_cache_status()
         return jsonify({
             **status,
-            "source": "Yahoo Finance",
+            "source": "API Manus",
             "api_limit_warning": "⚠️ Limite quotidienne: Illimitée (système optimisé)"
         })
     except Exception as e:
@@ -2679,7 +2679,7 @@ def get_stock_price_history(symbol):
             "symbol": symbol,
             "history": history,
             "days": days,
-            "source": "Yahoo Finance"
+            "source": "API Manus"
         })
         
     except Exception as e:
@@ -2849,7 +2849,7 @@ def update_all_stock_prices():
             "failed": results['failed'],
             "skipped": results['skipped'],
             "updated_data": updated_data,
-            "source": "Yahoo Finance (optimisé 10 requêtes/jour)"
+            "source": "API Manus (données live)"
         })
         
     except Exception as e:
@@ -2857,7 +2857,7 @@ def update_all_stock_prices():
         return jsonify({
             "success": False,
             "error": str(e),
-            "source": "Yahoo Finance"
+            "source": "API Manus"
         }), 500
 
 
@@ -2983,7 +2983,7 @@ def get_stock_price_yahoo(symbol: str, item: Optional[CollectionItem], cache_key
         if not price_data:
             logger.error(f"Aucune donnée trouvée pour {symbol}")
             return jsonify({
-                "error": "Données non disponibles via Yahoo Finance", 
+                "error": "Données non disponibles via API Manus", 
                 "details": "Symbole non trouvé ou API indisponible",
                 "message": "Veuillez mettre à jour le prix manuellement."
             }), 404
@@ -2995,7 +2995,7 @@ def get_stock_price_yahoo(symbol: str, item: Optional[CollectionItem], cache_key
             "currency": price_data.currency,
             "company_name": item.name if item else symbol,
             "last_update": price_data.timestamp or datetime.now().isoformat(),
-            "source": f"Yahoo Finance ({price_data.currency})",
+            "source": f"API Manus ({price_data.currency})",
             "change": format_stock_value(price_data.change, is_price=True),
             "change_percent": format_stock_value(price_data.change_percent, is_percent=True),
             "volume": format_stock_value(price_data.volume, is_volume=True),
@@ -3005,7 +3005,7 @@ def get_stock_price_yahoo(symbol: str, item: Optional[CollectionItem], cache_key
             "fifty_two_week_low": format_stock_value(price_data.low_52_week, is_price=True)
         }
         
-        logger.info(f"✅ Données Yahoo Finance récupérées pour {symbol}: {result['price']} {result['currency']}")
+        logger.info(f"✅ Données API Manus récupérées pour {symbol}: {result['price']} {result['currency']}")
         
         # Mettre en cache
         stock_price_cache[cache_key] = {'data': result, 'timestamp': time.time()}
@@ -3052,7 +3052,7 @@ def get_stock_price_yahoo(symbol: str, item: Optional[CollectionItem], cache_key
             return jsonify(stock_price_cache[cache_key]['data'])
         
         return jsonify({
-            "error": "Données non disponibles via Yahoo Finance", 
+            "error": "Données non disponibles via API Manus",
             "details": str(e),
             "message": "Veuillez mettre à jour le prix manuellement."
         }), 500
