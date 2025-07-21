@@ -5029,42 +5029,15 @@ def generate_market_briefing_with_gemini():
 
         # Prompt pour Gemini avec recherche web forcée
         current_date = datetime.now().strftime('%d/%m/%Y')
-        prompt = f"""Recherche en temps réel les données de marché d'aujourd'hui ({current_date}) et génère un briefing complet.
+        prompt = f"""Utilise la recherche web pour obtenir les données de marché actuelles et génère un briefing financier pour {current_date}.
 
-Fais-moi un briefing narratif détaillé et structuré sur la séance des marchés financiers du jour ({current_date}).
+Donne-moi un résumé des marchés financiers d'aujourd'hui avec :
+- Indices boursiers principaux (S&P 500, NASDAQ, CAC 40, DAX, SMI)
+- Prix du Bitcoin et Ethereum
+- Taux d'intérêt (US 10Y, Bund 10Y)
+- Actualités importantes du jour
 
-STRUCTURE OBLIGATOIRE :
-
-1. MARCHÉS ACTIONS
-- USA (S&P 500, NASDAQ, Dow Jones)
-- Europe (CAC 40, DAX, FTSE 100)
-- Suisse (SMI)
-- Autres zones si mouvement significatif
-
-2. OBLIGATIONS SOUVERAINES
-- US 10Y, Bund, OAT, BTP
-- Confédération suisse
-- Spreads et mouvements
-
-3. CRYPTOACTIFS
-- BTC, ETH
-- Capitalisation globale
-- Mouvements liés à la régulation ou aux flux
-
-4. MACROÉCONOMIE & BANQUES CENTRALES
-- Statistiques importantes
-- Commentaires des banquiers centraux
-- Tensions géopolitiques
-
-5. RÉSUMÉ & POINTS DE SURVEILLANCE
-- Bullet points clairs
-- Signaux faibles ou ruptures de tendance à surveiller
-
-INSTRUCTIONS :
-- Utilise tes capacités de recherche web pour des données ACTUELLES
-- Cite les sources spécifiques
-- Donne des chiffres exacts
-- Sois détaillé et complet"""
+Sois concis mais informatif. Utilise des données réelles trouvées via la recherche web."""
 
         # Appel à l'API Gemini avec outils de grounding
         url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
