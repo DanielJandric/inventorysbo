@@ -110,15 +110,15 @@
             border-radius: 1.5rem;
         }
         
-        /* Market update styles */
-        .market-update {
+        /* Market report styles */
+        .market-report {
             background: rgba(10, 50, 60, 0.25);
             backdrop-filter: blur(15px);
             border: 1px solid rgba(0, 200, 220, 0.2);
             border-radius: 1.5rem;
             transition: all 0.3s ease;
         }
-        .market-update:hover {
+        .market-report:hover {
             transform: translateY(-2px);
             box-shadow: 0 8px 25px rgba(0, 200, 220, 0.15);
         }
@@ -146,17 +146,10 @@
             100% { transform: rotate(360deg); }
         }
         
-        .status-indicator {
-            display: inline-block;
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            margin-right: 8px;
+        /* Logo carré */
+        .logo-square {
+            border-radius: 0.5rem;
         }
-        .status-scheduled { background: #fbbf24; }
-        .status-running { background: #10b981; }
-        .status-completed { background: #3b82f6; }
-        .status-error { background: #ef4444; }
     </style>
 </head>
 <body class="h-full">
@@ -165,7 +158,7 @@
         <header class="p-6">
             <div class="flex justify-between items-center">
                 <div class="flex items-center gap-4">
-                    <img src="/static/Bonvin_180x180.png" alt="BONVIN" class="w-12 h-12 rounded-full">
+                    <img src="/static/Bonvin_180x180.png" alt="BONVIN" class="w-12 h-12 logo-square">
                     <div>
                         <h1 class="text-2xl font-bold">BONVIN</h1>
                         <p class="text-slate-400">Update Marchés</p>
@@ -221,30 +214,12 @@
         </header>
         
         <main class="p-6">
-            <!-- Info Section -->
-            <section class="glass-dark p-6 mb-8 glowing-element">
-                <div class="flex items-center justify-between mb-4">
-                    <h2 class="text-xl font-bold">📊 Briefings de Marché</h2>
-                    <div class="flex gap-2">
-                        <a href="/settings" class="glass px-4 py-2 rounded-lg text-sm font-medium transition-all hover:scale-105">
-                            <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                            </svg>
-                            Gérer dans Settings
-                        </a>
-                    </div>
-                </div>
-                <p class="text-slate-400 text-sm">Consultez l'historique des briefings de marché générés automatiquement ou manuellement.</p>
-                <p class="text-cyan-400 text-sm mt-2">⚙️ La gestion du scheduler et des déclenchements manuels se fait dans la page Settings.</p>
-            </section>
-            
-            <!-- Market Updates Section -->
+            <!-- Market Report Section -->
             <section class="mb-8">
                 <div class="flex items-center justify-between mb-6">
-                    <h2 class="text-2xl font-bold">Briefings de Marché</h2>
+                    <h2 class="text-2xl font-bold">Rapport de Marché</h2>
                     <div class="flex gap-2">
-                        <button onclick="loadMarketUpdates()" class="glass px-4 py-2 rounded-lg text-sm font-medium transition-all hover:scale-105">
+                        <button onclick="loadMarketReport()" class="glass px-4 py-2 rounded-lg text-sm font-medium transition-all hover:scale-105">
                             <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
                             </svg>
@@ -253,7 +228,7 @@
                     </div>
                 </div>
                 
-                <div id="market-updates-container" class="space-y-6">
+                <div id="market-report-container" class="space-y-6">
                     <div class="flex justify-center py-12">
                         <div class="loading-spinner"></div>
                     </div>
@@ -286,62 +261,57 @@
             }
         });
         
-        // Load market updates on page load
+        // Load market report on page load
         document.addEventListener('DOMContentLoaded', () => {
-            loadMarketUpdates();
+            loadMarketReport();
         });
         
-        async function loadMarketUpdates() {
-            const container = document.getElementById('market-updates-container');
+        async function loadMarketReport() {
+            const container = document.getElementById('market-report-container');
             container.innerHTML = '<div class="flex justify-center py-12"><div class="loading-spinner"></div></div>';
             
             try {
-                const response = await fetch('/api/market-updates');
+                // TODO: Remplacer par l'endpoint Manus quand il sera disponible
+                const response = await fetch('/api/market-report/manus');
                 const data = await response.json();
                 
                 if (data.success) {
-                    displayMarketUpdates(data.updates);
+                    displayMarketReport(data.report);
                 } else {
-                    container.innerHTML = '<div class="text-center py-12 text-slate-400">Aucun briefing de marché disponible</div>';
+                    container.innerHTML = '<div class="text-center py-12 text-slate-400">Aucun rapport de marché disponible</div>';
                 }
             } catch (error) {
-                console.error('Erreur lors du chargement des updates:', error);
-                container.innerHTML = '<div class="text-center py-12 text-red-400">Erreur lors du chargement</div>';
+                console.error('Erreur lors du chargement du rapport:', error);
+                container.innerHTML = '<div class="text-center py-12 text-red-400">Erreur lors du chargement du rapport</div>';
             }
         }
         
-        function displayMarketUpdates(updates) {
-            const container = document.getElementById('market-updates-container');
+        function displayMarketReport(report) {
+            const container = document.getElementById('market-report-container');
             
-            if (!updates || updates.length === 0) {
-                container.innerHTML = '<div class="text-center py-12 text-slate-400">Aucun briefing de marché disponible</div>';
+            if (!report) {
+                container.innerHTML = '<div class="text-center py-12 text-slate-400">Aucun rapport de marché disponible</div>';
                 return;
             }
             
-            container.innerHTML = updates.map(update => `
+            container.innerHTML = `
                 <div class="glass-dark p-6 glowing-element">
                     <div class="flex items-center justify-between mb-4">
                         <div class="flex items-center gap-3">
-                            <span class="text-lg font-bold text-cyan-400">📊</span>
                             <div>
-                                <div class="text-lg font-semibold">Briefing du ${update.date}</div>
-                                <div class="text-sm text-slate-400">Généré à ${update.time} (${update.trigger_type === 'manual' ? 'Manuel' : 'Automatique'})</div>
+                                <div class="text-lg font-semibold">Rapport du ${report.date}</div>
+                                <div class="text-sm text-slate-400">Généré à ${report.time}</div>
                             </div>
-                        </div>
-                        <div class="text-xs bg-cyan-900/30 px-3 py-1 rounded-full text-cyan-400">
-                            ${update.trigger_type === 'manual' ? '🔄 Manuel' : '⏰ Auto'}
                         </div>
                     </div>
                     <div class="market-content prose prose-invert max-w-none">
                         <div class="whitespace-pre-wrap text-slate-300 leading-relaxed">
-                            ${update.content}
+                            ${report.content}
                         </div>
                     </div>
                 </div>
-            `).join('');
+            `;
         }
-        
-
     </script>
 </body>
 </html> 

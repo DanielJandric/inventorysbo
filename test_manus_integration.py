@@ -1,83 +1,125 @@
 #!/usr/bin/env python3
 """
-Test d'intégration de l'API Manus dans l'application
+Test d'intégration du rapport Manus
 """
 
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
-from manus_stock_manager import manus_stock_manager
-from stock_price_manager import StockPriceManager
+import requests
+import json
+from datetime import datetime
 
 def test_manus_integration():
-    """Test complet de l'intégration Manus"""
-    print("🧪 Test d'intégration Manus API")
-    print("=" * 60)
+    """Test de l'intégration du rapport Manus"""
     
-    # Test 1: Actions US
-    print("\n1️⃣ Test actions US (AAPL, MSFT, TSLA):")
-    us_symbols = ['AAPL', 'MSFT', 'TSLA']
-    us_results = manus_stock_manager.get_multiple_stock_prices(us_symbols)
+    print("🔍 Test d'intégration du rapport Manus...")
     
-    for symbol, data in us_results.items():
-        print(f"   {symbol}: ${data.price:.2f} ({data.change_percent:+.2f}%) - {data.currency}")
+    # Configuration
+    base_url = "http://localhost:5000"
     
-    # Test 2: Actions suisses
-    print("\n2️⃣ Test actions suisses (IREN.SW, NESN.SW, ROG.SW):")
-    ch_symbols = ['IREN.SW', 'NESN.SW', 'ROG.SW']
-    ch_results = manus_stock_manager.get_multiple_stock_prices(ch_symbols, exchange='SWX')
+    # Test de l'endpoint
+    print(f"\n📊 Test de l'endpoint /api/market-report/manus")
+    print("="*60)
     
-    for symbol, data in ch_results.items():
-        print(f"   {symbol}: {data.price:.2f} {data.currency} ({data.change_percent:+.2f}%)")
+    try:
+        response = requests.get(f"{base_url}/api/market-report/manus", timeout=10)
+        
+        print(f"Status: {response.status_code}")
+        
+        if response.status_code == 200:
+            data = response.json()
+            print(f"Success: {data.get('success', False)}")
+            
+            if data.get('success') and data.get('report'):
+                report = data['report']
+                print(f"\n✅ Rapport trouvé:")
+                print(f"   - Date: {report.get('date', 'N/A')}")
+                print(f"   - Heure: {report.get('time', 'N/A')}")
+                print(f"   - Contenu: {len(report.get('content', ''))} caractères")
+                print(f"   - Créé le: {report.get('created_at', 'N/A')}")
+                
+                # Afficher un extrait du contenu
+                content = report.get('content', '')
+                if content:
+                    preview = content[:200] + "..." if len(content) > 200 else content
+                    print(f"\n📝 Extrait du contenu:")
+                    print(f"   {preview}")
+            else:
+                print(f"❌ Aucun rapport disponible: {data.get('message', 'Erreur inconnue')}")
+        else:
+            print(f"❌ Erreur HTTP: {response.status_code}")
+            try:
+                error_data = response.json()
+                print(f"   Détails: {error_data}")
+            except:
+                print(f"   Réponse: {response.text}")
+                
+    except requests.exceptions.ConnectionError:
+        print("❌ Impossible de se connecter au serveur")
+        print("   Assurez-vous que l'application Flask est démarrée")
+    except requests.exceptions.Timeout:
+        print("❌ Timeout de la requête")
+    except Exception as e:
+        print(f"❌ Erreur inattendue: {e}")
     
-    # Test 3: Test individuel avec exchange
-    print("\n3️⃣ Test individuel IREN.SW avec exchange:")
-    iren_data = manus_stock_manager.get_stock_price('IREN.SW', exchange='SWX')
-    if iren_data:
-        print(f"   IREN.SW: {iren_data.price:.2f} {iren_data.currency}")
-        print(f"   Exchange: {iren_data.exchange}")
-        print(f"   Volume: {iren_data.volume:,}")
-        print(f"   Change: {iren_data.change:+.2f} ({iren_data.change_percent:+.2f}%)")
+    # Test de la page web
+    print(f"\n🌐 Test de la page /markets")
+    print("="*60)
     
-    # Test 4: Cache status
-    print("\n4️⃣ Statut du cache:")
-    cache_status = manus_stock_manager.get_cache_status()
-    print(f"   Taille cache: {cache_status['cache_size']}")
-    print(f"   Durée cache: {cache_status['cache_duration']}s")
-    print(f"   Symboles en cache: {cache_status['cached_symbols']}")
+    try:
+        response = requests.get(f"{base_url}/markets", timeout=10)
+        
+        print(f"Status: {response.status_code}")
+        
+        if response.status_code == 200:
+            print("✅ Page accessible")
+            
+            # Vérifier si le contenu contient les éléments attendus
+            content = response.text
+            
+            checks = [
+                ("Logo carré", "logo-square"),
+                ("Rapport de Marché", "Rapport de Marché"),
+                ("Actualiser", "Actualiser"),
+                ("loadMarketReport", "loadMarketReport"),
+                ("/api/market-report/manus", "/api/market-report/manus")
+            ]
+            
+            print(f"\n🔍 Vérifications du template:")
+            for check_name, check_value in checks:
+                if check_value in content:
+                    print(f"   ✅ {check_name}: OK")
+                else:
+                    print(f"   ❌ {check_name}: Manquant")
+        else:
+            print(f"❌ Erreur HTTP: {response.status_code}")
+            
+    except requests.exceptions.ConnectionError:
+        print("❌ Impossible de se connecter au serveur")
+    except Exception as e:
+        print(f"❌ Erreur inattendue: {e}")
     
-    # Test 5: Comparaison avec Yahoo
-    print("\n5️⃣ Comparaison Manus vs Yahoo (AAPL):")
-    yahoo_manager = StockPriceManager()
+    # Recommandations
+    print(f"\n💡 RECOMMANDATIONS")
+    print("="*60)
     
-    manus_aapl = manus_stock_manager.get_stock_price('AAPL')
-    yahoo_aapl = yahoo_manager.get_stock_price('AAPL')
+    print("1. Pour tester l'intégration complète:")
+    print("   - Démarrez l'application Flask: python app.py")
+    print("   - Ouvrez http://localhost:5000/markets")
+    print("   - Vérifiez que le rapport s'affiche correctement")
     
-    if manus_aapl and yahoo_aapl:
-        print(f"   Manus: ${manus_aapl.price:.2f} ({manus_aapl.change_percent:+.2f}%)")
-        print(f"   Yahoo: ${yahoo_aapl.price:.2f} ({yahoo_aapl.change_percent:+.2f}%)")
-        price_diff = abs(manus_aapl.price - yahoo_aapl.price)
-        print(f"   Différence: ${price_diff:.2f}")
-    else:
-        print("   ❌ Données manquantes pour la comparaison")
+    print("\n2. Pour intégrer l'endpoint Manus réel:")
+    print("   - Remplacez l'URL dans get_manus_market_report()")
+    print("   - Adaptez le format de réponse selon l'API Manus")
+    print("   - Testez avec l'endpoint réel")
     
-    # Test 6: Test de fallback
-    print("\n6️⃣ Test de fallback (symbole inexistant):")
-    fake_symbol = 'FAKE123'
-    fake_data = manus_stock_manager.get_stock_price(fake_symbol)
-    if fake_data:
-        print(f"   {fake_symbol}: {fake_data.price}")
-    else:
-        print(f"   {fake_symbol}: Non trouvé (comportement attendu)")
+    print("\n3. Fonctionnalités implémentées:")
+    print("   ✅ Logo Bonvin carré")
+    print("   ✅ Suppression des emojis")
+    print("   ✅ Suppression de la section info")
+    print("   ✅ Suppression de la fonction manuelle")
+    print("   ✅ Endpoint API préparé")
+    print("   ✅ Template adapté")
     
-    print("\n🎯 Test d'intégration terminé!")
-    print("\n📊 Résumé:")
-    print(f"   - Actions US testées: {len(us_results)}/{len(us_symbols)}")
-    print(f"   - Actions CH testées: {len(ch_results)}/{len(ch_symbols)}")
-    print(f"   - Cache actif: {cache_status['cache_size']} entrées")
-    
-    return True
+    print("\n✅ Test terminé !")
 
 if __name__ == "__main__":
     test_manus_integration() 

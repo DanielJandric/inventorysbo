@@ -4684,6 +4684,40 @@ def get_market_updates():
         logger.error(f"Erreur récupération market updates: {e}")
         return jsonify({"error": str(e)}), 500
 
+@app.route("/api/market-report/manus", methods=["GET"])
+def get_manus_market_report():
+    """Récupère le rapport de marché généré par Manus"""
+    try:
+        # TODO: Remplacer par l'appel à l'endpoint Manus quand il sera disponible
+        # Pour l'instant, on utilise le dernier rapport généré localement
+        
+        if not supabase:
+            return jsonify({"error": "Supabase non connecté"}), 500
+        
+        # Récupérer le dernier rapport
+        response = supabase.table("market_updates").select("*").order("created_at", desc=True).limit(1).execute()
+        
+        if response.data:
+            latest_report = response.data[0]
+            return jsonify({
+                "success": True,
+                "report": {
+                    "date": latest_report.get("date", ""),
+                    "time": latest_report.get("time", ""),
+                    "content": latest_report.get("content", ""),
+                    "created_at": latest_report.get("created_at", "")
+                }
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "message": "Aucun rapport de marché disponible"
+            })
+            
+    except Exception as e:
+        logger.error(f"Erreur récupération rapport Manus: {e}")
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/api/market-updates/trigger", methods=["POST"])
 def trigger_market_update():
     """Déclenche manuellement la génération d'un briefing de marché"""

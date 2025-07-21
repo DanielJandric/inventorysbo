@@ -1,0 +1,51 @@
+{
+  "timestamp": "2025-07-22T01:32:59.553211",
+  "results": [
+    {
+      "symbol": "AAPL",
+      "error": "Erreur API: 526 Server Error:  for url: https://g8h3i7cn86z0.manus.space/api/custom/stocks?symbols=AAPL&region=US",
+      "region": "US"
+    },
+    {
+      "symbol": "MSFT",
+      "error": "Erreur API: 526 Server Error:  for url: https://g8h3i7cn86z0.manus.space/api/custom/stocks?symbols=MSFT&region=US",
+      "region": "US"
+    },
+    {
+      "symbol": "GOOGL",
+      "error": "Erreur API: 526 Server Error:  for url: https://g8h3i7cn86z0.manus.space/api/custom/stocks?symbols=GOOGL&region=US",
+      "region": "US"
+    },
+    {
+      "symbol": "NESTLE.SW",
+      "error": "Erreur API: 526 Server Error:  for url: https://g8h3i7cn86z0.manus.space/api/custom/stocks?symbols=NESTLE.SW&region=CH",
+      "region": "CH"
+    },
+    {
+      "symbol": "NOVN.SW",
+      "error": "Erreur API: 526 Server Error:  for url: https://g8h3i7cn86z0.manus.space/api/custom/stocks?symbols=NOVN.SW&region=CH",
+      "region": "CH"
+    },
+    {
+      "symbol": "ROG.SW",
+      "error": "Erreur API: 526 Server Error:  for url: https://g8h3i7cn86z0.manus.space/api/custom/stocks?symbols=ROG.SW&region=CH",
+      "region": "CH"
+    },
+    {
+      "symbol": "ASML",
+      "error": "Erreur API: 526 Server Error:  for url: https://g8h3i7cn86z0.manus.space/api/custom/stocks?symbols=ASML&region=EU",
+      "region": "EU"
+    },
+    {
+      "symbol": "SAP",
+      "error": "Erreur API: 526 Server Error:  for url: https://g8h3i7cn86z0.manus.space/api/custom/stocks?symbols=SAP&region=EU",
+      "region": "EU"
+    }
+  ],
+  "summary": {
+    "total": 8,
+    "successful": 0,
+    "failed": 8,
+    "pe_ratios_found": 0
+  }
+}
