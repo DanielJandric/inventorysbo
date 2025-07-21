@@ -4999,7 +4999,7 @@ if __name__ == "__main__":
 # Fonction Google Custom Search supprimée - Remplacée par Gemini 2.0 Flash
 
 def generate_market_briefing_with_gemini():
-    """Génère un briefing de marché avec Gemini 2.5 Flash et outils de grounding"""
+    """Génère un briefing de marché avec Gemini 1.5 Flash et outils de grounding"""
     try:
         gemini_api_key = os.getenv('GEMINI_API_KEY')
 
@@ -5047,7 +5047,7 @@ INSTRUCTIONS :
 - Sois détaillé et complet"""
 
         # Appel à l'API Gemini avec outils de grounding
-        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent"
+        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
         
         headers = {
             'Content-Type': 'application/json',
@@ -5077,16 +5077,17 @@ INSTRUCTIONS :
             }
         }
 
+        logger.info(f"🔍 Appel API Gemini avec clé: {gemini_api_key[:10]}...")
         response = requests.post(url, headers=headers, json=data, timeout=30)
 
         if response.status_code == 200:
             result = response.json()
             if 'candidates' in result and len(result['candidates']) > 0:
                 content = result['candidates'][0]['content']['parts'][0]['text']
-                logger.info("✅ Briefing généré avec Gemini 2.5 Flash + Google Search")
+                logger.info("✅ Briefing généré avec Gemini 1.5 Flash + Google Search")
                 return content
             else:
-                logger.error("Réponse Gemini invalide")
+                logger.error(f"Réponse Gemini invalide: {result}")
                 return None
         else:
             logger.error(f"Erreur API Gemini: {response.status_code} - {response.text}")

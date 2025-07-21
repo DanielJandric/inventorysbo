@@ -159,11 +159,20 @@ SUPABASE_KEY=votre_clé_supabase_anon
 # Configuration OpenAI
 OPENAI_API_KEY=votre_clé_openai_gpt4
 
+# Configuration Google Gemini (optionnel)
+GEMINI_API_KEY=votre_clé_gemini_ici
+
 # Configuration Gmail (optionnel)
 GMAIL_USER=votre_email@gmail.com
 GMAIL_PASSWORD=votre_mot_de_passe_app
 GMAIL_RECIPIENTS=email1@example.com,email2@example.com
 ```
+
+### Obtenir une clé Gemini
+1. Allez sur [Google AI Studio](https://makersuite.google.com/app/apikey)
+2. Créez un nouveau projet ou sélectionnez un projet existant
+3. Cliquez sur "Create API Key"
+4. Copiez la clé et ajoutez-la dans votre fichier `.env`
 
 5. **Migration de la base de données**
 Exécuter dans Supabase SQL Editor :
