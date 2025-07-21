@@ -5007,8 +5007,13 @@ def generate_market_briefing_with_gemini():
             logger.warning("Variable GEMINI_API_KEY non configurée")
             return None
         
-        # Prompt pour Gemini
-        prompt = """Fais-moi un briefing narratif concis et structuré sur la séance des marchés financiers du jour (date du jour).
+        # Prompt pour Gemini avec recherche web forcée
+        current_date = datetime.now().strftime('%d/%m/%Y')
+        prompt = f"""IMPORTANT: Utilise tes capacités de recherche web pour obtenir les données de marché ACTUELLES d'aujourd'hui ({current_date}).
+
+Ne pas utiliser tes connaissances d'entraînement. Recherche en temps réel les données de marché du jour.
+
+Fais-moi un briefing narratif concis et structuré sur la séance des marchés financiers du jour ({current_date}).
 
 Format souhaité :
 
@@ -5028,10 +5033,15 @@ Macroéconomie, banques centrales, géopolitique (statistiques, commentaires, te
 
 Résumé final clair et bullet points + signal faible ou rupture de tendance à surveiller
 
-Utilise tes capacités de recherche web pour obtenir les données de marché les plus récentes et actualisées."""
+INSTRUCTIONS STRICTES:
+- Recherche en temps réel les données de marché d'aujourd'hui
+- Cite les sources spécifiques des données utilisées
+- Mentionne les chiffres exacts trouvés
+- Si une donnée n'est pas disponible aujourd'hui, dis "pas d'information disponible"
+- Ne jamais utiliser tes connaissances d'entraînement pour les données de marché"""
         
-        # Appel à l'API Gemini
-        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+        # Appel à l'API Gemini avec recherche web
+        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent"
         
         headers = {
             'Content-Type': 'application/json',
@@ -5047,7 +5057,14 @@ Utilise tes capacités de recherche web pour obtenir les données de marché les
                         }
                     ]
                 }
-            ]
+            ],
+            "generationConfig": {
+                "temperature": 0.1,
+                "topK": 1,
+                "topP": 0.1,
+                "maxOutputTokens": 3000
+            },
+            "safetySettings": []
         }
         
         response = requests.post(url, headers=headers, json=data, timeout=30)
