@@ -18,7 +18,7 @@ def test_gemini_key():
     print(f"Clé: {gemini_api_key[:10]}...")
     
     # Test simple
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+    url = "https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent"
     
     headers = {
         'Content-Type': 'application/json',
@@ -73,7 +73,7 @@ def test_gemini_with_search():
     print("\n🔍 Test avec recherche web")
     print("=" * 50)
     
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+    url = "https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent"
     
     headers = {
         'Content-Type': 'application/json',

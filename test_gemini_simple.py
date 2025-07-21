@@ -17,7 +17,7 @@ def test_gemini_function():
     print("=" * 50)
     
     # Test de la structure de l'appel API
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+    url = "https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent"
     
     headers = {
         'Content-Type': 'application/json',

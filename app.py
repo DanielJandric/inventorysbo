@@ -189,17 +189,24 @@ try:
 except Exception as e:
     logger.warning(f"⚠️ OpenAI non disponible: {e}")
 
+# ──────────────────────────────────────────────────────────
+# Gemini 2.5 client (SDK google-genai)
+# ──────────────────────────────────────────────────────────
 try:
-    GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
-    if GEMINI_API_KEY:
-        import google.generativeai as genai
-        genai.configure(api_key=GEMINI_API_KEY)
-        gemini_client = genai.GenerativeModel('gemini-2.0-flash-exp')
-        logger.info("✅ Gemini connecté avec la bibliothèque officielle")
+    from google import genai
+    
+    # accepte GEMINI_API_KEY **ou** GOOGLE_API_KEY
+    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    if not GEMINI_API_KEY:
+        logger.warning("⚠️ Clé Gemini absente – fallback OpenAI")
+        gemini_client = None
     else:
-        logger.warning("⚠️ Gemini non configuré")
+        genai.configure(api_key=GEMINI_API_KEY)
+        gemini_client = genai.GenerativeModel("gemini-2.5-flash")
+        logger.info("✅ Gemini 2.5 Flash connecté avec SDK officiel")
 except Exception as e:
     logger.warning(f"⚠️ Gemini non disponible: {e}")
+    gemini_client = None
 
 # CSS optimisé pour PDFs noir et blanc professionnels
 def get_optimized_pdf_css():
@@ -5033,13 +5040,15 @@ if __name__ == "__main__":
 # Fonction Google Custom Search supprimée - Remplacée par Gemini 2.0 Flash
 
 def generate_market_briefing_with_gemini():
-    """Génère un briefing de marché avec Gemini via la bibliothèque officielle"""
-    try:
-        if not gemini_client:
-            logger.warning("Client Gemini non configuré")
-            return None
+    """
+    Retourne un briefing de marché (texte brut) via Gemini 2.5 Flash.
+    Fallback GPT-4o si l'appel échoue.
+    """
+    if not gemini_client:
+        logger.warning("Client Gemini non configuré")
+        return None
 
-        # Prompt pour Gemini avec recherche web
+    try:
         current_date = datetime.now().strftime('%d/%m/%Y')
         prompt = f"""Tu es un analyste financier expérimenté. Utilise la recherche web pour obtenir les données de marché actuelles et génère un briefing financier détaillé pour {current_date}.
 
@@ -5068,27 +5077,21 @@ RECHERCHE ET RÉDIGE un rapport complet incluant :
 
 IMPORTANT : Utilise EXCLUSIVEMENT des données trouvées via la recherche web. Cite tes sources. Sois détaillé et précis."""
 
-        logger.info("🔍 Appel Gemini via bibliothèque officielle...")
+        logger.info("🔍 Appel Gemini 2.5 Flash avec recherche web...")
         
-        # Utilisation de la bibliothèque officielle avec recherche web
-        response = gemini_client.generate_content(
+        resp = gemini_client.generate_content(
             prompt,
-            tools=[{"googleSearch": {}}],
-            generation_config={
-                "temperature": 0.3,
-                "top_k": 40,
-                "top_p": 0.8,
-                "max_output_tokens": 4000
-            }
+            generation_config={"temperature": 0.3, "max_output_tokens": 4000},
+            tools=[{"googleSearch": {}}],   # recherche web temps réel
         )
-
-        if response and response.text:
-            logger.info("✅ Briefing généré avec Gemini 2.0 Flash + Google Search (bibliothèque officielle)")
-            return response.text
+        
+        if resp and resp.text:
+            logger.info("✅ Briefing généré avec Gemini 2.5 Flash + Google Search")
+            return resp.text.strip()
         else:
             logger.error("Réponse Gemini vide")
             return None
-
+            
     except Exception as e:
         logger.error(f"Erreur génération briefing avec Gemini: {e}")
         return None

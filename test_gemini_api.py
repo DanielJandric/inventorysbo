@@ -30,7 +30,7 @@ def test_gemini_configuration():
     print(f"✅ Clé API trouvée: {gemini_api_key[:10]}...")
     
     # Test simple avec Gemini
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+    url = "https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent"
     
     headers = {
         'Content-Type': 'application/json',
@@ -85,7 +85,7 @@ def test_gemini_with_search():
         print("❌ GEMINI_API_KEY non configurée")
         return False
     
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+    url = "https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent"
     
     headers = {
         'Content-Type': 'application/json',
