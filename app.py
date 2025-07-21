@@ -155,6 +155,9 @@ AUTO_UPDATE_TIMES = [
 MARKET_UPDATE_TIME = "21:30"  # Heure de génération automatique
 MARKET_UPDATE_TIMEZONE = "Europe/Paris"  # Timezone pour les updates
 
+# Configuration API Manus pour rapports financiers
+MANUS_API_BASE_URL = "https://e5h6i7cn86z0.manus.space"
+
 # Configuration FreeCurrency (pour conversion USD/EUR vers CHF)
 FREECURRENCY_API_KEY = os.getenv("FREECURRENCY_API_KEY", "fca_live_MhoTdTd6auvKD1Dr5kVQ7ua9SwgGPApjylr3CrRe")
 
@@ -5186,108 +5189,82 @@ if __name__ == "__main__":
 
 def generate_market_briefing_with_manus():
     """
-    Génère un briefing financier avec données Manus + GPT-4o
+    Génère un briefing financier avec API Manus + GPT-4o
     """
     try:
-        current_date = datetime.now().strftime('%d/%m/%Y')
-
-        # 1. Récupérer les données via API Manus
-        logger.info("📊 Récupération des données via API Manus...")
-
+        current_date = datetime.now().strftime('%Y-%m-%d')
+        
+        logger.info("📊 Génération briefing avec API Manus...")
+        
+        # 1. Collecter les données via API Manus
         try:
-            # Récupérer les indices principaux
-            indices = ['^GSPC', '^IXIC', '^DJI', '^FCHI', '^GDAXI', '^SSMI']
-            market_data = manus_stock_manager.get_multiple_stock_prices(indices)
-            
-            # Récupérer les crypto
-            crypto = ['BTC-USD', 'ETH-USD']
-            crypto_data = manus_stock_manager.get_multiple_stock_prices(crypto)
-            
-            # Récupérer les obligations (via Yahoo fallback)
-            bonds = ['^TNX', '^BUND']
-            bond_data = {}
-            for bond in bonds:
-                bond_info = stock_price_manager.get_stock_price(bond)
-                if bond_info:
-                    bond_data[bond] = bond_info
-
-            # Formater les données
-            market_formatted = "📈 INDICES PRINCIPAUX:\n"
-            for symbol, data in market_data.items():
-                market_formatted += f"   {symbol}: {data.price:.2f} {data.currency} ({data.change_percent:+.2f}%)\n"
-            
-            crypto_formatted = "🪙 CRYPTOACTIFS:\n"
-            for symbol, data in crypto_data.items():
-                crypto_formatted += f"   {symbol}: {data.price:.2f} {data.currency} ({data.change_percent:+.2f}%)\n"
-            
-            bond_formatted = "📊 OBLIGATIONS:\n"
-            for symbol, data in bond_data.items():
-                bond_formatted += f"   {symbol}: {data.price:.2f}% ({data.change_percent:+.2f}%)\n"
-
-            # Combiner les données
-            real_data = f"{market_formatted}\n{crypto_formatted}\n{bond_formatted}"
-
-            if not market_data and not crypto_data and not bond_data:
-                logger.error("❌ Aucune donnée récupérée de Manus")
+            collect_response = requests.post(f"{MANUS_API_BASE_URL}/api/data/collect", timeout=30)
+            if collect_response.status_code != 200:
+                logger.error(f"❌ Erreur collecte données Manus: {collect_response.status_code}")
                 return None
-
+                
+            logger.info("✅ Données collectées via API Manus")
+            
         except Exception as e:
-            logger.error(f"❌ Erreur API Manus: {e}")
+            logger.error(f"❌ Erreur connexion API Manus: {e}")
             return None
+        
+        # 2. Générer le rapport IA via API Manus
+        try:
+            report_data = {
+                "date": current_date,
+                "force_refresh": False
+            }
+            
+            report_response = requests.post(
+                f"{MANUS_API_BASE_URL}/api/ai/generate/complete",
+                json=report_data,
+                timeout=60
+            )
+            
+            if report_response.status_code != 200:
+                logger.error(f"❌ Erreur génération rapport IA: {report_response.status_code}")
+                return None
+                
+            report = report_response.json()
+            
+            if not report.get('success') or not report.get('report'):
+                logger.error("❌ Réponse invalide de l'API Manus")
+                return None
+            
+            # Extraire le contenu du rapport
+            report_content = report['report']
+            
+            # Construire le briefing complet
+            briefing = f"""📊 BRIEFING FINANCIER QUOTIDIEN - {current_date}
 
-        # 2. Créer le prompt pour GPT-4o
-        prompt = f"""Tu es un analyste financier expérimenté. Génère un briefing financier détaillé pour {current_date}.
+🎯 RÉSUMÉ EXÉCUTIF
+{report_content.get('executive_summary', 'Non disponible')}
 
-        DONNÉES RÉELLES DISPONIBLES :
-        {real_data}
+📈 ANALYSE DES MARCHÉS
+{report_content.get('market_analysis', 'Non disponible')}
 
-        RÉDIGE un rapport complet incluant :
+🏛️ PERSPECTIVE ÉCONOMIQUE
+{report_content.get('economic_outlook', 'Non disponible')}
 
-        1. MARCHÉS ACTIONS (analyse uniquement les données fournies)
-        2. CRYPTOACTIFS (analyse uniquement les données fournies)
-        3. OBLIGATIONS (analyse uniquement les données fournies)
-        4. CONTEXTE ET PERSPECTIVES (basé sur les données)
+⚠️ ÉVALUATION DES RISQUES
+{report_content.get('risk_assessment', 'Non disponible')}
 
-        IMPORTANT :
-        - Utilise UNIQUEMENT les données réelles fournies ci-dessus
-        - Ne pas inventer de prix, de données ou d'actualités
-        - Ne pas utiliser tes connaissances générales
-        - Analyse uniquement ce qui est fourni dans les données
-        - Sois détaillé et professionnel avec les données disponibles
-        - Si une section n'a pas de données, indique-le clairement
+📰 SOURCES
+• Données financières: API Manus (Yahoo Finance, CoinGecko)
+• Actualités: Sources multiples via API Manus
+• Analyse IA: OpenAI GPT-4 via API Manus
+• Généré le: {datetime.now().strftime('%d/%m/%Y à %H:%M')}"""
 
-        FORMAT :
-        - Analyse technique des mouvements
-        - Contexte des variations
-        - Perspectives à court terme
-        - Sources : API Manus (données live)"""
-
-        logger.info("🔍 Appel GPT-4o pour synthèse...")
-
-        if not openai_client:
-            logger.error("❌ OpenAI client non configuré")
+            logger.info("✅ Briefing généré : API Manus + IA")
+            return briefing.strip()
+            
+        except Exception as e:
+            logger.error(f"❌ Erreur génération rapport IA: {e}")
             return None
-
-        response = openai_client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "Tu es un analyste financier expert. Analyse uniquement les données fournies sans inventer."},
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=4000,
-            temperature=0.3
-        )
-
-        if response.choices and response.choices[0].message.content:
-            content = response.choices[0].message.content
-            logger.info("✅ Briefing généré : API Manus + GPT-4o")
-            return content.strip()
-
-        logger.error("Réponse GPT-4o invalide")
-        return None
 
     except Exception as e:
-        logger.error(f"Erreur génération briefing avec GPT-4o: {e}")
+        logger.error(f"Erreur génération briefing avec API Manus: {e}")
         return None
 
 
