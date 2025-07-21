@@ -4623,79 +4623,10 @@ def get_scheduler_status():
         return jsonify({"error": str(e)}), 500
 
 def generate_market_briefing():
-    """Génère un briefing de marché avec GPT-4o et données Google Search"""
+    """Génère un briefing de marché avec Gemini 2.0 Flash"""
     try:
-        if not openai_client:
-            return None
-        
-        # Récupérer des données de marché actuelles
-        market_data = get_market_data_from_google_search()
-        
-        # Construire le prompt avec ou sans données de marché
-        if market_data:
-            prompt = f"""IMPORTANT: Utilise UNIQUEMENT les données de marché fournies ci-dessous pour générer ton briefing. Ne pas inventer ou utiliser tes connaissances d'entraînement.
-
-DONNÉES RÉELLES DU JOUR ({datetime.now().strftime('%d/%m/%Y')}):
-{market_data}
-
-INSTRUCTIONS STRICTES:
-- Utilise EXCLUSIVEMENT les données réelles fournies ci-dessus
-- Cite les sources spécifiques des données utilisées
-- Mentionne les chiffres exacts trouvés
-- Si une donnée n'est pas dans la liste, dis "pas d'information disponible"
-- Ne pas inventer de données ou utiliser tes connaissances d'entraînement
-
-Format souhaité :
-
-Ton narratif, comme un stratégiste qui me parle directement ;
-
-Concision, mais sans sacrifier la clarté ;
-
-Structuration logique :
-
-Marchés actions (USA, Europe, Suisse — autres zones si mouvement significatif)
-
-Obligations souveraines (US 10Y, Bund, OAT, BTP, Confédération…)
-
-Cryptoactifs (BTC, ETH, capitalisation globale, mouvements liés à la régulation ou aux flux)
-
-Macroéconomie, banques centrales, géopolitique (statistiques, commentaires, tensions)
-
-Résumé final clair et bullet points + signal faible ou rupture de tendance à surveiller
-
-VALIDATION: Assure-toi que chaque information mentionnée provient des données réelles fournies."""
-        else:
-            prompt = """Fais-moi un briefing narratif concis et structuré sur la séance des marchés financiers du jour (date du jour).
-
-Format souhaité :
-
-Ton narratif, comme un stratégiste qui me parle directement ;
-
-Concision, mais sans sacrifier la clarté ;
-
-Structuration logique :
-
-Marchés actions (USA, Europe, Suisse — autres zones si mouvement significatif)
-
-Obligations souveraines (US 10Y, Bund, OAT, BTP, Confédération…)
-
-Cryptoactifs (BTC, ETH, capitalisation globale, mouvements liés à la régulation ou aux flux)
-
-Macroéconomie, banques centrales, géopolitique (statistiques, commentaires, tensions)
-
-Résumé final clair et bullet points + signal faible ou rupture de tendance à surveiller"""
-
-        response = openai_client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "Tu es un expert en marchés financiers. Tu DOIS utiliser UNIQUEMENT les données fournies par l'utilisateur. Ne jamais inventer ou utiliser tes connaissances d'entraînement."},
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=2500,
-            temperature=0.3
-        )
-        
-        return response.choices[0].message.content
+        # Utiliser Gemini au lieu d'OpenAI
+        return generate_market_briefing_with_gemini()
         
     except Exception as e:
         logger.error(f"Erreur génération briefing: {e}")
@@ -5065,75 +4996,75 @@ if __name__ == "__main__":
         logger.error(f"❌ Erreur démarrage: {e}")
         raise
 
-def get_market_data_from_google_search():
-    """Récupère des données de marché actuelles via Google Custom Search API"""
+# Fonction Google Custom Search supprimée - Remplacée par Gemini 2.0 Flash
+
+def generate_market_briefing_with_gemini():
+    """Génère un briefing de marché avec Gemini 2.0 Flash"""
     try:
-        google_api_key = os.getenv('GOOGLE_CUSTOM_SEARCH_API_KEY')
-        google_search_engine_id = os.getenv('GOOGLE_CUSTOM_SEARCH_ENGINE_ID')
+        gemini_api_key = os.getenv('GEMINI_API_KEY')
         
-        if not google_api_key or not google_search_engine_id:
-            logger.warning("Variables Google Custom Search non configurées")
+        if not gemini_api_key:
+            logger.warning("Variable GEMINI_API_KEY non configurée")
             return None
         
-        # Recherche ciblée pour les marchés financiers
-        queries = [
-            "S&P 500 NASDAQ Dow Jones market data today",
-            "European stocks DAX CAC 40 market update",
-            "Swiss Market Index SMI today",
-            "Bitcoin Ethereum crypto market today",
-            "US Treasury yields 10Y market data"
-        ]
+        # Prompt pour Gemini
+        prompt = """Fais-moi un briefing narratif concis et structuré sur la séance des marchés financiers du jour (date du jour).
+
+Format souhaité :
+
+Ton narratif, comme un stratégiste qui me parle directement ;
+
+Concision, mais sans sacrifier la clarté ;
+
+Structuration logique :
+
+Marchés actions (USA, Europe, Suisse — autres zones si mouvement significatif)
+
+Obligations souveraines (US 10Y, Bund, OAT, BTP, Confédération…)
+
+Cryptoactifs (BTC, ETH, capitalisation globale, mouvements liés à la régulation ou aux flux)
+
+Macroéconomie, banques centrales, géopolitique (statistiques, commentaires, tensions)
+
+Résumé final clair et bullet points + signal faible ou rupture de tendance à surveiller
+
+Utilise tes capacités de recherche web pour obtenir les données de marché les plus récentes et actualisées."""
         
-        all_results = []
+        # Appel à l'API Gemini
+        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
         
-        for query in queries:
-            try:
-                url = "https://www.googleapis.com/customsearch/v1"
-                params = {
-                    'key': google_api_key,
-                    'cx': google_search_engine_id,
-                    'q': query,
-                    'num': 3,  # 3 résultats par requête
-                    'dateRestrict': 'd1'  # Résultats du dernier jour
+        headers = {
+            'Content-Type': 'application/json',
+            'X-goog-api-key': gemini_api_key
+        }
+        
+        data = {
+            "contents": [
+                {
+                    "parts": [
+                        {
+                            "text": prompt
+                        }
+                    ]
                 }
-                
-                response = requests.get(url, params=params, timeout=10)
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    if 'items' in data:
-                        for item in data['items']:
-                            all_results.append({
-                                'title': item.get('title', ''),
-                                'snippet': item.get('snippet', ''),
-                                'link': item.get('link', ''),
-                                'query': query
-                            })
-                
-                # Pause entre les requêtes pour éviter les limites
-                time.sleep(0.5)
-                
-            except Exception as e:
-                logger.warning(f"Erreur requête Google Search '{query}': {e}")
-                continue
+            ]
+        }
         
-        if all_results:
-            # Formater les résultats pour le prompt
-            formatted_results = f"DONNÉES DE MARCHÉ ACTUELLES ({datetime.now().strftime('%d/%m/%Y')}):\n\n"
-            for i, result in enumerate(all_results[:10], 1):  # Limiter à 10 résultats
-                formatted_results += f"SOURCE {i}:\n"
-                formatted_results += f"Titre: {result['title']}\n"
-                formatted_results += f"Contenu: {result['snippet']}\n"
-                formatted_results += f"URL: {result['link']}\n"
-                formatted_results += f"Requête: {result['query']}\n"
-                formatted_results += "-" * 50 + "\n\n"
-            
-            logger.info(f"✅ {len(all_results)} résultats Google Search récupérés")
-            return formatted_results
+        response = requests.post(url, headers=headers, json=data, timeout=30)
+        
+        if response.status_code == 200:
+            result = response.json()
+            if 'candidates' in result and len(result['candidates']) > 0:
+                content = result['candidates'][0]['content']['parts'][0]['text']
+                logger.info("✅ Briefing généré avec Gemini 2.0 Flash")
+                return content
+            else:
+                logger.error("Réponse Gemini invalide")
+                return None
         else:
-            logger.warning("Aucun résultat Google Search trouvé")
+            logger.error(f"Erreur API Gemini: {response.status_code} - {response.text}")
             return None
             
     except Exception as e:
-        logger.error(f"Erreur Google Custom Search: {e}")
+        logger.error(f"Erreur génération briefing avec Gemini: {e}")
         return None
