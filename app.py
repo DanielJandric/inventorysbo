@@ -201,8 +201,7 @@ try:
         logger.warning("⚠️ Clé Gemini absente – fallback OpenAI")
         gemini_client = None
     else:
-        genai.configure(api_key=GEMINI_API_KEY)
-        gemini_client = genai.GenerativeModel("gemini-2.5-flash")
+        gemini_client = genai.Client(api_key=GEMINI_API_KEY)
         logger.info("✅ Gemini 2.5 Flash connecté avec SDK officiel")
 except Exception as e:
     logger.warning(f"⚠️ Gemini non disponible: {e}")
@@ -5079,17 +5078,43 @@ IMPORTANT : Utilise EXCLUSIVEMENT des données trouvées via la recherche web. C
 
         logger.info("🔍 Appel Gemini 2.5 Flash avec recherche web...")
         
-        resp = gemini_client.generate_content(
-            prompt,
-            generation_config={"temperature": 0.3, "max_output_tokens": 4000}
-        )
+        # API HTTP directe (plus fiable)
+        url = "https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent"
+        headers = {
+            'Content-Type': 'application/json',
+            'X-goog-api-key': GEMINI_API_KEY
+        }
         
-        if resp and resp.text:
-            logger.info("✅ Briefing généré avec Gemini 2.5 Flash + Google Search")
-            return resp.text.strip()
-        else:
-            logger.error("Réponse Gemini vide")
-            return None
+        data = {
+            "contents": [
+                {
+                    "parts": [
+                        {
+                            "text": prompt
+                        }
+                    ]
+                }
+            ],
+            "generationConfig": {
+                "temperature": 0.3,
+                "maxOutputTokens": 4000
+            }
+        }
+        
+        import requests
+        response = requests.post(url, headers=headers, json=data, timeout=30)
+        
+        if response.status_code == 200:
+            result = response.json()
+            if 'candidates' in result and len(result['candidates']) > 0:
+                candidate = result['candidates'][0]
+                if 'content' in candidate and 'parts' in candidate['content']:
+                    content = candidate['content']['parts'][0]['text']
+                    logger.info("✅ Briefing généré avec Gemini 2.5 Flash + Google Search")
+                    return content.strip()
+        
+        logger.error("Réponse Gemini invalide")
+        return None
             
     except Exception as e:
         logger.error(f"Erreur génération briefing avec Gemini: {e}")
