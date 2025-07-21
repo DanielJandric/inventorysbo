@@ -438,14 +438,68 @@ class ReutersScraper:
     
     def _get_alternative_market_data(self) -> Dict[str, str]:
         """
-        Récupère des données de marché depuis des sources alternatives
+        Récupère des données de marché depuis l'API Manus
         """
-        logger.info("📊 Récupération données alternatives...")
+        logger.info("📊 Récupération données via API Manus...")
         
         market_data = {}
         
         try:
-            # Utiliser Yahoo Finance comme fallback
+            # API Manus pour les données de marché
+            manus_api_base = "https://g8h3ilcvpz3y.manus.space"
+            
+            # 1. Indices principaux
+            indices_response = requests.get(f"{manus_api_base}/api/custom/indices?symbols=^GSPC,^IXIC,^DJI,^FCHI,^GDAXI,^SSMI", timeout=10)
+            if indices_response.status_code == 200:
+                indices_data = indices_response.json()
+                for item in indices_data.get('data', []):
+                    name = item.get('name', item.get('symbol', ''))
+                    price = item.get('price', 0)
+                    change = item.get('change', 0)
+                    change_percent = item.get('change_percent', 0)
+                    if price:
+                        market_data[name] = f"${price:.2f} ({change:+.2f}, {change_percent:+.2f}%)"
+            
+            # 2. Cryptomonnaies
+            crypto_response = requests.get(f"{manus_api_base}/api/custom/crypto?ids=bitcoin,ethereum", timeout=10)
+            if crypto_response.status_code == 200:
+                crypto_data = crypto_response.json()
+                for item in crypto_data.get('data', []):
+                    name = item.get('name', item.get('symbol', ''))
+                    price = item.get('price_usd', 0)
+                    change_24h = item.get('change_24h', 0)
+                    if price:
+                        market_data[name] = f"${price:.2f} ({change_24h:+.2f}%)"
+            
+            # 3. Actions suisses (IREN.SW inclus)
+            stocks_response = requests.get(f"{manus_api_base}/api/custom/stocks?symbols=IREN.SW,NESN.SW,ROG.SW&region=CH", timeout=10)
+            if stocks_response.status_code == 200:
+                stocks_data = stocks_response.json()
+                for item in stocks_data.get('data', []):
+                    symbol = item.get('symbol', '')
+                    name = item.get('name', symbol)
+                    price = item.get('price', 0)
+                    currency = item.get('currency', 'CHF')
+                    if price:
+                        market_data[name] = f"{currency} {price:.2f}"
+            
+            logger.info(f"✅ API Manus: {len(market_data)} données récupérées")
+            return market_data
+            
+        except Exception as e:
+            logger.error(f"❌ Erreur API Manus: {e}")
+            # Fallback vers Yahoo Finance si Manus échoue
+            return self._fallback_yahoo_finance()
+    
+    def _fallback_yahoo_finance(self) -> Dict[str, str]:
+        """
+        Fallback vers Yahoo Finance si Manus échoue
+        """
+        logger.info("📊 Fallback vers Yahoo Finance...")
+        
+        market_data = {}
+        
+        try:
             import yfinance as yf
             
             symbols = {
