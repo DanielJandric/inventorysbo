@@ -4628,8 +4628,8 @@ def generate_market_briefing():
         if not openai_client:
             return None
         
-        # Prompt pour GPT-4o avec recherche web
-        prompt = """Tu es un stratégiste financier expérimenté. Utilise ta fonction de recherche web pour récupérer les données de marché actuelles et génère un briefing narratif fluide, concis et structuré sur la séance des marchés financiers du jour.
+        # Prompt pour GPT-4o
+        prompt = """Tu es un stratégiste financier expérimenté. Génère un briefing narratif fluide, concis et structuré sur la séance des marchés financiers du jour.
 
 Format exigé :
 - Ton narratif, comme un stratégiste qui me parle directement
@@ -4641,7 +4641,7 @@ Format exigé :
   * Macro, banques centrales et géopolitique (stats, décisions, tensions)
 - Termine par une synthèse rapide intégrée à la narration, avec ce que je dois retenir en une phrase, et signale tout signal faible ou rupture de tendance à surveiller
 
-Recherche les données de marché actuelles pour :
+Couvre les principaux marchés :
 - Indices boursiers (S&P 500, NASDAQ, Dow Jones, Euro Stoxx 50, DAX, CAC 40, Swiss Market Index)
 - Rendements obligataires (US 10Y, Bund 10Y, OAT 10Y, BTP 10Y)
 - Cryptoactifs (Bitcoin, Ethereum, capitalisation globale)
@@ -4649,12 +4649,12 @@ Recherche les données de marché actuelles pour :
 - Commodities (Or, Pétrole)
 - Actualités macro et géopolitiques importantes
 
-Si une classe d'actif n'a pas bougé, dis-le clairement sans meubler. Génère un briefing pour aujourd'hui basé sur les données de marché réelles trouvées."""
+Si une classe d'actif n'a pas bougé, dis-le clairement sans meubler. Génère un briefing pour aujourd'hui basé sur tes connaissances actuelles des marchés."""
 
         response = openai_client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "Tu es un expert en marchés financiers avec une expertise particulière en analyse macro et technique. Utilise ta fonction de recherche web pour obtenir les données de marché les plus récentes."},
+                {"role": "system", "content": "Tu es un expert en marchés financiers avec une expertise particulière en analyse macro et technique."},
                 {"role": "user", "content": prompt}
             ],
             max_tokens=1500,
