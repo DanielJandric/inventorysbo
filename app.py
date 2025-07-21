@@ -5081,8 +5081,7 @@ IMPORTANT : Utilise EXCLUSIVEMENT des données trouvées via la recherche web. C
         
         resp = gemini_client.generate_content(
             prompt,
-            generation_config={"temperature": 0.3, "max_output_tokens": 4000},
-            tools=[{"googleSearch": {}}],   # recherche web temps réel
+            generation_config={"temperature": 0.3, "max_output_tokens": 4000}
         )
         
         if resp and resp.text:
@@ -5132,7 +5131,6 @@ Si une classe d'actif n'a pas bougé, dis-le clairement sans meubler. Génère u
                 {"role": "system", "content": "Tu es un expert en marchés financiers. Utilise la recherche web pour des données actuelles."},
                 {"role": "user", "content": prompt}
             ],
-            tools=[{"type": "web_search"}],
             max_tokens=2000,
             temperature=0.7
         )
