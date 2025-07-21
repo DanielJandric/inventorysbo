@@ -4629,27 +4629,25 @@ def generate_market_briefing():
             return None
         
         # Prompt pour GPT-4o
-        prompt = """Tu es un stratégiste financier expérimenté. Génère un briefing narratif fluide, concis et structuré sur la séance des marchés financiers du jour.
+        prompt = """Fais-moi un briefing narratif concis et structuré sur la séance des marchés financiers du jour (date du jour).
 
-Format exigé :
-- Ton narratif, comme un stratégiste qui me parle directement
-- Concision : pas de blabla, mais du fond
-- Structure logique intégrée dans le récit (pas de titres) :
-  * Actions (USA, Europe, Suisse, autres zones si mouvement marquant)
-  * Obligations souveraines (US 10Y, Bund, OAT, BTP, Confédération…)
-  * Cryptoactifs (BTC, ETH, capitalisation globale, régulation, flux)
-  * Macro, banques centrales et géopolitique (stats, décisions, tensions)
-- Termine par une synthèse rapide intégrée à la narration, avec ce que je dois retenir en une phrase, et signale tout signal faible ou rupture de tendance à surveiller
+Format souhaité :
 
-Couvre les principaux marchés :
-- Indices boursiers (S&P 500, NASDAQ, Dow Jones, Euro Stoxx 50, DAX, CAC 40, Swiss Market Index)
-- Rendements obligataires (US 10Y, Bund 10Y, OAT 10Y, BTP 10Y)
-- Cryptoactifs (Bitcoin, Ethereum, capitalisation globale)
-- Devises (EUR/USD, USD/CHF, GBP/USD)
-- Commodities (Or, Pétrole)
-- Actualités macro et géopolitiques importantes
+Ton narratif, comme un stratégiste qui me parle directement ;
 
-Si une classe d'actif n'a pas bougé, dis-le clairement sans meubler. Génère un briefing pour aujourd'hui basé sur tes connaissances actuelles des marchés."""
+Concision, mais sans sacrifier la clarté ;
+
+Structuration logique :
+
+Marchés actions (USA, Europe, Suisse — autres zones si mouvement significatif)
+
+Obligations souveraines (US 10Y, Bund, OAT, BTP, Confédération…)
+
+Cryptoactifs (BTC, ETH, capitalisation globale, mouvements liés à la régulation ou aux flux)
+
+Macroéconomie, banques centrales, géopolitique (statistiques, commentaires, tensions)
+
+Résumé final clair et bullet points + signal faible ou rupture de tendance à surveiller"""
 
         response = openai_client.chat.completions.create(
             model="gpt-4o",
