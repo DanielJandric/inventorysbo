@@ -2592,7 +2592,7 @@ def get_stock_price_cache_status():
         return jsonify({
             **status,
             "source": "Yahoo Finance",
-            "api_limit_warning": f"⚠️ Limite quotidienne: {status['daily_requests']}/{status['max_daily_requests']} requêtes"
+            "api_limit_warning": "⚠️ Limite quotidienne: Illimitée (système optimisé)"
         })
     except Exception as e:
         logger.error(f"Erreur lors de la récupération du statut du cache: {e}")
@@ -2754,12 +2754,10 @@ def schedule_auto_stock_updates():
             
             # Vérifier le statut du cache
             cache_status = stock_price_manager.get_cache_status()
-            logger.info(f"📊 Statut cache: {cache_status['cache_size']} entrées, {cache_status['daily_requests']}/{cache_status['max_daily_requests']} requêtes utilisées")
+            logger.info(f"📊 Statut cache: {cache_status['cache_size']} entrées, système illimité optimisé")
             
-            # Si on a déjà utilisé toutes les requêtes, on ne fait rien
-            if not cache_status['can_make_request']:
-                logger.info("⚠️ Limite quotidienne atteinte, pas de mise à jour automatique")
-                return []
+            # Avec le système illimité, on peut toujours faire des requêtes
+            # Pas de vérification de limite nécessaire
             
             items = AdvancedDataManager.fetch_all_items()
             stock_items = [item for item in items if item.category == 'Actions' and item.stock_symbol]
@@ -4660,8 +4658,7 @@ Si une classe d'actif n'a pas bougé, dis-le clairement sans meubler. Génère u
                 {"role": "user", "content": prompt}
             ],
             max_tokens=1500,
-            temperature=0.7,
-            tools=[{"type": "web_search"}]
+            temperature=0.7
         )
         
         return response.choices[0].message.content

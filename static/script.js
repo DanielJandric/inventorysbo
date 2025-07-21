@@ -475,11 +475,20 @@ function displayItems() {
         );
     }
     
-    // Tri par priorité de catégorie : Actions → Voitures → Bateaux → Avions → Reste
+    // Tri par statut d'abord (disponibles avant vendus), puis par catégorie
     filteredItems.sort((a, b) => {
+        // 1. Tri par statut : Available avant Sold
+        const statusA = a.status === 'Available' ? 0 : 1;
+        const statusB = b.status === 'Available' ? 0 : 1;
+        
+        if (statusA !== statusB) {
+            return statusA - statusB;
+        }
+        
+        // 2. Si même statut, trier par priorité de catégorie
         const categoryPriority = {
             'Actions': 1,
-            'Véhicules': 2,
+            'Voitures': 2,
             'Bateaux': 3,
             'Avions': 4
         };
@@ -491,7 +500,7 @@ function displayItems() {
             return priorityA - priorityB;
         }
         
-        // Si même priorité, trier par nom
+        // 3. Si même catégorie, trier par nom
         return (a.name || '').localeCompare(b.name || '');
     });
     
@@ -1124,10 +1133,76 @@ function displayItemsAsCards(container, items) {
         return;
     }
     
-    const grid = document.createElement('div');
-    grid.className = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8';
-    grid.innerHTML = items.map(createItemCardHTML).join('');
-    container.appendChild(grid);
+    // Grouper les items par statut et catégorie
+    const groups = {
+        available: {
+            Actions: [],
+            Voitures: [],
+            Bateaux: [],
+            Avions: [],
+            Autres: []
+        },
+        sold: {
+            Actions: [],
+            Voitures: [],
+            Bateaux: [],
+            Avions: [],
+            Autres: []
+        }
+    };
+    
+    // Trier les items dans les groupes
+    items.forEach(item => {
+        const status = item.status === 'Available' ? 'available' : 'sold';
+        const category = item.category;
+        
+        if (groups[status][category]) {
+            groups[status][category].push(item);
+        } else {
+            groups[status].Autres.push(item);
+        }
+    });
+    
+    // Créer le HTML avec les sections
+    let html = '';
+    
+    // Section des objets disponibles
+    const availableItems = [
+        ...groups.available.Actions,
+        ...groups.available.Voitures,
+        ...groups.available.Bateaux,
+        ...groups.available.Avions,
+        ...groups.available.Autres
+    ];
+    
+    if (availableItems.length > 0) {
+        html += '<div class="mb-8">';
+        html += '<h2 class="text-2xl font-bold text-cyan-400 mb-6 border-b border-cyan-500/30 pb-2">📦 Objets Disponibles</h2>';
+        html += '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">';
+        html += availableItems.map(createItemCardHTML).join('');
+        html += '</div>';
+        html += '</div>';
+    }
+    
+    // Section des objets vendus
+    const soldItems = [
+        ...groups.sold.Actions,
+        ...groups.sold.Voitures,
+        ...groups.sold.Bateaux,
+        ...groups.sold.Avions,
+        ...groups.sold.Autres
+    ];
+    
+    if (soldItems.length > 0) {
+        html += '<div class="mt-12">';
+        html += '<h2 class="text-2xl font-bold text-gray-400 mb-6 border-b border-gray-500/30 pb-2">💰 Objets Vendus</h2>';
+        html += '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">';
+        html += soldItems.map(createItemCardHTML).join('');
+        html += '</div>';
+        html += '</div>';
+    }
+    
+    container.innerHTML = html;
 }
 
 function displayItemsAsList(container, items) {
