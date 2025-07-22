@@ -292,22 +292,24 @@ class StockAPIManager:
         # Essayer Alpha Vantage en premier
         result = self.alpha_vantage.get_stock_price(symbol)
         if result and result.get('price', 0) > 0:
+            result = self._adjust_currency_for_swiss_stocks(symbol, result)
             self._cache_result(symbol, result)
             return result
         
         # Essayer EODHD
         result = self.eodhd.get_stock_price(symbol)
         if result and result.get('price', 0) > 0:
+            result = self._adjust_currency_for_swiss_stocks(symbol, result)
             self._cache_result(symbol, result)
             return result
         
-        # Essayer Finnhub
+        # Essayer Finnhub en dernier
         result = self.finnhub.get_stock_price(symbol)
         if result and result.get('price', 0) > 0:
+            result = self._adjust_currency_for_swiss_stocks(symbol, result)
             self._cache_result(symbol, result)
             return result
         
-        # Aucune API n'a fonctionné
         logger.error(f"❌ Toutes les APIs ont échoué pour {symbol}")
         return None
     
@@ -348,6 +350,16 @@ class StockAPIManager:
             },
             'cache': self.get_cache_status()
         }
+
+    def _adjust_currency_for_swiss_stocks(self, symbol: str, result: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Ajuste la devise pour les actions suisses (.SW)
+        Force l'affichage en CHF pour les actions suisses
+        """
+        if symbol.endswith('.SW'):
+            result['currency'] = 'CHF'
+            logger.info(f"🇨🇭 Devise ajustée pour {symbol}: CHF")
+        return result
 
 # Instance globale
 stock_api_manager = StockAPIManager()
