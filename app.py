@@ -2849,9 +2849,9 @@ def get_stock_price_cache_status():
 def reset_daily_requests():
     """Réinitialise le compteur de requêtes quotidiennes"""
     try:
-        result = manus_stock_api.clear_cache()
+        stock_api_manager.clear_cache()
         logger.info("✅ Compteur de requêtes quotidiennes réinitialisé via API")
-        return jsonify(result)
+        return jsonify({"status": "success", "message": "Cache vidé"})
     except Exception as e:
         logger.error(f"Erreur réinitialisation requêtes: {e}")
         return jsonify({
@@ -2867,9 +2867,9 @@ def get_stock_price_history(symbol):
         items = AdvancedDataManager.fetch_all_items()
         item = next((i for i in items if i.stock_symbol == symbol), None)
         
-        # Utiliser l'API Manus pour l'historique (simplifié)
+        # Utiliser le nouveau gestionnaire pour l'historique (simplifié)
         history = []
-        current_data = manus_stock_api.get_stock_price(symbol, force_refresh=True)
+        current_data = stock_api_manager.get_stock_price(symbol, force_refresh=True)
         if current_data:
             history.append({
                 'date': datetime.now().strftime('%Y-%m-%d'),
@@ -2881,7 +2881,7 @@ def get_stock_price_history(symbol):
             "symbol": symbol,
             "history": history,
             "days": days,
-            "source": "API Manus"
+            "source": "Stock API Manager"
         })
         
     except Exception as e:
@@ -2893,37 +2893,27 @@ def get_stock_price_history(symbol):
 
 @app.route("/api/stock-price/status")
 def check_stock_price_status():
-    """Vérifie le statut des APIs de cours de bourse (Manus + Yahoo)"""
+    """Vérifie le statut des APIs de cours de bourse"""
     try:
         # Tester avec un symbole simple
         test_symbol = "AAPL"
         
-        # Test Manus API
-        manus_data = manus_stock_api.get_stock_price(test_symbol, force_refresh=False)
-        manus_status = {
-            "available": manus_data is not None,
+        # Test nouveau gestionnaire
+        stock_data = stock_api_manager.get_stock_price(test_symbol, force_refresh=False)
+        stock_status = {
+            "available": stock_data is not None,
             "test_symbol": test_symbol,
-            "test_price": manus_data.get('price') if manus_data else None,
-            "test_currency": manus_data.get('currency') if manus_data else None,
-            "cache_status": manus_stock_api.get_cache_status()
-        }
-        
-        # Test Manus API
-        manus_data = manus_stock_api.get_stock_price(test_symbol, force_refresh=False)
-        manus_status = {
-            "available": manus_data is not None,
-            "test_symbol": test_symbol,
-            "test_price": manus_data.get('price') if manus_data else None,
-            "test_currency": manus_data.get('currency') if manus_data else None,
-            "cache_status": manus_stock_api.get_cache_status()
+            "test_price": stock_data.get('price') if stock_data else None,
+            "test_currency": stock_data.get('currency') if stock_data else None,
+            "cache_status": stock_api_manager.get_cache_status()
         }
         
         # Statut global
         overall_status = {
-            "manus_api": manus_status,
-            "primary_source": "Manus API",
-            "fallback_source": "Manus API",
-            "system_status": "Operational" if manus_status["available"] else "Degraded"
+            "stock_api_manager": stock_status,
+            "primary_source": "Stock API Manager",
+            "apis": ["Alpha Vantage", "EODHD", "Finnhub"],
+            "system_status": "Operational" if stock_status["available"] else "Degraded"
         }
         
         return jsonify(overall_status)
@@ -2956,9 +2946,7 @@ def update_all_stock_prices():
         # Extraire les symboles
         symbols = [item.stock_symbol for item in action_items]
         
-        # Essayer d'abord l'API Manus pour tous les symboles
-        logger.info("📊 Mise à jour via API Manus...")
-        manus_results = manus_stock_api.get_multiple_stock_prices(symbols)
+        logger.info("📊 Mise à jour via Stock API Manager...")
         
         # Préparer les résultats
         results = {
@@ -2966,43 +2954,28 @@ def update_all_stock_prices():
             'failed': [],
             'skipped': [],
             'requests_used': len(symbols),
-            'source': 'Manus API'
+            'source': 'Stock API Manager'
         }
         
-        # Traiter les résultats Manus
-        for symbol, price_data in manus_results.items():
-            results['success'].append({
-                'symbol': symbol,
-                'price': price_data.get('price'),
-                'currency': price_data.get('currency'),
-                'change': price_data.get('change'),
-                'change_percent': price_data.get('change_percent'),
-                'volume': price_data.get('volume'),
-                'source': 'Manus API'
-            })
-        
-        # Pour les symboles non trouvés par Manus, essayer de les récupérer individuellement
-        missing_symbols = [s for s in symbols if s not in manus_results]
-        if missing_symbols:
-            logger.info(f"🔄 Récupération individuelle pour {len(missing_symbols)} symboles")
-            for symbol in missing_symbols:
-                try:
-                    price_data = manus_stock_api.get_stock_price(symbol, force_refresh=True)
-                    if price_data:
-                        results['success'].append({
-                            'symbol': symbol,
-                            'price': price_data.get('price'),
-                            'currency': price_data.get('currency'),
-                            'change': price_data.get('change'),
-                            'change_percent': price_data.get('change_percent'),
-                            'volume': price_data.get('volume'),
-                            'source': 'Manus API (individuel)'
-                        })
-                    else:
-                        results['failed'].append(symbol)
-                except Exception as e:
-                    logger.error(f"❌ Erreur pour {symbol}: {e}")
+        # Traiter chaque symbole individuellement
+        for symbol in symbols:
+            try:
+                price_data = stock_api_manager.get_stock_price(symbol, force_refresh=True)
+                if price_data:
+                    results['success'].append({
+                        'symbol': symbol,
+                        'price': price_data.get('price'),
+                        'currency': price_data.get('currency'),
+                        'change': price_data.get('change'),
+                        'change_percent': price_data.get('change_percent'),
+                        'volume': price_data.get('volume'),
+                        'source': price_data.get('source', 'Stock API Manager')
+                    })
+                else:
                     results['failed'].append(symbol)
+            except Exception as e:
+                logger.error(f"❌ Erreur pour {symbol}: {e}")
+                results['failed'].append(symbol)
         
         # Préparer les données de réponse et mettre à jour la base de données
         updated_data = []
@@ -3085,13 +3058,11 @@ def schedule_auto_stock_updates():
     def auto_update_stock_prices():
         """Fonction de mise à jour automatique optimisée"""
         try:
-            logger.info("🔄 Début mise à jour automatique des prix via Manus API")
+            logger.info("🔄 Début mise à jour automatique des prix via Stock API Manager")
             
-            # Vérifier le statut du cache Manus
-            manus_cache_status = manus_stock_api.get_cache_status()
-            yahoo_cache_status = stock_price_manager.get_cache_status()
-            logger.info(f"📊 Cache Manus: {manus_cache_status['cache_size']} entrées")
-            logger.info(f"📊 Cache Yahoo: {yahoo_cache_status['cache_size']} entrées")
+            # Vérifier le statut du cache
+            cache_status = stock_api_manager.get_cache_status()
+            logger.info(f"📊 Cache Stock API Manager: {cache_status['cache_size']} entrées")
             
             items = AdvancedDataManager.fetch_all_items()
             stock_items = [item for item in items if item.category == 'Actions' and item.stock_symbol]
@@ -3103,9 +3074,7 @@ def schedule_auto_stock_updates():
             # Extraire les symboles
             symbols = [item.stock_symbol for item in stock_items]
             
-            # Essayer d'abord l'API Manus pour tous les symboles
-            logger.info("📊 Mise à jour automatique via API Manus...")
-            manus_results = manus_stock_api.get_multiple_stock_prices(symbols)
+            logger.info("📊 Mise à jour automatique via Stock API Manager...")
             
             # Préparer les résultats
             results = {
@@ -3113,43 +3082,28 @@ def schedule_auto_stock_updates():
                 'failed': [],
                 'skipped': [],
                 'requests_used': len(symbols),
-                'source': 'Manus API'
+                'source': 'Stock API Manager'
             }
             
-            # Traiter les résultats Manus
-            for symbol, price_data in manus_results.items():
-                results['success'].append({
-                    'symbol': symbol,
-                    'price': price_data.get('price'),
-                    'currency': price_data.get('currency'),
-                    'change': price_data.get('change'),
-                    'change_percent': price_data.get('change_percent'),
-                    'volume': price_data.get('volume'),
-                    'source': 'Manus API'
-                })
-            
-            # Pour les symboles non trouvés par Manus, essayer de les récupérer individuellement
-            missing_symbols = [s for s in symbols if s not in manus_results]
-            if missing_symbols:
-                logger.info(f"🔄 Récupération individuelle pour {len(missing_symbols)} symboles")
-                for symbol in missing_symbols:
-                    try:
-                        price_data = manus_stock_api.get_stock_price(symbol, force_refresh=True)
-                        if price_data:
-                            results['success'].append({
-                                'symbol': symbol,
-                                'price': price_data.get('price'),
-                                'currency': price_data.get('currency'),
-                                'change': price_data.get('change'),
-                                'change_percent': price_data.get('change_percent'),
-                                'volume': price_data.get('volume'),
-                                'source': 'Manus API (individuel)'
-                            })
-                        else:
-                            results['failed'].append(symbol)
-                    except Exception as e:
-                        logger.error(f"❌ Erreur pour {symbol}: {e}")
+            # Traiter chaque symbole individuellement
+            for symbol in symbols:
+                try:
+                    price_data = stock_api_manager.get_stock_price(symbol, force_refresh=True)
+                    if price_data:
+                        results['success'].append({
+                            'symbol': symbol,
+                            'price': price_data.get('price'),
+                            'currency': price_data.get('currency'),
+                            'change': price_data.get('change'),
+                            'change_percent': price_data.get('change_percent'),
+                            'volume': price_data.get('volume'),
+                            'source': price_data.get('source', 'Stock API Manager')
+                        })
+                    else:
                         results['failed'].append(symbol)
+                except Exception as e:
+                    logger.error(f"❌ Erreur pour {symbol}: {e}")
+                    results['failed'].append(symbol)
             
             logger.info(f"✅ Mise à jour automatique terminée:")
             logger.info(f"   - {len(results['success'])} symboles traités")
@@ -3181,14 +3135,14 @@ def schedule_auto_stock_updates():
 
 def get_stock_price_manus(symbol: str, item: Optional[CollectionItem], cache_key: str, force_refresh=False):
     """
-    Récupère les données boursières via le wrapper stable (Manus -> Alpha Vantage -> yfinance).
-    API boursière principale avec fallback robuste.
+    Récupère les données boursières via le nouveau gestionnaire d'API.
+    API boursière principale avec fallback robuste (Alpha Vantage -> EODHD -> Finnhub).
     """
     try:
-        logger.info(f"Récupération prix stable wrapper pour le symbole : {symbol}")
+        logger.info(f"Récupération prix via Stock API Manager pour le symbole : {symbol}")
         
-        # Utiliser le wrapper stable qui gère Manus -> Alpha Vantage -> yfinance
-        price_data = get_stock_price_stable(symbol)
+        # Utiliser le nouveau gestionnaire d'API
+        price_data = stock_api_manager.get_stock_price(symbol, force_refresh=force_refresh)
         
         if not price_data or not price_data.get('price'):
             logger.error(f"Aucune donnée trouvée pour {symbol}")
