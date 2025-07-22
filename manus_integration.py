@@ -239,7 +239,13 @@ class ManusStockAPI:
     def _try_fallback_api(self, symbol: str) -> Optional[Dict[str, Any]]:
         """Essaie une API de fallback si Manus échoue"""
         try:
-            # Essayer yfinance en premier (gratuit et fiable)
+            # Essayer Alpha Vantage en premier (fonctionne sur Render)
+            from alpha_vantage_fallback import alpha_vantage_fallback
+            alpha_result = alpha_vantage_fallback.get_stock_price(symbol)
+            if alpha_result:
+                return alpha_result
+            
+            # Fallback vers yfinance si Alpha Vantage échoue
             return self._try_yfinance_fallback(symbol)
             
         except Exception as e:
@@ -499,7 +505,7 @@ class ManusMarketReportAPI:
     """API Manus pour les rapports de marché - Remplace toutes les autres APIs de rapports"""
     
     def __init__(self):
-        self.base_url = "https://y0h0i3cqzyko.manus.space"
+        self.base_url = "https://5001-i6iozp7b45ajvx9qtfijb-2bff9589.manusvm.computer"
         self.session = requests.Session()
         self.session.headers.update({
             'User-Agent': 'InventorySBO/1.0 (Manus Integration)'
@@ -521,48 +527,185 @@ class ManusMarketReportAPI:
             response = self.session.get(f"{self.base_url}/api/report", timeout=30)
             
             if response.status_code == 200:
-                data = response.json()
+                # Essayer de parser comme JSON d'abord
+                try:
+                    data = response.json()
+                    if 'content' in data and 'html' in data['content']:
+                        # Structure JSON avec HTML à l'intérieur
+                        html_content = data['content']['html']
+                        parsed_data = self._parse_market_report_html(html_content)
+                    else:
+                        # Structure JSON différente
+                        parsed_data = self._parse_market_report_json(data)
+                except json.JSONDecodeError:
+                    # Fallback: parser comme HTML direct
+                    html_content = response.text
+                    parsed_data = self._parse_market_report_html(html_content)
                 
-                # Nouvelle structure de l'API Manus
-                report = data.get('report', {})
-                
-                # Transformer les données
-                market_report = {
-                    'timestamp': datetime.now().isoformat(),
-                    'report_date': data.get('api_call_timestamp', datetime.now().isoformat()),
-                    'generation_time': data.get('generation_time', ''),
-                    'source': 'Manus API',
-                    'status': 'complete',
+                if parsed_data['parsing_success']:
+                    market_report = {
+                        'timestamp': datetime.now().isoformat(),
+                        'report_date': datetime.now().strftime('%Y-%m-%d'),
+                        'generation_time': parsed_data.get('generation_time', ''),
+                        'source': 'Manus API',
+                        'status': 'complete',
+                        
+                        # Contenu parsé
+                        'content': {
+                            'html': parsed_data.get('html_content', ''),
+                            'markdown': parsed_data.get('markdown_content', ''),
+                            'text': parsed_data.get('text_content', '')
+                        },
+                        
+                        # Métriques extraites
+                        'market_metrics': parsed_data.get('metrics', {}),
+                        
+                        # Résumé
+                        'summary': parsed_data.get('summary', {}),
+                        
+                        # Sections
+                        'sections': parsed_data.get('sections', []),
+                        
+                        # Données brutes
+                        'raw_content_length': len(html_content),
+                        'parsing_success': True
+                    }
                     
-                    # Métriques de marché
-                    'market_metrics': report.get('key_metrics', {}),
-                    
-                    # Contenu - nouvelle structure
-                    'content': {
-                        'html': report.get('content', {}).get('html', ''),
-                        'markdown': report.get('content', {}).get('markdown', '')
-                    },
-                    
-                    # Résumé
-                    'summary': report.get('summary', {}),
-                    
-                    # Sections
-                    'sections': report.get('metadata', {}).get('sections', []),
-                    
-                    # Données brutes
-                    'raw_data': data
-                }
-                
-                # Mettre en cache
-                self.cache[cache_key] = (market_report, datetime.now())
-                return market_report
+                    # Mettre en cache
+                    self.cache[cache_key] = (market_report, datetime.now())
+                    logger.info(f"✅ Rapport de marché récupéré avec succès (taille: {len(html_content)} chars)")
+                    return market_report
+                else:
+                    logger.warning(f"⚠️ Échec du parsing du rapport de marché")
+                    return self._create_default_report()
                 
             else:
+                logger.error(f"❌ Erreur HTTP {response.status_code} pour le rapport de marché")
                 return self._create_default_report()
                 
         except Exception as e:
-            logger.error(f"Erreur récupération rapport: {e}")
+            logger.error(f"❌ Erreur récupération rapport: {e}")
             return self._create_default_report()
+    
+    def _parse_market_report_json(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Parse la structure JSON du rapport de marché"""
+        try:
+            # Extraire les données de base
+            content = data.get('content', {})
+            html_content = content.get('html', '')
+            
+            # Parser le HTML à l'intérieur du JSON
+            return self._parse_market_report_html(html_content)
+            
+        except Exception as e:
+            logger.error(f"❌ Erreur parsing JSON rapport: {e}")
+            return {
+                'parsing_success': False,
+                'error': str(e),
+                'html_content': str(data)[:1000] + "..." if len(str(data)) > 1000 else str(data),
+                'text_content': '',
+                'markdown_content': '# Erreur de Parsing JSON\n\nImpossible de parser le rapport de marché JSON.',
+                'metrics': {},
+                'summary': {},
+                'sections': []
+            }
+    
+    def _parse_market_report_html(self, html_content: str) -> Dict[str, Any]:
+        """Parse le contenu HTML du rapport de marché"""
+        try:
+            # Extraire le contenu principal
+            main_content_match = re.search(r'<main[^>]*>(.*?)</main>', html_content, re.DOTALL)
+            if main_content_match:
+                main_content = main_content_match.group(1)
+            else:
+                # Fallback: chercher dans le body
+                body_match = re.search(r'<body[^>]*>(.*?)</body>', html_content, re.DOTALL)
+                main_content = body_match.group(1) if body_match else html_content
+            
+            # Extraire le titre
+            title_match = re.search(r'<h1[^>]*>(.*?)</h1>', main_content, re.DOTALL)
+            title = title_match.group(1).strip() if title_match else "Rapport de Marché"
+            
+            # Extraire les métriques clés
+            metrics = {}
+            metric_patterns = [
+                (r'<strong>([^<]+):</strong>\s*([^<]+)', 'general'),
+                (r'(\w+):\s*([0-9.,%]+)', 'numbers'),
+                (r'<span[^>]*>([^<]+)</span>', 'spans')
+            ]
+            
+            for pattern, metric_type in metric_patterns:
+                matches = re.findall(pattern, main_content)
+                for match in matches:
+                    if isinstance(match, tuple) and len(match) == 2:
+                        key, value = match
+                        metrics[key.strip()] = value.strip()
+                    elif isinstance(match, str):
+                        metrics[f"{metric_type}_{len(metrics)}"] = match.strip()
+            
+            # Extraire le contenu textuel
+            # Nettoyer les balises HTML
+            text_content = re.sub(r'<[^>]+>', ' ', main_content)
+            text_content = re.sub(r'\s+', ' ', text_content).strip()
+            
+            # Créer un contenu Markdown basique
+            markdown_content = f"# {title}\n\n"
+            
+            # Ajouter les métriques
+            if metrics:
+                markdown_content += "## Métriques Clés\n\n"
+                for key, value in metrics.items():
+                    markdown_content += f"- **{key}**: {value}\n"
+                markdown_content += "\n"
+            
+            # Ajouter le contenu principal
+            paragraphs = text_content.split('. ')
+            for para in paragraphs[:10]:  # Limiter à 10 paragraphes
+                if para.strip():
+                    markdown_content += f"{para.strip()}.\n\n"
+            
+            # Créer un résumé
+            summary = {
+                'title': title,
+                'key_points': list(metrics.keys())[:5],  # 5 premiers points
+                'word_count': len(text_content.split()),
+                'metrics_count': len(metrics)
+            }
+            
+            # Extraire les sections (basé sur les headers)
+            sections = []
+            header_matches = re.findall(r'<h[2-6][^>]*>(.*?)</h[2-6]>', main_content, re.DOTALL)
+            for i, header in enumerate(header_matches):
+                sections.append({
+                    'id': f'section_{i}',
+                    'title': header.strip(),
+                    'type': 'header'
+                })
+            
+            return {
+                'parsing_success': True,
+                'title': title,
+                'html_content': main_content,
+                'text_content': text_content,
+                'markdown_content': markdown_content,
+                'metrics': metrics,
+                'summary': summary,
+                'sections': sections,
+                'generation_time': f"{len(text_content)} chars, {len(metrics)} metrics"
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Erreur parsing HTML rapport: {e}")
+            return {
+                'parsing_success': False,
+                'error': str(e),
+                'html_content': html_content[:1000] + "..." if len(html_content) > 1000 else html_content,
+                'text_content': '',
+                'markdown_content': '# Erreur de Parsing\n\nImpossible de parser le rapport de marché.',
+                'metrics': {},
+                'summary': {},
+                'sections': []
+            }
     
     def _create_default_report(self) -> Dict[str, Any]:
         """Crée un rapport par défaut"""
