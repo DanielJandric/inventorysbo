@@ -90,6 +90,10 @@ class ManusStockAPI:
                                 # Mettre à jour le cache avec les données de fallback
                                 self.cache[cache_key] = (fallback_data, datetime.now())
                                 return fallback_data
+                            else:
+                                # Si le fallback échoue aussi, retourner les données Manus mais avec un avertissement
+                                logger.warning(f"⚠️ Fallback échoué pour {symbol}, retour des données Manus (prix peut être incorrect)")
+                                return stock_data
                         
                         return stock_data
                         
@@ -111,7 +115,7 @@ class ManusStockAPI:
                 'low_52_week': None,
                 'open': None,
                 'previous_close': None,
-                'currency': 'USD',
+                'currency': self._get_currency_for_symbol(symbol, {}),
                 'exchange': 'NASDAQ',
                 'last_updated': datetime.now().isoformat(),
                 'source': 'Manus API',
@@ -134,6 +138,7 @@ class ManusStockAPI:
                 'symbol': symbol,
                 'status': 'error',
                 'error': str(e),
+                'currency': self._get_currency_for_symbol(symbol, {}),
                 'last_updated': datetime.now().isoformat()
             }
     
@@ -179,7 +184,7 @@ class ManusStockAPI:
                 'low_52_week': None,
                 'open': None,
                 'previous_close': None,
-                'currency': 'USD',
+                'currency': self._get_currency_for_symbol(symbol, {}),
                 'exchange': 'NASDAQ',
                 'parsing_success': False
             }
@@ -206,7 +211,10 @@ class ManusStockAPI:
             # Marquer comme succès si au moins le prix est trouvé ET qu'il n'est pas 1.0
             if parsed_data['price'] is not None and parsed_data['price'] != 1.0:
                 parsed_data['parsing_success'] = True
-                logger.info(f"✅ Parsing HTML réussi pour {symbol}: prix={parsed_data['price']}")
+                # Déterminer la devise correcte même pour les données Manus
+                correct_currency = self._get_currency_for_symbol(symbol, {})
+                parsed_data['currency'] = correct_currency
+                logger.info(f"✅ Parsing HTML réussi pour {symbol}: prix={parsed_data['price']} {correct_currency}")
             else:
                 parsed_data['parsing_success'] = False
                 if parsed_data['price'] == 1.0:
@@ -221,6 +229,7 @@ class ManusStockAPI:
             return {
                 'name': symbol,
                 'price': None,
+                'currency': self._get_currency_for_symbol(symbol, {}),
                 'parsing_success': False
             }
     
@@ -244,6 +253,9 @@ class ManusStockAPI:
             ticker = yf.Ticker(symbol)
             info = ticker.info
             
+            # Obtenir la devise correcte pour ce symbole
+            correct_currency = self._get_currency_for_symbol(symbol, info)
+            
             # Extraire les données importantes
             price_data = {
                 'symbol': symbol,
@@ -258,7 +270,7 @@ class ManusStockAPI:
                 'low_52_week': info.get('fiftyTwoWeekLow'),
                 'open': info.get('regularMarketOpen'),
                 'previous_close': info.get('regularMarketPreviousClose'),
-                'currency': 'USD',
+                'currency': correct_currency,
                 'exchange': info.get('exchange', 'NASDAQ'),
                 'last_updated': datetime.now().isoformat(),
                 'source': 'Yahoo Finance (yfinance)',
@@ -267,7 +279,7 @@ class ManusStockAPI:
             }
             
             if price_data['price']:
-                logger.info(f"✅ Fallback yfinance réussi pour {symbol}: {price_data['price']} USD")
+                logger.info(f"✅ Fallback yfinance réussi pour {symbol}: {price_data['price']} {price_data['currency']}")
                 return price_data
             else:
                 logger.warning(f"⚠️ Fallback yfinance échoué pour {symbol}: prix non disponible")
@@ -279,6 +291,81 @@ class ManusStockAPI:
         except Exception as e:
             logger.error(f"❌ Erreur fallback yfinance pour {symbol}: {e}")
             return None
+    
+    def _get_currency_for_symbol(self, symbol: str, yf_info: Dict[str, Any]) -> str:
+        """Détermine la devise correcte pour un symbole"""
+        # Mapping des devises par symbole
+        currency_map = {
+            # Actions américaines
+            "AAPL": "USD",
+            "TSLA": "USD", 
+            "MSFT": "USD",
+            "GOOGL": "USD",
+            "MPW": "USD",
+            "AMZN": "USD",
+            "META": "USD",
+            "NVDA": "USD",
+            "NFLX": "USD",
+            
+            # Actions suisses (.SW)
+            "IREN.SW": "CHF",
+            "NOVN.SW": "CHF",
+            "ROG.SW": "CHF",
+            "NESN.SW": "CHF",
+            "UHR.SW": "CHF",
+            "CSGN.SW": "CHF",
+            "UBSG.SW": "CHF",
+            "ABBN.SW": "CHF",
+            "LONN.SW": "CHF",
+            "GIVN.SW": "CHF",
+            
+            # Actions européennes
+            "ASML": "EUR",
+            "SAP": "EUR",
+            "BMW": "EUR",
+            "VOW3": "EUR",
+            "SIE": "EUR",
+            "BAYN": "EUR",
+            "BAS": "EUR",
+            
+            # Actions britanniques
+            "HSBA": "GBP",
+            "BP": "GBP",
+            "GSK": "GBP",
+            "VOD": "GBP",
+            "RIO": "GBP",
+            "BHP": "GBP"
+        }
+        
+        # Vérifier d'abord le mapping explicite
+        if symbol in currency_map:
+            logger.info(f"💰 Devise mappée pour {symbol}: {currency_map[symbol]}")
+            return currency_map[symbol]
+        
+        # Vérifier la devise retournée par yfinance
+        yf_currency = yf_info.get('currency')
+        if yf_currency and yf_currency in ['USD', 'CHF', 'EUR', 'GBP']:
+            logger.info(f"💰 Devise yfinance pour {symbol}: {yf_currency}")
+            return yf_currency
+        
+        # Vérifier l'exchange pour déduire la devise
+        exchange = yf_info.get('exchange', '').upper()
+        if 'SW' in exchange or '.SW' in symbol:
+            logger.info(f"💰 Devise déduite (Suisse) pour {symbol}: CHF")
+            return "CHF"
+        elif exchange in ['LSE', 'LON']:
+            logger.info(f"💰 Devise déduite (UK) pour {symbol}: GBP")
+            return "GBP"
+        elif exchange in ['FRA', 'ETR', 'AMS']:
+            logger.info(f"💰 Devise déduite (Europe) pour {symbol}: EUR")
+            return "EUR"
+        elif exchange in ['NMS', 'NYQ', 'ASE']:
+            logger.info(f"💰 Devise déduite (US) pour {symbol}: USD")
+            return "USD"
+        
+        # Par défaut, utiliser USD
+        logger.warning(f"⚠️ Devise par défaut pour {symbol}: USD")
+        return "USD"
     
     def get_multiple_stock_prices(self, symbols: List[str], force_refresh: bool = False) -> Dict[str, Dict[str, Any]]:
         """Récupère les prix de plusieurs actions"""
