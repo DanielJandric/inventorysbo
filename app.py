@@ -1066,6 +1066,229 @@ L'objet "<strong>{item_data.get('name', 'N/A')}</strong>" de la catégorie "<str
         
         self.send_notification_async(subject, content, item_data)
     
+    def send_market_report_email(self, market_report_data: Dict):
+        """Envoie un email avec le rapport de marché"""
+        if not self.enabled:
+            logger.warning("Notifications Gmail désactivées")
+            return False
+        
+        try:
+            # Extraire les données du rapport
+            report_date = market_report_data.get('date', 'Date inconnue')
+            report_time = market_report_data.get('time', 'Heure inconnue')
+            report_content = market_report_data.get('content', 'Contenu non disponible')
+            
+            subject = f"📰 Rapport de Marché - {report_date}"
+            
+            # Créer le contenu HTML structuré
+            html_content = self._create_market_report_html(report_date, report_time, report_content)
+            
+            # Créer le contenu texte
+            text_content = self._create_market_report_text(report_date, report_time, report_content)
+            
+            # Créer le message
+            msg = MIMEMultipart('alternative')
+            msg['From'] = self.email_user
+            msg['To'] = ", ".join(self.recipients)
+            msg['Subject'] = f"[BONVIN Collection] {subject}"
+            
+            # Attacher le contenu HTML
+            html_part = MIMEText(html_content, 'html', 'utf-8')
+            msg.attach(html_part)
+            
+            # Contenu texte de secours
+            text_part = MIMEText(text_content, 'plain', 'utf-8')
+            msg.attach(text_part)
+            
+            # Envoyer l'email via Gmail
+            with smtplib.SMTP(self.email_host, self.email_port) as server:
+                server.starttls()
+                server.login(self.email_user, self.email_password)
+                server.send_message(msg)
+            
+            logger.info(f"✅ Email rapport de marché envoyé: {subject}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Erreur envoi email rapport de marché: {e}")
+            return False
+    
+    def _create_market_report_html(self, report_date: str, report_time: str, report_content: str) -> str:
+        """Crée un HTML professionnel pour le rapport de marché"""
+        timestamp = datetime.now().strftime("%d/%m/%Y à %H:%M")
+        
+        return f"""
+        <!DOCTYPE html>
+        <html lang="fr">
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Rapport de Marché - {report_date}</title>
+            <style>
+                body {{
+                    font-family: Arial, sans-serif;
+                    line-height: 1.6;
+                    color: #333333;
+                    background-color: #f5f5f5;
+                    margin: 0;
+                    padding: 20px;
+                }}
+                
+                .container {{
+                    max-width: 700px;
+                    margin: 0 auto;
+                    background-color: #ffffff;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+                    overflow: hidden;
+                }}
+                
+                .header {{
+                    background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+                    color: white;
+                    padding: 30px;
+                    text-align: center;
+                }}
+                
+                .header h1 {{
+                    margin: 0;
+                    font-size: 28px;
+                    font-weight: bold;
+                }}
+                
+                .header .subtitle {{
+                    margin-top: 10px;
+                    font-size: 16px;
+                    opacity: 0.9;
+                }}
+                
+                .content {{
+                    padding: 30px;
+                }}
+                
+                .report-info {{
+                    background-color: #f8f9fa;
+                    border-left: 4px solid #1e3a8a;
+                    padding: 20px;
+                    margin-bottom: 25px;
+                    border-radius: 4px;
+                }}
+                
+                .report-info h3 {{
+                    margin: 0 0 10px 0;
+                    color: #1e3a8a;
+                    font-size: 18px;
+                }}
+                
+                .report-info p {{
+                    margin: 5px 0;
+                    color: #666;
+                }}
+                
+                .report-content {{
+                    background-color: #ffffff;
+                    border: 1px solid #e1e5e9;
+                    border-radius: 6px;
+                    padding: 25px;
+                    margin-bottom: 25px;
+                }}
+                
+                .report-content h3 {{
+                    margin: 0 0 20px 0;
+                    color: #1e3a8a;
+                    font-size: 20px;
+                    border-bottom: 2px solid #e1e5e9;
+                    padding-bottom: 10px;
+                }}
+                
+                .report-content pre {{
+                    white-space: pre-wrap;
+                    font-family: 'Courier New', monospace;
+                    font-size: 14px;
+                    line-height: 1.5;
+                    color: #333;
+                    background-color: #f8f9fa;
+                    padding: 15px;
+                    border-radius: 4px;
+                    border: 1px solid #e1e5e9;
+                    overflow-x: auto;
+                }}
+                
+                .footer {{
+                    background-color: #f8f9fa;
+                    padding: 20px;
+                    text-align: center;
+                    border-top: 1px solid #e1e5e9;
+                }}
+                
+                .footer p {{
+                    margin: 5px 0;
+                    color: #666;
+                    font-size: 14px;
+                }}
+                
+                .logo {{
+                    width: 60px;
+                    height: 60px;
+                    margin-bottom: 15px;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <img src="https://bonvin.ch/wp-content/uploads/2023/03/BONVIN_120x120.png" alt="BONVIN" class="logo">
+                    <h1>📰 Rapport de Marché</h1>
+                    <div class="subtitle">Analyse et insights des marchés financiers</div>
+                </div>
+                
+                <div class="content">
+                    <div class="report-info">
+                        <h3>📋 Informations du Rapport</h3>
+                        <p><strong>Date:</strong> {report_date}</p>
+                        <p><strong>Heure:</strong> {report_time}</p>
+                        <p><strong>Source:</strong> API Manus - Données temps réel</p>
+                        <p><strong>Généré le:</strong> {timestamp}</p>
+                    </div>
+                    
+                    <div class="report-content">
+                        <h3>📊 Analyse de Marché</h3>
+                        <pre>{report_content}</pre>
+                    </div>
+                </div>
+                
+                <div class="footer">
+                    <p><strong>BONVIN Collection</strong> - Gestion de portefeuille d'investissement</p>
+                    <p>Ce rapport a été généré automatiquement par votre système de gestion</p>
+                    <p>Pour plus d'informations, consultez votre tableau de bord</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+    
+    def _create_market_report_text(self, report_date: str, report_time: str, report_content: str) -> str:
+        """Crée le contenu texte pour le rapport de marché"""
+        timestamp = datetime.now().strftime("%d/%m/%Y à %H:%M")
+        
+        return f"""
+BONVIN Collection - Rapport de Marché
+====================================
+
+📋 INFORMATIONS DU RAPPORT
+Date: {report_date}
+Heure: {report_time}
+Source: API Manus - Données temps réel
+Généré le: {timestamp}
+
+📊 ANALYSE DE MARCHÉ
+{report_content}
+
+---
+BONVIN Collection - Gestion de portefeuille d'investissement
+Ce rapport a été généré automatiquement par votre système de gestion
+        """
+    
     def _detect_important_changes(self, old_data: Dict, new_data: Dict) -> List[str]:
         """Détecte les changements importants"""
         changes = []
@@ -3781,6 +4004,79 @@ def email_config():
         "service": "Gmail",
         "app_url": APP_URL
     })
+
+@app.route("/api/send-market-report-email", methods=["POST"])
+def send_market_report_email():
+    """Envoie le dernier rapport de marché par email"""
+    try:
+        # Vérifier que l'email est configuré
+        if not gmail_manager.enabled:
+            return jsonify({
+                "success": False,
+                "error": "Configuration email non disponible"
+            }), 400
+        
+        # Récupérer le dernier rapport de marché
+        try:
+            response = supabase.table('market_reports').select('*').order('created_at', desc=True).limit(1).execute()
+            
+            if not response.data:
+                # Aucun rapport trouvé, en générer un nouveau
+                logger.info("Aucun rapport trouvé, génération d'un nouveau rapport...")
+                briefing = generate_market_briefing()
+                
+                if briefing.get('status') == 'success':
+                    # Créer les données du rapport
+                    market_report_data = {
+                        'date': datetime.now().strftime('%d/%m/%Y'),
+                        'time': datetime.now().strftime('%H:%M'),
+                        'content': briefing.get('briefing', {}).get('content', 'Contenu non disponible')
+                    }
+                else:
+                    return jsonify({
+                        "success": False,
+                        "error": "Impossible de générer un nouveau rapport de marché"
+                    }), 500
+            else:
+                # Utiliser le dernier rapport de la base de données
+                latest_report = response.data[0]
+                market_report_data = {
+                    'date': latest_report.get('date', 'Date inconnue'),
+                    'time': latest_report.get('time', 'Heure inconnue'),
+                    'content': latest_report.get('content', 'Contenu non disponible')
+                }
+            
+            # Envoyer l'email
+            success = gmail_manager.send_market_report_email(market_report_data)
+            
+            if success:
+                logger.info(f"✅ Rapport de marché envoyé par email à {len(gmail_manager.recipients)} destinataires")
+                return jsonify({
+                    "success": True,
+                    "message": f"Rapport de marché envoyé avec succès à {len(gmail_manager.recipients)} destinataires",
+                    "recipients": gmail_manager.recipients,
+                    "report_date": market_report_data['date'],
+                    "report_time": market_report_data['time']
+                })
+            else:
+                return jsonify({
+                    "success": False,
+                    "error": "Erreur lors de l'envoi de l'email"
+                }), 500
+                
+        except Exception as e:
+            logger.error(f"Erreur récupération rapport de marché: {e}")
+            return jsonify({
+                "success": False,
+                "error": f"Erreur récupération rapport: {str(e)}"
+            }), 500
+            
+    except Exception as e:
+        logger.error(f"Erreur envoi email rapport de marché: {e}")
+        return jsonify({
+            "success": False,
+            "error": f"Erreur système: {str(e)}"
+        }), 500
 
 @app.route("/api/endpoints")
 def list_endpoints():
