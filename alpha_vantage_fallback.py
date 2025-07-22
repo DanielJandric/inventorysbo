@@ -36,7 +36,9 @@ class AlphaVantageFallback:
     """Fallback vers Alpha Vantage API"""
     
     def __init__(self):
-        self.api_key = os.environ.get('ALPHA_VANTAGE_KEY', 'XCRQGI1OMS5381DE')  # Clé Alpha Vantage fournie
+        self.api_key = os.environ.get('ALPHA_VANTAGE_KEY')
+        if not self.api_key:
+            logger.warning("⚠️ ALPHA_VANTAGE_KEY non définie dans l'environnement")
         self.base_url = 'https://www.alphavantage.co/query'
         self.session = requests.Session()
         self.session.headers.update({

@@ -202,10 +202,10 @@ def test_alpha_vantage_key():
             key = alpha_vantage_fallback.api_key
             if key == 'demo':
                 logger.error("❌ Utilise la clé 'demo' au lieu de la vraie clé")
-            elif key == 'XCRQGI1OMS5381DE':
+            elif key:
                 logger.info("✅ Clé correcte configurée")
             else:
-                logger.warning(f"⚠️ Clé inconnue: {key[:4]}...")
+                logger.warning("⚠️ Clé non définie")
             
             return False
         

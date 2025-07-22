@@ -170,7 +170,7 @@ def test_alpha_vantage_key():
         if not key:
             logger.warning("⚠️ ALPHA_VANTAGE_KEY non définie")
             # Utiliser la clé par défaut
-            key = 'XCRQGI1OMS5381DE'
+            key = 'demo'
             logger.info(f"   Utilisation clé par défaut: {key[:4]}...")
         
         # Test direct Alpha Vantage
