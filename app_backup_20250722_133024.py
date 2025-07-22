@@ -21,15 +21,8 @@ from sklearn.metrics.pairwise import cosine_similarity
 from dotenv import load_dotenv
 import requests
 import schedule
-from manus_integration import (
-    manus_stock_api, 
-    manus_market_report_api,
-    get_stock_price_manus,
-    get_market_report_manus,
-    generate_market_briefing_manus,
-    get_exchange_rate_manus
-)
-# Remplacé par l'API Manus unifiée
+from stock_price_manager import StockPriceManager
+from manus_stock_manager import manus_stock_manager
 
 # Load environment variables from .env file
 load_dotenv()
@@ -55,8 +48,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# APIs Manus unifiées - Remplace toutes les autres APIs
-# stock_price_manager = StockPriceManager()  # Remplacé par Manus
+# Gestionnaire de prix d'actions avec Yahoo Finance
+stock_price_manager = StockPriceManager()
 
 
 
@@ -2478,12 +2471,34 @@ def format_stock_value(value, is_price=False, is_percent=False, is_volume=False)
     return value
 
 def get_live_exchange_rate(from_currency: str, to_currency: str = 'CHF') -> float:
-    """Récupère le taux de change via les données Manus (remplace les autres APIs)"""
-    try:
-        return get_exchange_rate_manus(from_currency, to_currency)
-    except Exception as e:
-        logger.error(f"Erreur taux de change Manus: {e}")
+    """
+    Récupère le taux de change en direct en utilisant l'API FreeCurrency.
+    Convertit une valeur de 'from_currency' vers 'to_currency'.
+    """
+    if from_currency == to_currency:
         return 1.0
+    
+    now = time.time()
+    cache_key = f"forex_{from_currency}_{to_currency}"
+
+    # 1. Vérifier si le taux est en cache et valide
+    if cache_key in forex_cache and now - forex_cache[cache_key]['timestamp'] < FOREX_CACHE_DURATION:
+        return forex_cache[cache_key]['rate']
+
+    # 2. Appel API FreeCurrency
+    logger.info(f"💰 Appel API FreeCurrency pour {from_currency} -> {to_currency}")
+    try:
+        import requests
+        url = f"https://api.freecurrencyapi.com/v1/latest?apikey={FREECURRENCY_API_KEY}&currencies={to_currency}&base_currency={from_currency}"
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        
+        rate = data.get('data', {}).get(to_currency)
+        if rate:
+            # Mettre à jour le cache
+            forex_cache[cache_key] = {'rate': rate, 'timestamp': now}
+            return rate
         else:
             logger.warning(f"Taux de change non trouvé pour {from_currency} -> {to_currency}")
             return 1.0
@@ -2511,25 +2526,84 @@ def get_exchange_rate_route(from_currency: str, to_currency: str = 'CHF'):
 
 @app.route("/api/stock-price/<symbol>")
 def get_stock_price(symbol):
-    """API Manus pour les prix d'actions - Remplace toutes les autres APIs"""
+    """
+    Récupère le prix d'une action via Yahoo Finance API.
+    """
+    # Vérifier si on force le refresh
+    force_refresh = request.args.get('force_refresh', 'false').lower() == 'true'
+    
+    items = AdvancedDataManager.fetch_all_items()
+    item = next((i for i in items if i.stock_symbol == symbol), None)
+
+    if not item:
+        logger.warning(f"Aucun item trouvé pour le symbole {symbol}")
+
     try:
-        force_refresh = request.args.get('refresh', 'false').lower() == 'true'
-        stock_data = get_stock_price_manus(symbol, force_refresh)
+        # Essayer d'abord l'API Manus
+        price_data = manus_stock_manager.get_stock_price(
+            symbol=symbol,
+            exchange=item.stock_exchange if item else None,
+            force_refresh=force_refresh
+        )
         
-        return jsonify({
-            'success': True,
-            'data': stock_data,
-            'source': 'Manus API',
-            'timestamp': datetime.now().isoformat()
-        })
-    except Exception as e:
-        logger.error(f"Erreur API prix {symbol}: {e}")
-        return jsonify({
-            'success': False,
-            'error': str(e),
-            'source': 'Manus API',
-            'timestamp': datetime.now().isoformat()
-        }), 500
+        # Fallback vers Yahoo si Manus échoue
+        if not price_data:
+            logger.info(f"🔄 Fallback Yahoo pour {symbol}")
+            price_data = stock_price_manager.get_stock_price(
+                symbol=symbol,
+                exchange=item.stock_exchange if item else None,
+                force_refresh=force_refresh
+            )
+        
+        if price_data:
+            # Mettre à jour la base de données si c'est une action existante
+            try:
+                items = AdvancedDataManager.fetch_all_items()
+                item = next((i for i in items if i.stock_symbol == symbol), None)
+                
+                if item and item.id:
+                    total_value = price_data.price * (item.stock_quantity or 1)
+                    
+                    update_data = {
+                        'current_price': price_data.price,
+                        'current_value': total_value,
+                        'last_price_update': datetime.now().isoformat(),
+                        'stock_volume': price_data.volume,
+                        'stock_52_week_high': price_data.fifty_two_week_high,
+                        'stock_52_week_low': price_data.fifty_two_week_low,
+                        'stock_change': price_data.change,
+                        'stock_change_percent': price_data.change_percent,
+                        'stock_average_volume': price_data.volume,
+                        'stock_pe_ratio': price_data.pe_ratio,
+                        'stock_currency': price_data.currency
+                    }
+                    
+                    # Mettre à jour dans Supabase
+                    if supabase:
+                        response = supabase.table('items').update(update_data).eq('id', item.id).execute()
+                        if response.data:
+                            logger.info(f"✅ Prix Manus mis à jour dans DB pour {symbol}: {price_data.price} {price_data.currency}")
+                        else:
+                            logger.warning(f"⚠️ Échec mise à jour DB pour {symbol}")
+            except Exception as e:
+                logger.error(f"❌ Erreur mise à jour DB pour {symbol}: {e}")
+            
+            # Convertir en format compatible avec l'interface
+            response_data = {
+                'symbol': price_data.symbol,
+                'price': price_data.price,
+                'currency': price_data.currency,
+                'change': price_data.change,
+                'change_percent': price_data.change_percent,
+                'volume': price_data.volume,
+                'pe_ratio': price_data.pe_ratio,
+                'high_52_week': price_data.fifty_two_week_high,
+                'low_52_week': price_data.fifty_two_week_low,
+                'timestamp': price_data.timestamp,
+                'source': 'API Manus'
+            }
+            
+            return jsonify(response_data)
         else:
             return jsonify({"error": "Prix non disponible", "details": "Données non trouvées"}), 404
 
@@ -2540,21 +2614,16 @@ def get_stock_price(symbol):
 
 @app.route("/api/stock-price/cache/clear", methods=["POST"])
 def clear_stock_price_cache():
-    """Vide le cache des prix d'actions (API Manus)"""
+    """
+    Vide complètement le cache des prix des actions
+    """
     try:
-        result = manus_stock_api.clear_cache()
+        stock_price_manager.clear_cache()
         return jsonify({
-            'success': True,
-            'message': 'Cache des prix d'actions vidé avec succès',
-            'data': result,
-            'source': 'Manus API'
+            "success": True,
+            "message": "Cache des prix vidé avec succès",
+            "source": "API Manus"
         })
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e),
-            'source': 'Manus API'
-        }), 500
     except Exception as e:
         logger.error(f"Erreur lors du vidage du cache: {e}")
         return jsonify({
@@ -2892,7 +2961,7 @@ def schedule_auto_stock_updates():
     scheduler_thread.start()
     logger.info("🚀 Scheduler de mise à jour automatique démarré (optimisé 10 requêtes/jour)")
 
-def get_stock_price_manus(symbol: str, item: Optional[CollectionItem], cache_key: str, force_refresh=False):
+def get_stock_price_yahoo(symbol: str, item: Optional[CollectionItem], cache_key: str, force_refresh=False):
     """
     Récupère les données boursières via Yahoo Finance API.
     API boursière principale pour les prix d'actions.
@@ -4617,25 +4686,13 @@ def get_market_updates():
 
 @app.route("/api/market-report/manus", methods=["GET"])
 def get_manus_market_report():
-    """Récupère le rapport de marché via l'API Manus (remplace toutes les autres APIs)"""
+    """Récupère le rapport de marché généré par Manus"""
     try:
-        force_refresh = request.args.get('refresh', 'false').lower() == 'true'
-        market_report = get_market_report_manus(force_refresh)
+        # TODO: Remplacer par l'appel à l'endpoint Manus quand il sera disponible
+        # Pour l'instant, on utilise le dernier rapport généré localement
         
-        return jsonify({
-            'success': True,
-            'data': market_report,
-            'source': 'Manus API',
-            'timestamp': datetime.now().isoformat()
-        })
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e),
-            'timestamp': datetime.now().isoformat(),
-            'source': 'Manus API'
-        }), 500, 500
+        if not supabase:
+            return jsonify({"error": "Supabase non connecté"}), 500
         
         # Récupérer le dernier rapport
         response = supabase.table("market_updates").select("*").order("created_at", desc=True).limit(1).execute()
@@ -4780,27 +4837,530 @@ def get_scheduler_status():
         return jsonify({"error": str(e)}), 500
 
 def generate_market_briefing():
-    """Génère un briefing de marché via l'API Manus (remplace toutes les autres APIs)"""
+    """Génère un briefing de marché avec API Manus + GPT-4o"""
     try:
-        briefing = generate_market_briefing_manus()
+        # Utiliser l'API Manus pour les données de marché
+        manus_briefing = generate_market_briefing_with_manus()
+        if manus_briefing:
+            logger.info("✅ Briefing généré avec API Manus + GPT-4o")
+            return manus_briefing
         
-        if briefing.get('status') == 'success':
-            return briefing
+        # Fallback vers OpenAI si Manus échoue
+        if openai_client:
+            logger.info("🔄 Fallback vers OpenAI")
+            return generate_market_briefing_with_openai()
         else:
-            return {
-                'status': 'error',
-                'message': briefing.get('message', 'Erreur génération briefing'),
-                'timestamp': datetime.now().isoformat(),
-                'source': 'Manus API'
-            }
+            logger.error("❌ Aucune API IA disponible")
+            return None
+        
     except Exception as e:
-        logger.error(f"Erreur génération briefing Manus: {e}")
-        return {
-            'status': 'error',
-            'message': str(e),
-            'timestamp': datetime.now().isoformat(),
-            'source': 'Manus API'
-        }.strip()
+        logger.error(f"Erreur génération briefing: {e}")
+        return None
+
+
+
+def schedule_market_updates():
+    """Configure le scheduler pour les updates de marché"""
+    try:
+        schedule.every().day.at(MARKET_UPDATE_TIME).do(generate_scheduled_market_update)
+        logger.info(f"✅ Scheduler market updates configuré pour {MARKET_UPDATE_TIME}")
+        
+        # Démarrer le scheduler dans un thread séparé
+        def run_scheduler():
+            while True:
+                schedule.run_pending()
+                time.sleep(60)  # Vérifier toutes les minutes
+        
+        scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
+        scheduler_thread.start()
+        logger.info("✅ Thread scheduler market updates démarré")
+        
+    except Exception as e:
+        logger.error(f"Erreur configuration scheduler market updates: {e}")
+
+def generate_scheduled_market_update():
+    """Fonction appelée automatiquement par le scheduler"""
+    try:
+        logger.info("🔄 Début génération automatique briefing de marché")
+        
+        briefing = generate_market_briefing()
+        if not briefing:
+            logger.error("❌ Impossible de générer le briefing automatique")
+            return
+        
+        # Sauvegarder en base
+        if supabase:
+            update_data = {
+                "content": briefing,
+                "date": datetime.now().strftime("%Y-%m-%d"),
+                "time": datetime.now().strftime("%H:%M"),
+                "created_at": datetime.now().isoformat(),
+                "trigger_type": "scheduled"
+            }
+            
+            response = supabase.table("market_updates").insert(update_data).execute()
+            
+            if response.data:
+                logger.info("✅ Briefing automatique généré et sauvegardé")
+                
+                # Notification par email si configuré
+                if gmail_manager.enabled:
+                    email_subject = f"📊 Briefing de Marché - {datetime.now().strftime('%d/%m/%Y')}"
+                    email_content = f"""
+                    <div style="font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto;">
+                        <h2 style="color: #00d4ff; border-bottom: 2px solid #00d4ff; padding-bottom: 10px;">
+                            📊 Briefing de Marché - {datetime.now().strftime('%d/%m/%Y')}
+                        </h2>
+                        
+                        <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin: 20px 0;">
+                            <p style="margin: 0; color: #666; font-size: 14px;">
+                                <strong>Généré automatiquement à {datetime.now().strftime('%H:%M')} CEST</strong>
+                            </p>
+                        </div>
+                        
+                        <div style="line-height: 1.7; text-align: justify; color: #333;">
+                            {briefing.replace(chr(10), '<br>')}
+                        </div>
+                        
+                        <div style="margin-top: 30px; padding: 15px; background: #e3f2fd; border-radius: 8px; border-left: 4px solid #2196f3;">
+                            <p style="margin: 0; font-size: 14px; color: #1976d2;">
+                                💡 Ce briefing est généré automatiquement par l'IA de BONVIN Collection.
+                                <br>Consultez l'application pour plus de détails et d'analyses.
+                            </p>
+                        </div>
+                    </div>
+                    """
+                    
+                    gmail_manager.send_notification_async(email_subject, email_content)
+            else:
+                logger.error("❌ Erreur sauvegarde briefing automatique")
+        else:
+            logger.warning("⚠️ Supabase non disponible pour sauvegarde")
+            
+    except Exception as e:
+        logger.error(f"Erreur génération automatique briefing: {e}")
+
+# Gestion d'erreurs
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({"error": "Page non trouvée"}), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    return jsonify({"error": "Erreur interne du serveur"}), 500
+
+@app.route("/template_import_voitures.csv")
+def download_csv_template():
+    """Télécharge le template CSV pour l'import"""
+    try:
+        with open('template_import_voitures.csv', 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        response = Response(content, mimetype='text/csv')
+        response.headers['Content-Disposition'] = 'attachment; filename=template_import_voitures.csv'
+        return response
+    except FileNotFoundError:
+        return jsonify({"error": "Template CSV non trouvé"}), 404
+
+@app.route("/api/import-csv", methods=["POST"])
+def import_csv():
+    """Importe un CSV et remplace toutes les voitures existantes"""
+    try:
+        if 'file' not in request.files:
+            return jsonify({"error": "Aucun fichier fourni"}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({"error": "Aucun fichier sélectionné"}), 400
+        
+        if not file.filename.endswith('.csv'):
+            return jsonify({"error": "Le fichier doit être au format CSV"}), 400
+        
+        # Lire le contenu du CSV
+        import csv
+        import io
+        
+        # Décoder le contenu
+        content = file.read().decode('utf-8')
+        csv_reader = csv.DictReader(io.StringIO(content))
+        
+        # Supprimer seulement les voitures existantes (catégorie "Véhicules")
+        try:
+            supabase.table("items").delete().eq("category", "Véhicules").execute()
+            logger.info("Toutes les voitures existantes supprimées")
+        except Exception as e:
+            logger.error(f"Erreur lors de la suppression: {e}")
+            return jsonify({"error": f"Erreur lors de la suppression des données existantes: {str(e)}"}), 500
+        
+        # Préparer les nouvelles données
+        new_items = []
+        for row in csv_reader:
+            try:
+                # Nettoyer et convertir les données
+                item_data = {
+                    'name': row.get('name', '').strip(),
+                    'category': 'Véhicules',  # Forcer la catégorie Véhicules pour l'import
+                    'status': row.get('status', 'Available').strip(),
+                    'condition': row.get('condition', '').strip() or None,
+                    'description': row.get('description', '').strip() or None,
+                    'location': row.get('location', '').strip() or None,
+                    'current_value': float(row.get('current_value', 0)) if row.get('current_value') else None,
+                    'acquisition_price': float(row.get('acquisition_price', 0)) if row.get('acquisition_price') else None,
+                    'sold_price': float(row.get('sold_price', 0)) if row.get('sold_price') else None,
+                    'construction_year': int(row.get('construction_year', 0)) if row.get('construction_year') else None,
+                    'for_sale': row.get('for_sale', '').lower() in ['true', '1', 'yes', 'oui'],
+                    'sale_status': row.get('sale_status', '').strip() or None,
+                    'sale_progress': row.get('sale_progress', '').strip() or None,
+                    'buyer_contact': row.get('buyer_contact', '').strip() or None,
+                    'intermediary': row.get('intermediary', '').strip() or None,
+                    'current_offer': float(row.get('current_offer', 0)) if row.get('current_offer') else None,
+                    'commission_rate': float(row.get('commission_rate', 0)) if row.get('commission_rate') else None,
+                    'last_action_date': row.get('last_action_date', '').strip() or None,
+                    'surface_m2': float(row.get('surface_m2', 0)) if row.get('surface_m2') else None,
+                    'rental_income_chf': float(row.get('rental_income_chf', 0)) if row.get('rental_income_chf') else None,
+                    'stock_symbol': row.get('stock_symbol', '').strip() or None,
+                    'stock_quantity': int(row.get('stock_quantity', 0)) if row.get('stock_quantity') else None,
+                    'stock_purchase_price': float(row.get('stock_purchase_price', 0)) if row.get('stock_purchase_price') else None,
+                    'stock_exchange': row.get('stock_exchange', '').strip() or None,
+                    'current_price': float(row.get('current_price', 0)) if row.get('current_price') else None,
+                    'stock_volume': int(row.get('stock_volume', 0)) if row.get('stock_volume') else None,
+                    'stock_pe_ratio': float(row.get('stock_pe_ratio', 0)) if row.get('stock_pe_ratio') else None,
+                    'stock_52_week_high': float(row.get('stock_52_week_high', 0)) if row.get('stock_52_week_high') else None,
+                    'stock_52_week_low': float(row.get('stock_52_week_low', 0)) if row.get('stock_52_week_low') else None,
+                    'stock_change': float(row.get('stock_change', 0)) if row.get('stock_change') else None,
+                    'stock_change_percent': float(row.get('stock_change_percent', 0)) if row.get('stock_change_percent') else None,
+                    'stock_average_volume': int(row.get('stock_average_volume', 0)) if row.get('stock_average_volume') else None
+                }
+                
+                # Filtrer les valeurs None
+                item_data = {k: v for k, v in item_data.items() if v is not None}
+                new_items.append(item_data)
+                
+            except Exception as e:
+                logger.warning(f"Erreur lors du traitement de la ligne: {row} - {e}")
+                continue
+        
+        # Insérer les nouvelles données
+        if new_items:
+            try:
+                response = supabase.table("items").insert(new_items).execute()
+                inserted_count = len(response.data) if response.data else 0
+                logger.info(f"{inserted_count} voitures importées avec succès")
+                
+                # Invalider le cache
+                smart_cache.invalidate()
+                
+                return jsonify({
+                    "success": True,
+                    "message": f"{inserted_count} voitures importées avec succès",
+                    "imported_count": inserted_count,
+                    "total_rows": len(new_items)
+                })
+                
+            except Exception as e:
+                logger.error(f"Erreur lors de l'insertion: {e}")
+                return jsonify({"error": f"Erreur lors de l'insertion des données: {str(e)}"}), 500
+        else:
+            return jsonify({"error": "Aucune donnée valide trouvée dans le CSV"}), 400
+            
+    except Exception as e:
+        logger.error(f"Erreur lors de l'import CSV: {e}")
+        return jsonify({"error": f"Erreur lors de l'import: {str(e)}"}), 500
+
+@app.route("/api/rollback-csv", methods=["POST"])
+def rollback_csv():
+    """Rollback avec un CSV de sauvegarde - remplace TOUTES les données"""
+    try:
+        if 'file' not in request.files:
+            return jsonify({"error": "Aucun fichier fourni"}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({"error": "Aucun fichier sélectionné"}), 400
+        
+        if not file.filename.endswith('.csv'):
+            return jsonify({"error": "Le fichier doit être au format CSV"}), 400
+        
+        # Lire le contenu du CSV
+        import csv
+        import io
+        
+        # Décoder le contenu
+        content = file.read().decode('utf-8')
+        csv_reader = csv.DictReader(io.StringIO(content))
+        
+        # Supprimer TOUTES les données existantes (rollback complet)
+        try:
+            supabase.table("items").delete().neq("id", 0).execute()
+            logger.info("Toutes les données existantes supprimées pour le rollback")
+        except Exception as e:
+            logger.error(f"Erreur lors de la suppression: {e}")
+            return jsonify({"error": f"Erreur lors de la suppression des données existantes: {str(e)}"}), 500
+        
+        # Préparer les nouvelles données
+        new_items = []
+        for row in csv_reader:
+            try:
+                # Nettoyer et convertir les données
+                item_data = {
+                    'name': row.get('name', '').strip(),
+                    'category': row.get('category', '').strip(),
+                    'status': row.get('status', 'Available').strip(),
+                    'condition': row.get('condition', '').strip() or None,
+                    'description': row.get('description', '').strip() or None,
+                    'location': row.get('location', '').strip() or None,
+                    'current_value': float(row.get('current_value', 0)) if row.get('current_value') else None,
+                    'acquisition_price': float(row.get('acquisition_price', 0)) if row.get('acquisition_price') else None,
+                    'sold_price': float(row.get('sold_price', 0)) if row.get('sold_price') else None,
+                    'construction_year': int(row.get('construction_year', 0)) if row.get('construction_year') else None,
+                    'for_sale': row.get('for_sale', '').lower() in ['true', '1', 'yes', 'oui'],
+                    'sale_status': row.get('sale_status', '').strip() or None,
+                    'sale_progress': row.get('sale_progress', '').strip() or None,
+                    'buyer_contact': row.get('buyer_contact', '').strip() or None,
+                    'intermediary': row.get('intermediary', '').strip() or None,
+                    'current_offer': float(row.get('current_offer', 0)) if row.get('current_offer') else None,
+                    'commission_rate': float(row.get('commission_rate', 0)) if row.get('commission_rate') else None,
+                    'last_action_date': row.get('last_action_date', '').strip() or None,
+                    'surface_m2': float(row.get('surface_m2', 0)) if row.get('surface_m2') else None,
+                    'rental_income_chf': float(row.get('rental_income_chf', 0)) if row.get('rental_income_chf') else None,
+                    'stock_symbol': row.get('stock_symbol', '').strip() or None,
+                    'stock_quantity': int(row.get('stock_quantity', 0)) if row.get('stock_quantity') else None,
+                    'stock_purchase_price': float(row.get('stock_purchase_price', 0)) if row.get('stock_purchase_price') else None,
+                    'stock_exchange': row.get('stock_exchange', '').strip() or None,
+                    'current_price': float(row.get('current_price', 0)) if row.get('current_price') else None,
+                    'stock_volume': int(row.get('stock_volume', 0)) if row.get('stock_volume') else None,
+                    'stock_pe_ratio': float(row.get('stock_pe_ratio', 0)) if row.get('stock_pe_ratio') else None,
+                    'stock_52_week_high': float(row.get('stock_52_week_high', 0)) if row.get('stock_52_week_high') else None,
+                    'stock_52_week_low': float(row.get('stock_52_week_low', 0)) if row.get('stock_52_week_low') else None,
+                    'stock_change': float(row.get('stock_change', 0)) if row.get('stock_change') else None,
+                    'stock_change_percent': float(row.get('stock_change_percent', 0)) if row.get('stock_change_percent') else None,
+                    'stock_average_volume': int(row.get('stock_average_volume', 0)) if row.get('stock_average_volume') else None
+                }
+                
+                # Filtrer les valeurs None
+                item_data = {k: v for k, v in item_data.items() if v is not None}
+                new_items.append(item_data)
+                
+            except Exception as e:
+                logger.warning(f"Erreur lors du traitement de la ligne: {row} - {e}")
+                continue
+        
+        # Insérer les nouvelles données
+        if new_items:
+            try:
+                response = supabase.table("items").insert(new_items).execute()
+                inserted_count = len(response.data) if response.data else 0
+                logger.info(f"Rollback réussi: {inserted_count} objets restaurés")
+                
+                # Invalider le cache
+                smart_cache.invalidate()
+                
+                return jsonify({
+                    "success": True,
+                    "message": f"Rollback réussi ! {inserted_count} objets restaurés",
+                    "restored_count": inserted_count,
+                    "total_rows": len(new_items)
+                })
+                
+            except Exception as e:
+                logger.error(f"Erreur lors de l'insertion: {e}")
+                return jsonify({"error": f"Erreur lors de la restauration des données: {str(e)}"}), 500
+        else:
+            return jsonify({"error": "Aucune donnée valide trouvée dans le CSV de rollback"}), 400
+            
+    except Exception as e:
+        logger.error(f"Erreur lors du rollback CSV: {e}")
+        return jsonify({"error": f"Erreur lors du rollback: {str(e)}"}), 500
+
+# Point d'entrée
+if __name__ == "__main__":
+    port = int(os.getenv("PORT", 5000))
+    host = "0.0.0.0"
+    
+    logger.info("=" * 60)
+    logger.info("🚀 BONVIN COLLECTION - VERSION OPENAI AVEC RAG")
+    logger.info("=" * 60)
+    logger.info(f"🌐 Host: {host}:{port}")
+    logger.info(f"🔗 App URL: {APP_URL}")
+    logger.info(f"🗄️ Supabase: {'✅' if supabase else '❌'}")
+    logger.info(f"🤖 OpenAI: {'✅' if openai_client else '❌'}")
+    logger.info(f"🤖 Gemini: {'✅' if gemini_client else '❌'}")
+    logger.info(f"🧠 IA Engine: {'✅ GPT-4 avec RAG' if ai_engine else '❌'}")
+    logger.info(f"📧 Gmail: {'✅' if gmail_manager.enabled else '❌'}")
+    if gmail_manager.enabled:
+        logger.info(f"📬 Destinataires: {len(gmail_manager.recipients)}")
+        logger.info(f"💾 Cache: ✅ Multi-niveaux avec embeddings")
+    logger.info(f"📈 Support Actions: ✅ Complet avec Yahoo Finance")
+    logger.info("=" * 60)
+    logger.info("MODE: OpenAI Pure avec Recherche Sémantique RAG")
+    logger.info("✅ GPT-4o avec recherche intelligente")
+    logger.info("✅ Embeddings OpenAI text-embedding-3-small")
+    logger.info("✅ Recherche sémantique par similarité cosinus")
+    logger.info("✅ Détection d'intention de requête")
+    logger.info("✅ Génération automatique d'embeddings")
+    logger.info("✅ Cache intelligent pour les embeddings")
+    logger.info("✅ Données boursières via Yahoo Finance")
+    logger.info("✅ Mise à jour automatique 6x/jour")
+    logger.info("✅ Prix manuel pour les actions")
+    logger.info("=" * 60)
+    
+    try:
+        # Démarrer le scheduler de mise à jour automatique des prix
+        try:
+            schedule_auto_stock_updates()
+        except Exception as e:
+            logger.error(f"Erreur démarrage scheduler prix: {e}")
+        
+        # Démarrer le scheduler de market updates
+        try:
+            schedule_market_updates()
+        except Exception as e:
+            logger.error(f"Erreur démarrage scheduler market updates: {e}")
+        
+        app.run(debug=False, host=host, port=port)
+    except Exception as e:
+        logger.error(f"❌ Erreur démarrage: {e}")
+        raise
+
+# Fonction Google Custom Search supprimée - Remplacée par Gemini 2.0 Flash
+
+def generate_market_briefing_with_manus():
+    """
+    Génère un briefing financier avec API Manus (données) + OpenAI (narratif)
+    """
+    try:
+        current_date = datetime.now().strftime('%Y-%m-%d')
+        
+        logger.info("📊 Génération briefing avec API Manus + OpenAI...")
+        
+        # 1. Collecter les données via API Manus
+        try:
+            collect_response = requests.post(f"{MANUS_API_BASE_URL}/api/data/collect", timeout=30)
+            if collect_response.status_code != 200:
+                logger.error(f"❌ Erreur collecte données Manus: {collect_response.status_code}")
+                return None
+                
+            logger.info("✅ Données collectées via API Manus")
+            
+            # Récupérer les données collectées
+            market_data = collect_response.json()
+            
+        except Exception as e:
+            logger.error(f"❌ Erreur connexion API Manus: {e}")
+            return None
+        
+        # 2. Récupérer les données détaillées via API Manus
+        try:
+            # Récupérer les données financières
+            financial_response = requests.get(f"{MANUS_API_BASE_URL}/api/data/financial", timeout=30)
+            financial_data = financial_response.json() if financial_response.status_code == 200 else {}
+            
+            # Récupérer les données économiques
+            economic_response = requests.get(f"{MANUS_API_BASE_URL}/api/data/economic", timeout=30)
+            economic_data = economic_response.json() if economic_response.status_code == 200 else {}
+            
+            # Récupérer les actualités
+            news_response = requests.get(f"{MANUS_API_BASE_URL}/api/data/news", timeout=30)
+            news_data = news_response.json() if news_response.status_code == 200 else {}
+            
+            logger.info("✅ Données détaillées récupérées via API Manus")
+            
+        except Exception as e:
+            logger.error(f"❌ Erreur récupération données détaillées: {e}")
+            financial_data = {}
+            economic_data = {}
+            news_data = {}
+        
+        # 3. Générer le rapport narratif avec OpenAI
+        if not openai_client:
+            logger.error("❌ OpenAI client non configuré")
+            return None
+            
+        try:
+            # Construire le contexte avec les données Manus complètes (sans limitations)
+            context = f"""Données de marché actuelles (API Manus) pour {current_date}:
+
+MARCHÉS FINANCIERS:
+{json.dumps(financial_data.get('financial_data', {}).get('markets', {}), indent=2, ensure_ascii=False)}
+
+OBLIGATIONS:
+{json.dumps(financial_data.get('financial_data', {}).get('bonds', []), indent=2, ensure_ascii=False)}
+
+CRYPTOMONNAIES:
+{json.dumps(financial_data.get('crypto_data', {}).get('cryptocurrencies', []), indent=2, ensure_ascii=False)}
+
+COMMODITÉS:
+{json.dumps(financial_data.get('financial_data', {}).get('commodities', []), indent=2, ensure_ascii=False)}
+
+DEVISES:
+{json.dumps(financial_data.get('financial_data', {}).get('currencies', []), indent=2, ensure_ascii=False)}
+
+INDICATEURS ÉCONOMIQUES:
+{json.dumps(economic_data.get('economic_data', {}).get('indicators', {}), indent=2, ensure_ascii=False)}
+
+ACTUALITÉS:
+{json.dumps(news_data.get('news_data', {}), indent=2, ensure_ascii=False)}
+
+Génère un briefing narratif fluide et structuré basé sur ces données réelles."""
+
+            prompt = f"""Tu es un analyste financier senior. Tu dois créer un rapport de marché complet et professionnel pour {current_date} en utilisant EXCLUSIVEMENT les données fournies par l'API Manus.
+
+INSTRUCTIONS OBLIGATOIRES :
+1. CRÉE un rapport complet et structuré
+2. UTILISE toutes les données disponibles
+3. ANALYSE chaque classe d'actifs mentionnée
+4. FOURNIS des insights concrets et actionnables
+5. STRUCTURE ton rapport de manière professionnelle
+
+STRUCTURE DU RAPPORT :
+1. RÉSUMÉ EXÉCUTIF (2-3 phrases clés)
+2. MARCHÉS ACTIONS (USA, Europe, Suisse, Asie si pertinent)
+3. OBLIGATIONS ET TAUX (souverains, corporate, spreads)
+4. CRYPTOMONNAIES (BTC, ETH, altcoins, régulation)
+5. COMMODITÉS (pétrole, or, métaux, agriculture)
+6. DEVISES (paires majeures, émergentes)
+7. INDICATEURS ÉCONOMIQUES (inflation, emploi, PMI)
+8. ACTUALITÉS IMPACTANTES (géopolitique, banques centrales)
+9. PERSPECTIVES ET RISQUES (signaux à surveiller)
+
+STYLE :
+- Ton professionnel et direct
+- Données chiffrées précises
+- Analyse factuelle basée sur les données
+- Insights stratégiques pour l'investisseur
+- Longueur : 800-1200 mots
+
+Données à analyser :
+{context}
+
+IMPORTANT : Si certaines données sont manquantes ou vides, indique-le clairement. Ne fais pas d'hypothèses sur des données non fournies. Base ton analyse UNIQUEMENT sur les données réelles disponibles."""
+
+            response = openai_client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": "Tu es un analyste financier senior spécialisé dans les rapports de marché quotidiens. Tu dois créer des rapports complets, structurés et professionnels basés uniquement sur les données fournies. Tu ne peux pas refuser de créer un rapport - c'est ta tâche principale."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=4000,
+                temperature=0.5
+            )
+
+            if response.choices and response.choices[0].message.content:
+                content = response.choices[0].message.content
+                
+                # Construire le briefing complet
+                briefing = f"""📊 BRIEFING FINANCIER QUOTIDIEN - {current_date}
+
+{content}
+
+📰 SOURCES
+• Données financières: API Manus (Yahoo Finance, CoinGecko)
+• Actualités: Sources multiples via API Manus
+• Analyse IA: OpenAI GPT-4o
+• Généré le: {datetime.now().strftime('%d/%m/%Y à %H:%M')}"""
+
+                logger.info("✅ Briefing généré : API Manus (données) + OpenAI (narratif)")
+                return briefing.strip()
             else:
                 logger.error("❌ Réponse OpenAI invalide")
                 return None

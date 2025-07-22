@@ -1,0 +1,78 @@
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rapports de Marché - Manus API</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .header { background: #f0f0f0; padding: 20px; border-radius: 5px; }
+        .content { margin: 20px 0; }
+        .metric { display: inline-block; margin: 10px; padding: 10px; background: #e8f4f8; border-radius: 5px; }
+        .section { margin: 20px 0; padding: 15px; border-left: 4px solid #007bff; }
+        .error { color: red; background: #ffe6e6; padding: 10px; border-radius: 5px; }
+        .timestamp { color: #666; font-size: 0.9em; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📊 Rapports de Marché - Manus API</h1>
+        <p class="timestamp">Dernière mise à jour: {{ timestamp }}</p>
+    </div>
+    
+    {% if error %}
+        <div class="error">
+            <h3>❌ Erreur</h3>
+            <p>{{ error }}</p>
+        </div>
+    {% elif market_data %}
+        <div class="content">
+            <h2>📈 Métriques Clés</h2>
+            <div class="metrics">
+                {% for key, value in market_data.key_metrics.items() %}
+                    <div class="metric">
+                        <strong>{{ key|title }}:</strong> {{ value }}%
+                    </div>
+                {% endfor %}
+            </div>
+            
+            <h2>📋 Résumé</h2>
+            <div class="section">
+                {% if market_data.summary.key_points %}
+                    <ul>
+                    {% for point in market_data.summary.key_points %}
+                        <li>{{ point }}</li>
+                    {% endfor %}
+                    </ul>
+                {% endif %}
+            </div>
+            
+            <h2>📝 Contenu Complet</h2>
+            <div class="section">
+                {% if market_data.content_markdown %}
+                    <pre>{{ market_data.content_markdown }}</pre>
+                {% endif %}
+            </div>
+            
+            <h2>🔧 Informations Techniques</h2>
+            <div class="section">
+                <p><strong>Date du rapport:</strong> {{ market_data.report_date }}</p>
+                <p><strong>Sections disponibles:</strong> {{ market_data.sections|length }}</p>
+                <p><strong>Statut:</strong> {{ market_data.summary.status }}</p>
+            </div>
+        </div>
+    {% else %}
+        <div class="error">
+            <h3>⚠️ Aucune donnée disponible</h3>
+            <p>Impossible de récupérer les données de marché.</p>
+        </div>
+    {% endif %}
+    
+    <div class="header">
+        <p><a href="/api/manus/market-report">API JSON</a> | 
+           <a href="/manus/stocks">Cours de Bourse</a> | 
+           <a href="/api/manus/status">Statut APIs</a></p>
+    </div>
+</body>
+</html>
