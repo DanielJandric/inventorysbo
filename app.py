@@ -2514,6 +2514,17 @@ def get_stock_price(symbol):
         
         stock_data = get_stock_price_manus(symbol, item, cache_key, force_refresh)
         
+        # Vérifier si c'est une erreur
+        if isinstance(stock_data, dict) and stock_data.get('error'):
+            return jsonify({
+                'success': False,
+                'error': stock_data.get('error'),
+                'details': stock_data.get('details'),
+                'message': stock_data.get('message'),
+                'source': 'Manus API',
+                'timestamp': datetime.now().isoformat()
+            }), 404
+        
         return jsonify({
             'success': True,
             'data': stock_data,
@@ -2913,19 +2924,11 @@ def get_stock_price_manus(symbol: str, item: Optional[CollectionItem], cache_key
         # Pas de fallback nécessaire, on utilise seulement Manus
         if not price_data:
             logger.error(f"Aucune donnée trouvée pour {symbol}")
-            return jsonify({
+            return {
                 "error": "Données non disponibles via API Manus", 
                 "details": "Symbole non trouvé ou API indisponible",
                 "message": "Veuillez mettre à jour le prix manuellement."
-            }), 404
-        
-        if not price_data:
-            logger.error(f"Aucune donnée trouvée pour {symbol}")
-            return jsonify({
-                "error": "Données non disponibles via API Manus", 
-                "details": "Symbole non trouvé ou API indisponible",
-                "message": "Veuillez mettre à jour le prix manuellement."
-            }), 404
+            }
         
         # Formater les données pour l'affichage
         result = {
@@ -2952,7 +2955,13 @@ def get_stock_price_manus(symbol: str, item: Optional[CollectionItem], cache_key
         # Mettre à jour le prix dans la DB si c'est une action existante
         if item and item.id:
             try:
-                total_value = price_data.get('price', 0) * (item.stock_quantity or 1)
+                # Vérifier que le prix est valide avant de calculer
+                price = price_data.get('price')
+                if price is None:
+                    logger.warning(f"⚠️ Prix non disponible pour {symbol}, mise à jour DB ignorée")
+                    return result
+                
+                total_value = price * (item.stock_quantity or 1)
                 
                 update_data = {
                     'current_price': price_data.get('price'),
@@ -2981,7 +2990,7 @@ def get_stock_price_manus(symbol: str, item: Optional[CollectionItem], cache_key
             except Exception as e:
                 logger.error(f"❌ Erreur mise à jour DB pour action {item.name}: {e}")
         
-        return jsonify(result)
+        return result
         
     except Exception as e:
         logger.error(f"Erreur Manus API pour {symbol}: {e}")
@@ -2989,13 +2998,13 @@ def get_stock_price_manus(symbol: str, item: Optional[CollectionItem], cache_key
         # Utiliser le cache si disponible
         if cache_key in stock_price_cache:
             logger.info(f"Erreur API, retour des données en cache pour {symbol}")
-            return jsonify(stock_price_cache[cache_key]['data'])
+            return stock_price_cache[cache_key]['data']
         
-        return jsonify({
+        return {
             "error": "Données non disponibles via API Manus",
             "details": str(e),
             "message": "Veuillez mettre à jour le prix manuellement."
-        }), 500
+        }
 
 
 @app.route("/api/market-price/<int:item_id>")
