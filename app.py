@@ -22,12 +22,15 @@ from dotenv import load_dotenv
 import requests
 import schedule
 from manus_integration import (
-    manus_stock_api, 
     manus_market_report_api,
-    get_stock_price_manus,
     get_market_report_manus,
     generate_market_briefing_manus,
     get_exchange_rate_manus
+)
+from stock_api_manager import (
+    stock_api_manager,
+    get_stock_price_stable,
+    get_stock_price_manus
 )
 # Remplacé par l'API Manus unifiée
 
@@ -2727,31 +2730,74 @@ def get_exchange_rate_route(from_currency: str, to_currency: str = 'CHF'):
 
 @app.route("/api/stock-price/<symbol>")
 def get_stock_price(symbol):
-    """API Manus pour les prix d'actions - Remplace toutes les autres APIs"""
+    """API stable pour les prix d'actions - Manus -> Alpha Vantage -> yfinance"""
     try:
         force_refresh = request.args.get('refresh', 'false').lower() == 'true'
         # Récupérer l'item correspondant au symbole
         items = AdvancedDataManager.fetch_all_items()
         item = next((i for i in items if i.stock_symbol == symbol), None)
-        cache_key = f"stock_{symbol}"
         
-        stock_data = get_stock_price_manus(symbol, item, cache_key, force_refresh)
+        # Utiliser directement le wrapper stable
+        price_data = get_stock_price_stable(symbol)
         
-        # Vérifier si c'est une erreur
-        if isinstance(stock_data, dict) and stock_data.get('error'):
+        if not price_data or not price_data.get('price'):
             return jsonify({
                 'success': False,
-                'error': stock_data.get('error'),
-                'details': stock_data.get('details'),
-                'message': stock_data.get('message'),
-                'source': 'Manus API',
+                'error': 'Prix non disponible',
+                'details': 'Toutes les sources API ont échoué',
+                'message': 'Veuillez mettre à jour le prix manuellement.',
+                'source': 'Stable Wrapper',
                 'timestamp': datetime.now().isoformat()
             }), 404
         
+        # Formater les données pour l'affichage
+        result = {
+            "symbol": symbol,
+            "price": price_data.get('price'),
+            "currency": price_data.get('currency'),
+            "company_name": item.name if item else symbol,
+            "last_update": price_data.get('timestamp') or datetime.now().isoformat(),
+            "source": f"{price_data.get('source', 'API')} ({price_data.get('currency', 'USD')})",
+            "change": format_stock_value(price_data.get('change'), is_price=True),
+            "change_percent": format_stock_value(price_data.get('change_percent'), is_percent=True),
+            "volume": format_stock_value(price_data.get('volume'), is_volume=True),
+            "average_volume": format_stock_value(price_data.get('volume'), is_volume=True),
+            "pe_ratio": str(price_data.get('pe_ratio')) if price_data.get('pe_ratio') else 'N/A',
+            "fifty_two_week_high": format_stock_value(price_data.get('fifty_two_week_high'), is_price=True),
+            "fifty_two_week_low": format_stock_value(price_data.get('fifty_two_week_low'), is_price=True)
+        }
+        
+        # Mettre à jour le prix dans la DB si c'est une action existante
+        if item and item.id and price_data.get('price', 0) > 0:
+            try:
+                total_value = price_data.get('price') * (item.stock_quantity or 1)
+                
+                update_data = {
+                    'current_price': price_data.get('price'),
+                    'current_value': total_value,
+                    'last_price_update': datetime.now().isoformat(),
+                    'stock_volume': price_data.get('volume'),
+                    'stock_pe_ratio': price_data.get('pe_ratio'),
+                    'stock_52_week_high': price_data.get('fifty_two_week_high'),
+                    'stock_52_week_low': price_data.get('fifty_two_week_low'),
+                    'stock_change': price_data.get('change'),
+                    'stock_change_percent': price_data.get('change_percent'),
+                    'stock_average_volume': price_data.get('volume'),
+                    'stock_currency': price_data.get('currency')
+                }
+                
+                # Mettre à jour dans Supabase
+                if supabase:
+                    response = supabase.table('items').update(update_data).eq('id', item.id).execute()
+                    if response.data:
+                        logger.info(f"✅ Prix mis à jour dans DB pour {symbol}: {price_data.get('price')} {price_data.get('currency')}")
+            except Exception as e:
+                logger.error(f"❌ Erreur mise à jour DB pour {symbol}: {e}")
+        
         return jsonify({
             'success': True,
-            'data': stock_data,
-            'source': 'Manus API',
+            'data': result,
+            'source': price_data.get('source', 'Stable Wrapper'),
             'timestamp': datetime.now().isoformat()
         })
     except Exception as e:
@@ -2761,14 +2807,14 @@ def get_stock_price(symbol):
 
 @app.route("/api/stock-price/cache/clear", methods=["POST"])
 def clear_stock_price_cache():
-    """Vide le cache des prix d'actions (API Manus)"""
+    """Vide le cache des prix d'actions (Nouveau gestionnaire)"""
     try:
-        result = manus_stock_api.clear_cache()
+        stock_api_manager.clear_cache()
+        
         return jsonify({
             'success': True,
             'message': 'Cache des prix d\'actions vidé avec succès',
-            'data': result,
-            'source': 'Manus API'
+            'source': 'Stock API Manager'
         })
     except Exception as e:
         logger.error(f"Erreur lors du vidage du cache: {e}")
@@ -2784,11 +2830,14 @@ def get_stock_price_cache_status():
     Retourne le statut du cache des prix des actions
     """
     try:
-        status = manus_stock_api.get_cache_status()
+        cache_status = stock_api_manager.get_cache_status()
+        health_status = stock_api_manager.get_health_status()
+        
         return jsonify({
-            **status,
-            "source": "API Manus",
-            "api_limit_warning": "⚠️ Limite quotidienne: Illimitée (système optimisé)"
+            "cache": cache_status,
+            "health": health_status,
+            "source": "Stock API Manager",
+            "apis": ["Alpha Vantage", "EODHD", "Finnhub"]
         })
     except Exception as e:
         logger.error(f"Erreur lors de la récupération du statut du cache: {e}")
@@ -3132,24 +3181,20 @@ def schedule_auto_stock_updates():
 
 def get_stock_price_manus(symbol: str, item: Optional[CollectionItem], cache_key: str, force_refresh=False):
     """
-    Récupère les données boursières via Manus API.
-    API boursière principale pour les prix d'actions.
+    Récupère les données boursières via le wrapper stable (Manus -> Alpha Vantage -> yfinance).
+    API boursière principale avec fallback robuste.
     """
-    # Cache local pour cette fonction
-    stock_price_cache = {}
-    
     try:
-        logger.info(f"Récupération prix Manus API pour le symbole : {symbol}")
+        logger.info(f"Récupération prix stable wrapper pour le symbole : {symbol}")
         
-        # Essayer d'abord l'API Manus
-        price_data = manus_stock_api.get_stock_price(symbol, force_refresh)
+        # Utiliser le wrapper stable qui gère Manus -> Alpha Vantage -> yfinance
+        price_data = get_stock_price_stable(symbol)
         
-        # Pas de fallback nécessaire, on utilise seulement Manus
-        if not price_data:
+        if not price_data or not price_data.get('price'):
             logger.error(f"Aucune donnée trouvée pour {symbol}")
             return {
-                "error": "Données non disponibles via API Manus", 
-                "details": "Symbole non trouvé ou API indisponible",
+                "error": "Données non disponibles", 
+                "details": "Toutes les sources API ont échoué",
                 "message": "Veuillez mettre à jour le prix manuellement."
             }
         
@@ -3160,27 +3205,24 @@ def get_stock_price_manus(symbol: str, item: Optional[CollectionItem], cache_key
             "currency": price_data.get('currency'),
             "company_name": item.name if item else symbol,
             "last_update": price_data.get('timestamp') or datetime.now().isoformat(),
-            "source": f"API Manus ({price_data.get('currency', 'USD')})",
+            "source": f"{price_data.get('source', 'API')} ({price_data.get('currency', 'USD')})",
             "change": format_stock_value(price_data.get('change'), is_price=True),
             "change_percent": format_stock_value(price_data.get('change_percent'), is_percent=True),
             "volume": format_stock_value(price_data.get('volume'), is_volume=True),
-            "average_volume": format_stock_value(price_data.get('volume'), is_volume=True),  # Utiliser le volume actuel
+            "average_volume": format_stock_value(price_data.get('volume'), is_volume=True),
             "pe_ratio": str(price_data.get('pe_ratio')) if price_data.get('pe_ratio') else 'N/A',
             "fifty_two_week_high": format_stock_value(price_data.get('fifty_two_week_high'), is_price=True),
             "fifty_two_week_low": format_stock_value(price_data.get('fifty_two_week_low'), is_price=True)
         }
         
-        logger.info(f"✅ Données API Manus récupérées pour {symbol}: {result['price']} {result['currency']}")
-        
-        # Mettre en cache
-        stock_price_cache[cache_key] = {'data': result, 'timestamp': time.time()}
+        logger.info(f"✅ Données récupérées pour {symbol}: {result['price']} {result['currency']} via {price_data.get('source')}")
         
         # Mettre à jour le prix dans la DB si c'est une action existante
         if item and item.id:
             try:
                 # Vérifier que le prix est valide avant de calculer
                 price = price_data.get('price')
-                if price is None:
+                if price is None or price <= 0:
                     logger.warning(f"⚠️ Prix non disponible pour {symbol}, mise à jour DB ignorée")
                     return result
                 
@@ -3216,15 +3258,10 @@ def get_stock_price_manus(symbol: str, item: Optional[CollectionItem], cache_key
         return result
         
     except Exception as e:
-        logger.error(f"Erreur Manus API pour {symbol}: {e}")
-        
-        # Utiliser le cache si disponible
-        if cache_key in stock_price_cache:
-            logger.info(f"Erreur API, retour des données en cache pour {symbol}")
-            return stock_price_cache[cache_key]['data']
+        logger.error(f"Erreur stable wrapper pour {symbol}: {e}")
         
         return {
-            "error": "Données non disponibles via API Manus",
+            "error": "Données non disponibles",
             "details": str(e),
             "message": "Veuillez mettre à jour le prix manuellement."
         }

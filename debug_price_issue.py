@@ -1,200 +1,246 @@
 #!/usr/bin/env python3
 """
-Diagnostic du problème des prix à 1.0
+Debug du problème des prix à 1.0
+Diagnostic complet de l'API en production
 """
 
 import sys
 import os
+import time
+import logging
+import requests
+import json
+
+# Configuration du logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+# Ajouter le répertoire courant au path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-def test_manus_vs_yfinance():
-    """Test direct de Manus vs yfinance"""
-    print("🔍 Test direct Manus vs yfinance...")
-    
+def test_production_api():
+    """Test de l'API en production"""
     try:
-        from manus_integration import manus_stock_api
+        # URL de votre app Render (à adapter)
+        production_url = "https://inventorysbo.onrender.com"
         
-        symbols = ["AAPL", "TSLA", "IREN.SW"]
+        logger.info("🧪 Test de l'API en production")
+        logger.info(f"📡 URL: {production_url}")
+        
+        # Test 1: Endpoint de base
+        try:
+            response = requests.get(f"{production_url}/", timeout=10)
+            logger.info(f"✅ App accessible: {response.status_code}")
+        except Exception as e:
+            logger.error(f"❌ App non accessible: {e}")
+            return False
+        
+        # Test 2: API stock price
+        symbols = ["AAPL", "TSLA", "MSFT"]
         
         for symbol in symbols:
-            print(f"\n📈 Test {symbol}:")
-            
-            # Test direct yfinance
             try:
-                import yfinance as yf
-                ticker = yf.Ticker(symbol)
-                info = ticker.info
-                yf_price = info.get('currentPrice')
-                yf_currency = info.get('currency')
-                print(f"   🔄 yfinance direct: {yf_price} {yf_currency}")
-            except Exception as e:
-                print(f"   ❌ yfinance direct: {e}")
-            
-            # Test via notre API
-            result = manus_stock_api.get_stock_price(symbol, force_refresh=True)
-            print(f"   📊 Notre API: {result.get('price')} {result.get('currency')}")
-            print(f"   📋 Source: {result.get('source')}")
-            print(f"   🔍 Status: {result.get('status')}")
-            
-            if result.get('price') == 1.0:
-                print(f"   ⚠️ PROBLÈME: Prix toujours à 1.0!")
-            else:
-                print(f"   ✅ Prix correct: {result.get('price')}")
-        
-        return True
-        
-    except Exception as e:
-        print(f"❌ Erreur test: {e}")
-        return False
-
-def test_cache_behavior():
-    """Test du comportement du cache"""
-    print("\n🔍 Test du comportement du cache...")
-    
-    try:
-        from manus_integration import manus_stock_api
-        
-        symbol = "AAPL"
-        print(f"\n📈 Test cache pour {symbol}:")
-        
-        # Premier appel (force refresh)
-        print("   1. Premier appel (force_refresh=True):")
-        result1 = manus_stock_api.get_stock_price(symbol, force_refresh=True)
-        print(f"      Prix: {result1.get('price')} {result1.get('currency')}")
-        print(f"      Source: {result1.get('source')}")
-        
-        # Deuxième appel (cache)
-        print("   2. Deuxième appel (cache):")
-        result2 = manus_stock_api.get_stock_price(symbol, force_refresh=False)
-        print(f"      Prix: {result2.get('price')} {result2.get('currency')}")
-        print(f"      Source: {result2.get('source')}")
-        
-        # Troisième appel (force refresh)
-        print("   3. Troisième appel (force_refresh=True):")
-        result3 = manus_stock_api.get_stock_price(symbol, force_refresh=True)
-        print(f"      Prix: {result3.get('price')} {result3.get('currency')}")
-        print(f"      Source: {result3.get('source')}")
-        
-        return True
-        
-    except Exception as e:
-        print(f"❌ Erreur test cache: {e}")
-        return False
-
-def test_parsing_logic():
-    """Test de la logique de parsing"""
-    print("\n🔍 Test de la logique de parsing...")
-    
-    try:
-        from manus_integration import manus_stock_api
-        
-        symbol = "AAPL"
-        print(f"\n📈 Test parsing pour {symbol}:")
-        
-        # Vider le cache
-        manus_stock_api.clear_cache()
-        
-        # Test avec force_refresh
-        result = manus_stock_api.get_stock_price(symbol, force_refresh=True)
-        
-        print(f"   Prix final: {result.get('price')}")
-        print(f"   Devise: {result.get('currency')}")
-        print(f"   Source: {result.get('source')}")
-        print(f"   Status: {result.get('status')}")
-        print(f"   Parsing success: {result.get('parsing_success')}")
-        print(f"   Fallback reason: {result.get('fallback_reason')}")
-        
-        if result.get('parsing_success') == False:
-            print("   ✅ Parsing Manus échoué (normal)")
-            if result.get('source') == 'Yahoo Finance (yfinance)':
-                print("   ✅ Fallback yfinance utilisé")
-            else:
-                print("   ❌ Fallback yfinance non utilisé!")
-        else:
-            print("   ⚠️ Parsing Manus réussi (anormal)")
-        
-        return True
-        
-    except Exception as e:
-        print(f"❌ Erreur test parsing: {e}")
-        return False
-
-def check_manus_api_response():
-    """Vérifier la réponse de l'API Manus"""
-    print("\n🔍 Vérification réponse API Manus...")
-    
-    try:
-        import requests
-        
-        symbol = "AAPL"
-        base_url = "https://ogh5izcelen1.manus.space"
-        
-        print(f"\n📈 Test API Manus pour {symbol}:")
-        
-        # Test différents endpoints
-        endpoints = [
-            f"/api/stocks/{symbol}",
-            f"/stocks/{symbol}",
-            f"/api/prices/{symbol}",
-            f"/prices/{symbol}"
-        ]
-        
-        for endpoint in endpoints:
-            try:
-                url = f"{base_url}{endpoint}"
-                print(f"   🔗 Test: {url}")
-                
-                response = requests.get(url, timeout=10)
-                print(f"      Status: {response.status_code}")
-                print(f"      Content-Length: {len(response.text)}")
+                logger.info(f"📞 Test prix pour {symbol}")
+                response = requests.get(f"{production_url}/api/stock-price/{symbol}", timeout=15)
                 
                 if response.status_code == 200:
-                    # Chercher des patterns de prix
-                    import re
-                    price_patterns = [
-                        r'price["\']?\s*:\s*["\']?([\d,]+\.?\d*)["\']?',
-                        r'current-price["\']?\s*:\s*["\']?([\d,]+\.?\d*)["\']?',
-                        r'[\$€£]?\s*([\d,]+\.?\d*)\s*USD?',
-                        r'price["\']?\s*=\s*["\']?([\d,]+\.?\d*)["\']?'
-                    ]
+                    data = response.json()
+                    price = data.get('price', 0)
+                    source = data.get('source', 'N/A')
+                    status = data.get('status', 'N/A')
                     
-                    for pattern in price_patterns:
-                        matches = re.findall(pattern, response.text, re.IGNORECASE)
-                        if matches:
-                            print(f"      ✅ Pattern trouvé: {matches[:3]}")  # Afficher les 3 premiers
-                            break
+                    logger.info(f"   Prix: {price}")
+                    logger.info(f"   Source: {source}")
+                    logger.info(f"   Status: {status}")
+                    
+                    if price == 1.0:
+                        logger.error(f"   ❌ PROBLÈME: Prix à 1.0 pour {symbol}")
+                    elif price > 0:
+                        logger.info(f"   ✅ Prix correct pour {symbol}")
                     else:
-                        print(f"      ❌ Aucun pattern de prix trouvé")
-                
+                        logger.warning(f"   ⚠️ Prix invalide pour {symbol}")
+                        
+                else:
+                    logger.error(f"   ❌ Erreur HTTP {response.status_code}")
+                    
             except Exception as e:
-                print(f"      ❌ Erreur: {e}")
+                logger.error(f"   ❌ Erreur pour {symbol}: {e}")
         
         return True
         
     except Exception as e:
-        print(f"❌ Erreur vérification API: {e}")
+        logger.error(f"❌ Erreur test production: {e}")
+        return False
+
+def test_local_modules():
+    """Test des modules locaux"""
+    try:
+        logger.info("🧪 Test des modules locaux")
+        
+        # Test 1: manus_integration
+        try:
+            from manus_integration import ManusStockAPI
+            manus = ManusStockAPI()
+            result = manus.get_stock_price("AAPL")
+            
+            logger.info(f"📊 Manus local - Prix: {result.get('price')}")
+            logger.info(f"📊 Manus local - Source: {result.get('source')}")
+            logger.info(f"📊 Manus local - Status: {result.get('status')}")
+            
+        except Exception as e:
+            logger.error(f"❌ Erreur manus_integration: {e}")
+        
+        # Test 2: alpha_vantage_fallback
+        try:
+            from alpha_vantage_fallback import alpha_vantage_fallback
+            result = alpha_vantage_fallback.get_stock_price("AAPL")
+            
+            if result:
+                logger.info(f"📊 Alpha Vantage local - Prix: {result.get('price')}")
+                logger.info(f"📊 Alpha Vantage local - Source: {result.get('source')}")
+            else:
+                logger.warning("⚠️ Alpha Vantage local - Pas de données")
+                
+        except Exception as e:
+            logger.error(f"❌ Erreur alpha_vantage_fallback: {e}")
+        
+        # Test 3: stable_manus_wrapper
+        try:
+            from stable_manus_wrapper import stable_manus_api
+            result = stable_manus_api.get_stock_price("AAPL")
+            
+            logger.info(f"📊 Stable wrapper local - Prix: {result.get('price')}")
+            logger.info(f"📊 Stable wrapper local - Source: {result.get('source')}")
+            
+        except Exception as e:
+            logger.error(f"❌ Erreur stable_manus_wrapper: {e}")
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Erreur test modules locaux: {e}")
+        return False
+
+def test_app_integration():
+    """Test de l'intégration dans app.py"""
+    try:
+        logger.info("🧪 Test intégration app.py")
+        
+        # Vérifier si app.py utilise les nouveaux modules
+        with open('app.py', 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # Vérifications
+        checks = {
+            'manus_integration': 'manus_integration' in content,
+            'alpha_vantage_fallback': 'alpha_vantage_fallback' in content,
+            'stable_manus_wrapper': 'stable_manus_wrapper' in content,
+            'get_stock_price_manus': 'get_stock_price_manus' in content
+        }
+        
+        logger.info("📋 Intégration dans app.py:")
+        for module, integrated in checks.items():
+            status = "✅" if integrated else "❌"
+            logger.info(f"   {status} {module}")
+        
+        # Vérifier la route API
+        if '/api/stock-price/' in content:
+            logger.info("✅ Route API trouvée")
+        else:
+            logger.error("❌ Route API manquante")
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Erreur test intégration: {e}")
+        return False
+
+def test_environment_variables():
+    """Test des variables d'environnement"""
+    try:
+        logger.info("🧪 Test variables d'environnement")
+        
+        # Variables importantes
+        important_vars = [
+            'ALPHA_VANTAGE_KEY',
+            'SUPABASE_URL',
+            'SUPABASE_KEY'
+        ]
+        
+        for var in important_vars:
+            value = os.environ.get(var)
+            if value:
+                # Masquer partiellement la valeur
+                masked = value[:4] + '*' * (len(value) - 8) + value[-4:] if len(value) > 8 else '***'
+                logger.info(f"✅ {var}: {masked}")
+            else:
+                logger.warning(f"⚠️ {var}: Non définie")
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Erreur test variables: {e}")
+        return False
+
+def test_alpha_vantage_key():
+    """Test spécifique de la clé Alpha Vantage"""
+    try:
+        logger.info("🧪 Test clé Alpha Vantage")
+        
+        from alpha_vantage_fallback import alpha_vantage_fallback
+        
+        # Test direct
+        result = alpha_vantage_fallback.get_stock_price("AAPL")
+        
+        if result and result.get('price', 0) > 0:
+            logger.info(f"✅ Clé Alpha Vantage fonctionne: {result['price']} USD")
+            return True
+        else:
+            logger.error("❌ Clé Alpha Vantage ne fonctionne pas")
+            
+            # Vérifier la clé
+            key = alpha_vantage_fallback.api_key
+            if key == 'demo':
+                logger.error("❌ Utilise la clé 'demo' au lieu de la vraie clé")
+            elif key == 'XCRQGI1OMS5381DE':
+                logger.info("✅ Clé correcte configurée")
+            else:
+                logger.warning(f"⚠️ Clé inconnue: {key[:4]}...")
+            
+            return False
+        
+    except Exception as e:
+        logger.error(f"❌ Erreur test clé Alpha Vantage: {e}")
         return False
 
 def main():
-    """Test principal"""
-    print("🚀 Diagnostic du problème des prix à 1.0")
-    print("=" * 80)
+    """Fonction principale de debug"""
+    logger.info("🚀 Début du diagnostic des prix à 1.0")
     
-    # Test direct
-    test_manus_vs_yfinance()
+    # Test 1: Variables d'environnement
+    logger.info("\n" + "="*50)
+    test_environment_variables()
     
-    # Test cache
-    test_cache_behavior()
+    # Test 2: Modules locaux
+    logger.info("\n" + "="*50)
+    test_local_modules()
     
-    # Test parsing
-    test_parsing_logic()
+    # Test 3: Intégration app.py
+    logger.info("\n" + "="*50)
+    test_app_integration()
     
-    # Vérification API
-    check_manus_api_response()
+    # Test 4: Clé Alpha Vantage
+    logger.info("\n" + "="*50)
+    test_alpha_vantage_key()
     
-    print("\n" + "=" * 80)
-    print("📋 DIAGNOSTIC TERMINÉ")
-    print("🔍 Vérifiez les logs ci-dessus pour identifier le problème")
+    # Test 5: API production (si accessible)
+    logger.info("\n" + "="*50)
+    test_production_api()
+    
+    # Résumé
+    logger.info("\n" + "="*50)
+    logger.info("📋 DIAGNOSTIC TERMINÉ")
+    logger.info("🔍 Vérifiez les logs ci-dessus pour identifier le problème")
 
 if __name__ == "__main__":
     main() 
