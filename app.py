@@ -2607,13 +2607,13 @@ def check_stock_price_status():
         test_symbol = "AAPL"
         
         # Test Manus API
-        manus_data = manus_stock_manager.get_stock_price(test_symbol, force_refresh=False)
+        manus_data = manus_stock_api.get_stock_price(test_symbol, force_refresh=False)
         manus_status = {
             "available": manus_data is not None,
             "test_symbol": test_symbol,
-            "test_price": manus_data.price if manus_data else None,
-            "test_currency": manus_data.currency if manus_data else None,
-            "cache_status": manus_stock_manager.get_cache_status()
+            "test_price": manus_data.get('price') if manus_data else None,
+            "test_currency": manus_data.get('currency') if manus_data else None,
+            "cache_status": manus_stock_api.get_cache_status()
         }
         
         # Test Yahoo Finance (fallback)
@@ -2667,7 +2667,7 @@ def update_all_stock_prices():
         
         # Essayer d'abord l'API Manus pour tous les symboles
         logger.info("📊 Mise à jour via API Manus...")
-        manus_results = manus_stock_manager.get_multiple_stock_prices(symbols)
+        manus_results = manus_stock_api.get_multiple_stock_prices(symbols)
         
         # Préparer les résultats
         results = {
@@ -2787,7 +2787,7 @@ def schedule_auto_stock_updates():
             logger.info("🔄 Début mise à jour automatique des prix via Yahoo Finance")
             
             # Vérifier le statut du cache Manus
-            manus_cache_status = manus_stock_manager.get_cache_status()
+            manus_cache_status = manus_stock_api.get_cache_status()
             yahoo_cache_status = stock_price_manager.get_cache_status()
             logger.info(f"📊 Cache Manus: {manus_cache_status['cache_size']} entrées")
             logger.info(f"📊 Cache Yahoo: {yahoo_cache_status['cache_size']} entrées")
@@ -2804,7 +2804,7 @@ def schedule_auto_stock_updates():
             
             # Essayer d'abord l'API Manus pour tous les symboles
             logger.info("📊 Mise à jour automatique via API Manus...")
-            manus_results = manus_stock_manager.get_multiple_stock_prices(symbols)
+            manus_results = manus_stock_api.get_multiple_stock_prices(symbols)
             
             # Préparer les résultats
             results = {
@@ -2877,11 +2877,7 @@ def get_stock_price_manus(symbol: str, item: Optional[CollectionItem], cache_key
         logger.info(f"Récupération prix Yahoo Finance pour le symbole : {symbol}")
         
         # Essayer d'abord l'API Manus
-        price_data = manus_stock_manager.get_stock_price(
-            symbol=symbol,
-            exchange=item.stock_exchange if item else None,
-            force_refresh=force_refresh
-        )
+        price_data = manus_stock_api.get_stock_price(symbol, force_refresh)
         
         # Fallback vers Yahoo si Manus échoue
         if not price_data:
@@ -4649,15 +4645,18 @@ def trigger_market_update():
             return jsonify({"error": "Aucune API IA configurée (Gemini ou OpenAI)"}), 500
         
         # Générer le briefing
-        briefing = generate_market_briefing()
+        briefing_result = generate_market_briefing()
         
-        if not briefing:
+        if not briefing_result or briefing_result.get('status') != 'success':
             error_msg = "Impossible de générer le briefing"
-            if gemini_configured:
-                error_msg += " - Vérifiez la clé Gemini"
-            elif openai_configured:
-                error_msg += " - Vérifiez la clé OpenAI"
+            if briefing_result:
+                error_msg += f" - {briefing_result.get('message', 'Erreur inconnue')}"
             return jsonify({"error": error_msg}), 500
+        
+        # Extraire le contenu du briefing
+        briefing = briefing_result.get('briefing', {}).get('content', '')
+        if not briefing:
+            return jsonify({"error": "Contenu du briefing vide"}), 500
         
         # Sauvegarder en base
         if supabase:
@@ -4761,7 +4760,27 @@ def generate_market_briefing():
         briefing = generate_market_briefing_manus()
         
         if briefing.get('status') == 'success':
-            return briefing
+            # Extraire le contenu du briefing
+            briefing_content = briefing.get('briefing', {}).get('content', '')
+            if briefing_content:
+                return {
+                    'status': 'success',
+                    'briefing': {
+                        'content': briefing_content,
+                        'title': briefing.get('briefing', {}).get('title', 'Briefing de Marché'),
+                        'summary': briefing.get('briefing', {}).get('summary', []),
+                        'metrics': briefing.get('briefing', {}).get('metrics', {})
+                    },
+                    'timestamp': datetime.now().isoformat(),
+                    'source': 'Manus API'
+                }
+            else:
+                return {
+                    'status': 'error',
+                    'message': 'Contenu du briefing vide',
+                    'timestamp': datetime.now().isoformat(),
+                    'source': 'Manus API'
+                }
         else:
             return {
                 'status': 'error',
