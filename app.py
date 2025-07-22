@@ -2507,7 +2507,12 @@ def get_stock_price(symbol):
     """API Manus pour les prix d'actions - Remplace toutes les autres APIs"""
     try:
         force_refresh = request.args.get('refresh', 'false').lower() == 'true'
-        stock_data = get_stock_price_manus(symbol, force_refresh)
+        # Récupérer l'item correspondant au symbole
+        items = AdvancedDataManager.fetch_all_items()
+        item = next((i for i in items if i.stock_symbol == symbol), None)
+        cache_key = f"stock_{symbol}"
+        
+        stock_data = get_stock_price_manus(symbol, item, cache_key, force_refresh)
         
         return jsonify({
             'success': True,
@@ -4615,44 +4620,39 @@ def get_market_updates():
 def get_manus_market_report():
     """Récupère le rapport de marché via l'API Manus (remplace toutes les autres APIs)"""
     try:
-        force_refresh = request.args.get('refresh', 'false').lower() == 'true'
-        market_report = get_market_report_manus(force_refresh)
+        # D'abord essayer de récupérer depuis la base de données
+        if supabase:
+            response = supabase.table("market_updates").select("*").order("created_at", desc=True).limit(1).execute()
+            
+            if response.data:
+                latest_report = response.data[0]
+                return jsonify({
+                    "success": True,
+                    "report": {
+                        "date": latest_report.get("date", ""),
+                        "time": latest_report.get("time", ""),
+                        "content": latest_report.get("content", ""),
+                        "created_at": latest_report.get("created_at", "")
+                    }
+                })
         
+        # Si pas de rapport en base, essayer de générer un nouveau
+        force_refresh = request.args.get('refresh', 'false').lower() == 'true'
+        if force_refresh:
+            market_report = get_market_report_manus(force_refresh)
+            return jsonify({
+                'success': True,
+                'data': market_report,
+                'source': 'Manus API',
+                'timestamp': datetime.now().isoformat()
+            })
+        
+        # Aucun rapport disponible
         return jsonify({
-            'success': True,
-            'data': market_report,
-            'source': 'Manus API',
-            'timestamp': datetime.now().isoformat()
+            "success": False,
+            "message": "Aucun rapport de marché disponible"
         })
         
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e),
-            'timestamp': datetime.now().isoformat(),
-            'source': 'Manus API'
-        }), 500, 500
-        
-        # Récupérer le dernier rapport
-        response = supabase.table("market_updates").select("*").order("created_at", desc=True).limit(1).execute()
-        
-        if response.data:
-            latest_report = response.data[0]
-            return jsonify({
-                "success": True,
-                "report": {
-                    "date": latest_report.get("date", ""),
-                    "time": latest_report.get("time", ""),
-                    "content": latest_report.get("content", ""),
-                    "created_at": latest_report.get("created_at", "")
-                }
-            })
-        else:
-            return jsonify({
-                "success": False,
-                "message": "Aucun rapport de marché disponible"
-            })
-            
     except Exception as e:
         logger.error(f"Erreur récupération rapport Manus: {e}")
         return jsonify({"error": str(e)}), 500
