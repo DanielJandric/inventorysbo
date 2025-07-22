@@ -193,21 +193,26 @@ class ManusMarketReportAPI:
             
             if response.status_code == 200:
                 data = response.json()
+                
+                # Nouvelle structure de l'API Manus
                 report = data.get('report', {})
                 
                 # Transformer les données
                 market_report = {
                     'timestamp': datetime.now().isoformat(),
-                    'report_date': report.get('metadata', {}).get('report_date'),
-                    'generation_time': report.get('metadata', {}).get('generation_time_formatted'),
+                    'report_date': data.get('api_call_timestamp', datetime.now().isoformat()),
+                    'generation_time': data.get('generation_time', ''),
                     'source': 'Manus API',
                     'status': 'complete',
                     
                     # Métriques de marché
                     'market_metrics': report.get('key_metrics', {}),
                     
-                    # Contenu
-                    'content': report.get('content', {}),
+                    # Contenu - nouvelle structure
+                    'content': {
+                        'html': report.get('content', {}).get('html', ''),
+                        'markdown': report.get('content', {}).get('markdown', '')
+                    },
                     
                     # Résumé
                     'summary': report.get('summary', {}),
@@ -336,7 +341,7 @@ manus_stock_api = ManusStockAPI()
 manus_market_report_api = ManusMarketReportAPI()
 
 # Fonctions de remplacement pour compatibilité
-def get_stock_price_manus(symbol: str, force_refresh: bool = False) -> Dict[str, Any]:
+def get_stock_price_manus(symbol: str, item=None, cache_key=None, force_refresh: bool = False) -> Dict[str, Any]:
     """Remplace toutes les autres fonctions de prix d'actions"""
     return manus_stock_api.get_stock_price(symbol, force_refresh)
 

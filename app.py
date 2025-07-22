@@ -2545,7 +2545,7 @@ def get_stock_price_cache_status():
     Retourne le statut du cache des prix des actions
     """
     try:
-        status = stock_price_manager.get_cache_status()
+        status = manus_stock_api.get_cache_status()
         return jsonify({
             **status,
             "source": "API Manus",
@@ -2561,7 +2561,7 @@ def get_stock_price_cache_status():
 def reset_daily_requests():
     """Réinitialise le compteur de requêtes quotidiennes"""
     try:
-        result = stock_price_manager.reset_daily_requests()
+        result = manus_stock_api.clear_cache()
         logger.info("✅ Compteur de requêtes quotidiennes réinitialisé via API")
         return jsonify(result)
     except Exception as e:
@@ -2579,11 +2579,15 @@ def get_stock_price_history(symbol):
         items = AdvancedDataManager.fetch_all_items()
         item = next((i for i in items if i.stock_symbol == symbol), None)
         
-        history = stock_price_manager.get_price_history(
-            symbol=symbol,
-            exchange=item.stock_exchange if item else None,
-            days=days
-        )
+        # Utiliser l'API Manus pour l'historique (simplifié)
+        history = []
+        current_data = manus_stock_api.get_stock_price(symbol, force_refresh=True)
+        if current_data:
+            history.append({
+                'date': datetime.now().strftime('%Y-%m-%d'),
+                'price': current_data.get('price'),
+                'volume': current_data.get('volume')
+            })
         
         return jsonify({
             "symbol": symbol,
@@ -2617,13 +2621,13 @@ def check_stock_price_status():
         }
         
         # Test Yahoo Finance (fallback)
-        yahoo_data = stock_price_manager.get_stock_price(test_symbol, force_refresh=False)
+        yahoo_data = manus_stock_api.get_stock_price(test_symbol, force_refresh=False)
         yahoo_status = {
             "available": yahoo_data is not None,
             "test_symbol": test_symbol,
-            "test_price": yahoo_data.price if yahoo_data else None,
-            "test_currency": yahoo_data.currency if yahoo_data else None,
-            "cache_status": stock_price_manager.get_cache_status()
+            "test_price": yahoo_data.get('price') if yahoo_data else None,
+            "test_currency": yahoo_data.get('currency') if yahoo_data else None,
+            "cache_status": manus_stock_api.get_cache_status()
         }
         
         # Statut global
@@ -2682,26 +2686,36 @@ def update_all_stock_prices():
         for symbol, price_data in manus_results.items():
             results['success'].append({
                 'symbol': symbol,
-                'price': price_data.price,
-                'currency': price_data.currency,
-                'change': price_data.change,
-                'change_percent': price_data.change_percent,
-                'volume': price_data.volume,
+                'price': price_data.get('price'),
+                'currency': price_data.get('currency'),
+                'change': price_data.get('change'),
+                'change_percent': price_data.get('change_percent'),
+                'volume': price_data.get('volume'),
                 'source': 'Manus API'
             })
         
-        # Pour les symboles non trouvés par Manus, essayer Yahoo
+        # Pour les symboles non trouvés par Manus, essayer de les récupérer individuellement
         missing_symbols = [s for s in symbols if s not in manus_results]
         if missing_symbols:
-            logger.info(f"🔄 Fallback Yahoo pour {len(missing_symbols)} symboles")
-            yahoo_results = stock_price_manager.update_all_stocks(missing_symbols)
-            
-            # Ajouter les résultats Yahoo
-            results['success'].extend(yahoo_results['success'])
-            results['failed'].extend(yahoo_results['failed'])
-            results['skipped'].extend(yahoo_results['skipped'])
-            results['requests_used'] += yahoo_results.get('requests_used', 0)
-            results['source'] = 'Manus API + Yahoo Finance'
+            logger.info(f"🔄 Récupération individuelle pour {len(missing_symbols)} symboles")
+            for symbol in missing_symbols:
+                try:
+                    price_data = manus_stock_api.get_stock_price(symbol, force_refresh=True)
+                    if price_data:
+                        results['success'].append({
+                            'symbol': symbol,
+                            'price': price_data.get('price'),
+                            'currency': price_data.get('currency'),
+                            'change': price_data.get('change'),
+                            'change_percent': price_data.get('change_percent'),
+                            'volume': price_data.get('volume'),
+                            'source': 'Manus API (individuel)'
+                        })
+                    else:
+                        results['failed'].append(symbol)
+                except Exception as e:
+                    logger.error(f"❌ Erreur pour {symbol}: {e}")
+                    results['failed'].append(symbol)
         
         # Préparer les données de réponse et mettre à jour la base de données
         updated_data = []
@@ -2819,26 +2833,36 @@ def schedule_auto_stock_updates():
             for symbol, price_data in manus_results.items():
                 results['success'].append({
                     'symbol': symbol,
-                    'price': price_data.price,
-                    'currency': price_data.currency,
-                    'change': price_data.change,
-                    'change_percent': price_data.change_percent,
-                    'volume': price_data.volume,
+                    'price': price_data.get('price'),
+                    'currency': price_data.get('currency'),
+                    'change': price_data.get('change'),
+                    'change_percent': price_data.get('change_percent'),
+                    'volume': price_data.get('volume'),
                     'source': 'Manus API'
                 })
             
-            # Pour les symboles non trouvés par Manus, essayer Yahoo
+            # Pour les symboles non trouvés par Manus, essayer de les récupérer individuellement
             missing_symbols = [s for s in symbols if s not in manus_results]
             if missing_symbols:
-                logger.info(f"🔄 Fallback Yahoo pour {len(missing_symbols)} symboles")
-                yahoo_results = stock_price_manager.update_all_stocks(missing_symbols)
-                
-                # Ajouter les résultats Yahoo
-                results['success'].extend(yahoo_results['success'])
-                results['failed'].extend(yahoo_results['failed'])
-                results['skipped'].extend(yahoo_results['skipped'])
-                results['requests_used'] += yahoo_results.get('requests_used', 0)
-                results['source'] = 'Manus API + Yahoo Finance'
+                logger.info(f"🔄 Récupération individuelle pour {len(missing_symbols)} symboles")
+                for symbol in missing_symbols:
+                    try:
+                        price_data = manus_stock_api.get_stock_price(symbol, force_refresh=True)
+                        if price_data:
+                            results['success'].append({
+                                'symbol': symbol,
+                                'price': price_data.get('price'),
+                                'currency': price_data.get('currency'),
+                                'change': price_data.get('change'),
+                                'change_percent': price_data.get('change_percent'),
+                                'volume': price_data.get('volume'),
+                                'source': 'Manus API (individuel)'
+                            })
+                        else:
+                            results['failed'].append(symbol)
+                    except Exception as e:
+                        logger.error(f"❌ Erreur pour {symbol}: {e}")
+                        results['failed'].append(symbol)
             
             logger.info(f"✅ Mise à jour automatique terminée:")
             logger.info(f"   - {len(results['success'])} symboles traités")
@@ -2879,14 +2903,14 @@ def get_stock_price_manus(symbol: str, item: Optional[CollectionItem], cache_key
         # Essayer d'abord l'API Manus
         price_data = manus_stock_api.get_stock_price(symbol, force_refresh)
         
-        # Fallback vers Yahoo si Manus échoue
+        # Pas de fallback nécessaire, on utilise seulement Manus
         if not price_data:
-            logger.info(f"🔄 Fallback Yahoo pour {symbol}")
-            price_data = stock_price_manager.get_stock_price(
-                symbol=symbol,
-                exchange=item.stock_exchange if item else None,
-                force_refresh=force_refresh
-            )
+            logger.error(f"Aucune donnée trouvée pour {symbol}")
+            return jsonify({
+                "error": "Données non disponibles via API Manus", 
+                "details": "Symbole non trouvé ou API indisponible",
+                "message": "Veuillez mettre à jour le prix manuellement."
+            }), 404
         
         if not price_data:
             logger.error(f"Aucune donnée trouvée pour {symbol}")
@@ -2898,19 +2922,19 @@ def get_stock_price_manus(symbol: str, item: Optional[CollectionItem], cache_key
         
         # Formater les données pour l'affichage
         result = {
-            "symbol": price_data.symbol,
-            "price": price_data.price,
-            "currency": price_data.currency,
+            "symbol": symbol,
+            "price": price_data.get('price'),
+            "currency": price_data.get('currency'),
             "company_name": item.name if item else symbol,
-            "last_update": price_data.timestamp or datetime.now().isoformat(),
-            "source": f"API Manus ({price_data.currency})",
-            "change": format_stock_value(price_data.change, is_price=True),
-            "change_percent": format_stock_value(price_data.change_percent, is_percent=True),
-            "volume": format_stock_value(price_data.volume, is_volume=True),
-            "average_volume": format_stock_value(price_data.volume, is_volume=True),  # Utiliser le volume actuel
-            "pe_ratio": str(price_data.pe_ratio) if price_data.pe_ratio else 'N/A',
-            "fifty_two_week_high": format_stock_value(price_data.fifty_two_week_high, is_price=True),
-            "fifty_two_week_low": format_stock_value(price_data.fifty_two_week_low, is_price=True)
+            "last_update": price_data.get('timestamp') or datetime.now().isoformat(),
+            "source": f"API Manus ({price_data.get('currency', 'USD')})",
+            "change": format_stock_value(price_data.get('change'), is_price=True),
+            "change_percent": format_stock_value(price_data.get('change_percent'), is_percent=True),
+            "volume": format_stock_value(price_data.get('volume'), is_volume=True),
+            "average_volume": format_stock_value(price_data.get('volume'), is_volume=True),  # Utiliser le volume actuel
+            "pe_ratio": str(price_data.get('pe_ratio')) if price_data.get('pe_ratio') else 'N/A',
+            "fifty_two_week_high": format_stock_value(price_data.get('fifty_two_week_high'), is_price=True),
+            "fifty_two_week_low": format_stock_value(price_data.get('fifty_two_week_low'), is_price=True)
         }
         
         logger.info(f"✅ Données API Manus récupérées pour {symbol}: {result['price']} {result['currency']}")
@@ -2921,20 +2945,20 @@ def get_stock_price_manus(symbol: str, item: Optional[CollectionItem], cache_key
         # Mettre à jour le prix dans la DB si c'est une action existante
         if item and item.id:
             try:
-                total_value = price_data.price * (item.stock_quantity or 1)
+                total_value = price_data.get('price', 0) * (item.stock_quantity or 1)
                 
                 update_data = {
-                    'current_price': price_data.price,
+                    'current_price': price_data.get('price'),
                     'current_value': total_value,
                     'last_price_update': datetime.now().isoformat(),
-                    'stock_volume': price_data.volume,
-                    'stock_pe_ratio': price_data.pe_ratio,
-                    'stock_52_week_high': price_data.fifty_two_week_high,
-                    'stock_52_week_low': price_data.fifty_two_week_low,
-                    'stock_change': price_data.change,
-                    'stock_change_percent': price_data.change_percent,
-                    'stock_average_volume': price_data.volume,
-                    'stock_currency': price_data.currency
+                    'stock_volume': price_data.get('volume'),
+                    'stock_pe_ratio': price_data.get('pe_ratio'),
+                    'stock_52_week_high': price_data.get('fifty_two_week_high'),
+                    'stock_52_week_low': price_data.get('fifty_two_week_low'),
+                    'stock_change': price_data.get('change'),
+                    'stock_change_percent': price_data.get('change_percent'),
+                    'stock_average_volume': price_data.get('volume'),
+                    'stock_currency': price_data.get('currency')
                 }
                 
                 # Mettre à jour dans Supabase
@@ -2942,8 +2966,8 @@ def get_stock_price_manus(symbol: str, item: Optional[CollectionItem], cache_key
                     response = supabase.table('items').update(update_data).eq('id', item.id).execute()
                     if response.data:
                         logger.info(f"✅ Prix et métriques mis à jour dans DB pour action {item.name} (ID: {item.id})")
-                        logger.info(f"💰 Prix: {price_data.price} {price_data.currency}")
-                        logger.info(f"💼 Valeur totale: {total_value:.2f} {price_data.currency} ({item.stock_quantity or 1} actions)")
+                        logger.info(f"💰 Prix: {price_data.get('price')} {price_data.get('currency')}")
+                        logger.info(f"💼 Valeur totale: {total_value:.2f} {price_data.get('currency')} ({item.stock_quantity or 1} actions)")
                         logger.info(f"📊 Métriques: Volume={update_data['stock_volume']}, PE={update_data['stock_pe_ratio']}, 52W-H={update_data['stock_52_week_high']}, 52W-L={update_data['stock_52_week_low']}")
                     else:
                         logger.warning(f"⚠️ Échec mise à jour DB pour action {item.name} (ID: {item.id})")
