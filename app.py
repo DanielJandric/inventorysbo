@@ -2484,13 +2484,6 @@ def get_live_exchange_rate(from_currency: str, to_currency: str = 'CHF') -> floa
     except Exception as e:
         logger.error(f"Erreur taux de change Manus: {e}")
         return 1.0
-        else:
-            logger.warning(f"Taux de change non trouvé pour {from_currency} -> {to_currency}")
-            return 1.0
-            
-    except Exception as e:
-        logger.error(f"Erreur API FreeCurrency: {e}. Utilisation d'un taux de 1.0")
-        return 1.0
 
 
 @app.route("/api/exchange-rate/<from_currency>/<to_currency>")
@@ -2523,17 +2516,6 @@ def get_stock_price(symbol):
             'timestamp': datetime.now().isoformat()
         })
     except Exception as e:
-        logger.error(f"Erreur API prix {symbol}: {e}")
-        return jsonify({
-            'success': False,
-            'error': str(e),
-            'source': 'Manus API',
-            'timestamp': datetime.now().isoformat()
-        }), 500
-        else:
-            return jsonify({"error": "Prix non disponible", "details": "Données non trouvées"}), 404
-
-    except Exception as e:
         logger.error(f"Erreur get_stock_price pour {symbol}: {e}")
         return jsonify({"error": "Prix non disponible", "details": str(e)}), 500
 
@@ -2545,16 +2527,10 @@ def clear_stock_price_cache():
         result = manus_stock_api.clear_cache()
         return jsonify({
             'success': True,
-            'message': 'Cache des prix d'actions vidé avec succès',
+            'message': 'Cache des prix d\'actions vidé avec succès',
             'data': result,
             'source': 'Manus API'
         })
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e),
-            'source': 'Manus API'
-        }), 500
     except Exception as e:
         logger.error(f"Erreur lors du vidage du cache: {e}")
         return jsonify({
@@ -4800,18 +4776,7 @@ def generate_market_briefing():
             'message': str(e),
             'timestamp': datetime.now().isoformat(),
             'source': 'Manus API'
-        }.strip()
-            else:
-                logger.error("❌ Réponse OpenAI invalide")
-                return None
-                
-        except Exception as e:
-            logger.error(f"❌ Erreur génération rapport OpenAI: {e}")
-            return None
-
-    except Exception as e:
-        logger.error(f"Erreur génération briefing avec API Manus + OpenAI: {e}")
-        return None
+        }
 
 
 
