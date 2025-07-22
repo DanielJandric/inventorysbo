@@ -145,7 +145,7 @@ EMAIL_RECIPIENTS = os.getenv("EMAIL_RECIPIENTS", "").split(",")
 
 FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY")
 
-# Configuration Yahoo Finance pour données boursières
+# Configuration Manus API pour données boursières
 # API boursière principale pour les prix d'actions
 
 # Configuration mise à jour automatique des prix (6x/jour)
@@ -2625,23 +2625,22 @@ def check_stock_price_status():
             "cache_status": manus_stock_api.get_cache_status()
         }
         
-        # Test Yahoo Finance (fallback)
-        yahoo_data = manus_stock_api.get_stock_price(test_symbol, force_refresh=False)
-        yahoo_status = {
-            "available": yahoo_data is not None,
+        # Test Manus API
+        manus_data = manus_stock_api.get_stock_price(test_symbol, force_refresh=False)
+        manus_status = {
+            "available": manus_data is not None,
             "test_symbol": test_symbol,
-            "test_price": yahoo_data.get('price') if yahoo_data else None,
-            "test_currency": yahoo_data.get('currency') if yahoo_data else None,
+            "test_price": manus_data.get('price') if manus_data else None,
+            "test_currency": manus_data.get('currency') if manus_data else None,
             "cache_status": manus_stock_api.get_cache_status()
         }
         
         # Statut global
         overall_status = {
             "manus_api": manus_status,
-            "yahoo_finance": yahoo_status,
             "primary_source": "Manus API",
-            "fallback_source": "Yahoo Finance",
-            "system_status": "Operational" if manus_status["available"] or yahoo_status["available"] else "Degraded"
+            "fallback_source": "Manus API",
+            "system_status": "Operational" if manus_status["available"] else "Degraded"
         }
         
         return jsonify(overall_status)
@@ -2656,7 +2655,7 @@ def check_stock_price_status():
 
 @app.route("/api/stock-price/update-all", methods=["POST"])
 def update_all_stock_prices():
-    """Met à jour tous les prix d'actions via Yahoo Finance et retourne les données mises à jour"""
+    """Met à jour tous les prix d'actions via Manus API et retourne les données mises à jour"""
     try:
         items = AdvancedDataManager.fetch_all_items()
         action_items = [item for item in items if item.category == 'Actions' and item.stock_symbol]
@@ -2669,7 +2668,7 @@ def update_all_stock_prices():
                 "updated_data": []
             })
         
-        logger.info(f"Mise à jour de {len(action_items)} actions via Yahoo Finance")
+        logger.info(f"Mise à jour de {len(action_items)} actions via Manus API")
         
         # Extraire les symboles
         symbols = [item.stock_symbol for item in action_items]
@@ -2803,7 +2802,7 @@ def schedule_auto_stock_updates():
     def auto_update_stock_prices():
         """Fonction de mise à jour automatique optimisée"""
         try:
-            logger.info("🔄 Début mise à jour automatique des prix via Yahoo Finance")
+            logger.info("🔄 Début mise à jour automatique des prix via Manus API")
             
             # Vérifier le statut du cache Manus
             manus_cache_status = manus_stock_api.get_cache_status()
@@ -2899,11 +2898,14 @@ def schedule_auto_stock_updates():
 
 def get_stock_price_manus(symbol: str, item: Optional[CollectionItem], cache_key: str, force_refresh=False):
     """
-    Récupère les données boursières via Yahoo Finance API.
+    Récupère les données boursières via Manus API.
     API boursière principale pour les prix d'actions.
     """
+    # Cache local pour cette fonction
+    stock_price_cache = {}
+    
     try:
-        logger.info(f"Récupération prix Yahoo Finance pour le symbole : {symbol}")
+        logger.info(f"Récupération prix Manus API pour le symbole : {symbol}")
         
         # Essayer d'abord l'API Manus
         price_data = manus_stock_api.get_stock_price(symbol, force_refresh)
@@ -2982,7 +2984,7 @@ def get_stock_price_manus(symbol: str, item: Optional[CollectionItem], cache_key
         return jsonify(result)
         
     except Exception as e:
-        logger.error(f"Erreur Yahoo Finance pour {symbol}: {e}")
+        logger.error(f"Erreur Manus API pour {symbol}: {e}")
         
         # Utiliser le cache si disponible
         if cache_key in stock_price_cache:
