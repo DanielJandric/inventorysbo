@@ -81,6 +81,16 @@ class ManusStockAPI:
                         
                         # Mettre en cache
                         self.cache[cache_key] = (stock_data, datetime.now())
+                        
+                        # Si le parsing a échoué, essayer le fallback
+                        if not stock_data.get('parsing_success', False):
+                            logger.info(f"🔄 Parsing Manus échoué pour {symbol}, tentative de fallback...")
+                            fallback_data = self._try_fallback_api(symbol)
+                            if fallback_data:
+                                # Mettre à jour le cache avec les données de fallback
+                                self.cache[cache_key] = (fallback_data, datetime.now())
+                                return fallback_data
+                        
                         return stock_data
                         
                 except Exception as e:
@@ -193,12 +203,16 @@ class ManusStockAPI:
                         except (ValueError, AttributeError):
                             continue
             
-            # Marquer comme succès si au moins le prix est trouvé
-            if parsed_data['price'] is not None:
+            # Marquer comme succès si au moins le prix est trouvé ET qu'il n'est pas 1.0
+            if parsed_data['price'] is not None and parsed_data['price'] != 1.0:
                 parsed_data['parsing_success'] = True
                 logger.info(f"✅ Parsing HTML réussi pour {symbol}: prix={parsed_data['price']}")
             else:
-                logger.warning(f"⚠️ Parsing HTML échoué pour {symbol}, aucun prix trouvé")
+                parsed_data['parsing_success'] = False
+                if parsed_data['price'] == 1.0:
+                    logger.warning(f"⚠️ Parsing HTML incorrect pour {symbol}: prix=1.0 (pattern générique)")
+                else:
+                    logger.warning(f"⚠️ Parsing HTML échoué pour {symbol}, aucun prix trouvé")
             
             return parsed_data
             
@@ -213,13 +227,57 @@ class ManusStockAPI:
     def _try_fallback_api(self, symbol: str) -> Optional[Dict[str, Any]]:
         """Essaie une API de fallback si Manus échoue"""
         try:
-            # API de fallback simple (exemple avec Alpha Vantage ou similaire)
-            # Pour l'instant, on retourne None pour garder la logique simple
-            logger.info(f"🔄 Tentative de fallback pour {symbol} (non implémenté)")
-            return None
+            # Essayer yfinance en premier (gratuit et fiable)
+            return self._try_yfinance_fallback(symbol)
             
         except Exception as e:
             logger.error(f"❌ Erreur fallback API pour {symbol}: {e}")
+            return None
+    
+    def _try_yfinance_fallback(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """Fallback vers yfinance"""
+        try:
+            import yfinance as yf
+            
+            logger.info(f"🔄 Tentative fallback yfinance pour {symbol}")
+            
+            ticker = yf.Ticker(symbol)
+            info = ticker.info
+            
+            # Extraire les données importantes
+            price_data = {
+                'symbol': symbol,
+                'name': info.get('longName', symbol),
+                'price': info.get('currentPrice'),
+                'change': info.get('regularMarketChange'),
+                'change_percent': info.get('regularMarketChangePercent'),
+                'volume': info.get('volume'),
+                'market_cap': info.get('marketCap'),
+                'pe_ratio': info.get('trailingPE'),
+                'high_52_week': info.get('fiftyTwoWeekHigh'),
+                'low_52_week': info.get('fiftyTwoWeekLow'),
+                'open': info.get('regularMarketOpen'),
+                'previous_close': info.get('regularMarketPreviousClose'),
+                'currency': 'USD',
+                'exchange': info.get('exchange', 'NASDAQ'),
+                'last_updated': datetime.now().isoformat(),
+                'source': 'Yahoo Finance (yfinance)',
+                'status': 'fallback_success',
+                'fallback_reason': 'Manus API parsing failed'
+            }
+            
+            if price_data['price']:
+                logger.info(f"✅ Fallback yfinance réussi pour {symbol}: {price_data['price']} USD")
+                return price_data
+            else:
+                logger.warning(f"⚠️ Fallback yfinance échoué pour {symbol}: prix non disponible")
+                return None
+                
+        except ImportError:
+            logger.warning("⚠️ yfinance non installé, fallback non disponible")
+            return None
+        except Exception as e:
+            logger.error(f"❌ Erreur fallback yfinance pour {symbol}: {e}")
             return None
     
     def get_multiple_stock_prices(self, symbols: List[str], force_refresh: bool = False) -> Dict[str, Dict[str, Any]]:
