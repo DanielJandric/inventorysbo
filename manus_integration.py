@@ -36,7 +36,10 @@ class ManusStockAPI:
         if not force_refresh and cache_key in self.cache:
             cached_data, timestamp = self.cache[cache_key]
             if datetime.now() - timestamp < timedelta(seconds=self.cache_duration):
+                logger.info(f"📦 Données en cache pour {symbol} (évite rate limiting)")
                 return cached_data
+            else:
+                logger.info(f"🔄 Cache expiré pour {symbol}, mise à jour...")
         
         try:
             # Essayer différents endpoints
@@ -247,8 +250,13 @@ class ManusStockAPI:
         """Fallback vers yfinance"""
         try:
             import yfinance as yf
+            import time
+            import requests
             
             logger.info(f"🔄 Tentative fallback yfinance pour {symbol}")
+            
+            # Ajouter un délai pour éviter le rate limiting
+            time.sleep(1)
             
             ticker = yf.Ticker(symbol)
             info = ticker.info
@@ -288,8 +296,77 @@ class ManusStockAPI:
         except ImportError:
             logger.warning("⚠️ yfinance non installé, fallback non disponible")
             return None
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 429:
+                logger.warning(f"⚠️ Rate limit yfinance pour {symbol}, attente...")
+                time.sleep(5)  # Attendre 5 secondes
+                return self._try_yfinance_fallback_retry(symbol, max_retries=2)
+            else:
+                logger.error(f"❌ Erreur HTTP yfinance pour {symbol}: {e}")
+                return None
         except Exception as e:
             logger.error(f"❌ Erreur fallback yfinance pour {symbol}: {e}")
+            return None
+    
+    def _try_yfinance_fallback_retry(self, symbol: str, max_retries: int = 2) -> Optional[Dict[str, Any]]:
+        """Retry du fallback yfinance avec gestion du rate limiting"""
+        try:
+            import yfinance as yf
+            import time
+            
+            for attempt in range(max_retries):
+                try:
+                    logger.info(f"🔄 Tentative yfinance {attempt + 1}/{max_retries} pour {symbol}")
+                    
+                    # Délai progressif
+                    if attempt > 0:
+                        delay = 2 ** attempt  # 2, 4, 8 secondes
+                        logger.info(f"⏳ Attente {delay}s avant retry...")
+                        time.sleep(delay)
+                    
+                    ticker = yf.Ticker(symbol)
+                    info = ticker.info
+                    
+                    # Obtenir la devise correcte
+                    correct_currency = self._get_currency_for_symbol(symbol, info)
+                    
+                    price_data = {
+                        'symbol': symbol,
+                        'name': info.get('longName', symbol),
+                        'price': info.get('currentPrice'),
+                        'change': info.get('regularMarketChange'),
+                        'change_percent': info.get('regularMarketChangePercent'),
+                        'volume': info.get('volume'),
+                        'market_cap': info.get('marketCap'),
+                        'pe_ratio': info.get('trailingPE'),
+                        'high_52_week': info.get('fiftyTwoWeekHigh'),
+                        'low_52_week': info.get('fiftyTwoWeekLow'),
+                        'open': info.get('regularMarketOpen'),
+                        'previous_close': info.get('regularMarketPreviousClose'),
+                        'currency': correct_currency,
+                        'exchange': info.get('exchange', 'NASDAQ'),
+                        'last_updated': datetime.now().isoformat(),
+                        'source': 'Yahoo Finance (yfinance)',
+                        'status': 'fallback_success',
+                        'fallback_reason': 'Manus API parsing failed'
+                    }
+                    
+                    if price_data['price']:
+                        logger.info(f"✅ Fallback yfinance réussi (retry {attempt + 1}) pour {symbol}: {price_data['price']} {price_data['currency']}")
+                        return price_data
+                    else:
+                        logger.warning(f"⚠️ Fallback yfinance échoué (retry {attempt + 1}) pour {symbol}: prix non disponible")
+                        
+                except Exception as e:
+                    logger.warning(f"⚠️ Erreur retry {attempt + 1} pour {symbol}: {e}")
+                    if attempt == max_retries - 1:
+                        logger.error(f"❌ Tous les retries échoués pour {symbol}")
+                        return None
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"❌ Erreur retry yfinance pour {symbol}: {e}")
             return None
     
     def _get_currency_for_symbol(self, symbol: str, yf_info: Dict[str, Any]) -> str:
