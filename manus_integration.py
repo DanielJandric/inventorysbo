@@ -7,6 +7,7 @@ Intégration des APIs Manus pour remplacer toutes les autres APIs
 
 import requests
 import json
+import re
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 import logging
@@ -50,27 +51,32 @@ class ManusStockAPI:
                 try:
                     response = self.session.get(f"{self.base_url}{endpoint}", timeout=10)
                     if response.status_code == 200:
+                        # Parser le HTML pour extraire les données
+                        html_content = response.text
+                        parsed_data = self._parse_html_content(html_content, symbol)
+                        
                         # Données disponibles via l'API Manus
                         stock_data = {
                             'symbol': symbol,
-                            'name': symbol,
-                            'price': None,  # À extraire du HTML si possible
-                            'change': None,
-                            'change_percent': None,
-                            'volume': None,
-                            'market_cap': None,
-                            'pe_ratio': None,
-                            'high_52_week': None,
-                            'low_52_week': None,
-                            'open': None,
-                            'previous_close': None,
-                            'currency': 'USD',
-                            'exchange': 'NASDAQ',
+                            'name': parsed_data.get('name', symbol),
+                            'price': parsed_data.get('price'),
+                            'change': parsed_data.get('change'),
+                            'change_percent': parsed_data.get('change_percent'),
+                            'volume': parsed_data.get('volume'),
+                            'market_cap': parsed_data.get('market_cap'),
+                            'pe_ratio': parsed_data.get('pe_ratio'),
+                            'high_52_week': parsed_data.get('high_52_week'),
+                            'low_52_week': parsed_data.get('low_52_week'),
+                            'open': parsed_data.get('open'),
+                            'previous_close': parsed_data.get('previous_close'),
+                            'currency': parsed_data.get('currency', 'USD'),
+                            'exchange': parsed_data.get('exchange', 'NASDAQ'),
                             'last_updated': datetime.now().isoformat(),
                             'source': 'Manus API',
                             'status': 'available',
                             'endpoint': endpoint,
-                            'raw_content_length': len(response.text)
+                            'raw_content_length': len(response.text),
+                            'parsing_success': parsed_data.get('parsing_success', False)
                         }
                         
                         # Mettre en cache
@@ -104,6 +110,12 @@ class ManusStockAPI:
             }
             
             self.cache[cache_key] = (default_data, datetime.now())
+            
+            # Essayer un fallback vers une API alternative
+            fallback_data = self._try_fallback_api(symbol)
+            if fallback_data:
+                return fallback_data
+            
             return default_data
             
         except Exception as e:
@@ -114,6 +126,101 @@ class ManusStockAPI:
                 'error': str(e),
                 'last_updated': datetime.now().isoformat()
             }
+    
+    def _parse_html_content(self, html_content: str, symbol: str) -> Dict[str, Any]:
+        """Parse le contenu HTML pour extraire les données boursières"""
+        try:
+            # Patterns pour extraire les données
+            patterns = {
+                'price': [
+                    r'price["\']?\s*:\s*["\']?([\d,]+\.?\d*)["\']?',
+                    r'current-price["\']?\s*:\s*["\']?([\d,]+\.?\d*)["\']?',
+                    r'[\$€£]?\s*([\d,]+\.?\d*)\s*USD?',
+                    r'price["\']?\s*=\s*["\']?([\d,]+\.?\d*)["\']?'
+                ],
+                'change': [
+                    r'change["\']?\s*:\s*["\']?([+-]?[\d,]+\.?\d*)["\']?',
+                    r'[\$€£]?\s*([+-]?[\d,]+\.?\d*)\s*\([+-]?\d+\.?\d*%\)'
+                ],
+                'change_percent': [
+                    r'change-percent["\']?\s*:\s*["\']?([+-]?\d+\.?\d*)%["\']?',
+                    r'\(([+-]?\d+\.?\d*)%\)',
+                    r'[\$€£]?\s*[+-]?[\d,]+\.?\d*\s*\(([+-]?\d+\.?\d*)%\)'
+                ],
+                'volume': [
+                    r'volume["\']?\s*:\s*["\']?([\d,]+)["\']?',
+                    r'volume["\']?\s*=\s*["\']?([\d,]+)["\']?'
+                ],
+                'market_cap': [
+                    r'market-cap["\']?\s*:\s*["\']?([\d,]+\.?\d*[MBK]?)["\']?',
+                    r'marketcap["\']?\s*:\s*["\']?([\d,]+\.?\d*[MBK]?)["\']?'
+                ]
+            }
+            
+            parsed_data = {
+                'name': symbol,
+                'price': None,
+                'change': None,
+                'change_percent': None,
+                'volume': None,
+                'market_cap': None,
+                'pe_ratio': None,
+                'high_52_week': None,
+                'low_52_week': None,
+                'open': None,
+                'previous_close': None,
+                'currency': 'USD',
+                'exchange': 'NASDAQ',
+                'parsing_success': False
+            }
+            
+            # Essayer d'extraire chaque donnée
+            for field, field_patterns in patterns.items():
+                for pattern in field_patterns:
+                    match = re.search(pattern, html_content, re.IGNORECASE)
+                    if match:
+                        try:
+                            value = match.group(1).replace(',', '')
+                            if field == 'price':
+                                parsed_data[field] = float(value)
+                            elif field in ['change', 'change_percent']:
+                                parsed_data[field] = float(value)
+                            elif field == 'volume':
+                                parsed_data[field] = int(value)
+                            else:
+                                parsed_data[field] = value
+                            break
+                        except (ValueError, AttributeError):
+                            continue
+            
+            # Marquer comme succès si au moins le prix est trouvé
+            if parsed_data['price'] is not None:
+                parsed_data['parsing_success'] = True
+                logger.info(f"✅ Parsing HTML réussi pour {symbol}: prix={parsed_data['price']}")
+            else:
+                logger.warning(f"⚠️ Parsing HTML échoué pour {symbol}, aucun prix trouvé")
+            
+            return parsed_data
+            
+        except Exception as e:
+            logger.error(f"❌ Erreur parsing HTML pour {symbol}: {e}")
+            return {
+                'name': symbol,
+                'price': None,
+                'parsing_success': False
+            }
+    
+    def _try_fallback_api(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """Essaie une API de fallback si Manus échoue"""
+        try:
+            # API de fallback simple (exemple avec Alpha Vantage ou similaire)
+            # Pour l'instant, on retourne None pour garder la logique simple
+            logger.info(f"🔄 Tentative de fallback pour {symbol} (non implémenté)")
+            return None
+            
+        except Exception as e:
+            logger.error(f"❌ Erreur fallback API pour {symbol}: {e}")
+            return None
     
     def get_multiple_stock_prices(self, symbols: List[str], force_refresh: bool = False) -> Dict[str, Dict[str, Any]]:
         """Récupère les prix de plusieurs actions"""
