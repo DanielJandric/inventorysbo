@@ -12,23 +12,8 @@ let stockPriceUpdateErrors = {}; // Pour tracker les erreurs par symbole
 
 // --- Notifications ---
 function showNotification(message, isError = false) {
-    const notification = document.createElement('div');
-    notification.className = `fixed top-5 right-5 text-white px-6 py-3 rounded-xl shadow-lg transition-transform transform translate-x-full ${isError ? 'bg-red-600/80' : 'bg-green-600/80'} backdrop-blur-md border ${isError ? 'border-red-500' : 'border-green-500'} z-50`;
-    notification.textContent = message;
-    document.body.appendChild(notification);
-
-    setTimeout(() => {
-        notification.classList.remove('translate-x-full');
-    }, 100);
-
-    setTimeout(() => {
-        notification.classList.add('translate-x-full');
-        setTimeout(() => {
-            if (notification.parentNode) {
-                notification.remove();
-            }
-        }, 300);
-    }, 5000);
+    // Notifications désactivées pour éviter les popups dérangeants
+    // console.log(`Notification ${isError ? 'erreur' : 'succès'}: ${message}`);
 }
 
 function showError(message) {
@@ -605,7 +590,6 @@ async function updateStockPrices(forceRefresh = false) {
 // Fonction pour forcer la mise à jour immédiate des prix (ignore le cache)
 async function forceUpdateStockPrices() {
     console.log('Mise à jour des prix (cache ignoré)...');
-    showNotification('Mise à jour des prix en cours...', false);
     
     // Réinitialiser les erreurs pour permettre de nouveaux essais
     stockPriceUpdateErrors = {};
@@ -615,14 +599,11 @@ async function forceUpdateStockPrices() {
     
     // Mettre à jour les statistiques après la mise à jour des prix
     updateStatistics();
-    
-    showNotification('Prix mis à jour !', false);
 }
 
 async function updateSingleStockPrice(symbol, itemId) {
     try {
         console.log(`🔄 Début mise à jour ${symbol} (ID: ${itemId})`);
-        showNotification(`Mise à jour de ${symbol} en cours...`, false);
         
         const response = await fetch(`/api/stock-price/${symbol}?force_refresh=true`, {
             method: 'GET',
@@ -634,7 +615,6 @@ async function updateSingleStockPrice(symbol, itemId) {
         if (response.ok) {
             const data = await response.json();
             console.log(`✅ Données reçues pour ${symbol}:`, data);
-            showSuccess(`${symbol} mis à jour: ${formatPrice(data.price)} ${data.currency}`);
             
             // Mettre à jour l'affichage de la carte
             console.log(`🔄 Appel updateStockCardDisplay pour ${itemId}`);
