@@ -425,8 +425,8 @@ Contenu: {data.content[:2000]}
         try:
             logger.info(f"🚀 Début exécution tâche: {task_id}")
             
-            # Scraping
-            scraped_data = await self.search_and_scrape(task.prompt, num_results=5)
+            # Scraping - Utiliser un nombre réduit pour éviter les timeouts
+            scraped_data = await self.search_and_scrape(task.prompt, num_results=2)
             
             if not scraped_data:
                 task.status = "failed"
