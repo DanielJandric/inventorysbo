@@ -228,8 +228,10 @@ function getFilteredItems() {
         filteredItems = filteredItems.filter(item => item.status === 'Available' && item.for_sale === true);
     } else if (currentMainFilter === 'Sold') {
         filteredItems = filteredItems.filter(item => item.status === 'Sold');
+    } else if (currentMainFilter === 'all') {
+        // Pour 'all', exclure les items vendus par défaut (ils sont dans l'onglet Vendu)
+        filteredItems = filteredItems.filter(item => item.status !== 'Sold');
     }
-    // 'all' n'applique aucun filtre supplémentaire
     
     return filteredItems;
 }
@@ -241,7 +243,6 @@ function updateStatistics() {
     
     const elements = {
         'stat-total': stats.total,
-        'stat-vendus': stats.vendus,
         'stat-disponibles': stats.disponibles,
         'stat-valeur-vente': stats.valeur_vente,
         'stat-valeur-dispo': stats.valeur_disponible,
@@ -360,8 +361,7 @@ function updateStatusCounts() {
     const counts = {
         'count-all': filteredItems.length,
         'count-available': filteredItems.filter(item => item.status === 'Available' && !item.for_sale).length,
-        'count-for-sale': filteredItems.filter(item => item.status === 'Available' && item.for_sale === true).length,
-        'count-sold': filteredItems.filter(item => item.status === 'Sold').length
+        'count-for-sale': filteredItems.filter(item => item.status === 'Available' && item.for_sale === true).length
     };
     
     for (const [id, count] of Object.entries(counts)) {
