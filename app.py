@@ -6449,9 +6449,9 @@ def scrapingbee_market_update_quick():
 def check_background_worker_status():
     """Vérifie le statut du Background Worker"""
     try:
-        # Ici vous pourriez implémenter une vérification du statut du worker
-        # Pour l'instant, on suppose qu'il est disponible
-        return {"available": True, "last_check": datetime.now().isoformat()}
+        from market_analysis_db import get_market_analysis_db
+        db = get_market_analysis_db()
+        return db.get_worker_status()
     except Exception as e:
         logger.error(f"Erreur vérification Background Worker: {e}")
         return {"available": False, "error": str(e)}
@@ -6459,29 +6459,26 @@ def check_background_worker_status():
 def get_latest_market_analysis():
     """Récupère la dernière analyse de marché"""
     try:
-        # Ici vous pourriez implémenter la récupération depuis une base de données
-        # Pour l'instant, on retourne un exemple
-        return {
-            "timestamp": datetime.now().isoformat(),
-            "data": {
-                "summary": "Analyse automatique générée par le Background Worker. Les marchés montrent une tendance positive avec un focus particulier sur l'IA.",
-                "key_points": [
-                    "Marchés en hausse avec focus sur l'IA",
-                    "Tendances technologiques positives",
-                    "Investissements dans l'intelligence artificielle"
-                ],
-                "structured_data": {
-                    "prix": "Tendance haussière",
-                    "tendance": "Positive",
-                    "volumes": "Élevés"
-                },
-                "insights": ["L'IA continue d'attirer les investissements"],
-                "risks": ["Volatilité possible"],
-                "opportunities": ["Croissance technologique"],
-                "sources": [{"title": "Background Worker Analysis", "url": "#"}],
-                "confidence_score": 0.85
+        from market_analysis_db import get_market_analysis_db
+        db = get_market_analysis_db()
+        analysis = db.get_latest_analysis()
+        
+        if analysis:
+            return {
+                "timestamp": analysis.timestamp,
+                "data": {
+                    "summary": analysis.summary,
+                    "key_points": analysis.key_points or [],
+                    "structured_data": analysis.structured_data or {},
+                    "insights": analysis.insights or [],
+                    "risks": analysis.risks or [],
+                    "opportunities": analysis.opportunities or [],
+                    "sources": analysis.sources or [],
+                    "confidence_score": analysis.confidence_score or 0.0
+                }
             }
-        }
+        else:
+            return None
     except Exception as e:
         logger.error(f"Erreur récupération analyse: {e}")
         return None
