@@ -393,7 +393,7 @@
                 const statusIndicator = document.getElementById('aiStatus');
                 const statusText = document.getElementById('aiStatusText');
                 
-                if (data.success) {
+                if (data.status === "operational") {
                     statusIndicator.className = 'status-indicator status-online';
                     statusText.textContent = 'IA: En ligne';
                 } else {
