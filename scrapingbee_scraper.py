@@ -308,7 +308,7 @@ class ScrapingBeeScraper:
                         # Extraire le contenu du body
                         cleaned_content = self._extract_text_from_html(html_content)
                         
-                        return cleaned_content[:5000]  # Limite de caractères
+                                                 return cleaned_content[:8000]  # Limite de caractères augmentée
                     else:
                         logger.error(f"❌ Erreur ScrapingBee scraping: {response.status}")
                         return None
@@ -333,7 +333,7 @@ class ScrapingBeeScraper:
         text = re.sub(r'\s+', ' ', text)
         text = re.sub(r'[^\w\s\.\,\!\?\-\:\;\(\)\-\$\%]', '', text)
         
-        return text.strip()[:5000]
+        return text.strip()[:8000]
     
     def _clean_content(self, content: str) -> str:
         """Nettoie le contenu extrait"""
@@ -347,7 +347,7 @@ class ScrapingBeeScraper:
         content = re.sub(r'[^\w\s\.\,\!\?\-\:\;\(\)]', '', content)
         
         # Limiter la longueur
-        return content.strip()[:5000]
+        return content.strip()[:8000]
     
     async def process_with_llm(self, prompt: str, scraped_data: List[ScrapedData]) -> Dict:
         """Traite les données scrapées avec OpenAI"""
@@ -359,23 +359,36 @@ class ScrapingBeeScraper:
             # Préparer le contexte
             context = self._prepare_context(scraped_data)
             
-            # Prompt système
-            system_prompt = """Tu es un assistant expert en analyse de données financières et boursières. 
-            Analyse les informations fournies et réponds à la demande de l'utilisateur.
+            # Prompt système enrichi
+            system_prompt = """Tu es un expert analyste financier et boursier de haut niveau. 
+            Tu dois analyser les informations fournies et créer un rapport détaillé et exhaustif.
             
-            Structure ta réponse de manière claire avec:
-            1. Un résumé exécutif des informations clés
-            2. Les points clés extraits (prix, tendances, actualités)
-            3. Les données structurées (si applicable)
-            4. Les sources utilisées
+            IMPORTANT: Crée un rapport COMPLET et DÉTAILLÉ, pas un résumé succinct.
+            
+            Structure ta réponse avec:
+            1. Un résumé exécutif COMPLET (minimum 300 mots)
+            2. Des points clés DÉTAILLÉS (minimum 8-10 points)
+            3. Des données structurées RICHES (prix, tendances, volumes, actualités, analyses)
+            4. Une analyse approfondie des sources
+            5. Des recommandations et insights
             
             Retourne ta réponse en JSON avec la structure suivante:
             {
-                "summary": "résumé concis",
-                "key_points": ["point 1", "point 2", ...],
-                "structured_data": {"prix": "", "tendance": "", "actualités": []},
+                "summary": "résumé détaillé et complet (minimum 300 mots)",
+                "key_points": ["point détaillé 1", "point détaillé 2", ... (minimum 8 points)],
+                "structured_data": {
+                    "prix": "analyse des prix",
+                    "tendance": "analyse des tendances",
+                    "volumes": "analyse des volumes",
+                    "actualités": ["actualité 1", "actualité 2", ...],
+                    "analyses": ["analyse 1", "analyse 2", ...],
+                    "recommandations": ["recommandation 1", "recommandation 2", ...]
+                },
                 "sources": [{"title": "", "url": ""}],
-                "confidence_score": 0.85
+                "confidence_score": 0.85,
+                "insights": ["insight 1", "insight 2", ...],
+                "risks": ["risque 1", "risque 2", ...],
+                "opportunities": ["opportunité 1", "opportunité 2", ...]
             }"""
             
             response = client.chat.completions.create(
@@ -408,7 +421,7 @@ class ScrapingBeeScraper:
             context_parts.append(f"""
 Source {idx}: {data.title}
 URL: {data.url}
-Contenu: {data.content[:2000]}
+Contenu: {data.content[:4000]}
 ---
 """)
         
@@ -425,8 +438,8 @@ Contenu: {data.content[:2000]}
         try:
             logger.info(f"🚀 Début exécution tâche: {task_id}")
             
-            # Scraping - Utiliser un nombre réduit pour éviter les timeouts
-            scraped_data = await self.search_and_scrape(task.prompt, num_results=2)
+            # Scraping - Utiliser 3 sources pour un rapport plus complet
+            scraped_data = await self.search_and_scrape(task.prompt, num_results=3)
             
             if not scraped_data:
                 task.status = "failed"

@@ -266,20 +266,53 @@
                     const analysis = data.data;
                     content.innerHTML = `
                         <div class="mb-3">
-                            <h6><i class="fas fa-chart-line"></i> Résumé</h6>
-                            <p>${analysis.summary || 'Aucun résumé disponible'}</p>
+                            <h6><i class="fas fa-chart-line"></i> Résumé Exécutif</h6>
+                            <p class="text-justify">${analysis.summary || 'Aucun résumé disponible'}</p>
                         </div>
                         
                         <div class="mb-3">
-                            <h6><i class="fas fa-list"></i> Points Clés</h6>
+                            <h6><i class="fas fa-list"></i> Points Clés (${(analysis.key_points || []).length})</h6>
                             <ul>
                                 ${(analysis.key_points || []).map(point => `<li>${point}</li>`).join('')}
                             </ul>
                         </div>
                         
                         <div class="mb-3">
-                            <h6><i class="fas fa-database"></i> Données Structurées</h6>
-                            <pre class="bg-light p-2 rounded">${JSON.stringify(analysis.structured_data || {}, null, 2)}</pre>
+                            <h6><i class="fas fa-chart-bar"></i> Données Structurées</h6>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <strong>Prix:</strong> ${analysis.structured_data?.prix || 'N/A'}<br>
+                                    <strong>Tendance:</strong> ${analysis.structured_data?.tendance || 'N/A'}<br>
+                                    <strong>Volumes:</strong> ${analysis.structured_data?.volumes || 'N/A'}
+                                </div>
+                                <div class="col-md-6">
+                                    <strong>Actualités:</strong><br>
+                                    <ul>
+                                        ${(analysis.structured_data?.actualités || []).map(act => `<li>${act}</li>`).join('')}
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <h6><i class="fas fa-lightbulb"></i> Insights (${(analysis.insights || []).length})</h6>
+                            <ul>
+                                ${(analysis.insights || []).map(insight => `<li>${insight}</li>`).join('')}
+                            </ul>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <h6><i class="fas fa-exclamation-triangle"></i> Risques (${(analysis.risks || []).length})</h6>
+                            <ul>
+                                ${(analysis.risks || []).map(risk => `<li>${risk}</li>`).join('')}
+                            </ul>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <h6><i class="fas fa-star"></i> Opportunités (${(analysis.opportunities || []).length})</h6>
+                            <ul>
+                                ${(analysis.opportunities || []).map(opp => `<li>${opp}</li>`).join('')}
+                            </ul>
                         </div>
                         
                         <div class="mb-3">
