@@ -6555,7 +6555,7 @@ def get_background_worker_status():
 
         return jsonify({
             "status": latest_analysis.worker_status,
-            "analysis": latest_analysis.to_dict() if latest_analysis else None
+            "analysis": latest_analysis.to_frontend_dict() if latest_analysis else None
         })
 
     except Exception as e:

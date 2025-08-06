@@ -56,6 +56,25 @@ class MarketAnalysis:
         # Supprimer les champs None
         return {k: v for k, v in data.items() if v is not None}
 
+    def to_frontend_dict(self) -> Dict[str, Any]:
+        """Convertit en dictionnaire pour le frontend (JSON valide)."""
+        data = asdict(self)
+        # Assurer que les champs JSON sont des listes/dict et non des strings
+        for field in ['key_points', 'insights', 'risks', 'opportunities', 'sources', 'structured_data']:
+            if isinstance(data.get(field), str):
+                try:
+                    data[field] = json.loads(data[field])
+                except (json.JSONDecodeError, TypeError):
+                    logger.warning(f"Impossible de décoder le JSON pour le champ {field}")
+                    # Remplacer par une valeur par défaut en cas d'erreur
+                    if field in ['structured_data', 'sources']:
+                        data[field] = {} if field == 'structured_data' else []
+                    else:
+                        data[field] = []
+        
+        return {k: v for k, v in data.items() if v is not None}
+
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'MarketAnalysis':
         """Crée une instance depuis un dictionnaire de Supabase"""
