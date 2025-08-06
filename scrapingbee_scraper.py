@@ -307,7 +307,9 @@ class ScrapingBeeScraper:
                         
                         # Extraire le contenu du body
                         cleaned_content = self._extract_text_from_html(html_content)
-                        
+                        logger.info(f"📄 Contenu extrait de {url}: {len(cleaned_content)} caractères.")
+                        logger.debug(f"Contenu brut (aperçu): {cleaned_content[:500]}...")
+
                         return cleaned_content[:8000]  # Limite de caractères augmentée
                     else:
                         logger.error(f"❌ Erreur ScrapingBee scraping: {response.status}")
@@ -358,7 +360,9 @@ class ScrapingBeeScraper:
             
             # Préparer le contexte
             context = self._prepare_context(scraped_data)
-            
+            logger.info(f"🧠 Contexte préparé pour OpenAI ({len(context)} caractères).")
+            logger.debug(f"Contexte complet pour OpenAI: {context}")
+
             # Prompt système enrichi
             system_prompt = """Tu es un expert analyste financier et boursier de haut niveau. 
             Tu dois analyser les informations fournies et créer un rapport détaillé et exhaustif.
@@ -391,6 +395,7 @@ class ScrapingBeeScraper:
                 "opportunities": ["opportunité 1", "opportunité 2", ...]
             }"""
             
+            logger.info("🤖 Appel à l'API OpenAI (gpt-4o-mini) en cours...")
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
