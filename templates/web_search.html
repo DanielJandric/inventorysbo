@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Search - Financial Information</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            font-weight: 300;
+        }
+        
+        .header p {
+            margin: 10px 0 0 0;
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+        
+        .content {
+            padding: 30px;
+        }
+        
+        .search-section {
+            margin-bottom: 30px;
+            padding: 25px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            background: #fafafa;
+        }
+        
+        .search-section h2 {
+            margin: 0 0 20px 0;
+            color: #333;
+            font-size: 1.5em;
+            border-bottom: 2px solid #00d4ff;
+            padding-bottom: 10px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #555;
+        }
+        
+        select, input, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        
+        select:focus, input:focus, textarea:focus {
+            outline: none;
+            border-color: #00d4ff;
+            box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.1);
+        }
+        
+        button {
+            background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0, 212, 255, 0.3);
+        }
+        
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .result-section {
+            margin-top: 30px;
+            padding: 25px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            background: white;
+        }
+        
+        .result-section h3 {
+            margin: 0 0 20px 0;
+            color: #333;
+            font-size: 1.3em;
+        }
+        
+        .result-content {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #00d4ff;
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #00d4ff;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .error {
+            background: #ffe6e6;
+            border: 2px solid #ff6b6b;
+            color: #d63031;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+        
+        .success {
+            background: #e6ffe6;
+            border: 2px solid #6bff6b;
+            color: #00b894;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+        
+        .citations {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f0f8ff;
+            border-radius: 8px;
+            border-left: 4px solid #4a90e2;
+        }
+        
+        .citation {
+            margin-bottom: 10px;
+            padding: 10px;
+            background: white;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+        }
+        
+        .citation a {
+            color: #4a90e2;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        
+        .citation a:hover {
+            text-decoration: underline;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .status-online {
+            background: #00b894;
+        }
+        
+        .status-offline {
+            background: #d63031;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔍 Web Search Financial</h1>
+            <p>Recherche web OpenAI pour les informations financières</p>
+        </div>
+        
+        <div class="content">
+            <!-- Status Section -->
+            <div class="search-section">
+                <h2>📊 Statut du Service</h2>
+                <button onclick="checkStatus()">Vérifier le Statut</button>
+                <div id="status-result"></div>
+            </div>
+            
+            <!-- Market Briefing Section -->
+            <div class="search-section">
+                <h2>📈 Briefing de Marché</h2>
+                <div class="form-group">
+                    <label for="location">Localisation (optionnel):</label>
+                    <input type="text" id="location" placeholder="ex: CH, Genève, Genève" value="CH, Genève, Genève">
+                </div>
+                <div class="form-group">
+                    <label for="context-size">Taille du contexte:</label>
+                    <select id="context-size">
+                        <option value="low">Faible (rapide)</option>
+                        <option value="medium" selected>Moyen (équilibré)</option>
+                        <option value="high">Élevé (complet)</option>
+                    </select>
+                </div>
+                <button onclick="generateMarketBriefing()">Générer Briefing</button>
+                <div id="briefing-result"></div>
+            </div>
+            
+            <!-- Financial Markets Search Section -->
+            <div class="search-section">
+                <h2>💹 Recherche de Marchés</h2>
+                <div class="form-group">
+                    <label for="search-type">Type de recherche:</label>
+                    <select id="search-type">
+                        <option value="market_data">Données de marché</option>
+                        <option value="financial_news">Actualités financières</option>
+                        <option value="stock_analysis">Analyse d'actions</option>
+                        <option value="economic_indicators">Indicateurs économiques</option>
+                        <option value="crypto_market">Marché crypto</option>
+                        <option value="forex_market">Marché des changes</option>
+                        <option value="commodities">Matières premières</option>
+                        <option value="central_banks">Banques centrales</option>
+                        <option value="geopolitical">Géopolitique</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="markets-location">Localisation:</label>
+                    <input type="text" id="markets-location" placeholder="ex: CH, Genève" value="CH, Genève">
+                </div>
+                <button onclick="searchFinancialMarkets()">Rechercher</button>
+                <div id="markets-result"></div>
+            </div>
+            
+            <!-- Stock Search Section -->
+            <div class="search-section">
+                <h2>📊 Recherche d'Action</h2>
+                <div class="form-group">
+                    <label for="stock-symbol">Symbole de l'action:</label>
+                    <input type="text" id="stock-symbol" placeholder="ex: AAPL, TSLA, MSFT" value="AAPL">
+                </div>
+                <div class="form-group">
+                    <label for="stock-location">Localisation:</label>
+                    <input type="text" id="stock-location" placeholder="ex: US, New York" value="US, New York">
+                </div>
+                <button onclick="searchStock()">Rechercher Action</button>
+                <div id="stock-result"></div>
+            </div>
+            
+            <!-- Market Alerts Section -->
+            <div class="search-section">
+                <h2>🚨 Alertes de Marché</h2>
+                <div class="form-group">
+                    <label for="alert-type">Type d'alerte:</label>
+                    <select id="alert-type">
+                        <option value="breaking_news">Actualités importantes</option>
+                        <option value="market_moves">Mouvements de marché</option>
+                        <option value="central_bank">Banques centrales</option>
+                    </select>
+                </div>
+                <button onclick="searchMarketAlerts()">Rechercher Alertes</button>
+                <div id="alerts-result"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showLoading(elementId) {
+            document.getElementById(elementId).innerHTML = `
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Recherche en cours...</p>
+                </div>
+            `;
+        }
+        
+        function showError(elementId, message) {
+            document.getElementById(elementId).innerHTML = `
+                <div class="error">
+                    <strong>❌ Erreur:</strong> ${message}
+                </div>
+            `;
+        }
+        
+        function showSuccess(elementId, message) {
+            document.getElementById(elementId).innerHTML = `
+                <div class="success">
+                    <strong>✅ Succès:</strong> ${message}
+                </div>
+            `;
+        }
+        
+        function parseLocation(locationStr) {
+            if (!locationStr) return null;
+            const parts = locationStr.split(',').map(s => s.trim());
+            if (parts.length >= 2) {
+                return {
+                    country: parts[0],
+                    city: parts[1],
+                    region: parts[2] || parts[1]
+                };
+            }
+            return null;
+        }
+        
+        async function checkStatus() {
+            showLoading('status-result');
+            
+            try {
+                const response = await fetch('/api/web-search/status');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    const statusHtml = `
+                        <div class="success">
+                            <span class="status-indicator ${data.available ? 'status-online' : 'status-offline'}"></span>
+                            <strong>Statut du service:</strong><br>
+                            • Disponible: ${data.available ? 'Oui' : 'Non'}<br>
+                            • OpenAI configuré: ${data.openai_configured ? 'Oui' : 'Non'}<br>
+                            • Types de recherche: ${data.search_types ? data.search_types.join(', ') : 'N/A'}<br>
+                            • Cache: ${data.cache_duration || 'N/A'} secondes<br>
+                            • Timestamp: ${data.timestamp || 'N/A'}
+                        </div>
+                    `;
+                    document.getElementById('status-result').innerHTML = statusHtml;
+                } else {
+                    showError('status-result', data.error || 'Erreur inconnue');
+                }
+            } catch (error) {
+                showError('status-result', `Erreur de connexion: ${error.message}`);
+            }
+        }
+        
+        async function generateMarketBriefing() {
+            showLoading('briefing-result');
+            
+            try {
+                const location = parseLocation(document.getElementById('location').value);
+                const contextSize = document.getElementById('context-size').value;
+                
+                const response = await fetch('/api/web-search/market-briefing', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        user_location: location,
+                        search_context_size: contextSize
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    const resultHtml = `
+                        <div class="result-section">
+                            <h3>📈 Briefing de Marché</h3>
+                            <div class="result-content">${data.briefing}</div>
+                            <div class="success">
+                                <strong>Source:</strong> ${data.source}<br>
+                                <strong>Timestamp:</strong> ${data.timestamp}
+                            </div>
+                        </div>
+                    `;
+                    document.getElementById('briefing-result').innerHTML = resultHtml;
+                } else {
+                    showError('briefing-result', data.error || 'Erreur inconnue');
+                }
+            } catch (error) {
+                showError('briefing-result', `Erreur de connexion: ${error.message}`);
+            }
+        }
+        
+        async function searchFinancialMarkets() {
+            showLoading('markets-result');
+            
+            try {
+                const searchType = document.getElementById('search-type').value;
+                const location = parseLocation(document.getElementById('markets-location').value);
+                
+                const response = await fetch('/api/web-search/financial-markets', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        search_type: searchType,
+                        user_location: location,
+                        search_context_size: 'medium'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    const result = data.result;
+                    let citationsHtml = '';
+                    
+                    if (result.citations && result.citations.length > 0) {
+                        citationsHtml = `
+                            <div class="citations">
+                                <h4>📚 Sources citées:</h4>
+                                ${result.citations.map(citation => `
+                                    <div class="citation">
+                                        <a href="${citation.url}" target="_blank">${citation.title}</a>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        `;
+                    }
+                    
+                    const resultHtml = `
+                        <div class="result-section">
+                            <h3>💹 Données de Marché</h3>
+                            <div class="result-content">${result.content}</div>
+                            <div class="success">
+                                <strong>Type:</strong> ${result.search_type}<br>
+                                <strong>Citations:</strong> ${result.citations.length}<br>
+                                <strong>Timestamp:</strong> ${result.timestamp}
+                            </div>
+                            ${citationsHtml}
+                        </div>
+                    `;
+                    document.getElementById('markets-result').innerHTML = resultHtml;
+                } else {
+                    showError('markets-result', data.error || 'Erreur inconnue');
+                }
+            } catch (error) {
+                showError('markets-result', `Erreur de connexion: ${error.message}`);
+            }
+        }
+        
+        async function searchStock() {
+            showLoading('stock-result');
+            
+            try {
+                const symbol = document.getElementById('stock-symbol').value.toUpperCase();
+                const location = parseLocation(document.getElementById('stock-location').value);
+                
+                const params = new URLSearchParams();
+                if (location) {
+                    params.append('location', JSON.stringify(location));
+                }
+                
+                const response = await fetch(`/api/web-search/stock/${symbol}?${params}`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    const result = data.result;
+                    let citationsHtml = '';
+                    
+                    if (result.citations && result.citations.length > 0) {
+                        citationsHtml = `
+                            <div class="citations">
+                                <h4>📚 Sources citées:</h4>
+                                ${result.citations.map(citation => `
+                                    <div class="citation">
+                                        <a href="${citation.url}" target="_blank">${citation.title}</a>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        `;
+                    }
+                    
+                    const resultHtml = `
+                        <div class="result-section">
+                            <h3>📊 Informations sur ${symbol}</h3>
+                            <div class="result-content">${result.content}</div>
+                            <div class="success">
+                                <strong>Symbole:</strong> ${data.symbol}<br>
+                                <strong>Citations:</strong> ${result.citations.length}<br>
+                                <strong>Timestamp:</strong> ${result.timestamp}
+                            </div>
+                            ${citationsHtml}
+                        </div>
+                    `;
+                    document.getElementById('stock-result').innerHTML = resultHtml;
+                } else {
+                    showError('stock-result', data.error || 'Erreur inconnue');
+                }
+            } catch (error) {
+                showError('stock-result', `Erreur de connexion: ${error.message}`);
+            }
+        }
+        
+        async function searchMarketAlerts() {
+            showLoading('alerts-result');
+            
+            try {
+                const alertType = document.getElementById('alert-type').value;
+                
+                const response = await fetch(`/api/web-search/market-alerts?type=${alertType}`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    const result = data.result;
+                    let citationsHtml = '';
+                    
+                    if (result.citations && result.citations.length > 0) {
+                        citationsHtml = `
+                            <div class="citations">
+                                <h4>📚 Sources citées:</h4>
+                                ${result.citations.map(citation => `
+                                    <div class="citation">
+                                        <a href="${citation.url}" target="_blank">${citation.title}</a>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        `;
+                    }
+                    
+                    const resultHtml = `
+                        <div class="result-section">
+                            <h3>🚨 Alertes de Marché</h3>
+                            <div class="result-content">${result.content}</div>
+                            <div class="success">
+                                <strong>Type d'alerte:</strong> ${data.alert_type}<br>
+                                <strong>Citations:</strong> ${result.citations.length}<br>
+                                <strong>Timestamp:</strong> ${result.timestamp}
+                            </div>
+                            ${citationsHtml}
+                        </div>
+                    `;
+                    document.getElementById('alerts-result').innerHTML = resultHtml;
+                } else {
+                    showError('alerts-result', data.error || 'Erreur inconnue');
+                }
+            } catch (error) {
+                showError('alerts-result', `Erreur de connexion: ${error.message}`);
+            }
+        }
+        
+        // Vérifier le statut au chargement de la page
+        window.onload = function() {
+            checkStatus();
+        };
+    </script>
+</body>
+</html> 

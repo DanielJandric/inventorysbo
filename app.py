@@ -32,6 +32,12 @@ from stock_api_manager import (
     get_stock_price_stable,
     get_stock_price_manus
 )
+from web_search_manager import (
+    OpenAIWebSearchManager,
+    WebSearchType,
+    WebSearchResult,
+    create_web_search_manager
+)
 # Remplacé par l'API Manus unifiée
 
 # Load environment variables from .env file
@@ -202,6 +208,17 @@ try:
         logger.warning("⚠️ OpenAI non configuré")
 except Exception as e:
     logger.warning(f"⚠️ OpenAI non disponible: {e}")
+
+# Initialize Web Search Manager
+web_search_manager = None
+if openai_client:
+    try:
+        web_search_manager = create_web_search_manager(openai_client)
+        logger.info("✅ Gestionnaire de recherche web initialisé")
+    except Exception as e:
+        logger.error(f"❌ Erreur initialisation Web Search Manager: {e}")
+else:
+    logger.warning("⚠️ Gestionnaire de recherche web non disponible (OpenAI non configuré)")
 
 # ──────────────────────────────────────────────────────────
 # Gemini 2.5 client (SDK google-genai)
@@ -2477,6 +2494,11 @@ def settings():
 def sold():
     """Page des objets vendus"""
     return render_template('sold.html')
+
+@app.route("/web-search")
+def web_search():
+    """Interface de test pour la recherche web OpenAI"""
+    return render_template("web_search.html")
 
 @app.route("/health")
 def health():
@@ -5082,8 +5104,9 @@ def get_scheduler_status():
         return jsonify({"error": str(e)}), 500
 
 def generate_market_briefing():
-    """Génère un briefing de marché via l'API Manus (remplace toutes les autres APIs)"""
+    """Génère un briefing de marché avec fallback vers web search OpenAI"""
     try:
+        # Essayer d'abord l'API Manus
         briefing = generate_market_briefing_manus()
         
         if briefing.get('status') == 'success':
@@ -5101,27 +5124,57 @@ def generate_market_briefing():
                     'timestamp': datetime.now().isoformat(),
                     'source': 'Manus API'
                 }
-            else:
+        
+        # Fallback vers OpenAI Web Search si Manus échoue
+        if web_search_manager:
+            logger.info("🔄 Fallback vers OpenAI Web Search")
+            briefing_content = web_search_manager.get_comprehensive_market_briefing()
+            
+            if briefing_content:
                 return {
-                    'status': 'error',
-                    'message': 'Contenu du briefing vide',
+                    'status': 'success',
+                    'briefing': {
+                        'content': briefing_content,
+                        'title': 'Briefing de Marché',
+                        'summary': [],
+                        'metrics': {}
+                    },
                     'timestamp': datetime.now().isoformat(),
-                    'source': 'Manus API'
+                    'source': 'OpenAI Web Search'
                 }
-        else:
-            return {
-                'status': 'error',
-                'message': briefing.get('message', 'Erreur génération briefing'),
-                'timestamp': datetime.now().isoformat(),
-                'source': 'Manus API'
-            }
+        
+        # Fallback vers l'ancienne méthode OpenAI si web search échoue
+        if openai_client:
+            logger.info("🔄 Fallback vers OpenAI Chat Completions")
+            briefing_content = generate_market_briefing_with_openai()
+            
+            if briefing_content:
+                return {
+                    'status': 'success',
+                    'briefing': {
+                        'content': briefing_content,
+                        'title': 'Briefing de Marché',
+                        'summary': [],
+                        'metrics': {}
+                    },
+                    'timestamp': datetime.now().isoformat(),
+                    'source': 'OpenAI Chat Completions'
+                }
+        
+        return {
+            'status': 'error',
+            'message': 'Aucune méthode de génération disponible',
+            'timestamp': datetime.now().isoformat(),
+            'source': 'None'
+        }
+        
     except Exception as e:
-        logger.error(f"Erreur génération briefing Manus: {e}")
+        logger.error(f"Erreur génération briefing: {e}")
         return {
             'status': 'error',
             'message': str(e),
             'timestamp': datetime.now().isoformat(),
-            'source': 'Manus API'
+            'source': 'Error'
         }
 
 
@@ -5177,3 +5230,189 @@ Si une classe d'actif n'a pas bougé, dis-le clairement sans meubler. Génère u
     except Exception as e:
         logger.error(f"Erreur génération briefing avec OpenAI: {e}")
         return None
+
+# ──────────────────────────────────────────────────────────
+# Web Search API Endpoints
+# ──────────────────────────────────────────────────────────
+
+@app.route("/api/web-search/market-briefing", methods=["POST"])
+def web_search_market_briefing():
+    """Génère un briefing de marché avec recherche web OpenAI"""
+    try:
+        if not web_search_manager:
+            return jsonify({"error": "Web Search Manager non disponible"}), 500
+        
+        # Récupérer les paramètres de la requête
+        data = request.get_json() or {}
+        user_location = data.get('user_location')
+        search_context_size = data.get('search_context_size', 'high')
+        
+        # Générer le briefing avec recherche web
+        briefing_content = web_search_manager.get_comprehensive_market_briefing(
+            user_location=user_location
+        )
+        
+        if briefing_content:
+            # Sauvegarder en base si configuré
+            if supabase:
+                update_data = {
+                    "content": briefing_content,
+                    "date": datetime.now().strftime("%Y-%m-%d"),
+                    "time": datetime.now().strftime("%H:%M"),
+                    "created_at": datetime.now().isoformat(),
+                    "trigger_type": "web_search",
+                    "source": "OpenAI Web Search"
+                }
+                
+                response = supabase.table("market_updates").insert(update_data).execute()
+                
+                if response.data:
+                    logger.info("✅ Briefing web search généré et sauvegardé")
+            
+            return jsonify({
+                "success": True,
+                "briefing": briefing_content,
+                "timestamp": datetime.now().isoformat(),
+                "source": "OpenAI Web Search"
+            })
+        else:
+            return jsonify({"error": "Impossible de générer le briefing"}), 500
+            
+    except Exception as e:
+        logger.error(f"Erreur briefing web search: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/web-search/financial-markets", methods=["POST"])
+def web_search_financial_markets():
+    """Recherche web pour les données de marché financier"""
+    try:
+        if not web_search_manager:
+            return jsonify({"error": "Web Search Manager non disponible"}), 500
+        
+        data = request.get_json() or {}
+        search_type = data.get('search_type', 'market_data')
+        user_location = data.get('user_location')
+        search_context_size = data.get('search_context_size', 'medium')
+        
+        # Convertir le type de recherche
+        try:
+            web_search_type = WebSearchType(search_type)
+        except ValueError:
+            return jsonify({"error": f"Type de recherche invalide: {search_type}"}), 400
+        
+        # Effectuer la recherche
+        result = web_search_manager.search_financial_markets(
+            search_type=web_search_type,
+            user_location=user_location,
+            search_context_size=search_context_size
+        )
+        
+        if result:
+            return jsonify({
+                "success": True,
+                "result": {
+                    "content": result.content,
+                    "citations": result.citations,
+                    "search_call_id": result.search_call_id,
+                    "timestamp": result.timestamp,
+                    "search_type": result.search_type.value,
+                    "domains_searched": result.domains_searched
+                }
+            })
+        else:
+            return jsonify({"error": "Aucun résultat trouvé"}), 404
+            
+    except Exception as e:
+        logger.error(f"Erreur recherche web marchés: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/web-search/stock/<symbol>", methods=["GET"])
+def web_search_stock_info(symbol):
+    """Recherche web pour les informations d'une action spécifique"""
+    try:
+        if not web_search_manager:
+            return jsonify({"error": "Web Search Manager non disponible"}), 500
+        
+        # Récupérer les paramètres de localisation
+        user_location = request.args.get('location')
+        if user_location:
+            try:
+                user_location = json.loads(user_location)
+            except:
+                user_location = None
+        
+        # Effectuer la recherche
+        result = web_search_manager.search_specific_stock(
+            symbol=symbol.upper(),
+            user_location=user_location
+        )
+        
+        if result:
+            return jsonify({
+                "success": True,
+                "symbol": symbol.upper(),
+                "result": {
+                    "content": result.content,
+                    "citations": result.citations,
+                    "search_call_id": result.search_call_id,
+                    "timestamp": result.timestamp,
+                    "search_type": result.search_type.value
+                }
+            })
+        else:
+            return jsonify({"error": f"Aucune information trouvée pour {symbol}"}), 404
+            
+    except Exception as e:
+        logger.error(f"Erreur recherche action {symbol}: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/web-search/market-alerts", methods=["GET"])
+def web_search_market_alerts():
+    """Recherche web pour les alertes de marché en temps réel"""
+    try:
+        if not web_search_manager:
+            return jsonify({"error": "Web Search Manager non disponible"}), 500
+        
+        alert_type = request.args.get('type', 'breaking_news')
+        
+        # Effectuer la recherche
+        result = web_search_manager.get_market_alert(alert_type=alert_type)
+        
+        if result:
+            return jsonify({
+                "success": True,
+                "alert_type": alert_type,
+                "result": {
+                    "content": result.content,
+                    "citations": result.citations,
+                    "search_call_id": result.search_call_id,
+                    "timestamp": result.timestamp,
+                    "search_type": result.search_type.value
+                }
+            })
+        else:
+            return jsonify({"error": "Aucune alerte trouvée"}), 404
+            
+    except Exception as e:
+        logger.error(f"Erreur recherche alertes: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/web-search/status", methods=["GET"])
+def web_search_status():
+    """Statut du gestionnaire de recherche web"""
+    try:
+        status = {
+            "available": web_search_manager is not None,
+            "openai_configured": openai_client is not None,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        if web_search_manager:
+            status["search_types"] = [search_type.value for search_type in WebSearchType]
+            status["cache_duration"] = web_search_manager.cache_duration
+        
+        return jsonify(status)
+        
+    except Exception as e:
+        logger.error(f"Erreur statut web search: {e}")
+        return jsonify({"error": str(e)}), 500
