@@ -21,6 +21,7 @@ class MarketAnalysis:
     id: Optional[int] = None
     timestamp: Optional[str] = None
     analysis_type: str = 'automatic'
+    prompt: Optional[str] = None
     summary: Optional[str] = None
     key_points: Optional[List[str]] = None
     structured_data: Optional[Dict[str, Any]] = None
@@ -175,6 +176,55 @@ class MarketAnalysisDB:
         except Exception as e:
             logger.error(f"❌ Erreur récupération analyses par type: {e}")
             return []
+
+    def get_pending_analysis(self) -> Optional[MarketAnalysis]:
+        """Récupère la plus ancienne analyse en attente."""
+        try:
+            if not self.is_connected(): return None
+            
+            result = self.supabase.table('market_analyses')\
+                .select('*')\
+                .eq('worker_status', 'pending')\
+                .order('created_at', desc=False)\
+                .limit(1)\
+                .execute()
+                
+            if result.data:
+                analysis = MarketAnalysis.from_dict(result.data[0])
+                logger.info(f"ℹ️ Tâche en attente trouvée: ID {analysis.id}")
+                return analysis
+            return None
+        except Exception as e:
+            logger.error(f"❌ Erreur get_pending_analysis: {e}")
+            return None
+
+    def update_analysis_status(self, analysis_id: int, status: str):
+        """Met à jour uniquement le statut d'une analyse."""
+        self.update_analysis(analysis_id, {'worker_status': status})
+
+    def update_analysis(self, analysis_id: int, data: Dict[str, Any]) -> bool:
+        """Met à jour une analyse avec de nouvelles données."""
+        try:
+            if not self.is_connected(): return False
+            
+            # Assurer la mise à jour de 'updated_at'
+            data['updated_at'] = datetime.now(timezone.utc).isoformat()
+            
+            result = self.supabase.table('market_analyses')\
+                .update(data)\
+                .eq('id', analysis_id)\
+                .execute()
+
+            if result.data:
+                logger.info(f"✅ Analyse ID {analysis_id} mise à jour.")
+                return True
+            else:
+                logger.error(f"❌ Échec de la mise à jour de l'analyse ID {analysis_id}")
+                return False
+        except Exception as e:
+            logger.error(f"❌ Erreur update_analysis: {e}")
+            return False
+
     
     def get_worker_status(self) -> Dict[str, Any]:
         """Récupère le statut du Background Worker"""

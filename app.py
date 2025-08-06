@@ -6494,135 +6494,74 @@ def get_latest_market_analysis():
         logger.error(f"Erreur récupération analyse: {e}")
         return None
 
+
 @app.route("/api/background-worker/trigger", methods=["POST"])
 def trigger_background_worker():
-    """Déclenche manuellement le Background Worker"""
+    """Crée une nouvelle tâche d'analyse et la met en file d'attente"""
     try:
-        logger.info("🔄 Déclenchement manuel du Background Worker")
-        
-        # Importer et utiliser le scraper global
         from market_analysis_db import get_market_analysis_db, MarketAnalysis
-        import asyncio
-        import time
-        
-        # Utiliser l'instance globale du scraper
-        scraper = get_global_scraper()
+
         db = get_market_analysis_db()
         
-        # Initialiser le scraper
-        scraper.initialize_sync()
-        
-        # Créer une tâche d'analyse
-        prompt = "Résume moi parfaitement et d'une façon exhaustive la situation sur les marchés financiers aujourd'hui. Aussi, je veux un focus particulier sur l'IA. Inclus les indices majeurs, les tendances, les actualités importantes, et les développements technologiques."
-        
-        # Exécuter l'analyse de manière asynchrone
-        async def run_analysis():
-            try:
-                start_time = time.time()
-                
-                # Créer et exécuter la tâche
-                task_id = await scraper.create_scraping_task(prompt, 3)
-                logger.info(f"📋 Tâche créée: {task_id}")
-                
-                result = await scraper.execute_scraping_task(task_id)
-                
-                if "error" in result:
-                    logger.error(f"❌ Erreur analyse: {result['error']}")
-                    
-                    # Sauvegarder l'erreur dans la base de données
-                    error_analysis = MarketAnalysis(
-                        analysis_type='manual',
-                        worker_status='error',
-                        error_message=result['error'],
-                        processing_time_seconds=int(time.time() - start_time)
-                    )
-                    db.save_analysis(error_analysis)
-                    return False
-                else:
-                    logger.info("✅ Analyse terminée avec succès")
-                    
-                    # Créer l'objet d'analyse pour la base de données
-                    analysis = MarketAnalysis(
-                        analysis_type='manual',
-                        summary=result.get('summary'),
-                        key_points=result.get('key_points', []),
-                        structured_data=result.get('structured_data', {}),
-                        insights=result.get('insights', []),
-                        risks=result.get('risks', []),
-                        opportunities=result.get('opportunities', []),
-                        sources=result.get('sources', []),
-                        confidence_score=result.get('confidence_score', 0.0),
-                        worker_status='completed',
-                        processing_time_seconds=int(time.time() - start_time)
-                    )
-                    
-                    # Sauvegarder dans la base de données
-                    analysis_id = db.save_analysis(analysis)
-                    
-                    if analysis_id:
-                        logger.info(f"💾 Analyse sauvegardée avec l'ID: {analysis_id}")
-                    else:
-                        logger.error("❌ Erreur lors de la sauvegarde de l'analyse")
-                    
-                    return True
-                    
-            except Exception as e:
-                logger.error(f"❌ Erreur inattendue lors de l'analyse: {e}")
-                
-                # Sauvegarder l'erreur dans la base de données
-                error_analysis = MarketAnalysis(
-                    analysis_type='manual',
-                    worker_status='error',
-                    error_message=str(e),
-                    processing_time_seconds=int(time.time() - start_time)
-                )
-                db.save_analysis(error_analysis)
-                return False
-        
-        # Démarrer l'analyse en arrière-plan
-        import threading
-        def run_async():
-            try:
-                # Créer une nouvelle boucle d'événements pour le thread
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    loop.run_until_complete(run_analysis())
-                finally:
-                    loop.close()
-            except Exception as e:
-                logger.error(f"❌ Erreur dans le thread d'analyse: {e}")
-        
-        thread = threading.Thread(target=run_async)
-        thread.daemon = True
-        thread.start()
-        
+        # Vérifier s'il y a déjà une analyse en cours
+        latest_analysis = db.get_latest_analysis()
+        if latest_analysis and latest_analysis.worker_status in ['pending', 'processing']:
+            return jsonify({
+                "success": False,
+                "error": "Une analyse est déjà en cours. Veuillez patienter."
+            }), 409 # Conflict
+
+        # Créer une nouvelle analyse avec le statut 'pending'
+        new_analysis = MarketAnalysis(
+            analysis_type='manual',
+            worker_status='pending',
+            prompt="Résume moi parfaitement et d'une façon exhaustive la situation sur les marchés financiers aujourd'hui. Aussi, je veux un focus particulier sur l'IA."
+        )
+        analysis_id = db.save_analysis(new_analysis)
+
+        if not analysis_id:
+            return jsonify({"success": False, "error": "Impossible de créer la tâche d'analyse dans la base de données"}), 500
+
+        logger.info(f" nouvelle tâche d'analyse créée avec l'ID: {analysis_id}")
+
+        # La tâche est maintenant en BDD, le worker la prendra en charge
         return jsonify({
             "success": True,
-            "message": "Background Worker déclenché manuellement - Analyse en cours...",
-            "timestamp": datetime.now().isoformat(),
-            "note": "L'analyse sera disponible dans quelques minutes. Vous pouvez rafraîchir la page pour voir les résultats."
+            "message": "Nouvelle analyse planifiée. Le worker va la traiter.",
+            "analysis_id": analysis_id,
+            "timestamp": datetime.now().isoformat()
         })
         
     except Exception as e:
         logger.error(f"Erreur déclenchement Background Worker: {e}")
         return jsonify({"error": str(e)}), 500
 
+
+
 @app.route("/api/background-worker/status", methods=["GET"])
 def get_background_worker_status():
-    """Récupère le statut du Background Worker"""
+    """Récupère le statut de la dernière analyse."""
     try:
-        status = check_background_worker_status()
-        
+        from market_analysis_db import get_market_analysis_db
+
+        db = get_market_analysis_db()
+        latest_analysis = db.get_latest_analysis()
+
+        if not latest_analysis:
+            return jsonify({
+                "status": "idle",
+                "message": "Aucune analyse disponible."
+            })
+
         return jsonify({
-            "success": True,
-            "status": status,
-            "timestamp": datetime.now().isoformat()
+            "status": latest_analysis.worker_status,
+            "analysis": latest_analysis.to_dict() if latest_analysis else None
         })
-        
+
     except Exception as e:
-        logger.error(f"Erreur récupération statut Background Worker: {e}")
-        return jsonify({"error": str(e)}), 500
+        logger.error(f"Erreur statut Background Worker: {e}")
+        return jsonify({"status": "error", "error": str(e)}), 500
+
 
 if __name__ == "__main__":
     app.run(debug=True)

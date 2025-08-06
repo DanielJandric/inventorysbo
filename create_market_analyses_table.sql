@@ -3,6 +3,7 @@ CREATE TABLE IF NOT EXISTS market_analyses (
     id SERIAL PRIMARY KEY,
     timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     analysis_type VARCHAR(100) NOT NULL DEFAULT 'automatic',
+    prompt TEXT,
     summary TEXT,
     key_points JSONB,
     structured_data JSONB,
