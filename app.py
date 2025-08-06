@@ -6390,11 +6390,40 @@ def scrapingbee_market_update():
         # Prompt exhaustif pour l'analyse des marchés
         prompt = "Résume moi parfaitement et d'une façon exhaustive la situation sur les marchés financiers aujourd'hui. Aussi, je veux un focus particulier sur l'IA. Inclus les indices majeurs, les tendances, les actualités importantes, et les développements technologiques."
         
-        # Créer et exécuter la tâche de scraping
+        # Créer la tâche de scraping (sans l'exécuter immédiatement)
         import asyncio
-        task_id = asyncio.run(scrapingbee_scraper_manager.create_scraping_task(prompt, 5))
+        task_id = asyncio.run(scrapingbee_scraper_manager.create_scraping_task(prompt, 3))  # Réduit à 3 sites pour éviter le timeout
         
-        # Exécuter immédiatement la tâche
+        # Retourner immédiatement avec l'ID de tâche
+        return jsonify({
+            "success": True,
+            "task_id": task_id,
+            "message": "Tâche de scraping créée. Utilisez /api/scrapingbee/execute/{task_id} pour l'exécuter.",
+            "status": "created"
+        })
+        
+    except Exception as e:
+        logger.error(f"Erreur création tâche ScrapingBee: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/scrapingbee/market-update/quick", methods=["POST"])
+def scrapingbee_market_update_quick():
+    """Version rapide avec moins de sites pour éviter le timeout"""
+    try:
+        if not scrapingbee_scraper_manager:
+            return jsonify({
+                "success": False,
+                "error": "ScrapingBee scraper non disponible"
+            }), 500
+        
+        # Prompt simplifié pour analyse rapide
+        prompt = "Résume la situation actuelle des marchés financiers avec focus sur l'IA. Inclus les indices principaux et tendances importantes."
+        
+        # Créer et exécuter la tâche avec seulement 2 sites
+        import asyncio
+        task_id = asyncio.run(scrapingbee_scraper_manager.create_scraping_task(prompt, 2))
+        
+        # Exécuter la tâche
         result = asyncio.run(scrapingbee_scraper_manager.execute_scraping_task(task_id))
         
         if "error" in result:
@@ -6408,41 +6437,16 @@ def scrapingbee_market_update():
             "success": True,
             "task_id": task_id,
             "timestamp": datetime.now().isoformat(),
-            "source": "ScrapingBee Scraper",
-            "analysis_type": "Exhaustive Market Analysis",
-            "focus_areas": ["Marchés financiers", "IA", "Tendances", "Actualités"],
+            "source": "ScrapingBee Scraper (Quick)",
+            "analysis_type": "Quick Market Analysis",
+            "focus_areas": ["Marchés financiers", "IA", "Tendances"],
             "data": result
         }
-        
-        # Optionnel : Envoyer par email si configuré
-        try:
-            if gmail_manager:
-                email_content = f"""
-                📊 Mise à jour exhaustive des marchés financiers
-                
-                {result.get('summary', 'Aucun résumé disponible')}
-                
-                Points clés :
-                {chr(10).join([f"• {point}" for point in result.get('key_points', [])])}
-                
-                Données structurées :
-                {json.dumps(result.get('structured_data', {}), indent=2, ensure_ascii=False)}
-                
-                Sources : {len(result.get('sources', []))} sites analysés
-                Score de confiance : {result.get('confidence_score', 0)}
-                """
-                
-                gmail_manager.send_notification_async(
-                    subject="📊 Mise à jour exhaustive des marchés financiers",
-                    content=email_content
-                )
-        except Exception as email_error:
-            logger.warning(f"⚠️ Erreur envoi email: {email_error}")
         
         return jsonify(enriched_result)
         
     except Exception as e:
-        logger.error(f"Erreur mise à jour marché ScrapingBee: {e}")
+        logger.error(f"Erreur mise à jour marché ScrapingBee rapide: {e}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":

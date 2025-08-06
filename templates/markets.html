@@ -252,7 +252,8 @@
             result.style.display = 'none';
             
             try {
-                const response = await fetch('/api/scrapingbee/market-update', {
+                // Utiliser la version rapide pour éviter les timeouts
+                const response = await fetch('/api/scrapingbee/market-update/quick', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
