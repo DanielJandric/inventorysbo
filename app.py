@@ -54,6 +54,8 @@ from unified_market_manager import (
     MarketSource,
     MarketUpdateType
 )
+from google_cse_stock_data import GoogleCSEStockDataManager
+from enhanced_google_cse_ai_report import EnhancedGoogleCSEAIReport
 # Remplacé par l'API Manus unifiée
 
 # Load environment variables from .env file
@@ -82,6 +84,9 @@ logger = logging.getLogger(__name__)
 
 # APIs Manus unifiées - Remplace toutes les autres APIs
 # stock_price_manager = StockPriceManager()  # Remplacé par Manus
+
+# Google CSE comme source principale pour les données boursières
+google_cse_stock_manager = GoogleCSEStockDataManager()
 
 
 
@@ -257,6 +262,14 @@ try:
         logger.warning("⚠️ Gestionnaire de marché unifié non disponible")
 except Exception as e:
     logger.error(f"❌ Erreur initialisation Unified Market Manager: {e}")
+
+# Initialize Enhanced Google CSE AI Report Manager
+enhanced_ai_report_manager = None
+try:
+    enhanced_ai_report_manager = EnhancedGoogleCSEAIReport()
+    logger.info("✅ Gestionnaire de rapports IA Google CSE enrichi initialisé")
+except Exception as e:
+    logger.error(f"❌ Erreur initialisation Enhanced AI Report Manager: {e}")
 
 # ──────────────────────────────────────────────────────────
 # Gemini 2.5 client (SDK google-genai)
@@ -2805,74 +2818,94 @@ def get_exchange_rate_route(from_currency: str, to_currency: str = 'CHF'):
 
 @app.route("/api/stock-price/<symbol>")
 def get_stock_price(symbol):
-    """API stable pour les prix d'actions - Manus -> Alpha Vantage -> yfinance"""
+    """API pour les prix d'actions - Google CSE comme source principale"""
     try:
         force_refresh = request.args.get('refresh', 'false').lower() == 'true'
         # Récupérer l'item correspondant au symbole
         items = AdvancedDataManager.fetch_all_items()
         item = next((i for i in items if i.stock_symbol == symbol), None)
         
-        # Utiliser directement le wrapper stable
-        price_data = get_stock_price_stable(symbol)
+        # Utiliser Google CSE comme source principale
+        stock_data = google_cse_stock_manager.get_stock_price(symbol)
         
-        if not price_data or not price_data.get('price'):
-            return jsonify({
-                'success': False,
-                'error': 'Prix non disponible',
-                'details': 'Toutes les sources API ont échoué',
-                'message': 'Veuillez mettre à jour le prix manuellement.',
-                'source': 'Stable Wrapper',
-                'timestamp': datetime.now().isoformat()
-            }), 404
-        
-        # Formater les données pour l'affichage
-        result = {
-            "symbol": symbol,
-            "price": price_data.get('price'),
-            "currency": price_data.get('currency'),
-            "company_name": item.name if item else symbol,
-            "last_update": price_data.get('timestamp') or datetime.now().isoformat(),
-            "source": f"{price_data.get('source', 'API')} ({price_data.get('currency', 'USD')})",
-            "change": format_stock_value(price_data.get('change'), is_price=True),
-            "change_percent": format_stock_value(price_data.get('change_percent'), is_percent=True),
-            "volume": format_stock_value(price_data.get('volume'), is_volume=True),
-            "average_volume": format_stock_value(price_data.get('volume'), is_volume=True),
-            "pe_ratio": str(price_data.get('pe_ratio')) if price_data.get('pe_ratio') else 'N/A',
-            "fifty_two_week_high": format_stock_value(price_data.get('fifty_two_week_high'), is_price=True),
-            "fifty_two_week_low": format_stock_value(price_data.get('fifty_two_week_low'), is_price=True)
-        }
+        if not stock_data or not stock_data.price:
+            # Fallback vers les autres sources si Google CSE échoue
+            price_data = get_stock_price_stable(symbol)
+            if not price_data or not price_data.get('price'):
+                return jsonify({
+                    'success': False,
+                    'error': 'Prix non disponible',
+                    'details': 'Google CSE et sources de fallback ont échoué',
+                    'message': 'Veuillez mettre à jour le prix manuellement.',
+                    'source': 'Google CSE + Fallback',
+                    'timestamp': datetime.now().isoformat()
+                }), 404
+            
+            # Utiliser les données de fallback
+            result = {
+                "symbol": symbol,
+                "price": price_data.get('price'),
+                "currency": price_data.get('currency'),
+                "company_name": item.name if item else symbol,
+                "last_update": price_data.get('timestamp') or datetime.now().isoformat(),
+                "source": f"Fallback ({price_data.get('currency', 'USD')})",
+                "change": format_stock_value(price_data.get('change'), is_price=True),
+                "change_percent": format_stock_value(price_data.get('change_percent'), is_percent=True),
+                "volume": format_stock_value(price_data.get('volume'), is_volume=True),
+                "average_volume": format_stock_value(price_data.get('volume'), is_volume=True),
+                "pe_ratio": str(price_data.get('pe_ratio')) if price_data.get('pe_ratio') else 'N/A',
+                "fifty_two_week_high": format_stock_value(price_data.get('fifty_two_week_high'), is_price=True),
+                "fifty_two_week_low": format_stock_value(price_data.get('fifty_two_week_low'), is_price=True)
+            }
+        else:
+            # Utiliser les données Google CSE
+            result = {
+                "symbol": symbol,
+                "price": float(stock_data.price) if stock_data.price else None,
+                "currency": "USD",
+                "company_name": item.name if item else symbol,
+                "last_update": stock_data.timestamp.isoformat(),
+                "source": f"Google CSE ({stock_data.source})",
+                "change": stock_data.change,
+                "change_percent": stock_data.change_percent,
+                "volume": stock_data.volume,
+                "average_volume": stock_data.volume,
+                "pe_ratio": "N/A",
+                "fifty_two_week_high": "N/A",
+                "fifty_two_week_low": "N/A"
+            }
         
         # Mettre à jour le prix dans la DB si c'est une action existante
-        if item and item.id and price_data.get('price', 0) > 0:
+        if item and item.id and result.get('price', 0) > 0:
             try:
-                total_value = price_data.get('price') * (item.stock_quantity or 1)
+                total_value = result.get('price') * (item.stock_quantity or 1)
                 
                 update_data = {
-                    'current_price': price_data.get('price'),
+                    'current_price': result.get('price'),
                     'current_value': total_value,
                     'last_price_update': datetime.now().isoformat(),
-                    'stock_volume': price_data.get('volume'),
-                    'stock_pe_ratio': price_data.get('pe_ratio'),
-                    'stock_52_week_high': price_data.get('fifty_two_week_high'),
-                    'stock_52_week_low': price_data.get('fifty_two_week_low'),
-                    'stock_change': price_data.get('change'),
-                    'stock_change_percent': price_data.get('change_percent'),
-                    'stock_average_volume': price_data.get('volume'),
-                    'stock_currency': price_data.get('currency')
+                    'stock_volume': result.get('volume'),
+                    'stock_pe_ratio': result.get('pe_ratio'),
+                    'stock_52_week_high': result.get('fifty_two_week_high'),
+                    'stock_52_week_low': result.get('fifty_two_week_low'),
+                    'stock_change': result.get('change'),
+                    'stock_change_percent': result.get('change_percent'),
+                    'stock_average_volume': result.get('average_volume'),
+                    'stock_currency': result.get('currency')
                 }
                 
                 # Mettre à jour dans Supabase
                 if supabase:
                     response = supabase.table('items').update(update_data).eq('id', item.id).execute()
                     if response.data:
-                        logger.info(f"✅ Prix mis à jour dans DB pour {symbol}: {price_data.get('price')} {price_data.get('currency')}")
+                        logger.info(f"✅ Prix mis à jour dans DB pour {symbol}: {result.get('price')} {result.get('currency')}")
             except Exception as e:
                 logger.error(f"❌ Erreur mise à jour DB pour {symbol}: {e}")
         
         return jsonify({
             'success': True,
             'data': result,
-            'source': price_data.get('source', 'Stable Wrapper'),
+            'source': result.get('source', 'Google CSE'),
             'timestamp': datetime.now().isoformat()
         })
     except Exception as e:
@@ -5837,6 +5870,213 @@ def unified_clear_cache():
         
     except Exception as e:
         logger.error(f"Erreur vidage cache unifié: {e}")
+        return jsonify({"error": str(e)}), 500
+
+# ──────────────────────────────────────────────────────────
+# Google CSE Integration API Endpoints
+# ──────────────────────────────────────────────────────────
+
+@app.route("/google-cse")
+def google_cse():
+    """Interface Google CSE Integration"""
+    return render_template("google_cse.html")
+
+@app.route("/api/google-cse/status", methods=["GET"])
+def google_cse_status():
+    """Récupère le statut de l'intégration Google CSE"""
+    try:
+        from google_cse_integration import GoogleCSEIntegration
+        
+        cse = GoogleCSEIntegration()
+        status = cse.get_status()
+        
+        return jsonify(status)
+    except Exception as e:
+        logger.error(f"Erreur statut Google CSE: {e}")
+        return jsonify({
+            "status": "error",
+            "error": str(e)
+        }), 500
+
+@app.route("/api/google-cse/search", methods=["POST"])
+def google_cse_search():
+    """Effectue une recherche avec Google CSE"""
+    try:
+        data = request.get_json()
+        query = data.get('query', '')
+        
+        if not query:
+            return jsonify({"error": "Requête manquante"}), 400
+        
+        from google_cse_integration import GoogleCSEIntegration
+        
+        cse = GoogleCSEIntegration()
+        response = cse.search(query)
+        
+        if response:
+            return jsonify({
+                "success": True,
+                "results": [
+                    {
+                        "title": result.title,
+                        "link": result.link,
+                        "snippet": result.snippet,
+                        "source": result.source
+                    }
+                    for result in response.results
+                ],
+                "total_results": response.total_results,
+                "search_time": response.search_time,
+                "query": response.query
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "error": "Aucun résultat trouvé"
+            }), 404
+            
+    except Exception as e:
+        logger.error(f"Erreur recherche Google CSE: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/google-cse/stock-price/<symbol>", methods=["GET"])
+def google_cse_stock_price(symbol):
+    """Recherche le prix d'une action avec Google CSE"""
+    try:
+        from google_cse_integration import GoogleCSEIntegration
+        
+        cse = GoogleCSEIntegration()
+        result = cse.search_stock_price(symbol)
+        
+        if result:
+            return jsonify({
+                "success": True,
+                "data": result
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "message": f"Aucun prix trouvé pour {symbol}"
+            }), 404
+            
+    except Exception as e:
+        logger.error(f"Erreur prix action Google CSE: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/google-cse/market-news", methods=["POST"])
+def google_cse_market_news():
+    """Recherche des nouvelles du marché avec Google CSE"""
+    try:
+        data = request.get_json()
+        keywords = data.get('keywords', [])
+        
+        from google_cse_integration import GoogleCSEIntegration
+        
+        cse = GoogleCSEIntegration()
+        news = cse.search_market_news(keywords)
+        
+        if news:
+            return jsonify({
+                "success": True,
+                "news": news
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "message": "Aucune nouvelle trouvée"
+            }), 404
+            
+    except Exception as e:
+        logger.error(f"Erreur nouvelles marché Google CSE: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/google-cse/market-briefing", methods=["POST"])
+def google_cse_market_briefing():
+    """Recherche un briefing du marché avec Google CSE"""
+    try:
+        data = request.get_json()
+        location = data.get('location', 'global')
+        
+        from google_cse_integration import GoogleCSEIntegration
+        
+        cse = GoogleCSEIntegration()
+        briefing = cse.search_market_briefing(location)
+        
+        if briefing:
+            return jsonify({
+                "success": True,
+                "briefing": briefing
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "message": "Aucun briefing trouvé"
+            }), 404
+            
+    except Exception as e:
+        logger.error(f"Erreur briefing marché Google CSE: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/google-cse/daily-report", methods=["POST"])
+def google_cse_daily_report():
+    """Génère un rapport journalier avec Google CSE et IA"""
+    try:
+        data = request.get_json() or {}
+        symbols = data.get('symbols', ['AAPL', 'GOOGL', 'MSFT', 'TSLA', 'AMZN', 'META', 'NVDA', 'NFLX'])
+        
+        # Utiliser le gestionnaire amélioré si disponible
+        if enhanced_ai_report_manager:
+            report = enhanced_ai_report_manager.generate_enhanced_ai_report(symbols)
+            
+            if report:
+                return jsonify({
+                    'success': True,
+                    'data': {
+                        'summary': report.summary,
+                        'key_events': report.key_events,
+                        'market_sentiment': report.market_sentiment,
+                        'top_gainers': report.top_gainers,
+                        'top_losers': report.top_losers,
+                        'sector_performance': report.sector_performance,
+                        'recommendations': report.recommendations,
+                        'economic_analysis': report.economic_analysis,
+                        'risk_assessment': report.risk_assessment,
+                        'sources': report.sources,
+                        'generated_at': report.generated_at.isoformat()
+                    },
+                    'source': 'Google CSE + OpenAI (Enhanced)',
+                    'timestamp': datetime.now().isoformat()
+                })
+        
+        # Fallback vers l'ancien gestionnaire
+        report = google_cse_stock_manager.generate_daily_report(symbols)
+        
+        if report:
+            return jsonify({
+                'success': True,
+                'data': {
+                    'summary': report.summary,
+                    'key_events': report.key_events,
+                    'market_sentiment': report.market_sentiment,
+                    'top_gainers': report.top_gainers,
+                    'top_losers': report.top_losers,
+                    'sector_performance': report.sector_performance,
+                    'recommendations': report.recommendations,
+                    'sources': report.sources,
+                    'generated_at': report.generated_at.isoformat()
+                },
+                'source': 'Google CSE + OpenAI',
+                'timestamp': datetime.now().isoformat()
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Rapport non disponible',
+                'source': 'Google CSE + OpenAI'
+            }), 404
+            
+    except Exception as e:
+        logger.error(f"Erreur rapport journalier Google CSE: {e}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":

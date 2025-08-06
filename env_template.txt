@@ -1,28 +1,24 @@
-# Copy this file to .env and fill in your actual values
+# Configuration OpenAI
+OPENAI_API_KEY=your_openai_api_key_here
 
-# Supabase Configuration
+# Configuration Google Custom Search Engine
+GOOGLE_CUSTOM_SEARCH_ENGINE_ID=your_google_custom_search_engine_id_here
+GOOGLE_CUSTOM_SEARCH_API_KEY=your_google_custom_search_api_key_here
+
+# Configuration Google Search API (Legacy)
+GOOGLE_SEARCH_API_KEY=your_google_search_api_key_here
+GOOGLE_SEARCH_ENGINE_ID=0426c6b27374b4a72
+
+# Configuration Supabase
 SUPABASE_URL=your_supabase_url_here
 SUPABASE_KEY=your_supabase_key_here
 
-# OpenAI Configuration
-OPENAI_API_KEY=your_openai_api_key_here
+# Configuration FreeCurrency
+FREECURRENCY_API_KEY=your_frecurrency_api_key_here
 
-# Google Gemini Configuration (accepte aussi GOOGLE_API_KEY)
-GEMINI_API_KEY=your_gemini_api_key_here
-# GOOGLE_API_KEY=your_gemini_api_key_here  # alias optionnel
+# Configuration Email (Gmail)
+GMAIL_USER=your_gmail_user_here
+GMAIL_PASSWORD=your_gmail_password_here
 
-# Finnhub Configuration
-FINNHUB_API_KEY=your_finnhub_api_key_here
-
-# App Configuration
-APP_URL=https://inventorysbo.onrender.com
-
-# Email Configuration (Gmail)
-EMAIL_HOST=smtp.gmail.com
-EMAIL_PORT=587
-EMAIL_USER=your_email@gmail.com
-EMAIL_PASSWORD=your_app_password_here
-EMAIL_RECIPIENTS=recipient1@email.com,recipient2@email.com
-
-# Flask Configuration
-SECRET_KEY=your_secret_key_here 
+# Configuration Application
+FLASK_BASE_URL=http://localhost:5000 

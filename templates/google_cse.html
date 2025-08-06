@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google CSE Integration - Test</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .search-result {
+            border-left: 4px solid #007bff;
+            padding: 15px;
+            margin: 10px 0;
+            background-color: #f8f9fa;
+        }
+        .price-highlight {
+            background-color: #d4edda;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        .status-operational { background-color: #28a745; }
+        .status-error { background-color: #dc3545; }
+        .status-warning { background-color: #ffc107; }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-12">
+                <h1 class="mb-4">
+                    <i class="fas fa-search"></i> Google CSE Integration
+                </h1>
+                
+                <!-- Status Panel -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5><i class="fas fa-info-circle"></i> Status de l'Intégration</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="status-content">
+                            <p><i class="fas fa-spinner fa-spin"></i> Vérification du status...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Search Panel -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5><i class="fas fa-search"></i> Recherche Google CSE</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-8">
+                                <input type="text" id="search-query" class="form-control" 
+                                       placeholder="Entrez votre recherche (ex: AAPL stock price)" 
+                                       value="AAPL stock price">
+                            </div>
+                            <div class="col-md-4">
+                                <button class="btn btn-primary w-100" onclick="performSearch()">
+                                    <i class="fas fa-search"></i> Rechercher
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Results Panel -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5><i class="fas fa-list"></i> Résultats de Recherche</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="search-results">
+                            <p class="text-muted">Aucune recherche effectuée</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Actions -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5><i class="fas fa-bolt"></i> Actions Rapides</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-3 mb-2">
+                                <button class="btn btn-outline-primary w-100" onclick="searchStockPrice('AAPL')">
+                                    <i class="fas fa-chart-line"></i> AAPL Prix
+                                </button>
+                            </div>
+                            <div class="col-md-3 mb-2">
+                                <button class="btn btn-outline-success w-100" onclick="searchStockPrice('TSLA')">
+                                    <i class="fas fa-chart-line"></i> TSLA Prix
+                                </button>
+                            </div>
+                            <div class="col-md-3 mb-2">
+                                <button class="btn btn-outline-info w-100" onclick="searchMarketNews()">
+                                    <i class="fas fa-newspaper"></i> Nouvelles Marché
+                                </button>
+                            </div>
+                            <div class="col-md-3 mb-2">
+                                <button class="btn btn-outline-warning w-100" onclick="searchMarketBriefing()">
+                                    <i class="fas fa-briefcase"></i> Briefing Marché
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CSE Widget -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5><i class="fas fa-google"></i> Widget Google CSE</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="cse-widget">
+                            <script async src="https://cse.google.com/cse.js?cx=0426c6b27374b4a72"></script>
+                            <div class="gcse-search"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Vérifier le status au chargement
+        document.addEventListener('DOMContentLoaded', function() {
+            checkStatus();
+        });
+
+        function checkStatus() {
+            fetch('/api/google-cse/status')
+                .then(response => response.json())
+                .then(data => {
+                    const statusContent = document.getElementById('status-content');
+                    const statusClass = data.status === 'operational' ? 'status-operational' : 'status-error';
+                    
+                    statusContent.innerHTML = `
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p><span class="status-indicator ${statusClass}"></span>
+                                   Status: <strong>${data.status}</strong></p>
+                                <p>🔍 Engine ID: <code>${data.engine_id}</code></p>
+                                <p>🔑 API Key: <strong>${data.api_key_configured ? '✅ Configurée' : '❌ Manquante'}</strong></p>
+                            </div>
+                            <div class="col-md-6">
+                                <p>🌐 Base URL: <code>${data.base_url}</code></p>
+                                <p>📊 Configuration: <strong>${data.api_key_configured ? 'Prêt' : 'Incomplète'}</strong></p>
+                            </div>
+                        </div>
+                    `;
+                })
+                .catch(error => {
+                    document.getElementById('status-content').innerHTML = `
+                        <p class="text-danger"><i class="fas fa-exclamation-triangle"></i> Erreur de connexion</p>
+                    `;
+                });
+        }
+
+        function performSearch() {
+            const query = document.getElementById('search-query').value;
+            if (!query) {
+                alert('Veuillez entrer une requête de recherche');
+                return;
+            }
+
+            document.getElementById('search-results').innerHTML = `
+                <p><i class="fas fa-spinner fa-spin"></i> Recherche en cours...</p>
+            `;
+
+            fetch('/api/google-cse/search', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ query: query })
+            })
+            .then(response => response.json())
+            .then(data => {
+                displaySearchResults(data);
+            })
+            .catch(error => {
+                document.getElementById('search-results').innerHTML = `
+                    <p class="text-danger"><i class="fas fa-exclamation-triangle"></i> Erreur de recherche</p>
+                `;
+            });
+        }
+
+        function searchStockPrice(symbol) {
+            document.getElementById('search-query').value = `${symbol} stock price`;
+            performSearch();
+        }
+
+        function searchMarketNews() {
+            document.getElementById('search-query').value = 'stock market news today';
+            performSearch();
+        }
+
+        function searchMarketBriefing() {
+            document.getElementById('search-query').value = 'market briefing financial news';
+            performSearch();
+        }
+
+        function displaySearchResults(data) {
+            const resultsDiv = document.getElementById('search-results');
+            
+            if (!data || !data.results || data.results.length === 0) {
+                resultsDiv.innerHTML = `
+                    <p class="text-muted">Aucun résultat trouvé</p>
+                `;
+                return;
+            }
+
+            let html = `
+                <div class="mb-3">
+                    <p><strong>Résultats trouvés:</strong> ${data.total_results}</p>
+                    <p><strong>Temps de recherche:</strong> ${data.search_time}s</p>
+                </div>
+            `;
+
+            data.results.forEach((result, index) => {
+                html += `
+                    <div class="search-result">
+                        <h6><a href="${result.link}" target="_blank">${result.title}</a></h6>
+                        <p class="text-muted">${result.snippet}</p>
+                        <small class="text-info">Source: ${result.source}</small>
+                    </div>
+                `;
+            });
+
+            resultsDiv.innerHTML = html;
+        }
+    </script>
+</body>
+</html> 
