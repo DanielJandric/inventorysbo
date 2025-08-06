@@ -104,19 +104,24 @@
                     <h3><i class="fas fa-robot"></i> Analyse Exhaustive des Marchés - ScrapingBee</h3>
                     <p>Génère une analyse complète et exhaustive des marchés financiers avec focus sur l'IA</p>
                     
-                    <div class="row">
-                        <div class="col-md-6">
-                            <button id="generateMarketUpdate" class="btn btn-light btn-lg w-100">
-                                <i class="fas fa-sync-alt"></i> Générer Mise à Jour Exhaustive
-                            </button>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="d-flex align-items-center">
-                                <span class="status-indicator status-online" id="scrapingbeeStatus"></span>
-                                <span id="scrapingbeeStatusText">ScrapingBee: En ligne</span>
-                            </div>
-                        </div>
-                    </div>
+                                         <div class="row">
+                         <div class="col-md-4">
+                             <button id="generateMarketUpdate" class="btn btn-light btn-lg w-100">
+                                 <i class="fas fa-sync-alt"></i> Récupérer Analyse
+                             </button>
+                         </div>
+                         <div class="col-md-4">
+                             <button id="triggerBackgroundWorker" class="btn btn-warning btn-lg w-100">
+                                 <i class="fas fa-cog"></i> Déclencher Worker
+                             </button>
+                         </div>
+                         <div class="col-md-4">
+                             <div class="d-flex align-items-center">
+                                 <span class="status-indicator status-online" id="scrapingbeeStatus"></span>
+                                 <span id="scrapingbeeStatusText">Background Worker: En ligne</span>
+                             </div>
+                         </div>
+                     </div>
                     
                     <div class="loading mt-3" id="scrapingbeeLoading">
                         <div class="d-flex align-items-center">
@@ -252,7 +257,7 @@
             result.style.display = 'none';
             
             try {
-                // Utiliser la version rapide pour éviter les timeouts
+                // Utiliser le Background Worker pour éviter les timeouts
                 const response = await fetch('/api/scrapingbee/market-update/quick', {
                     method: 'POST',
                     headers: {
@@ -345,6 +350,37 @@
                 result.style.display = 'block';
             } finally {
                 loading.style.display = 'none';
+            }
+        });
+
+        // Background Worker Trigger
+        document.getElementById('triggerBackgroundWorker').addEventListener('click', async function() {
+            const button = this;
+            const originalText = button.innerHTML;
+            
+            button.disabled = true;
+            button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Déclenchement...';
+            
+            try {
+                const response = await fetch('/api/background-worker/trigger', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert('✅ Background Worker déclenché avec succès ! L\'analyse sera disponible dans quelques minutes.');
+                } else {
+                    alert('❌ Erreur: ' + data.error);
+                }
+            } catch (error) {
+                alert('❌ Erreur: ' + error.message);
+            } finally {
+                button.disabled = false;
+                button.innerHTML = originalText;
             }
         });
 
