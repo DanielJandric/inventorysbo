@@ -46,6 +46,14 @@ from google_search_manager import (
     DailyNewsItem,
     create_google_search_manager
 )
+from unified_market_manager import (
+    UnifiedMarketManager,
+    create_unified_market_manager,
+    StockPriceData,
+    MarketUpdateData,
+    MarketSource,
+    MarketUpdateType
+)
 # Remplacé par l'API Manus unifiée
 
 # Load environment variables from .env file
@@ -238,6 +246,17 @@ try:
         logger.warning("⚠️ Gestionnaire de recherche Google non disponible (configuration manquante)")
 except Exception as e:
     logger.error(f"❌ Erreur initialisation Google Search Manager: {e}")
+
+# Initialize Unified Market Manager
+unified_market_manager = None
+try:
+    unified_market_manager = create_unified_market_manager()
+    if unified_market_manager:
+        logger.info("✅ Gestionnaire de marché unifié initialisé")
+    else:
+        logger.warning("⚠️ Gestionnaire de marché unifié non disponible")
+except Exception as e:
+    logger.error(f"❌ Erreur initialisation Unified Market Manager: {e}")
 
 # ──────────────────────────────────────────────────────────
 # Gemini 2.5 client (SDK google-genai)
@@ -2523,6 +2542,11 @@ def web_search():
 def google_search():
     """Interface de test pour la recherche Google"""
     return render_template("google_search.html")
+
+@app.route("/unified-market")
+def unified_market():
+    """Interface du gestionnaire de marché unifié"""
+    return render_template("unified_market.html")
 
 @app.route("/health")
 def health():
@@ -5616,6 +5640,203 @@ def google_search_status():
         
     except Exception as e:
         logger.error(f"Erreur statut Google search: {e}")
+        return jsonify({"error": str(e)}), 500
+
+# ──────────────────────────────────────────────────────────
+# Unified Market Manager API Endpoints
+# ──────────────────────────────────────────────────────────
+
+@app.route("/api/unified/stock-price/<symbol>", methods=["GET"])
+def unified_get_stock_price(symbol):
+    """Récupère le prix d'une action via le gestionnaire unifié"""
+    try:
+        if not unified_market_manager:
+            return jsonify({"error": "Gestionnaire unifié non disponible"}), 500
+        
+        force_refresh = request.args.get('refresh', 'false').lower() == 'true'
+        price_data = unified_market_manager.get_stock_price(symbol, force_refresh)
+        
+        if price_data:
+            return jsonify({
+                'success': True,
+                'data': {
+                    'symbol': price_data.symbol,
+                    'price': price_data.price,
+                    'currency': price_data.currency,
+                    'change': price_data.change,
+                    'change_percent': price_data.change_percent,
+                    'volume': price_data.volume,
+                    'pe_ratio': price_data.pe_ratio,
+                    'fifty_two_week_high': price_data.fifty_two_week_high,
+                    'fifty_two_week_low': price_data.fifty_two_week_low,
+                    'source': price_data.source,
+                    'confidence_score': price_data.confidence_score,
+                    'timestamp': price_data.timestamp
+                },
+                'source': price_data.source,
+                'timestamp': datetime.now().isoformat()
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': f'Prix non disponible pour {symbol}',
+                'timestamp': datetime.now().isoformat()
+            }), 404
+            
+    except Exception as e:
+        logger.error(f"Erreur récupération prix unifié {symbol}: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/unified/market-briefing", methods=["POST"])
+def unified_get_market_briefing():
+    """Récupère un briefing de marché via le gestionnaire unifié"""
+    try:
+        if not unified_market_manager:
+            return jsonify({"error": "Gestionnaire unifié non disponible"}), 500
+        
+        data = request.get_json() or {}
+        location = data.get('location', 'global')
+        
+        briefing = unified_market_manager.get_market_briefing(location)
+        
+        if briefing:
+            return jsonify({
+                'success': True,
+                'data': {
+                    'content': briefing.content,
+                    'source': briefing.source.value,
+                    'timestamp': briefing.timestamp,
+                    'metadata': briefing.metadata
+                },
+                'timestamp': datetime.now().isoformat()
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Briefing de marché non disponible',
+                'timestamp': datetime.now().isoformat()
+            }), 404
+            
+    except Exception as e:
+        logger.error(f"Erreur récupération briefing unifié: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/unified/daily-news", methods=["POST"])
+def unified_get_daily_news():
+    """Récupère les nouvelles quotidiennes via le gestionnaire unifié"""
+    try:
+        if not unified_market_manager:
+            return jsonify({"error": "Gestionnaire unifié non disponible"}), 500
+        
+        data = request.get_json() or {}
+        categories = data.get('categories', ["finance", "markets", "economy"])
+        
+        news_items = unified_market_manager.get_daily_news(categories)
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'news_items': [
+                    {
+                        'content': item.content,
+                        'source': item.source.value,
+                        'timestamp': item.timestamp,
+                        'metadata': item.metadata
+                    }
+                    for item in news_items
+                ],
+                'total_count': len(news_items)
+            },
+            'timestamp': datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        logger.error(f"Erreur récupération nouvelles unifiées: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/unified/market-alerts", methods=["GET"])
+def unified_get_market_alerts():
+    """Récupère les alertes de marché via le gestionnaire unifié"""
+    try:
+        if not unified_market_manager:
+            return jsonify({"error": "Gestionnaire unifié non disponible"}), 500
+        
+        alerts = unified_market_manager.get_market_alerts()
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'alerts': [
+                    {
+                        'content': alert.content,
+                        'source': alert.source.value,
+                        'timestamp': alert.timestamp,
+                        'metadata': alert.metadata
+                    }
+                    for alert in alerts
+                ],
+                'total_count': len(alerts)
+            },
+            'timestamp': datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        logger.error(f"Erreur récupération alertes unifiées: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/unified/update-all-prices", methods=["POST"])
+def unified_update_all_prices():
+    """Met à jour tous les prix d'actions via le gestionnaire unifié"""
+    try:
+        if not unified_market_manager:
+            return jsonify({"error": "Gestionnaire unifié non disponible"}), 500
+        
+        data = request.get_json() or {}
+        symbols = data.get('symbols', None)
+        
+        results = unified_market_manager.update_all_stock_prices(symbols)
+        
+        return jsonify(results)
+        
+    except Exception as e:
+        logger.error(f"Erreur mise à jour prix unifiés: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/unified/status", methods=["GET"])
+def unified_market_status():
+    """Statut du gestionnaire de marché unifié"""
+    try:
+        if not unified_market_manager:
+            return jsonify({
+                "available": False,
+                "error": "Gestionnaire unifié non disponible",
+                "timestamp": datetime.now().isoformat()
+            })
+        
+        status = unified_market_manager.get_status()
+        return jsonify(status)
+        
+    except Exception as e:
+        logger.error(f"Erreur statut gestionnaire unifié: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/unified/clear-cache", methods=["POST"])
+def unified_clear_cache():
+    """Vide le cache du gestionnaire unifié"""
+    try:
+        if not unified_market_manager:
+            return jsonify({"error": "Gestionnaire unifié non disponible"}), 500
+        
+        unified_market_manager.clear_cache()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Cache du gestionnaire unifié vidé',
+            'timestamp': datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        logger.error(f"Erreur vidage cache unifié: {e}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
