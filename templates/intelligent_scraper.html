@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scraper Intelligent - Analyse de Données Web</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .card-hover {
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .card-hover:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+        }
+        .status-pending { color: #ffc107; }
+        .status-processing { color: #17a2b8; }
+        .status-completed { color: #28a745; }
+        .status-failed { color: #dc3545; }
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .result-card {
+            border-left: 4px solid #667eea;
+        }
+        .insight-card {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
+        .recommendation-card {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+        }
+    </style>
+</head>
+<body class="bg-light">
+    <div class="container-fluid">
+        <!-- Header -->
+        <div class="row gradient-bg text-white py-4">
+            <div class="col-12">
+                <h1 class="text-center mb-0">
+                    <i class="fas fa-robot me-3"></i>
+                    Scraper Intelligent
+                </h1>
+                <p class="text-center mb-0 opacity-75">Analyse de données web avec IA</p>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <!-- Formulaire de scraping -->
+            <div class="col-lg-4">
+                <div class="card card-hover">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">
+                            <i class="fas fa-search me-2"></i>
+                            Nouvelle Analyse
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="scrapingForm">
+                            <div class="mb-3">
+                                <label for="prompt" class="form-label">Requête d'analyse</label>
+                                <textarea 
+                                    class="form-control" 
+                                    id="prompt" 
+                                    rows="4" 
+                                    placeholder="Ex: Apple stock price today latest news, Tesla earnings analysis, market trends 2024..."
+                                    required
+                                ></textarea>
+                            </div>
+                            <div class="mb-3">
+                                <label for="numResults" class="form-label">Nombre de sources</label>
+                                <select class="form-select" id="numResults">
+                                    <option value="3">3 sources</option>
+                                    <option value="5" selected>5 sources</option>
+                                    <option value="7">7 sources</option>
+                                    <option value="10">10 sources</option>
+                                </select>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100" id="submitBtn">
+                                <i class="fas fa-play me-2"></i>
+                                Lancer l'analyse
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Statut des tâches -->
+                <div class="card mt-4">
+                    <div class="card-header bg-info text-white">
+                        <h6 class="mb-0">
+                            <i class="fas fa-tasks me-2"></i>
+                            Tâches Récentes
+                        </h6>
+                    </div>
+                    <div class="card-body">
+                        <div id="taskList">
+                            <p class="text-muted text-center">Aucune tâche récente</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Résultats -->
+            <div class="col-lg-8">
+                <div id="resultsContainer">
+                    <div class="text-center py-5">
+                        <i class="fas fa-chart-line fa-3x text-muted mb-3"></i>
+                        <h4 class="text-muted">Prêt pour l'analyse</h4>
+                        <p class="text-muted">Entrez une requête pour commencer l'analyse intelligente</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal pour les détails -->
+    <div class="modal fade" id="detailsModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Détails de l'analyse</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="modalContent">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        class IntelligentScraperUI {
+            constructor() {
+                this.currentTaskId = null;
+                this.pollingInterval = null;
+                this.init();
+            }
+
+            init() {
+                this.bindEvents();
+                this.loadRecentTasks();
+            }
+
+            bindEvents() {
+                document.getElementById('scrapingForm').addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    this.startScraping();
+                });
+            }
+
+            async startScraping() {
+                const prompt = document.getElementById('prompt').value;
+                const numResults = document.getElementById('numResults').value;
+                
+                if (!prompt.trim()) {
+                    this.showAlert('Veuillez entrer une requête', 'warning');
+                    return;
+                }
+
+                this.setLoadingState(true);
+                this.showAlert('Démarrage de l\'analyse...', 'info');
+
+                try {
+                    const response = await fetch('/api/intelligent-scraper/scrape', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            prompt: prompt,
+                            num_results: parseInt(numResults)
+                        })
+                    });
+
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        this.currentTaskId = data.task_id;
+                        this.addTaskToList(data.task_id, prompt, 'pending');
+                        this.startPolling();
+                        this.showAlert('Analyse lancée avec succès', 'success');
+                    } else {
+                        this.showAlert(data.error || 'Erreur lors du lancement', 'danger');
+                    }
+                } catch (error) {
+                    this.showAlert('Erreur de connexion', 'danger');
+                    console.error('Erreur:', error);
+                } finally {
+                    this.setLoadingState(false);
+                }
+            }
+
+            async startPolling() {
+                if (this.pollingInterval) {
+                    clearInterval(this.pollingInterval);
+                }
+
+                this.pollingInterval = setInterval(async () => {
+                    if (!this.currentTaskId) return;
+
+                    try {
+                        const response = await fetch(`/api/intelligent-scraper/status/${this.currentTaskId}`);
+                        const data = await response.json();
+
+                        if (data.success) {
+                            this.updateTaskStatus(this.currentTaskId, data.status);
+                            
+                            if (data.status === 'completed') {
+                                this.displayResults(data.results);
+                                this.stopPolling();
+                                this.showAlert('Analyse terminée avec succès', 'success');
+                            } else if (data.status === 'failed') {
+                                this.stopPolling();
+                                this.showAlert('Analyse échouée', 'danger');
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Erreur polling:', error);
+                    }
+                }, 2000);
+            }
+
+            stopPolling() {
+                if (this.pollingInterval) {
+                    clearInterval(this.pollingInterval);
+                    this.pollingInterval = null;
+                }
+            }
+
+            displayResults(results) {
+                const container = document.getElementById('resultsContainer');
+                
+                container.innerHTML = `
+                    <div class="row">
+                        <!-- Résumé -->
+                        <div class="col-12 mb-4">
+                            <div class="card result-card">
+                                <div class="card-header bg-primary text-white">
+                                    <h5 class="mb-0">
+                                        <i class="fas fa-chart-pie me-2"></i>
+                                        Résumé Exécutif
+                                    </h5>
+                                </div>
+                                <div class="card-body">
+                                    <p class="lead">${results.summary || 'Aucun résumé disponible'}</p>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span class="badge bg-info">
+                                            <i class="fas fa-chart-line me-1"></i>
+                                            Score de confiance: ${(results.confidence_score * 100).toFixed(1)}%
+                                        </span>
+                                        <button class="btn btn-sm btn-outline-primary" onclick="scraperUI.showDetails('${JSON.stringify(results).replace(/'/g, "\\'")}')">
+                                            <i class="fas fa-eye me-1"></i>
+                                            Voir détails
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Points clés -->
+                        <div class="col-md-6 mb-4">
+                            <div class="card h-100">
+                                <div class="card-header bg-success text-white">
+                                    <h6 class="mb-0">
+                                        <i class="fas fa-key me-2"></i>
+                                        Points Clés
+                                    </h6>
+                                </div>
+                                <div class="card-body">
+                                    <ul class="list-unstyled">
+                                        ${(results.key_points || []).map(point => 
+                                            `<li class="mb-2"><i class="fas fa-check-circle text-success me-2"></i>${point}</li>`
+                                        ).join('')}
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Insights -->
+                        <div class="col-md-6 mb-4">
+                            <div class="card insight-card h-100">
+                                <div class="card-header">
+                                    <h6 class="mb-0">
+                                        <i class="fas fa-lightbulb me-2"></i>
+                                        Insights
+                                    </h6>
+                                </div>
+                                <div class="card-body">
+                                    <ul class="list-unstyled">
+                                        ${(results.insights || []).map(insight => 
+                                            `<li class="mb-2"><i class="fas fa-star me-2"></i>${insight}</li>`
+                                        ).join('')}
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Recommandations -->
+                        <div class="col-12 mb-4">
+                            <div class="card recommendation-card">
+                                <div class="card-header">
+                                    <h6 class="mb-0">
+                                        <i class="fas fa-bullseye me-2"></i>
+                                        Recommandations
+                                    </h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        ${(results.recommendations || []).map((rec, index) => 
+                                            `<div class="col-md-6 mb-2">
+                                                <div class="d-flex align-items-start">
+                                                    <span class="badge bg-light text-dark me-2">${index + 1}</span>
+                                                    <span>${rec}</span>
+                                                </div>
+                                            </div>`
+                                        ).join('')}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Sources -->
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header bg-secondary text-white">
+                                    <h6 class="mb-0">
+                                        <i class="fas fa-link me-2"></i>
+                                        Sources Utilisées
+                                    </h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        ${(results.sources || []).map(source => 
+                                            `<div class="col-md-6 mb-2">
+                                                <a href="${source.url}" target="_blank" class="text-decoration-none">
+                                                    <i class="fas fa-external-link-alt me-1"></i>
+                                                    ${source.title}
+                                                </a>
+                                            </div>`
+                                        ).join('')}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            showDetails(results) {
+                const modal = new bootstrap.Modal(document.getElementById('detailsModal'));
+                const modalContent = document.getElementById('modalContent');
+                
+                modalContent.innerHTML = `
+                    <div class="row">
+                        <div class="col-12">
+                            <h6>Données Structurées</h6>
+                            <pre class="bg-light p-3 rounded">${JSON.stringify(results.structured_data || {}, null, 2)}</pre>
+                        </div>
+                    </div>
+                `;
+                
+                modal.show();
+            }
+
+            addTaskToList(taskId, prompt, status) {
+                const taskList = document.getElementById('taskList');
+                const taskElement = document.createElement('div');
+                taskElement.className = 'd-flex justify-content-between align-items-center mb-2 p-2 border rounded';
+                taskElement.id = `task-${taskId}`;
+                
+                taskElement.innerHTML = `
+                    <div>
+                        <small class="text-muted">${taskId.substring(0, 8)}...</small>
+                        <div class="small">${prompt.substring(0, 50)}...</div>
+                    </div>
+                    <span class="status-${status}">
+                        <i class="fas fa-circle me-1"></i>
+                        ${status}
+                    </span>
+                `;
+                
+                if (taskList.querySelector('.text-muted')) {
+                    taskList.innerHTML = '';
+                }
+                
+                taskList.appendChild(taskElement);
+            }
+
+            updateTaskStatus(taskId, status) {
+                const taskElement = document.getElementById(`task-${taskId}`);
+                if (taskElement) {
+                    const statusElement = taskElement.querySelector(`.status-${status.split(' ')[0]}`);
+                    if (statusElement) {
+                        statusElement.innerHTML = `<i class="fas fa-circle me-1"></i>${status}`;
+                    }
+                }
+            }
+
+            setLoadingState(loading) {
+                const submitBtn = document.getElementById('submitBtn');
+                if (loading) {
+                    submitBtn.innerHTML = '<span class="loading-spinner me-2"></span>Analyse en cours...';
+                    submitBtn.disabled = true;
+                } else {
+                    submitBtn.innerHTML = '<i class="fas fa-play me-2"></i>Lancer l\'analyse';
+                    submitBtn.disabled = false;
+                }
+            }
+
+            showAlert(message, type) {
+                const alertDiv = document.createElement('div');
+                alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+                alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+                alertDiv.innerHTML = `
+                    ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                `;
+                
+                document.body.appendChild(alertDiv);
+                
+                setTimeout(() => {
+                    if (alertDiv.parentNode) {
+                        alertDiv.remove();
+                    }
+                }, 5000);
+            }
+
+            loadRecentTasks() {
+                // À implémenter : charger les tâches récentes depuis l'API
+            }
+        }
+
+        // Initialisation
+        const scraperUI = new IntelligentScraperUI();
+    </script>
+</body>
+</html> 

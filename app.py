@@ -56,6 +56,8 @@ from unified_market_manager import (
 )
 from google_cse_stock_data import GoogleCSEStockDataManager
 from enhanced_google_cse_ai_report import EnhancedGoogleCSEAIReport
+from intelligent_scraper import IntelligentScraper, get_scraper
+from scrapingbee_scraper import ScrapingBeeScraper, get_scrapingbee_scraper
 # Remplacé par l'API Manus unifiée
 
 # Load environment variables from .env file
@@ -270,6 +272,25 @@ try:
     logger.info("✅ Gestionnaire de rapports IA Google CSE enrichi initialisé")
 except Exception as e:
     logger.error(f"❌ Erreur initialisation Enhanced AI Report Manager: {e}")
+
+# Initialize Intelligent Scraper
+intelligent_scraper_manager = None
+try:
+    intelligent_scraper_manager = IntelligentScraper()
+    # Initialiser le navigateur de manière synchrone
+    intelligent_scraper_manager.initialize_sync()
+    logger.info("✅ Scraper intelligent initialisé")
+except Exception as e:
+    logger.error(f"❌ Erreur initialisation Intelligent Scraper: {e}")
+
+# Initialize ScrapingBee Scraper
+scrapingbee_scraper_manager = None
+try:
+    scrapingbee_scraper_manager = get_scrapingbee_scraper()
+    scrapingbee_scraper_manager.initialize_sync()
+    logger.info("✅ ScrapingBee Scraper initialisé")
+except Exception as e:
+    logger.error(f"❌ Erreur initialisation ScrapingBee Scraper: {e}")
 
 # ──────────────────────────────────────────────────────────
 # Gemini 2.5 client (SDK google-genai)
@@ -6077,6 +6098,283 @@ def google_cse_daily_report():
             
     except Exception as e:
         logger.error(f"Erreur rapport journalier Google CSE: {e}")
+        return jsonify({"error": str(e)}), 500
+
+# ──────────────────────────────────────────────────────────
+# Intelligent Scraper Routes
+# ──────────────────────────────────────────────────────────
+
+@app.route("/intelligent-scraper")
+def intelligent_scraper_ui():
+    """Interface web pour le scraper intelligent"""
+    return render_template("intelligent_scraper.html")
+
+@app.route("/api/intelligent-scraper/scrape", methods=["POST"])
+def intelligent_scraper_scrape():
+    """Crée et exécute une nouvelle tâche de scraping"""
+    try:
+        data = request.get_json()
+        prompt = data.get('prompt', '')
+        num_results = data.get('num_results', 5)
+        
+        if not prompt:
+            return jsonify({
+                "success": False,
+                "error": "Prompt requis"
+            }), 400
+        
+        if not intelligent_scraper_manager:
+            return jsonify({
+                "success": False,
+                "error": "Scraper intelligent non disponible"
+            }), 500
+        
+        # Créer et exécuter la tâche de scraping
+        import asyncio
+        task_id = asyncio.run(intelligent_scraper_manager.create_scraping_task(prompt, num_results))
+        
+        # Exécuter immédiatement la tâche
+        result = asyncio.run(intelligent_scraper_manager.execute_scraping_task(task_id))
+        
+        if "error" in result:
+            return jsonify({
+                "success": False,
+                "error": result["error"]
+            }), 500
+        
+        return jsonify({
+            "success": True,
+            "task_id": task_id,
+            "message": "Tâche de scraping exécutée avec succès",
+            "results": result
+        })
+        
+    except Exception as e:
+        logger.error(f"Erreur création/exécution tâche scraping: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/intelligent-scraper/status/<task_id>")
+def intelligent_scraper_status(task_id):
+    """Récupère le statut d'une tâche de scraping"""
+    try:
+        if not intelligent_scraper_manager:
+            return jsonify({
+                "success": False,
+                "error": "Scraper intelligent non disponible"
+            }), 500
+        
+        import asyncio
+        task = asyncio.run(intelligent_scraper_manager.get_task_status(task_id))
+        
+        if not task:
+            return jsonify({
+                "success": False,
+                "error": "Tâche non trouvée"
+            }), 404
+        
+        response = {
+            "success": True,
+            "task_id": task_id,
+            "status": task.status,
+            "created_at": task.created_at.isoformat() if task.created_at else None,
+            "completed_at": task.completed_at.isoformat() if task.completed_at else None
+        }
+        
+        if task.status == "completed" and task.results:
+            response["results"] = task.results
+        elif task.status == "failed" and task.error:
+            response["error"] = task.error
+        
+        return jsonify(response)
+        
+    except Exception as e:
+        logger.error(f"Erreur statut tâche scraping: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/intelligent-scraper/execute/<task_id>", methods=["POST"])
+def intelligent_scraper_execute(task_id):
+    """Exécute une tâche de scraping"""
+    try:
+        if not intelligent_scraper_manager:
+            return jsonify({
+                "success": False,
+                "error": "Scraper intelligent non disponible"
+            }), 500
+        
+        import asyncio
+        result = asyncio.run(intelligent_scraper_manager.execute_scraping_task(task_id))
+        
+        if "error" in result:
+            return jsonify({
+                "success": False,
+                "error": result["error"]
+            }), 500
+        
+        return jsonify({
+            "success": True,
+            "task_id": task_id,
+            "results": result
+        })
+        
+    except Exception as e:
+        logger.error(f"Erreur exécution tâche scraping: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/intelligent-scraper/status")
+def intelligent_scraper_overall_status():
+    """Statut général du scraper intelligent"""
+    try:
+        status = {
+            "available": intelligent_scraper_manager is not None,
+            "initialized": intelligent_scraper_manager is not None,
+            "active_tasks": len(intelligent_scraper_manager.tasks) if intelligent_scraper_manager else 0
+        }
+        
+        return jsonify({
+            "success": True,
+            "status": status
+        })
+        
+    except Exception as e:
+        logger.error(f"Erreur statut scraper: {e}")
+        return jsonify({"error": str(e)}), 500
+
+# ──────────────────────────────────────────────────────────
+# ScrapingBee Scraper Routes
+# ──────────────────────────────────────────────────────────
+
+@app.route("/scrapingbee-scraper")
+def scrapingbee_scraper_ui():
+    """Interface web pour le ScrapingBee scraper"""
+    return render_template("scrapingbee_scraper.html")
+
+@app.route("/api/scrapingbee/status")
+def scrapingbee_scraper_status():
+    """Statut général du ScrapingBee scraper"""
+    try:
+        status = {
+            "available": scrapingbee_scraper_manager is not None,
+            "initialized": scrapingbee_scraper_manager is not None and scrapingbee_scraper_manager._initialized,
+            "active_tasks": len(scrapingbee_scraper_manager.tasks) if scrapingbee_scraper_manager else 0
+        }
+        
+        return jsonify({
+            "success": True,
+            "status": status
+        })
+        
+    except Exception as e:
+        logger.error(f"Erreur statut ScrapingBee scraper: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/scrapingbee/scrape", methods=["POST"])
+def scrapingbee_scraper_scrape():
+    """Crée et exécute une nouvelle tâche de scraping avec ScrapingBee"""
+    try:
+        data = request.get_json()
+        prompt = data.get('prompt', '')
+        num_results = data.get('num_results', 5)
+        
+        if not prompt:
+            return jsonify({
+                "success": False,
+                "error": "Prompt requis"
+            }), 400
+        
+        if not scrapingbee_scraper_manager:
+            return jsonify({
+                "success": False,
+                "error": "ScrapingBee scraper non disponible"
+            }), 500
+        
+        # Créer et exécuter la tâche de scraping
+        import asyncio
+        task_id = asyncio.run(scrapingbee_scraper_manager.create_scraping_task(prompt, num_results))
+        
+        # Exécuter immédiatement la tâche
+        result = asyncio.run(scrapingbee_scraper_manager.execute_scraping_task(task_id))
+        
+        if "error" in result:
+            return jsonify({
+                "success": False,
+                "error": result["error"]
+            }), 500
+        
+        return jsonify({
+            "success": True,
+            "task_id": task_id,
+            "message": "Tâche de scraping ScrapingBee exécutée avec succès",
+            "results": result
+        })
+        
+    except Exception as e:
+        logger.error(f"Erreur création/exécution tâche ScrapingBee scraping: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/scrapingbee/status/<task_id>")
+def scrapingbee_scraper_task_status(task_id):
+    """Récupère le statut d'une tâche de scraping ScrapingBee"""
+    try:
+        if not scrapingbee_scraper_manager:
+            return jsonify({
+                "success": False,
+                "error": "ScrapingBee scraper non disponible"
+            }), 500
+        
+        task = scrapingbee_scraper_manager.get_task_status(task_id)
+        
+        if not task:
+            return jsonify({
+                "success": False,
+                "error": "Tâche non trouvée"
+            }), 404
+        
+        response = {
+            "success": True,
+            "task_id": task_id,
+            "status": task.status,
+            "created_at": task.created_at.isoformat() if task.created_at else None,
+            "completed_at": task.completed_at.isoformat() if task.completed_at else None
+        }
+        
+        if task.status == "completed" and task.results:
+            response["results"] = task.results
+        elif task.status == "failed" and task.error:
+            response["error"] = task.error
+        
+        return jsonify(response)
+        
+    except Exception as e:
+        logger.error(f"Erreur statut tâche ScrapingBee scraping: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/scrapingbee/execute/<task_id>", methods=["POST"])
+def scrapingbee_scraper_execute(task_id):
+    """Exécute une tâche de scraping ScrapingBee"""
+    try:
+        if not scrapingbee_scraper_manager:
+            return jsonify({
+                "success": False,
+                "error": "ScrapingBee scraper non disponible"
+            }), 500
+        
+        import asyncio
+        result = asyncio.run(scrapingbee_scraper_manager.execute_scraping_task(task_id))
+        
+        if "error" in result:
+            return jsonify({
+                "success": False,
+                "error": result["error"]
+            }), 500
+        
+        return jsonify({
+            "success": True,
+            "task_id": task_id,
+            "results": result
+        })
+        
+    except Exception as e:
+        logger.error(f"Erreur exécution tâche ScrapingBee scraping: {e}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
