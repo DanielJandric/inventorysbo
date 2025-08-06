@@ -361,6 +361,40 @@ class StockAPIManager:
             logger.info(f"🇨🇭 Devise ajustée pour {symbol}: CHF")
         return result
 
+    def get_market_snapshot(self) -> Dict[str, Any]:
+        """Récupère un aperçu des principaux indicateurs de marché."""
+        logger.info("📊 Récupération de l'aperçu du marché...")
+        
+        snapshot = {
+            "indices": {},
+            "commodities": {},
+            "crypto": {}
+        }
+
+        # Symboles à suivre
+        symbols = {
+            "indices": {"S&P 500": "^GSPC", "NASDAQ": "^IXIC", "Dow Jones": "^DJI"},
+            "commodities": {"Gold": "GC=F", "Silver": "SI=F"},
+            "crypto": {"Bitcoin": "BTC-USD", "Ethereum": "ETH-USD"}
+        }
+
+        for category, items in symbols.items():
+            for name, symbol in items.items():
+                data = self.get_stock_price(symbol)
+                if data:
+                    snapshot[category][name] = {
+                        "price": data.get('price'),
+                        "change": data.get('change'),
+                        "change_percent": data.get('change_percent'),
+                        "source": data.get('source')
+                    }
+                else:
+                    snapshot[category][name] = {"error": "Data not available"}
+        
+        logger.info("✅ Aperçu du marché récupéré.")
+        return snapshot
+
+
 # Instance globale
 stock_api_manager = StockAPIManager()
 

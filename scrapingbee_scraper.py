@@ -351,7 +351,7 @@ class ScrapingBeeScraper:
         # Limiter la longueur
         return content.strip()[:8000]
     
-    async def process_with_llm(self, prompt: str, scraped_data: List[ScrapedData]) -> Dict:
+    async def process_with_llm(self, prompt: str, scraped_data: List[ScrapedData], market_snapshot: Dict) -> Dict:
         """Traite les données scrapées avec OpenAI"""
         try:
             from openai import OpenAI
@@ -364,14 +364,21 @@ class ScrapingBeeScraper:
             logger.debug(f"Contexte complet pour OpenAI: {context}")
 
             # Prompt système enrichi
-            system_prompt = """Tu es un expert analyste financier de classe mondiale. Ta mission est de produire un rapport de marché EXHAUSTIF, DÉTAILLÉ et HAUTEMENT STRUCTURÉ à partir des données brutes fournies. Ne sois pas bref. La profondeur et la complétude sont tes seules priorités.
+            system_prompt = """Tu es un expert analyste financier de classe mondiale. Ta mission est de produire un rapport de marché EXHAUSTIF, DÉTAILLÉ et HAUTEMENT STRUCTURÉ. Combine les données factuelles (market_snapshot) avec l'analyse des textes (données collectées).
 
 STRUCTURE OBLIGATOIRE DE LA RÉPONSE JSON :
 {
-    "summary": "Un résumé exécutif substantiel et approfondi. Analyse en profondeur les implications des données. Minimum 500 mots.",
+    "market_snapshot": {
+        "indices": {
+            "S&P 500": {"price": 5447.87, "change": -8.55, "change_percent": -0.16},
+            "NASDAQ": {"price": 17689.36, "change": -28.20, "change_percent": -0.16}
+        },
+        "commodities": {"Gold": {"price": 2330.20, "change": -1.20, "change_percent": -0.05}},
+        "crypto": {"Bitcoin": {"price": 69304.58, "change": 450.15, "change_percent": 0.65}}
+    },
+    "summary": "Un résumé exécutif substantiel et approfondi. Intègre les données du snapshot pour contextualiser l'analyse. Minimum 500 mots.",
     "key_points": [
-        "Point clé détaillé 1", 
-        "Point clé détaillé 2",
+        "Point clé détaillé 1, intégrant une donnée factuelle si pertinent", 
         "...",
         "Point clé détaillé 10"
     ],
@@ -381,22 +388,10 @@ STRUCTURE OBLIGATOIRE DE LA RÉPONSE JSON :
         "major_events": ["Événement majeur 1 et son impact", "Événement majeur 2", "..."],
         "sector_analysis": "Analyse détaillée des secteurs mentionnés, en particulier l'IA."
     },
-    "insights": [
-        "Insight actionnable 1 basé sur une corrélation de données", 
-        "Insight actionnable 2", 
-        "..."
-    ],
-    "risks": [
-        "Risque potentiel 1 avec explication", 
-        "Risque potentiel 2", 
-        "..."
-    ],
-    "opportunities": [
-        "Opportunité d'investissement 1 avec justification", 
-        "Opportunité d'investissement 2", 
-        "..."
-    ],
-    "sources_analysis": "Une brève critique de la fiabilité et de la convergence des sources fournies.",
+    "insights": ["Insight actionnable 1 basé sur une corrélation de données", "..."],
+    "risks": ["Risque potentiel 1 avec explication", "..."],
+    "opportunities": ["Opportunité d'investissement 1 avec justification", "..."],
+    "sources_analysis": "Une brève critique de la fiabilité des sources textuelles fournies.",
     "confidence_score": 0.95,
     "sources": [{"title": "Titre de la source 1", "url": "URL de la source 1"}]
 }"""
@@ -406,7 +401,7 @@ STRUCTURE OBLIGATOIRE DE LA RÉPONSE JSON :
                 model="gpt-4o",
                 messages=[
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Demande: {prompt}\n\nDonnées collectées:\n{context}"}
+                    {"role": "user", "content": f"Demande: {prompt}\n\nDONNÉES FACTUELLES (snapshot):\n{json.dumps(market_snapshot, indent=2)}\n\nDONNÉES COLLECTÉES (articles):\n{context}"}
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.2,
@@ -462,8 +457,12 @@ Contenu: {data.content[:4000]}
                     "status": "unavailable"
                 }
             
-            # Traitement LLM
-            llm_result = await self.process_with_llm(task.prompt, scraped_data)
+            # Étape 2: Récupérer les données factuelles de marché
+            from stock_api_manager import stock_api_manager
+            market_snapshot = stock_api_manager.get_market_snapshot()
+
+            # Étape 3: Traitement LLM avec les données scrapées ET les données factuelles
+            llm_result = await self.process_with_llm(task.prompt, scraped_data, market_snapshot)
             
             # Mettre à jour la tâche
             task.status = "completed"
