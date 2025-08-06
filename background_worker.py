@@ -16,6 +16,8 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+logger.info("--- DÉMARRAGE DU SCRIPT DU BACKGROUND WORKER ---")
+
 # Imports
 from scrapingbee_scraper import get_scrapingbee_scraper
 from market_analysis_db import get_market_analysis_db, MarketAnalysis
