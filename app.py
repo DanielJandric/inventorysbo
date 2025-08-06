@@ -38,6 +38,14 @@ from web_search_manager import (
     WebSearchResult,
     create_web_search_manager
 )
+from google_search_manager import (
+    GoogleSearchManager,
+    GoogleSearchType,
+    GoogleSearchResult,
+    MarketReport,
+    DailyNewsItem,
+    create_google_search_manager
+)
 # Remplacé par l'API Manus unifiée
 
 # Load environment variables from .env file
@@ -219,6 +227,17 @@ if openai_client:
         logger.error(f"❌ Erreur initialisation Web Search Manager: {e}")
 else:
     logger.warning("⚠️ Gestionnaire de recherche web non disponible (OpenAI non configuré)")
+
+# Initialize Google Search Manager
+google_search_manager = None
+try:
+    google_search_manager = create_google_search_manager()
+    if google_search_manager:
+        logger.info("✅ Gestionnaire de recherche Google initialisé")
+    else:
+        logger.warning("⚠️ Gestionnaire de recherche Google non disponible (configuration manquante)")
+except Exception as e:
+    logger.error(f"❌ Erreur initialisation Google Search Manager: {e}")
 
 # ──────────────────────────────────────────────────────────
 # Gemini 2.5 client (SDK google-genai)
@@ -2499,6 +2518,11 @@ def sold():
 def web_search():
     """Interface de test pour la recherche web OpenAI"""
     return render_template("web_search.html")
+
+@app.route("/google-search")
+def google_search():
+    """Interface de test pour la recherche Google"""
+    return render_template("google_search.html")
 
 @app.route("/health")
 def health():
@@ -5416,3 +5440,183 @@ def web_search_status():
     except Exception as e:
         logger.error(f"Erreur statut web search: {e}")
         return jsonify({"error": str(e)}), 500
+
+# ──────────────────────────────────────────────────────────
+# Google Search API Endpoints
+# ──────────────────────────────────────────────────────────
+
+@app.route("/api/google-search/market-report", methods=["POST"])
+def google_search_market_report():
+    """Génère un rapport de marché quotidien via Google Search"""
+    try:
+        if not google_search_manager:
+            return jsonify({"error": "Google Search Manager non disponible"}), 500
+        
+        data = request.get_json() or {}
+        location = data.get('location', 'global')
+        
+        # Générer le rapport de marché
+        report = google_search_manager.get_daily_market_report(location=location)
+        
+        return jsonify({
+            "success": True,
+            "report": {
+                "title": report.title,
+                "summary": report.summary,
+                "key_points": report.key_points,
+                "market_sentiment": report.market_sentiment,
+                "sources": report.sources,
+                "timestamp": report.timestamp,
+                "market_impact": report.market_impact
+            },
+            "location": location
+        })
+        
+    except Exception as e:
+        logger.error(f"Erreur rapport de marché Google: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/google-search/daily-news", methods=["POST"])
+def google_search_daily_news():
+    """Récupère les nouvelles quotidiennes via Google Search"""
+    try:
+        if not google_search_manager:
+            return jsonify({"error": "Google Search Manager non disponible"}), 500
+        
+        data = request.get_json() or {}
+        categories = data.get('categories', ['market', 'crypto', 'forex', 'commodities'])
+        
+        # Récupérer les nouvelles
+        news_items = google_search_manager.get_daily_news_summary(categories=categories)
+        
+        return jsonify({
+            "success": True,
+            "news_items": [
+                {
+                    "headline": item.headline,
+                    "summary": item.summary,
+                    "category": item.category,
+                    "source": item.source,
+                    "url": item.url,
+                    "published_date": item.published_date,
+                    "importance_level": item.importance_level
+                }
+                for item in news_items
+            ],
+            "categories": categories,
+            "total_items": len(news_items)
+        })
+        
+    except Exception as e:
+        logger.error(f"Erreur nouvelles quotidiennes Google: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/google-search/financial-markets", methods=["POST"])
+def google_search_financial_markets():
+    """Recherche Google pour les marchés financiers"""
+    try:
+        if not google_search_manager:
+            return jsonify({"error": "Google Search Manager non disponible"}), 500
+        
+        data = request.get_json() or {}
+        query = data.get('query', 'market news today')
+        search_type = data.get('search_type', 'market_news')
+        max_results = data.get('max_results', 10)
+        date_restrict = data.get('date_restrict', 'd1')
+        
+        # Convertir le type de recherche
+        try:
+            search_type_enum = GoogleSearchType(search_type)
+        except ValueError:
+            search_type_enum = GoogleSearchType.MARKET_NEWS
+        
+        # Effectuer la recherche
+        results = google_search_manager.search_financial_markets(
+            query=query,
+            search_type=search_type_enum,
+            max_results=max_results,
+            date_restrict=date_restrict
+        )
+        
+        return jsonify({
+            "success": True,
+            "query": query,
+            "search_type": search_type,
+            "results": [
+                {
+                    "title": result.title,
+                    "link": result.link,
+                    "snippet": result.snippet,
+                    "source": result.source,
+                    "published_date": result.published_date,
+                    "relevance_score": result.relevance_score
+                }
+                for result in results
+            ],
+            "total_results": len(results)
+        })
+        
+    except Exception as e:
+        logger.error(f"Erreur recherche marchés Google: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/google-search/stock/<symbol>", methods=["GET"])
+def google_search_stock_info(symbol):
+    """Recherche Google pour les informations d'une action spécifique"""
+    try:
+        if not google_search_manager:
+            return jsonify({"error": "Google Search Manager non disponible"}), 500
+        
+        # Effectuer la recherche pour l'action
+        results = google_search_manager.search_financial_markets(
+            query=f"{symbol} stock news analysis",
+            search_type=GoogleSearchType.STOCK_ANALYSIS,
+            max_results=5,
+            date_restrict="d1"
+        )
+        
+        if results:
+            return jsonify({
+                "success": True,
+                "symbol": symbol.upper(),
+                "results": [
+                    {
+                        "title": result.title,
+                        "link": result.link,
+                        "snippet": result.snippet,
+                        "source": result.source,
+                        "published_date": result.published_date,
+                        "relevance_score": result.relevance_score
+                    }
+                    for result in results
+                ],
+                "total_results": len(results)
+            })
+        else:
+            return jsonify({"error": f"Aucune information trouvée pour {symbol}"}), 404
+            
+    except Exception as e:
+        logger.error(f"Erreur recherche action {symbol}: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/google-search/status", methods=["GET"])
+def google_search_status():
+    """Statut du gestionnaire de recherche Google"""
+    try:
+        status = {
+            "available": google_search_manager is not None,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        if google_search_manager:
+            status["search_types"] = [search_type.value for search_type in GoogleSearchType]
+            status["financial_sources"] = google_search_manager.financial_sources
+        
+        return jsonify(status)
+        
+    except Exception as e:
+        logger.error(f"Erreur statut Google search: {e}")
+        return jsonify({"error": str(e)}), 500
+
+if __name__ == "__main__":
+    app.run(debug=True)

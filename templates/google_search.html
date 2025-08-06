@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Search API - Test Interface</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .section {
+            margin-bottom: 40px;
+            padding: 25px;
+            border: 1px solid #e1e5e9;
+            border-radius: 10px;
+            background: #f8f9fa;
+        }
+
+        .section h2 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 25px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: transform 0.2s;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .status {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-weight: 600;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        .results {
+            margin-top: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #e1e5e9;
+            border-radius: 8px;
+            background: white;
+        }
+
+        .result-item {
+            padding: 15px;
+            border-bottom: 1px solid #e1e5e9;
+        }
+
+        .result-item:last-child {
+            border-bottom: none;
+        }
+
+        .result-title {
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 8px;
+        }
+
+        .result-snippet {
+            color: #6c757d;
+            margin-bottom: 8px;
+            line-height: 1.4;
+        }
+
+        .result-meta {
+            font-size: 12px;
+            color: #868e96;
+        }
+
+        .result-link {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .result-link:hover {
+            text-decoration: underline;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #6c757d;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .news-item {
+            background: white;
+            border: 1px solid #e1e5e9;
+            border-radius: 8px;
+            padding: 20px;
+            transition: transform 0.2s;
+        }
+
+        .news-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .news-category {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .category-market { background: #e3f2fd; color: #1976d2; }
+        .category-crypto { background: #fff3e0; color: #f57c00; }
+        .category-forex { background: #e8f5e8; color: #388e3c; }
+        .category-commodities { background: #fce4ec; color: #c2185b; }
+
+        .importance-high { border-left: 4px solid #dc3545; }
+        .importance-medium { border-left: 4px solid #ffc107; }
+        .importance-low { border-left: 4px solid #28a745; }
+
+        .report-section {
+            background: white;
+            border: 1px solid #e1e5e9;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .sentiment-bullish { color: #28a745; }
+        .sentiment-bearish { color: #dc3545; }
+        .sentiment-neutral { color: #6c757d; }
+
+        .impact-high { background: #f8d7da; color: #721c24; }
+        .impact-medium { background: #fff3cd; color: #856404; }
+        .impact-low { background: #d1ecf1; color: #0c5460; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔍 Google Search API</h1>
+            <p>Interface de test pour l'API de recherche Google - Rapports de marché et nouvelles quotidiennes</p>
+        </div>
+
+        <div class="content">
+            <!-- Statut du service -->
+            <div class="section">
+                <h2>📊 Statut du Service</h2>
+                <button class="btn" onclick="checkStatus()">Vérifier le statut</button>
+                <div id="status-result"></div>
+            </div>
+
+            <!-- Rapport de marché -->
+            <div class="section">
+                <h2>📈 Rapport de Marché Quotidien</h2>
+                <div class="form-group">
+                    <label for="market-location">Localisation:</label>
+                    <select id="market-location">
+                        <option value="global">Global</option>
+                        <option value="US">États-Unis</option>
+                        <option value="EU">Europe</option>
+                        <option value="CH">Suisse</option>
+                        <option value="UK">Royaume-Uni</option>
+                    </select>
+                </div>
+                <button class="btn" onclick="generateMarketReport()">Générer le rapport</button>
+                <div id="market-report-result"></div>
+            </div>
+
+            <!-- Nouvelles quotidiennes -->
+            <div class="section">
+                <h2>📰 Nouvelles Quotidiennes</h2>
+                <div class="form-group">
+                    <label>Catégories:</label>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 8px;">
+                        <label><input type="checkbox" value="market" checked> Marchés</label>
+                        <label><input type="checkbox" value="crypto" checked> Crypto</label>
+                        <label><input type="checkbox" value="forex" checked> Forex</label>
+                        <label><input type="checkbox" value="commodities" checked> Commodités</label>
+                        <label><input type="checkbox" value="stocks"> Actions</label>
+                        <label><input type="checkbox" value="economic"> Économie</label>
+                    </div>
+                </div>
+                <button class="btn" onclick="getDailyNews()">Récupérer les nouvelles</button>
+                <div id="daily-news-result"></div>
+            </div>
+
+            <!-- Recherche de marchés financiers -->
+            <div class="section">
+                <h2>🔍 Recherche de Marchés Financiers</h2>
+                <div class="form-group">
+                    <label for="search-query">Requête:</label>
+                    <input type="text" id="search-query" placeholder="market news today" value="market news today">
+                </div>
+                <div class="form-group">
+                    <label for="search-type">Type de recherche:</label>
+                    <select id="search-type">
+                        <option value="market_news">Nouvelles de marché</option>
+                        <option value="financial_reports">Rapports financiers</option>
+                        <option value="stock_analysis">Analyse d'actions</option>
+                        <option value="economic_indicators">Indicateurs économiques</option>
+                        <option value="crypto_news">Nouvelles crypto</option>
+                        <option value="forex_news">Nouvelles forex</option>
+                        <option value="commodities_news">Nouvelles commodités</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="max-results">Nombre de résultats:</label>
+                    <input type="number" id="max-results" value="10" min="1" max="10">
+                </div>
+                <div class="form-group">
+                    <label for="date-restrict">Restriction de date:</label>
+                    <select id="date-restrict">
+                        <option value="d1">Dernier jour</option>
+                        <option value="w1">Dernière semaine</option>
+                        <option value="m1">Dernier mois</option>
+                    </select>
+                </div>
+                <button class="btn" onclick="searchFinancialMarkets()">Rechercher</button>
+                <div id="financial-markets-result"></div>
+            </div>
+
+            <!-- Recherche d'actions -->
+            <div class="section">
+                <h2>📊 Recherche d'Actions</h2>
+                <div class="form-group">
+                    <label for="stock-symbol">Symbole de l'action:</label>
+                    <input type="text" id="stock-symbol" placeholder="AAPL" value="AAPL">
+                </div>
+                <button class="btn" onclick="searchStock()">Rechercher l'action</button>
+                <div id="stock-result"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '/api/google-search';
+
+        function showLoading(elementId) {
+            document.getElementById(elementId).innerHTML = `
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Chargement en cours...</p>
+                </div>
+            `;
+        }
+
+        function showError(elementId, message) {
+            document.getElementById(elementId).innerHTML = `
+                <div class="status error">
+                    ❌ ${message}
+                </div>
+            `;
+        }
+
+        function showSuccess(elementId, message) {
+            document.getElementById(elementId).innerHTML = `
+                <div class="status success">
+                    ✅ ${message}
+                </div>
+            `;
+        }
+
+        async function makeRequest(url, options = {}) {
+            try {
+                const response = await fetch(url, {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...options.headers
+                    },
+                    ...options
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Erreur de requête');
+                }
+                
+                return data;
+            } catch (error) {
+                throw new Error(error.message || 'Erreur de connexion');
+            }
+        }
+
+        async function checkStatus() {
+            showLoading('status-result');
+            
+            try {
+                const data = await makeRequest(`${API_BASE}/status`);
+                
+                let statusHtml = `
+                    <div class="status ${data.available ? 'success' : 'error'}">
+                        ${data.available ? '✅ Service disponible' : '❌ Service non disponible'}
+                    </div>
+                `;
+                
+                if (data.available) {
+                    statusHtml += `
+                        <div class="results">
+                            <div class="result-item">
+                                <div class="result-title">Types de recherche disponibles:</div>
+                                <div class="result-snippet">${data.search_types.join(', ')}</div>
+                            </div>
+                            <div class="result-item">
+                                <div class="result-title">Sources financières:</div>
+                                <div class="result-snippet">${data.financial_sources.join(', ')}</div>
+                            </div>
+                            <div class="result-item">
+                                <div class="result-title">Timestamp:</div>
+                                <div class="result-snippet">${new Date(data.timestamp).toLocaleString()}</div>
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                document.getElementById('status-result').innerHTML = statusHtml;
+            } catch (error) {
+                showError('status-result', error.message);
+            }
+        }
+
+        async function generateMarketReport() {
+            showLoading('market-report-result');
+            
+            try {
+                const location = document.getElementById('market-location').value;
+                const data = await makeRequest(`${API_BASE}/market-report`, {
+                    method: 'POST',
+                    body: JSON.stringify({ location })
+                });
+                
+                const report = data.report;
+                let html = `
+                    <div class="status success">
+                        ✅ Rapport de marché généré pour ${location}
+                    </div>
+                    <div class="report-section">
+                        <h3>${report.title}</h3>
+                        <p><strong>Résumé:</strong> ${report.summary}</p>
+                        <p><strong>Sentiment:</strong> <span class="sentiment-${report.market_sentiment.toLowerCase()}">${report.market_sentiment}</span></p>
+                        <p><strong>Impact:</strong> <span class="impact-${report.market_impact.toLowerCase()}">${report.market_impact}</span></p>
+                        <p><strong>Sources:</strong> ${report.sources.join(', ')}</p>
+                        <p><strong>Timestamp:</strong> ${new Date(report.timestamp).toLocaleString()}</p>
+                        
+                        <h4>Points clés:</h4>
+                        <ul>
+                            ${report.key_points.map(point => `<li>${point}</li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+                
+                document.getElementById('market-report-result').innerHTML = html;
+            } catch (error) {
+                showError('market-report-result', error.message);
+            }
+        }
+
+        async function getDailyNews() {
+            showLoading('daily-news-result');
+            
+            try {
+                const checkboxes = document.querySelectorAll('input[type="checkbox"]:checked');
+                const categories = Array.from(checkboxes).map(cb => cb.value);
+                
+                const data = await makeRequest(`${API_BASE}/daily-news`, {
+                    method: 'POST',
+                    body: JSON.stringify({ categories })
+                });
+                
+                let html = `
+                    <div class="status success">
+                        ✅ ${data.total_items} nouvelles récupérées
+                    </div>
+                    <div class="grid">
+                `;
+                
+                data.news_items.forEach(item => {
+                    html += `
+                        <div class="news-item importance-${item.importance_level}">
+                            <div class="news-category category-${item.category}">${item.category.toUpperCase()}</div>
+                            <div class="result-title">${item.headline}</div>
+                            <div class="result-snippet">${item.summary}</div>
+                            <div class="result-meta">
+                                <strong>Source:</strong> <a href="${item.url}" target="_blank" class="result-link">${item.source}</a><br>
+                                <strong>Date:</strong> ${item.published_date}<br>
+                                <strong>Importance:</strong> ${item.importance_level}
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                html += '</div>';
+                document.getElementById('daily-news-result').innerHTML = html;
+            } catch (error) {
+                showError('daily-news-result', error.message);
+            }
+        }
+
+        async function searchFinancialMarkets() {
+            showLoading('financial-markets-result');
+            
+            try {
+                const query = document.getElementById('search-query').value;
+                const searchType = document.getElementById('search-type').value;
+                const maxResults = document.getElementById('max-results').value;
+                const dateRestrict = document.getElementById('date-restrict').value;
+                
+                const data = await makeRequest(`${API_BASE}/financial-markets`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        query,
+                        search_type: searchType,
+                        max_results: parseInt(maxResults),
+                        date_restrict: dateRestrict
+                    })
+                });
+                
+                let html = `
+                    <div class="status success">
+                        ✅ ${data.total_results} résultats trouvés pour "${query}"
+                    </div>
+                    <div class="results">
+                `;
+                
+                data.results.forEach(result => {
+                    html += `
+                        <div class="result-item">
+                            <div class="result-title">
+                                <a href="${result.link}" target="_blank" class="result-link">${result.title}</a>
+                            </div>
+                            <div class="result-snippet">${result.snippet}</div>
+                            <div class="result-meta">
+                                <strong>Source:</strong> ${result.source} | 
+                                <strong>Date:</strong> ${result.published_date || 'N/A'} | 
+                                <strong>Pertinence:</strong> ${(result.relevance_score * 100).toFixed(1)}%
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                html += '</div>';
+                document.getElementById('financial-markets-result').innerHTML = html;
+            } catch (error) {
+                showError('financial-markets-result', error.message);
+            }
+        }
+
+        async function searchStock() {
+            showLoading('stock-result');
+            
+            try {
+                const symbol = document.getElementById('stock-symbol').value.toUpperCase();
+                const data = await makeRequest(`${API_BASE}/stock/${symbol}`);
+                
+                let html = `
+                    <div class="status success">
+                        ✅ ${data.total_results} résultats trouvés pour ${symbol}
+                    </div>
+                    <div class="results">
+                `;
+                
+                data.results.forEach(result => {
+                    html += `
+                        <div class="result-item">
+                            <div class="result-title">
+                                <a href="${result.link}" target="_blank" class="result-link">${result.title}</a>
+                            </div>
+                            <div class="result-snippet">${result.snippet}</div>
+                            <div class="result-meta">
+                                <strong>Source:</strong> ${result.source} | 
+                                <strong>Date:</strong> ${result.published_date || 'N/A'} | 
+                                <strong>Pertinence:</strong> ${(result.relevance_score * 100).toFixed(1)}%
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                html += '</div>';
+                document.getElementById('stock-result').innerHTML = html;
+            } catch (error) {
+                showError('stock-result', error.message);
+            }
+        }
+
+        // Vérifier le statut au chargement de la page
+        window.addEventListener('load', checkStatus);
+    </script>
+</body>
+</html> 
