@@ -122,8 +122,62 @@
 
             // Fonction pour afficher les résultats de l'analyse
             function renderAnalysis(analysis) {
+                // Helper pour formater les variations de prix
+                const formatChange = (change, percent) => {
+                    if (change === undefined || percent === undefined) return '';
+                    const changeValue = parseFloat(change);
+                    const percentValue = parseFloat(percent);
+                    const color = changeValue >= 0 ? 'text-success' : 'text-danger';
+                    const icon = changeValue >= 0 ? '<i class="fas fa-arrow-up"></i>' : '<i class="fas fa-arrow-down"></i>';
+                    return `<span class="${color}">${icon} ${changeValue.toFixed(2)} (${percentValue.toFixed(2)}%)</span>`;
+                };
+
+                // Helper pour générer les lignes du tableau snapshot
+                const renderSnapshotRows = (data) => {
+                    let html = '';
+                    for (const [name, values] of Object.entries(data)) {
+                        html += `
+                            <tr>
+                                <td><strong>${name}</strong></td>
+                                <td>${values.price ? values.price.toFixed(2) : 'N/A'}</td>
+                                <td>${formatChange(values.change, values.change_percent)}</td>
+                                <td class="text-muted"><small>${values.source || 'N/A'}</small></td>
+                            </tr>
+                        `;
+                    }
+                    return html;
+                };
+
+                const snapshot = analysis.market_snapshot || {};
+                
                 resultDiv.innerHTML = `
                     <h3 class="mt-4">Résultats de l'Analyse</h3>
+
+                    <!-- Section Snapshot -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5><i class="fas fa-chart-pie"></i> Aperçu du Marché</h5>
+                        </div>
+                        <div class="card-body">
+                            <table class="table table-sm table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Actif</th>
+                                        <th>Dernier Prix</th>
+                                        <th>Variation</th>
+                                        <th>Source</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${snapshot.indices ? `<tr><td colspan="4" class="table-group-divider"><strong>Indices</strong></td></tr>` + renderSnapshotRows(snapshot.indices) : ''}
+                                    ${snapshot.commodities ? `<tr><td colspan="4" class="table-group-divider"><strong>Matières Premières</strong></td></tr>` + renderSnapshotRows(snapshot.commodities) : ''}
+                                    ${snapshot.crypto ? `<tr><td colspan="4" class="table-group-divider"><strong>Cryptomonnaies</strong></td></tr>` + renderSnapshotRows(snapshot.crypto) : ''}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Section Analyse IA -->
                     <div class="card"><div class="card-body">
                         <h6><i class="fas fa-chart-line"></i> Résumé Exécutif</h6>
                         <p>${analysis.summary || 'N/A'}</p>
