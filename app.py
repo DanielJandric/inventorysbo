@@ -273,15 +273,16 @@ try:
 except Exception as e:
     logger.error(f"❌ Erreur initialisation Enhanced AI Report Manager: {e}")
 
-# Initialize Intelligent Scraper
+# Initialize Intelligent Scraper (DÉSACTIVÉ - Problème Playwright sur Render)
 intelligent_scraper_manager = None
-try:
-    intelligent_scraper_manager = IntelligentScraper()
-    # Initialiser le navigateur de manière synchrone
-    intelligent_scraper_manager.initialize_sync()
-    logger.info("✅ Scraper intelligent initialisé")
-except Exception as e:
-    logger.error(f"❌ Erreur initialisation Intelligent Scraper: {e}")
+# try:
+#     intelligent_scraper_manager = IntelligentScraper()
+#     # Initialiser le navigateur de manière synchrone
+#     intelligent_scraper_manager.initialize_sync()
+#     logger.info("✅ Scraper intelligent initialisé")
+# except Exception as e:
+#     logger.error(f"❌ Erreur initialisation Intelligent Scraper: {e}")
+logger.info("⚠️ Intelligent Scraper désactivé (Playwright non disponible sur Render)")
 
 # Initialize ScrapingBee Scraper
 scrapingbee_scraper_manager = None
