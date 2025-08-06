@@ -6510,7 +6510,7 @@ def trigger_background_worker():
         db = get_market_analysis_db()
         
         # Initialiser le scraper
-        await scraper.initialize()
+        scraper.initialize_sync()
         
         # Créer une tâche d'analyse
         prompt = "Résume moi parfaitement et d'une façon exhaustive la situation sur les marchés financiers aujourd'hui. Aussi, je veux un focus particulier sur l'IA. Inclus les indices majeurs, les tendances, les actualités importantes, et les développements technologiques."
