@@ -2473,6 +2473,11 @@ def settings():
     """Page des paramètres et configuration"""
     return render_template('settings.html')
 
+@app.route("/sold")
+def sold():
+    """Page des objets vendus"""
+    return render_template('sold.html')
+
 @app.route("/health")
 def health():
     """Health check"""

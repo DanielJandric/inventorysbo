@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BONVIN - Analytics</title>
+    <title>BONVIN - Objets Vendus</title>
     <link rel="apple-touch-icon" sizes="180x180" href="/static/Bonvin_180x180.png">
     <link rel="apple-touch-icon" sizes="152x152" href="/static/BONVIN_152X152 (1).PNG">
     <link rel="apple-touch-icon" sizes="120x120" href="/static/BONVIN_120X120.PNG">
@@ -19,8 +19,6 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
     <style>
         :root {
             --bg-color: #0A232A;
@@ -73,107 +71,6 @@
             border: 1px solid var(--glass-border);
             border-radius: 1.5rem;
         }
-        .glass-subtle {
-            background: rgba(10, 35, 45, 0.3);
-            backdrop-filter: blur(12px);
-            border: 1px solid var(--glass-border);
-            border-radius: 1.5rem;
-        }
-        
-        /* FILTRES GLASSMORPHIQUES PURS */
-        .main-filter-btn {
-            transition: all 0.3s ease;
-            padding: 0.75rem 1.5rem;
-            border-radius: 0.75rem;
-            font-weight: 500;
-            font-size: 0.875rem;
-            position: relative;
-            overflow: hidden;
-            backdrop-filter: blur(15px);
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-        }
-        .main-filter-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
-        }
-        .main-filter-btn.active {
-            transform: translateY(-3px);
-            box-shadow: 0 12px 35px rgba(0, 0, 0, 0.2);
-        }
-        
-        /* COULEURS TRANSPARENTES */
-        .filter-all { 
-            background: rgba(100, 116, 139, 0.15);
-            border: 1px solid rgba(100, 116, 139, 0.25);
-            color: #94a3b8;
-        }
-        .filter-available { 
-            background: rgba(22, 163, 74, 0.15);
-            border: 1px solid rgba(22, 163, 74, 0.25);
-            color: #4ade80;
-        }
-        .filter-for-sale { 
-            background: rgba(220, 38, 38, 0.15);
-            border: 1px solid rgba(220, 38, 38, 0.25);
-            color: #f87171;
-        }
-        .filter-sold { 
-            background: rgba(234, 88, 12, 0.15);
-            border: 1px solid rgba(234, 88, 12, 0.25);
-            color: #fb923c;
-        }
-        
-        /* HOVER EFFECTS */
-        .filter-all:hover { 
-            background: rgba(100, 116, 139, 0.25);
-            border-color: rgba(100, 116, 139, 0.4);
-        }
-        .filter-available:hover { 
-            background: rgba(22, 163, 74, 0.25);
-            border-color: rgba(22, 163, 74, 0.4);
-        }
-        .filter-for-sale:hover { 
-            background: rgba(220, 38, 38, 0.25);
-            border-color: rgba(220, 38, 38, 0.4);
-        }
-        .filter-sold:hover { 
-            background: rgba(234, 88, 12, 0.25);
-            border-color: rgba(234, 88, 12, 0.4);
-        }
-        
-        /* ACTIVE STATES */
-        .filter-all.active { 
-            background: rgba(100, 116, 139, 0.35);
-            border-color: rgba(100, 116, 139, 0.6);
-            box-shadow: 0 0 25px rgba(100, 116, 139, 0.3);
-        }
-        .filter-available.active { 
-            background: rgba(22, 163, 74, 0.35);
-            border-color: rgba(22, 163, 74, 0.6);
-            box-shadow: 0 0 25px rgba(22, 163, 74, 0.3);
-        }
-        .filter-for-sale.active { 
-            background: rgba(220, 38, 38, 0.35);
-            border-color: rgba(220, 38, 38, 0.6);
-            box-shadow: 0 0 25px rgba(220, 38, 38, 0.3);
-            animation: pulse-filter-active 2s infinite;
-        }
-        .filter-sold.active { 
-            background: rgba(234, 88, 12, 0.35);
-            border-color: rgba(234, 88, 12, 0.6);
-            box-shadow: 0 0 25px rgba(234, 88, 12, 0.3);
-        }
-        
-        @keyframes pulse-filter-active {
-            0%, 100% { 
-                background: rgba(220, 38, 38, 0.35);
-                box-shadow: 0 0 25px rgba(220, 38, 38, 0.3);
-            }
-            50% { 
-                background: rgba(220, 38, 38, 0.45);
-                box-shadow: 0 0 35px rgba(220, 38, 38, 0.5);
-            }
-        }
         
         /* CARTES */
         .floating-card {
@@ -201,8 +98,6 @@
         .stat-card:nth-child(2) { animation-delay: 0.5s; }
         .stat-card:nth-child(3) { animation-delay: 1s; }
         .stat-card:nth-child(4) { animation-delay: 1.5s; }
-        .stat-card:nth-child(5) { animation-delay: 2s; }
-        .stat-card:nth-child(6) { animation-delay: 2.5s; }
 
         @keyframes statFloat {
             0%, 100% { 
@@ -255,48 +150,6 @@
             line-height: 1.2; 
             color: var(--text-primary);
             transition: all 0.3s ease;
-        }
-        
-        /* CHART CONTAINER */
-        .chart-container {
-            position: relative;
-            height: 400px;
-            width: 100%;
-            max-width: 600px;
-            margin: 0 auto;
-        }
-        
-        /* CATEGORY SELECTOR */
-        .category-selector {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.5rem;
-            margin-bottom: 2rem;
-        }
-        
-        .category-chip {
-            padding: 0.5rem 1rem;
-            border-radius: 2rem;
-            font-size: 0.875rem;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            background: rgba(100, 116, 139, 0.15);
-            border: 1px solid rgba(100, 116, 139, 0.25);
-            color: #94a3b8;
-        }
-        
-        .category-chip:hover {
-            background: rgba(100, 116, 139, 0.25);
-            border-color: rgba(100, 116, 139, 0.4);
-            transform: translateY(-2px);
-        }
-        
-        .category-chip.selected {
-            background: rgba(0, 220, 255, 0.2);
-            border-color: rgba(0, 220, 255, 0.4);
-            color: #00e5ff;
-            box-shadow: 0 0 20px rgba(0, 220, 255, 0.3);
         }
         
         /* NAVIGATION */
@@ -385,6 +238,27 @@
             transform: scale(1.1);
             color: #00e5ff;
         }
+        
+        /* STYLES SPÉCIAUX POUR LES OBJETS VENDUS */
+        .sold-item-card {
+            background: rgba(234, 88, 12, 0.1);
+            border: 1px solid rgba(234, 88, 12, 0.2);
+        }
+        
+        .sold-item-card:hover {
+            background: rgba(234, 88, 12, 0.15);
+            border-color: rgba(234, 88, 12, 0.3);
+        }
+        
+        .sold-price {
+            color: #fb923c;
+            font-weight: 700;
+        }
+        
+        .sold-date {
+            color: #fbbf24;
+            font-size: 0.875rem;
+        }
     </style>
 </head>
 <body class="min-h-screen">
@@ -395,7 +269,7 @@
                 <img src="/static/1da6a1fb-f4c3-401c-aa60-63e9b63360b0.png" alt="BONVIN" class="w-16 h-16">
                 <div>
                     <h1 class="text-4xl font-bold text-cyan-300">BONVIN</h1>
-                    <p class="text-slate-400">Analytics & Insights</p>
+                    <p class="text-slate-400">Objets Vendus</p>
                 </div>
             </div>
             
@@ -416,13 +290,13 @@
                         </svg>
                         <span>Collection</span>
                     </a>
-                    <a href="/analytics" class="menu-item active">
+                    <a href="/analytics" class="menu-item">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
                         </svg>
                         <span>Analytics</span>
                     </a>
-                    <a href="/sold" class="menu-item">
+                    <a href="/sold" class="menu-item active">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
                         </svg>
@@ -463,12 +337,12 @@
             <div class="stat-card glass glowing-element">
                 <div class="stat-icon">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
                     </svg>
                 </div>
                 <div>
-                    <div class="stat-title">Total Items</div>
-                    <div class="stat-value" id="total-items">0</div>
+                    <div class="stat-title">Total Vendus</div>
+                    <div class="stat-value" id="total-sold">0</div>
                 </div>
             </div>
             
@@ -479,44 +353,8 @@
                     </svg>
                 </div>
                 <div>
-                    <div class="stat-title">Fortune Actuelle</div>
-                    <div class="stat-value" id="total-value">0 CHF</div>
-                </div>
-            </div>
-            
-            <div class="stat-card glass glowing-element">
-                <div class="stat-icon">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                    </svg>
-                </div>
-                <div>
-                    <div class="stat-title">Available</div>
-                    <div class="stat-value" id="available-items">0</div>
-                </div>
-            </div>
-            
-            <div class="stat-card glass glowing-element">
-                <div class="stat-icon">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path>
-                    </svg>
-                </div>
-                <div>
-                    <div class="stat-title">For Sale</div>
-                    <div class="stat-value" id="for-sale-items">0</div>
-                </div>
-            </div>
-            
-            <div class="stat-card glass glowing-element">
-                <div class="stat-icon">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                    </svg>
-                </div>
-                <div>
-                    <div class="stat-title">Sold</div>
-                    <div class="stat-value" id="sold-items">0</div>
+                    <div class="stat-title">Valeur Totale Vendue</div>
+                    <div class="stat-value" id="total-sold-value">0 CHF</div>
                 </div>
             </div>
             
@@ -527,61 +365,90 @@
                     </svg>
                 </div>
                 <div>
-                    <div class="stat-title">Categories</div>
-                    <div class="stat-value" id="total-categories">0</div>
-                </div>
-            </div>
-        </section>
-
-        <!-- Category Selector -->
-        <section class="glass-dark p-6 mb-8">
-            <h2 class="text-2xl font-bold mb-4 text-cyan-300">Sélection de Catégories</h2>
-            <p class="text-slate-400 mb-4">Sélectionnez une ou plusieurs catégories pour voir leur répartition par valeur dans le Treemap</p>
-            <div class="category-selector" id="category-selector">
-                <!-- Categories will be populated by JavaScript -->
-            </div>
-        </section>
-
-        <!-- Chart Section -->
-        <section class="glass-dark p-8 mb-8">
-            <div class="flex justify-between items-center mb-6">
-                <h2 class="text-2xl font-bold text-cyan-300">Répartition par Valeur - Treemap</h2>
-                <button onclick="generatePDF()" class="px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-semibold rounded-lg transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl">
-                    📄 Générer PDF
-                </button>
-            </div>
-            <div class="chart-container" style="min-height: 400px;">
-                <div id="categoryChart" style="width: 100%; height: 400px;"></div>
-            </div>
-            <div class="text-center mt-6">
-                <div class="text-3xl font-bold text-cyan-300" id="selected-percentage">100%</div>
-                <div class="text-slate-400">de la fortune actuelle de la collection</div>
-            </div>
-        </section>
-
-        <!-- Additional Analytics -->
-        <section class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <!-- Top Categories by Value -->
-            <div class="glass-dark p-6">
-                <h3 class="text-xl font-bold mb-4 text-cyan-300">Top Catégories par Valeur</h3>
-                <div id="top-categories" class="space-y-3">
-                    <!-- Will be populated by JavaScript -->
+                    <div class="stat-title">Plus-value Totale</div>
+                    <div class="stat-value" id="total-profit">0 CHF</div>
                 </div>
             </div>
             
-            <!-- Recent Activity -->
-            <div class="glass-dark p-6">
-                <h3 class="text-xl font-bold mb-4 text-cyan-300">Activité Récente</h3>
-                <div id="recent-activity" class="space-y-3">
-                    <!-- Will be populated by JavaScript -->
+            <div class="stat-card glass glowing-element">
+                <div class="stat-icon">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                    </svg>
+                </div>
+                <div>
+                    <div class="stat-title">Catégories Vendues</div>
+                    <div class="stat-value" id="sold-categories">0</div>
+                </div>
+            </div>
+            
+            <div class="stat-card glass glowing-element">
+                <div class="stat-icon">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                    </svg>
+                </div>
+                <div>
+                    <div class="stat-title">Dernière Vente</div>
+                    <div class="stat-value" id="last-sale-date">-</div>
+                </div>
+            </div>
+            
+            <div class="stat-card glass glowing-element">
+                <div class="stat-icon">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                </div>
+                <div>
+                    <div class="stat-title">Taux de Réussite</div>
+                    <div class="stat-value" id="success-rate">0%</div>
                 </div>
             </div>
         </section>
+
+        <!-- Recherche -->
+        <section class="glass-dark p-6 mb-8 glowing-element">
+            <div class="relative">
+                <input type="text" id="search-input" oninput="handleSearch()" placeholder="Rechercher dans les objets vendus..." class="w-full glass rounded-xl px-4 py-3 pl-12 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 transition-all">
+                <svg class="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                </svg>
+            </div>
+        </section>
+
+        <!-- Filtres par catégorie -->
+        <section class="glass-dark p-6 mb-8">
+            <h2 class="text-2xl font-bold mb-4 text-cyan-300">Filtres par Catégorie</h2>
+            <div id="category-filters" class="flex flex-wrap gap-3">
+                <!-- Les filtres seront générés par JavaScript -->
+            </div>
+        </section>
+
+        <!-- Vue des objets vendus -->
+        <section class="mb-8 flex justify-center gap-4">
+            <button id="view-btn-cards" onclick="setViewMode('cards')" class="view-btn glass px-4 py-2 rounded-lg text-sm font-medium transition-all hover:scale-105">
+                <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>
+                Cartes
+            </button>
+            <button id="view-btn-list" onclick="setViewMode('list')" class="view-btn glass px-4 py-2 rounded-lg text-sm font-medium transition-all hover:scale-105">
+                <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path></svg>
+                Liste
+            </button>
+        </section>
+
+        <!-- Conteneur des objets vendus -->
+        <section id="sold-items-container" class="mb-8">
+            <!-- Les objets vendus seront chargés ici -->
+        </section>
     </div>
 
-    <script src="/static/analytics.js"></script>
-    
     <script>
+        let soldItems = [];
+        let filteredItems = [];
+        let currentViewMode = 'cards';
+        let currentCategoryFilter = 'all';
+        
         // Fonction pour gérer le menu hamburger
         function toggleHamburgerMenu() {
             const dropdown = document.getElementById('hamburger-dropdown');
@@ -613,17 +480,249 @@
             }
         });
         
-        // Fermer le menu après avoir cliqué sur un lien
-        document.querySelectorAll('.menu-item').forEach(item => {
-            item.addEventListener('click', function() {
-                setTimeout(() => {
-                    const dropdown = document.getElementById('hamburger-dropdown');
-                    dropdown.classList.remove('is-open');
-                    dropdown.style.transform = 'scale(0.95)';
-                    dropdown.style.opacity = '0';
-                    dropdown.style.pointerEvents = 'none';
-                }, 100);
+        // Charger les objets vendus
+        async function loadSoldItems() {
+            try {
+                const response = await fetch('/api/items');
+                const items = await response.json();
+                soldItems = items.filter(item => item.status === 'Sold');
+                filteredItems = [...soldItems];
+                
+                updateStats();
+                updateCategoryFilters();
+                renderItems();
+            } catch (error) {
+                console.error('Erreur lors du chargement des objets vendus:', error);
+            }
+        }
+        
+        // Mettre à jour les statistiques
+        function updateStats() {
+            const totalSold = soldItems.length;
+            const totalSoldValue = soldItems.reduce((sum, item) => sum + (item.sold_price || 0), 0);
+            const totalProfit = soldItems.reduce((sum, item) => {
+                const acquisitionPrice = item.acquisition_price || 0;
+                const soldPrice = item.sold_price || 0;
+                return sum + (soldPrice - acquisitionPrice);
+            }, 0);
+            
+            const categories = new Set(soldItems.map(item => item.category));
+            const soldCategories = categories.size;
+            
+            const lastSaleDate = soldItems.length > 0 ? 
+                soldItems.sort((a, b) => new Date(b.last_action_date || 0) - new Date(a.last_action_date || 0))[0].last_action_date : '-';
+            
+            const successRate = soldItems.length > 0 ? '100%' : '0%';
+            
+            document.getElementById('total-sold').textContent = totalSold;
+            document.getElementById('total-sold-value').textContent = `${totalSoldValue.toLocaleString('fr-CH')} CHF`;
+            document.getElementById('total-profit').textContent = `${totalProfit.toLocaleString('fr-CH')} CHF`;
+            document.getElementById('sold-categories').textContent = soldCategories;
+            document.getElementById('last-sale-date').textContent = lastSaleDate !== '-' ? new Date(lastSaleDate).toLocaleDateString('fr-CH') : '-';
+            document.getElementById('success-rate').textContent = successRate;
+        }
+        
+        // Mettre à jour les filtres de catégorie
+        function updateCategoryFilters() {
+            const categories = [...new Set(soldItems.map(item => item.category))];
+            const filterContainer = document.getElementById('category-filters');
+            
+            filterContainer.innerHTML = `
+                <button onclick="filterByCategory('all')" class="category-filter-btn glass px-4 py-2 rounded-lg text-sm font-medium transition-all hover:scale-105 active" data-category="all">
+                    Toutes (<span>${soldItems.length}</span>)
+                </button>
+            `;
+            
+            categories.forEach(category => {
+                const count = soldItems.filter(item => item.category === category).length;
+                filterContainer.innerHTML += `
+                    <button onclick="filterByCategory('${category}')" class="category-filter-btn glass px-4 py-2 rounded-lg text-sm font-medium transition-all hover:scale-105" data-category="${category}">
+                        ${category} (<span>${count}</span>)
+                    </button>
+                `;
             });
+        }
+        
+        // Filtrer par catégorie
+        function filterByCategory(category) {
+            currentCategoryFilter = category;
+            
+            // Mettre à jour les boutons actifs
+            document.querySelectorAll('.category-filter-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            if (category === 'all') {
+                filteredItems = [...soldItems];
+            } else {
+                filteredItems = soldItems.filter(item => item.category === category);
+            }
+            
+            renderItems();
+        }
+        
+        // Recherche
+        function handleSearch() {
+            const searchTerm = document.getElementById('search-input').value.toLowerCase();
+            
+            if (currentCategoryFilter === 'all') {
+                filteredItems = soldItems.filter(item => 
+                    item.name.toLowerCase().includes(searchTerm) ||
+                    item.category.toLowerCase().includes(searchTerm) ||
+                    (item.description && item.description.toLowerCase().includes(searchTerm))
+                );
+            } else {
+                filteredItems = soldItems.filter(item => 
+                    item.category === currentCategoryFilter &&
+                    (item.name.toLowerCase().includes(searchTerm) ||
+                     item.category.toLowerCase().includes(searchTerm) ||
+                     (item.description && item.description.toLowerCase().includes(searchTerm)))
+                );
+            }
+            
+            renderItems();
+        }
+        
+        // Définir le mode d'affichage
+        function setViewMode(mode) {
+            currentViewMode = mode;
+            
+            // Mettre à jour les boutons
+            document.querySelectorAll('.view-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.getElementById(`view-btn-${mode}`).classList.add('active');
+            
+            renderItems();
+        }
+        
+        // Rendre les objets
+        function renderItems() {
+            const container = document.getElementById('sold-items-container');
+            
+            if (currentViewMode === 'cards') {
+                container.innerHTML = `
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        ${filteredItems.map(item => createSoldItemCard(item)).join('')}
+                    </div>
+                `;
+            } else {
+                container.innerHTML = `
+                    <div class="glass-dark p-6">
+                        <div class="overflow-x-auto">
+                            <table class="w-full">
+                                <thead>
+                                    <tr class="border-b border-cyan-900/20">
+                                        <th class="text-left py-3 px-4">Nom</th>
+                                        <th class="text-left py-3 px-4">Catégorie</th>
+                                        <th class="text-left py-3 px-4">Prix de Vente</th>
+                                        <th class="text-left py-3 px-4">Prix d'Achat</th>
+                                        <th class="text-left py-3 px-4">Plus-value</th>
+                                        <th class="text-left py-3 px-4">Date de Vente</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${filteredItems.map(item => createSoldItemRow(item)).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            // Animation des cartes
+            setTimeout(() => {
+                document.querySelectorAll('.floating-card').forEach((card, index) => {
+                    setTimeout(() => {
+                        card.classList.add('is-visible');
+                    }, index * 100);
+                });
+            }, 100);
+        }
+        
+        // Créer une carte d'objet vendu
+        function createSoldItemCard(item) {
+            const soldPrice = item.sold_price || 0;
+            const acquisitionPrice = item.acquisition_price || 0;
+            const profit = soldPrice - acquisitionPrice;
+            const profitPercent = acquisitionPrice > 0 ? (profit / acquisitionPrice) * 100 : 0;
+            
+            return `
+                <div class="floating-card sold-item-card glass glowing-element p-6">
+                    <div class="flex justify-between items-start mb-4">
+                        <h3 class="text-xl font-bold text-cyan-300">${item.name}</h3>
+                        <span class="px-3 py-1 bg-orange-500/20 text-orange-300 rounded-full text-sm font-medium">Vendu</span>
+                    </div>
+                    
+                    <div class="space-y-3 mb-4">
+                        <div class="flex justify-between">
+                            <span class="text-slate-400">Catégorie:</span>
+                            <span class="font-medium">${item.category}</span>
+                        </div>
+                        
+                        <div class="flex justify-between">
+                            <span class="text-slate-400">Prix de vente:</span>
+                            <span class="sold-price font-bold">${soldPrice.toLocaleString('fr-CH')} CHF</span>
+                        </div>
+                        
+                        <div class="flex justify-between">
+                            <span class="text-slate-400">Prix d'achat:</span>
+                            <span class="font-medium">${acquisitionPrice.toLocaleString('fr-CH')} CHF</span>
+                        </div>
+                        
+                        <div class="flex justify-between">
+                            <span class="text-slate-400">Plus-value:</span>
+                            <span class="font-bold ${profit >= 0 ? 'text-green-400' : 'text-red-400'}">
+                                ${profit >= 0 ? '+' : ''}${profit.toLocaleString('fr-CH')} CHF (${profitPercent.toFixed(1)}%)
+                            </span>
+                        </div>
+                        
+                        ${item.last_action_date ? `
+                        <div class="flex justify-between">
+                            <span class="text-slate-400">Date de vente:</span>
+                            <span class="sold-date">${new Date(item.last_action_date).toLocaleDateString('fr-CH')}</span>
+                        </div>
+                        ` : ''}
+                    </div>
+                    
+                    ${item.description ? `
+                    <div class="mt-4 p-3 bg-slate-800/30 rounded-lg">
+                        <p class="text-sm text-slate-300">${item.description}</p>
+                    </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+        
+        // Créer une ligne d'objet vendu pour la vue liste
+        function createSoldItemRow(item) {
+            const soldPrice = item.sold_price || 0;
+            const acquisitionPrice = item.acquisition_price || 0;
+            const profit = soldPrice - acquisitionPrice;
+            
+            return `
+                <tr class="border-b border-cyan-900/20 hover:bg-cyan-900/10 transition-colors">
+                    <td class="py-3 px-4 font-medium">${item.name}</td>
+                    <td class="py-3 px-4">${item.category}</td>
+                    <td class="py-3 px-4 sold-price font-bold">${soldPrice.toLocaleString('fr-CH')} CHF</td>
+                    <td class="py-3 px-4">${acquisitionPrice.toLocaleString('fr-CH')} CHF</td>
+                    <td class="py-3 px-4 font-bold ${profit >= 0 ? 'text-green-400' : 'text-red-400'}">
+                        ${profit >= 0 ? '+' : ''}${profit.toLocaleString('fr-CH')} CHF
+                    </td>
+                    <td class="py-3 px-4 sold-date">${item.last_action_date ? new Date(item.last_action_date).toLocaleDateString('fr-CH') : '-'}</td>
+                </tr>
+            `;
+        }
+        
+        // Générer PDF
+        function generatePDF() {
+            window.open('/api/portfolio/pdf', '_blank');
+        }
+        
+        // Initialisation
+        document.addEventListener('DOMContentLoaded', function() {
+            loadSoldItems();
         });
     </script>
 </body>
