@@ -186,7 +186,7 @@ class ScrapingBeeScraper:
                     }
                 ]
             
-            logger.info(f"🔍 Recherche sur {len(sites_financiers)} sites financiers")
+            logger.info(f"🔍 Recherche sur {min(len(sites_financiers), num_results)} sites financiers")
             
             # Retourner les sites financiers comme résultats de recherche
             return sites_financiers[:num_results]
