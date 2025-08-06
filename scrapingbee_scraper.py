@@ -364,46 +364,53 @@ class ScrapingBeeScraper:
             logger.debug(f"Contexte complet pour OpenAI: {context}")
 
             # Prompt système enrichi
-            system_prompt = """Tu es un expert analyste financier et boursier de haut niveau. 
-            Tu dois analyser les informations fournies et créer un rapport détaillé et exhaustif.
+            system_prompt = """Tu es un expert analyste financier de classe mondiale. Ta mission est de produire un rapport de marché EXHAUSTIF, DÉTAILLÉ et HAUTEMENT STRUCTURÉ à partir des données brutes fournies. Ne sois pas bref. La profondeur et la complétude sont tes seules priorités.
+
+STRUCTURE OBLIGATOIRE DE LA RÉPONSE JSON :
+{
+    "summary": "Un résumé exécutif substantiel et approfondi. Analyse en profondeur les implications des données. Minimum 500 mots.",
+    "key_points": [
+        "Point clé détaillé 1", 
+        "Point clé détaillé 2",
+        "...",
+        "Point clé détaillé 10"
+    ],
+    "structured_data": {
+        "market_sentiment": "Analyse du sentiment de marché (haussier, baissier, neutre) avec justification.",
+        "key_trends": ["Tendance majeure 1 identifiée", "Tendance majeure 2", "..."],
+        "major_events": ["Événement majeur 1 et son impact", "Événement majeur 2", "..."],
+        "sector_analysis": "Analyse détaillée des secteurs mentionnés, en particulier l'IA."
+    },
+    "insights": [
+        "Insight actionnable 1 basé sur une corrélation de données", 
+        "Insight actionnable 2", 
+        "..."
+    ],
+    "risks": [
+        "Risque potentiel 1 avec explication", 
+        "Risque potentiel 2", 
+        "..."
+    ],
+    "opportunities": [
+        "Opportunité d'investissement 1 avec justification", 
+        "Opportunité d'investissement 2", 
+        "..."
+    ],
+    "sources_analysis": "Une brève critique de la fiabilité et de la convergence des sources fournies.",
+    "confidence_score": 0.95,
+    "sources": [{"title": "Titre de la source 1", "url": "URL de la source 1"}]
+}"""
             
-            IMPORTANT: Crée un rapport COMPLET et DÉTAILLÉ, pas un résumé succinct.
-            
-            Structure ta réponse avec:
-            1. Un résumé exécutif COMPLET (minimum 300 mots)
-            2. Des points clés DÉTAILLÉS (minimum 8-10 points)
-            3. Des données structurées RICHES (prix, tendances, volumes, actualités, analyses)
-            4. Une analyse approfondie des sources
-            5. Des recommandations et insights
-            
-            Retourne ta réponse en JSON avec la structure suivante:
-            {
-                "summary": "résumé détaillé et complet (minimum 300 mots)",
-                "key_points": ["point détaillé 1", "point détaillé 2", ... (minimum 8 points)],
-                "structured_data": {
-                    "prix": "analyse des prix",
-                    "tendance": "analyse des tendances",
-                    "volumes": "analyse des volumes",
-                    "actualités": ["actualité 1", "actualité 2", ...],
-                    "analyses": ["analyse 1", "analyse 2", ...],
-                    "recommandations": ["recommandation 1", "recommandation 2", ...]
-                },
-                "sources": [{"title": "", "url": ""}],
-                "confidence_score": 0.85,
-                "insights": ["insight 1", "insight 2", ...],
-                "risks": ["risque 1", "risque 2", ...],
-                "opportunities": ["opportunité 1", "opportunité 2", ...]
-            }"""
-            
-            logger.info("🤖 Appel à l'API OpenAI (gpt-4o-mini) en cours...")
+            logger.info("🤖 Appel à l'API OpenAI (gpt-4o) en cours pour une analyse exhaustive...")
             response = client.chat.completions.create(
-                model="gpt-4o-mini",
+                model="gpt-4o",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"Demande: {prompt}\n\nDonnées collectées:\n{context}"}
                 ],
                 response_format={"type": "json_object"},
-                temperature=0.3
+                temperature=0.2,
+                max_tokens=4000
             )
             
             return json.loads(response.choices[0].message.content)
