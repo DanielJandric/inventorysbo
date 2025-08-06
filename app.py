@@ -6377,5 +6377,73 @@ def scrapingbee_scraper_execute(task_id):
         logger.error(f"Erreur exécution tâche ScrapingBee scraping: {e}")
         return jsonify({"error": str(e)}), 500
 
+@app.route("/api/scrapingbee/market-update", methods=["POST"])
+def scrapingbee_market_update():
+    """Génère une mise à jour exhaustive du marché avec ScrapingBee"""
+    try:
+        if not scrapingbee_scraper_manager:
+            return jsonify({
+                "success": False,
+                "error": "ScrapingBee scraper non disponible"
+            }), 500
+        
+        # Prompt exhaustif pour l'analyse des marchés
+        prompt = "Résume moi parfaitement et d'une façon exhaustive la situation sur les marchés financiers aujourd'hui. Aussi, je veux un focus particulier sur l'IA. Inclus les indices majeurs, les tendances, les actualités importantes, et les développements technologiques."
+        
+        # Créer et exécuter la tâche de scraping
+        import asyncio
+        task_id = asyncio.run(scrapingbee_scraper_manager.create_scraping_task(prompt, 5))
+        
+        # Exécuter immédiatement la tâche
+        result = asyncio.run(scrapingbee_scraper_manager.execute_scraping_task(task_id))
+        
+        if "error" in result:
+            return jsonify({
+                "success": False,
+                "error": result["error"]
+            }), 500
+        
+        # Enrichir le résultat avec des métadonnées
+        enriched_result = {
+            "success": True,
+            "task_id": task_id,
+            "timestamp": datetime.now().isoformat(),
+            "source": "ScrapingBee Scraper",
+            "analysis_type": "Exhaustive Market Analysis",
+            "focus_areas": ["Marchés financiers", "IA", "Tendances", "Actualités"],
+            "data": result
+        }
+        
+        # Optionnel : Envoyer par email si configuré
+        try:
+            if gmail_manager:
+                email_content = f"""
+                📊 Mise à jour exhaustive des marchés financiers
+                
+                {result.get('summary', 'Aucun résumé disponible')}
+                
+                Points clés :
+                {chr(10).join([f"• {point}" for point in result.get('key_points', [])])}
+                
+                Données structurées :
+                {json.dumps(result.get('structured_data', {}), indent=2, ensure_ascii=False)}
+                
+                Sources : {len(result.get('sources', []))} sites analysés
+                Score de confiance : {result.get('confidence_score', 0)}
+                """
+                
+                gmail_manager.send_notification_async(
+                    subject="📊 Mise à jour exhaustive des marchés financiers",
+                    content=email_content
+                )
+        except Exception as email_error:
+            logger.warning(f"⚠️ Erreur envoi email: {email_error}")
+        
+        return jsonify(enriched_result)
+        
+    except Exception as e:
+        logger.error(f"Erreur mise à jour marché ScrapingBee: {e}")
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == "__main__":
     app.run(debug=True)
