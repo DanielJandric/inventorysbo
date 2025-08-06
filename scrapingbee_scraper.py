@@ -308,7 +308,7 @@ class ScrapingBeeScraper:
                         # Extraire le contenu du body
                         cleaned_content = self._extract_text_from_html(html_content)
                         
-                                                 return cleaned_content[:8000]  # Limite de caractères augmentée
+                        return cleaned_content[:8000]  # Limite de caractères augmentée
                     else:
                         logger.error(f"❌ Erreur ScrapingBee scraping: {response.status}")
                         return None
