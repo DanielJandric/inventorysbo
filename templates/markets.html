@@ -247,8 +247,10 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // ScrapingBee Market Update
-        document.getElementById('generateMarketUpdate').addEventListener('click', async function() {
+        // Attendre que le DOM soit chargé
+        document.addEventListener('DOMContentLoaded', function() {
+            // ScrapingBee Market Update
+            document.getElementById('generateMarketUpdate').addEventListener('click', async function() {
             const loading = document.getElementById('scrapingbeeLoading');
             const result = document.getElementById('scrapingbeeResult');
             const content = document.getElementById('scrapingbeeContent');
@@ -532,8 +534,7 @@
             }
         }
 
-        // Initialize
-        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize
             checkScrapingBeeStatus();
             checkAIStatus();
             loadMarketUpdates();
@@ -542,6 +543,7 @@
             // Refresh buttons
             document.getElementById('refreshUpdates').addEventListener('click', loadMarketUpdates);
             document.getElementById('checkServices').addEventListener('click', checkServiceStatus);
+        });
         });
     </script>
 </body>
