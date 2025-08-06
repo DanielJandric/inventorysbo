@@ -90,6 +90,17 @@ logger = logging.getLogger(__name__)
 # Google CSE comme source principale pour les données boursières
 google_cse_stock_manager = GoogleCSEStockDataManager()
 
+# Instance globale du scraper pour éviter les problèmes de gestion des tâches
+_global_scraper = None
+
+def get_global_scraper():
+    """Retourne l'instance globale du scraper"""
+    global _global_scraper
+    if _global_scraper is None:
+        from scrapingbee_scraper import get_scrapingbee_scraper
+        _global_scraper = get_scrapingbee_scraper()
+    return _global_scraper
+
 
 
 # Cache pour les taux de change avec expiration
@@ -6489,18 +6500,17 @@ def trigger_background_worker():
     try:
         logger.info("🔄 Déclenchement manuel du Background Worker")
         
-        # Importer et utiliser le scraper directement
-        from scrapingbee_scraper import get_scrapingbee_scraper
+        # Importer et utiliser le scraper global
         from market_analysis_db import get_market_analysis_db, MarketAnalysis
         import asyncio
         import time
         
-        # Initialiser le scraper et la base de données
-        scraper = get_scrapingbee_scraper()
+        # Utiliser l'instance globale du scraper
+        scraper = get_global_scraper()
         db = get_market_analysis_db()
         
         # Initialiser le scraper
-        scraper.initialize_sync()
+        await scraper.initialize()
         
         # Créer une tâche d'analyse
         prompt = "Résume moi parfaitement et d'une façon exhaustive la situation sur les marchés financiers aujourd'hui. Aussi, je veux un focus particulier sur l'IA. Inclus les indices majeurs, les tendances, les actualités importantes, et les développements technologiques."
@@ -6572,12 +6582,16 @@ def trigger_background_worker():
         # Démarrer l'analyse en arrière-plan
         import threading
         def run_async():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
             try:
-                loop.run_until_complete(run_analysis())
-            finally:
-                loop.close()
+                # Créer une nouvelle boucle d'événements pour le thread
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    loop.run_until_complete(run_analysis())
+                finally:
+                    loop.close()
+            except Exception as e:
+                logger.error(f"❌ Erreur dans le thread d'analyse: {e}")
         
         thread = threading.Thread(target=run_async)
         thread.daemon = True
