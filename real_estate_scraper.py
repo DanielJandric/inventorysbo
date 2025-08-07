@@ -56,7 +56,7 @@ class RealEstateScraper:
         }
         
         # J'utilise directement la méthode interne de ScrapingBee pour plus de contrôle.
-        html_content = await self.scraper._send_scrapingbee_request(url, params)
+        html_content = await self.scraper._scrape_with_params(url, params)
         if not html_content:
             logger.warning("Le scraping de la page de recherche n'a retourné aucun contenu.")
             return []

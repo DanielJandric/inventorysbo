@@ -337,6 +337,28 @@ class ScrapingBeeScraper:
         
         return text.strip()[:8000]
     
+    async def _scrape_with_params(self, url: str, params: Dict) -> Optional[str]:
+        """Scrape une page avec des paramètres ScrapingBee spécifiques."""
+        try:
+            # Les paramètres de base sont fusionnés avec les paramètres spécifiques
+            base_params = {
+                'api_key': self.api_key,
+                'url': url,
+            }
+            final_params = {**base_params, **params}
+
+            async with aiohttp.ClientSession() as session:
+                async with session.get(self.base_url, params=final_params) as response:
+                    if response.status == 200:
+                        return await response.text()
+                    else:
+                        logger.error(f"❌ Erreur ScrapingBee avec params: {response.status}")
+                        return None
+        except Exception as e:
+            logger.error(f"❌ Erreur scraping page avec params {url}: {e}")
+            return None
+
+    
     def _clean_content(self, content: str) -> str:
         """Nettoie le contenu extrait"""
         if not content:
