@@ -154,23 +154,27 @@ class ImmoScout24Scraper:
         from openai import OpenAI
         client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
         
-        prompt = f\"\"\"
-        Analyse le code HTML d'une annonce ImmoScout24. Extrait les informations suivantes en JSON:
-        - is_yield_property: booléen, `true` si c'est un "immeuble de rendement", "locatif", ou "maison plurifamiliale".
-        - image_url: L'URL de l'image principale.
-        - description_summary: Résumé de la description.
-        - rental_income_yearly: Revenu locatif annuel (nombre entier).
-        - number_of_apartments: Nombre d'appartements (nombre entier).
+        prompt_template = """
+Analyse le code HTML d'une annonce ImmoScout24. Extrait les informations suivantes en JSON:
+- is_yield_property: booléen, `true` si c'est un "immeuble de rendement", "locatif", ou "maison plurifamiliale".
+- image_url: L'URL de l'image principale.
+- description_summary: Résumé de la description.
+- rental_income_yearly: Revenu locatif annuel (nombre entier).
+- number_of_apartments: Nombre d'appartements (nombre entier).
+
+HTML:
+{html_data}
+"""
+        prompt = prompt_template.format(html_data=html_content[:15000])
         
-        HTML:
-        {html_content[:15000]}
-        \"\"\"
         try:
             response = client.chat.completions.create(
                 model="gpt-4o",
                 messages=[{"role": "user", "content": prompt}],
                 response_format={"type": "json_object"}
             )
+            # Ajout d'un import json manquant
+            import json
             return json.loads(response.choices[0].message.content)
         except Exception as e:
             logger.error(f"Erreur d'extraction IA pour {url}: {e}")
