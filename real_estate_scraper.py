@@ -53,13 +53,26 @@ class ImmoScout24Scraper:
         url = f"{self.base_url}?pn={page_num}"
         logger.info(f"Scraping de la page de résultats {page_num}: {url}")
 
+        
+        import json
+        js_instructions = {
+            "instructions": [
+                {"wait": 2000},
+                {"click": "#onetrust-accept-btn-handler", "optional": True},
+                {"wait": 1000},
+                {"wait_for": 'article[data-test="result-item"]'},
+                {"evaluate": "window.scrollTo(0, document.body.scrollHeight);"},
+                {"wait": 2000}
+            ]
+        }
+
         params = {
             'render_js': 'true',
             'premium_proxy': 'true',
             'country_code': 'ch',
             'wait': '5000',
             'wait_for': 'article[data-test="result-item"]',
-            'js_scenario': '{"instructions":[{"wait":2000},{"click":"#onetrust-accept-btn-handler","optional":true},{"wait":1000},{"wait_for":"article[data-test=\\"result-item\\"]"},{"scroll":"bottom"},{"wait":2000}]}'
+            'js_scenario': json.dumps(js_instructions)
         }
         return await self._send_scrapingbee_request(url, params)
 
