@@ -117,6 +117,20 @@ class RealEstateScraper:
             logger.warning(f"Impossible d'extraire les données de {url} via l'IA.")
             return
 
+        # Étape de validation et filtrage
+        is_yield_property = listing_data.get('is_yield_property', False)
+        price = listing_data.get('price')
+
+        if not is_yield_property:
+            logger.info(f"Annonce {url} ignorée : n'est pas un immeuble de rendement.")
+            return
+        
+        if price is None or price < 2000000:
+            logger.info(f"Annonce {url} ignorée : prix ({price} CHF) inférieur à 2'000'000 CHF.")
+            return
+
+        logger.info(f"✅ Annonce validée : {listing_data.get('title')} à {price} CHF.")
+
         # Créer l'objet et le sauvegarder
         listing = RealEstateListing(
             source_url=url,
@@ -133,6 +147,7 @@ class RealEstateScraper:
         prompt = f"""
         Analyse le code HTML suivant d'une annonce immobilière suisse pour un immeuble de rendement.
         Extrait les informations suivantes et retourne-les dans un format JSON.
+        - is_yield_property: Un booléen (`true` ou `false`). Mettre `true` si l'annonce est clairement un "immeuble de rendement", "immeuble locatif", ou "maison plurifamiliale". Mettre `false` s'il s'agit d'une simple maison ou d'un seul appartement.
         - title: Le titre principal de l'annonce.
         - location: La localité (ville ou village).
         - price: Le prix de vente en CHF (nombre entier, sans séparateurs). Si non trouvé, laisse null.
