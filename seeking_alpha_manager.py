@@ -95,6 +95,22 @@ def get_market_summary(region: str = "US"):
         print(f"An error occurred: {e}")
         return None
 
+def get_price_chart(id: str, interval: str = "d1"):
+    """Get price chart/ticks for an instrument to draw sparklines."""
+    url = f"https://{RAPIDAPI_HOST}/market/get-price-chart"
+    headers = {
+        "x-rapidapi-host": RAPIDAPI_HOST,
+        "x-rapidapi-key": RAPIDAPI_KEY
+    }
+    params = {"id": id, "interval": interval}
+    try:
+        response = requests.get(url, headers=headers, params=params)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        print(f"An error occurred: {e}")
+        return None
+
 
 
 

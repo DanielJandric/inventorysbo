@@ -54,6 +54,11 @@
         
         <div class="section">
             <h2>Market Movers</h2>
+            <div style="margin:6px 0">
+                <label style="margin-right:8px">Watchlist (comma-separated ids, e.g. AAPL:US,MSFT:US)</label>
+                <input id="watchlistInput" placeholder="AAPL:US,MSFT:US" style="padding:8px; width:60%" />
+                <button id="watchlistBtn" class="btn">Load Watchlist</button>
+            </div>
             <select id="regionSelect">
                 <option value="US">US</option>
                 <option value="EU">EU</option>
@@ -123,6 +128,7 @@
                                 <th>Change</th>
                                 <th>% Change</th>
                                 <th>Price</th>
+                                <th>7d</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -137,10 +143,12 @@
                             <td>${mover.change}</td>
                             <td>${mover.changesPercentage}</td>
                             <td>${mover.price}</td>
+                            <td><canvas width="60" height="18" data-id="${mover.ticker || mover.symbol}:US" class="spark"></canvas></td>
                         `;
                         tbody.appendChild(row);
                     });
                     moversResponse.appendChild(table);
+                    drawSparklines();
                 } else {
                     moversResponse.textContent = 'No data available.';
                 }
@@ -150,6 +158,71 @@
                 document.getElementById('moversResponse').textContent = 'An error occurred.';
             });
         });
+
+        document.getElementById('watchlistBtn').addEventListener('click', () => {
+            const input = (document.getElementById('watchlistInput').value || '').trim();
+            const list = input ? input.split(',').map(s => s.trim()) : [];
+            if (!list.length) return;
+            const container = document.getElementById('moversResponse');
+            container.innerHTML = '';
+            const table = document.createElement('table');
+            table.innerHTML = `
+                <thead>
+                    <tr>
+                        <th>Id</th>
+                        <th>7d</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            `;
+            const tbody = table.querySelector('tbody');
+            list.forEach(id => {
+                const row = document.createElement('tr');
+                row.innerHTML = `<td>${id}</td><td><canvas width="60" height="18" data-id="${id}" class="spark"></canvas></td>`;
+                tbody.appendChild(row);
+            });
+            container.appendChild(table);
+            drawSparklines();
+        });
+
+        function drawSparklines() {
+            document.querySelectorAll('canvas.spark').forEach(canvas => {
+                const id = canvas.getAttribute('data-id');
+                if (!id) return;
+                fetch(`/api/markets/seeking-alpha/price-chart?id=${encodeURIComponent(id)}&interval=d1`)
+                  .then(r => r.json())
+                  .then(chart => {
+                    try {
+                        const res = chart.result || chart.data || chart;
+                        const key = Object.keys(res || {})[0];
+                        const ticks = key ? (res[key].ticks || []) : [];
+                        const closes = ticks.map(t => t.close).filter(x => typeof x === 'number');
+                        renderSpark(canvas, closes.slice(-20));
+                    } catch {
+                        // ignore
+                    }
+                  }).catch(() => {});
+            });
+        }
+
+        function renderSpark(canvas, data) {
+            if (!data || !data.length) return;
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width, h = canvas.height;
+            ctx.clearRect(0,0,w,h);
+            const min = Math.min(...data), max = Math.max(...data);
+            const scaleX = w / (data.length - 1);
+            const scaleY = max === min ? 1 : h / (max - min);
+            ctx.strokeStyle = '#0ea5e9';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            data.forEach((v, i) => {
+                const x = i * scaleX;
+                const y = h - (v - min) * scaleY;
+                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            });
+            ctx.stroke();
+        }
 
         document.getElementById('statsBtn').addEventListener('click', () => {
             const symbol = document.getElementById('symbolInput').value;

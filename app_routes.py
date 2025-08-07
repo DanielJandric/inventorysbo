@@ -1,5 +1,12 @@
 from flask import Blueprint, jsonify, render_template, request
-from seeking_alpha_manager import logout as logout_seeking_alpha, get_movers as get_movers_seeking_alpha, get_stock_statistics as get_stock_statistics_seeking_alpha, get_news as get_news_seeking_alpha, get_market_summary as get_market_summary_seeking_alpha
+from seeking_alpha_manager import (
+    logout as logout_seeking_alpha,
+    get_movers as get_movers_seeking_alpha,
+    get_stock_statistics as get_stock_statistics_seeking_alpha,
+    get_news as get_news_seeking_alpha,
+    get_market_summary as get_market_summary_seeking_alpha,
+    get_price_chart as get_price_chart_seeking_alpha,
+)
 
 seeking_alpha_blueprint = Blueprint('seeking_alpha', __name__)
 
@@ -52,4 +59,16 @@ def seeking_alpha_market_summary():
     if response:
         return jsonify(response)
     return jsonify({"status": "error", "message": "Failed to get market summary from Seeking Alpha"}), 500
+
+@seeking_alpha_blueprint.route("/api/markets/seeking-alpha/price-chart", methods=["GET"])
+def seeking_alpha_price_chart():
+    """Get price chart to render sparklines."""
+    instrument_id = request.args.get("id")
+    interval = request.args.get("interval", "d1")
+    if not instrument_id:
+        return jsonify({"status": "error", "message": "id is required (e.g., AAPL:US)"}), 400
+    response = get_price_chart_seeking_alpha(instrument_id, interval)
+    if response:
+        return jsonify(response)
+    return jsonify({"status": "error", "message": "Failed to get price chart from Seeking Alpha"}), 500
 
