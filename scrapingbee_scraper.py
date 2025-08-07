@@ -352,7 +352,11 @@ class ScrapingBeeScraper:
                     if response.status == 200:
                         return await response.text()
                     else:
+                        response_text = await response.text()
                         logger.error(f"❌ Erreur ScrapingBee avec params: {response.status}")
+                        logger.error(f"URL: {url}")
+                        logger.error(f"Params: {params}")
+                        logger.error(f"Réponse de ScrapingBee: {response_text}")
                         return None
         except Exception as e:
             logger.error(f"❌ Erreur scraping page avec params {url}: {e}")

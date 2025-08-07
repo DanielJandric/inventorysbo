@@ -49,9 +49,10 @@ class RealEstateScraper:
         logger.info(f"Scraping de la page de recherche: {url}")
         # On demande à ScrapingBee d'attendre qu'un lien d'annonce soit présent.
         # Les liens d'annonce sur ImmoScout24 sont dans des balises <a> avec un attribut data-testid="result-list-item-link"
+        # On remplace le 'wait_for' par un 'wait' simple pour plus de robustesse.
         params = {
             'render_js': 'true',
-            'wait_for': '[data-testid="result-list-item-link"]'
+            'wait': '5000' # Attendre 5 secondes
         }
         
         # J'utilise directement la méthode interne de ScrapingBee pour plus de contrôle.
