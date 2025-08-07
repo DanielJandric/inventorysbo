@@ -54,26 +54,19 @@ class ImmoScout24Scraper:
         logger.info(f"Scraping de la page de résultats {page_num}: {url}")
 
         
-        import json
-        js_instructions = {
-            "instructions": [
-                {"wait": 2000},
-                # Clic optionnel sur le bouton des cookies via une évaluation JS robuste
-                {"evaluate": "document.querySelector('#onetrust-accept-btn-handler') && document.querySelector('#onetrust-accept-btn-handler').click()"},
-                {"wait": 1000},
-                {"wait_for": 'article[data-test="result-item"]'},
-                {"evaluate": "window.scrollTo(0, document.body.scrollHeight);"},
-                {"wait": 2000}
-            ]
-        }
-
         params = {
             'render_js': 'true',
             'premium_proxy': 'true',
             'country_code': 'ch',
-            'wait': '5000',
-            'wait_for': 'article[data-test="result-item"]',
-            'js_scenario': json.dumps(js_instructions)
+            'block_resources': 'true', # Bloquer CSS/images/polices pour accélérer
+            'js_scenario': json.dumps({
+                "instructions": [
+                    # Clic optionnel sur le bouton des cookies
+                    {"evaluate": "document.querySelector('#onetrust-accept-btn-handler') && document.querySelector('#onetrust-accept-btn-handler').click()"},
+                    # Attendre simplement que l'élément clé soit là.
+                    {"wait_for": 'article[data-test="result-item"]'}
+                ]
+            })
         }
         return await self._send_scrapingbee_request(url, params)
 
