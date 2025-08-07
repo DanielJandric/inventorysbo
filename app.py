@@ -2913,63 +2913,46 @@ def get_exchange_rate_route(from_currency: str, to_currency: str = 'CHF'):
 
 @app.route("/api/stock-price/<symbol>")
 def get_stock_price(symbol):
-    """API pour les prix d'actions - Google CSE comme source principale"""
+    """API prix d'action: utilise StockAPIManager (AV -> EODHD -> Finnhub -> yfinance). Pas de Google CSE pour éviter 429."""
     try:
-        force_refresh = request.args.get('refresh', 'false').lower() == 'true'
+        # Supporter deux flags: refresh=true ou force_refresh=true
+        force_refresh = (
+            request.args.get('force_refresh', 'false').lower() == 'true'
+            or request.args.get('refresh', 'false').lower() == 'true'
+        )
+
         # Récupérer l'item correspondant au symbole
         items = AdvancedDataManager.fetch_all_items()
         item = next((i for i in items if i.stock_symbol == symbol), None)
-        
-        # Utiliser Google CSE comme source principale
-        stock_data = google_cse_stock_manager.get_stock_price(symbol)
-        
-        if not stock_data or not stock_data.price:
-            # Fallback vers les autres sources si Google CSE échoue
-            price_data = get_stock_price_stable(symbol)
-            if not price_data or not price_data.get('price'):
-                return jsonify({
-                    'success': False,
-                    'error': 'Prix non disponible',
-                    'details': 'Google CSE et sources de fallback ont échoué',
-                    'message': 'Veuillez mettre à jour le prix manuellement.',
-                    'source': 'Google CSE + Fallback',
-                    'timestamp': datetime.now().isoformat()
-                }), 404
-            
-            # Utiliser les données de fallback
-            result = {
-                "symbol": symbol,
-                "price": price_data.get('price'),
-                "currency": price_data.get('currency'),
-                "company_name": item.name if item else symbol,
-                "last_update": price_data.get('timestamp') or datetime.now().isoformat(),
-                "source": f"Fallback ({price_data.get('currency', 'USD')})",
-                "change": format_stock_value(price_data.get('change'), is_price=True),
-                "change_percent": format_stock_value(price_data.get('change_percent'), is_percent=True),
-                "volume": format_stock_value(price_data.get('volume'), is_volume=True),
-                "average_volume": format_stock_value(price_data.get('volume'), is_volume=True),
-                "pe_ratio": str(price_data.get('pe_ratio')) if price_data.get('pe_ratio') else 'N/A',
-                "fifty_two_week_high": format_stock_value(price_data.get('fifty_two_week_high'), is_price=True),
-                "fifty_two_week_low": format_stock_value(price_data.get('fifty_two_week_low'), is_price=True)
-            }
-        else:
-            # Utiliser les données Google CSE
-            result = {
-                "symbol": symbol,
-                "price": float(stock_data.price) if stock_data.price else None,
-                "currency": "USD",
-                "company_name": item.name if item else symbol,
-                "last_update": stock_data.timestamp.isoformat(),
-                "source": f"Google CSE ({stock_data.source})",
-                "change": stock_data.change,
-                "change_percent": stock_data.change_percent,
-                "volume": stock_data.volume,
-                "average_volume": stock_data.volume,
-                "pe_ratio": "N/A",
-                "fifty_two_week_high": "N/A",
-                "fifty_two_week_low": "N/A"
-            }
-        
+
+        price_data = stock_api_manager.get_stock_price(symbol, force_refresh=force_refresh)
+        if not price_data or not price_data.get('price'):
+            return jsonify({
+                'success': False,
+                'error': 'Prix non disponible',
+                'details': 'Toutes les sources ont échoué',
+                'message': 'Veuillez mettre à jour le prix manuellement.',
+                'source': 'Stock API Manager',
+                'timestamp': datetime.now().isoformat()
+            }), 429 if 'limit' in str(price_data).lower() else 404
+
+        # Normaliser le format attendu par le front (champs à la racine)
+        result = {
+            "symbol": symbol,
+            "price": price_data.get('price'),
+            "currency": price_data.get('currency'),
+            "company_name": item.name if item else symbol,
+            "last_update": price_data.get('timestamp') or datetime.now().isoformat(),
+            "source": price_data.get('source', 'Stock API Manager'),
+            "change": price_data.get('change'),
+            "change_percent": price_data.get('change_percent'),
+            "volume": price_data.get('volume'),
+            "average_volume": price_data.get('volume'),
+            "pe_ratio": price_data.get('pe_ratio'),
+            "fifty_two_week_high": price_data.get('fifty_two_week_high'),
+            "fifty_two_week_low": price_data.get('fifty_two_week_low'),
+        }
+
         # Mettre à jour le prix dans la DB si c'est une action existante
         if item and item.id and result.get('price', 0) > 0:
             try:
@@ -2999,8 +2982,7 @@ def get_stock_price(symbol):
         
         return jsonify({
             'success': True,
-            'data': result,
-            'source': result.get('source', 'Google CSE'),
+            **result,
             'timestamp': datetime.now().isoformat()
         })
     except Exception as e:
