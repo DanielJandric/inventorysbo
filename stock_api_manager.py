@@ -265,6 +265,92 @@ class FinnhubAPI:
             logger.error(f"❌ Erreur Finnhub pour {symbol}: {e}")
             return None
 
+class YFinanceAPI:
+    """Yahoo Finance via yfinance (gratuit, robuste)"""
+
+    def __init__(self):
+        # yfinance est importé dynamiquement dans l'appel pour éviter les erreurs d'import au démarrage
+        pass
+
+    @rate_limit(calls_per_minute=90)
+    def get_stock_price(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """Récupère le prix d'une action via yfinance"""
+        try:
+            logger.info(f"🔄 Tentative yfinance pour {symbol}")
+            try:
+                import yfinance as yf  # type: ignore
+            except Exception as e:
+                logger.warning(f"⚠️ yfinance non disponible: {e}")
+                return None
+
+            ticker = yf.Ticker(symbol)
+            price = None
+            change = None
+            change_percent = None
+            volume = None
+            currency = None
+
+            # fast_info (plus fiable/rapide)
+            fi = getattr(ticker, 'fast_info', None)
+            if fi:
+                getter = getattr(fi, 'get', None)
+                if callable(getter):
+                    price = getter('last_price') or getter('lastPrice') or getter('last')
+                    prev_close = getter('previous_close') or getter('previousClose')
+                    volume = getter('volume')
+                    currency = getter('currency')
+                    if price and prev_close and prev_close != 0:
+                        try:
+                            change = float(price) - float(prev_close)
+                            change_percent = (change / float(prev_close)) * 100.0
+                        except Exception:
+                            pass
+
+            # Fallback sur info
+            if price is None or currency is None:
+                try:
+                    info = ticker.info or {}
+                except Exception:
+                    info = {}
+                price = price if price is not None else info.get('currentPrice') or info.get('regularMarketPrice')
+                currency = currency if currency is not None else info.get('currency')
+                if change is None and info.get('regularMarketChange') is not None:
+                    change = info.get('regularMarketChange')
+                if change_percent is None and info.get('regularMarketChangePercent') is not None:
+                    change_percent = float(info.get('regularMarketChangePercent')) * 100.0 if abs(info.get('regularMarketChangePercent')) < 1 else info.get('regularMarketChangePercent')
+                if volume is None:
+                    volume = info.get('regularMarketVolume')
+
+            # Fallback ultime: l'historique du jour
+            if price is None:
+                try:
+                    hist = ticker.history(period="1d")
+                    if not hist.empty:
+                        price = float(hist['Close'].iloc[-1])
+                        if currency is None:
+                            currency = (ticker.get_info() or {}).get('currency')
+                except Exception:
+                    pass
+
+            if price is None or (isinstance(price, (int, float)) and float(price) <= 0):
+                logger.warning(f"⚠️ yfinance: prix invalide pour {symbol}")
+                return None
+
+            result = {
+                'price': float(price),
+                'currency': currency or 'USD',
+                'change': float(change) if change is not None else None,
+                'change_percent': float(change_percent) if change_percent is not None else None,
+                'volume': int(volume) if volume is not None else None,
+                'timestamp': datetime.now().isoformat(),
+                'source': 'yfinance'
+            }
+            logger.info(f"✅ yfinance réussi pour {symbol}: {result['price']} {result['currency']}")
+            return result
+        except Exception as e:
+            logger.error(f"❌ Erreur yfinance pour {symbol}: {e}")
+            return None
+
 class StockAPIManager:
     """Gestionnaire principal des APIs boursières"""
     
@@ -272,6 +358,7 @@ class StockAPIManager:
         self.alpha_vantage = AlphaVantageAPI()
         self.eodhd = EODHDAPI()
         self.finnhub = FinnhubAPI()
+        self.yfinance = YFinanceAPI()
         self.cache = {}
         self.cache_duration = 300  # 5 minutes
     
@@ -303,8 +390,15 @@ class StockAPIManager:
             self._cache_result(symbol, result)
             return result
         
-        # Essayer Finnhub en dernier
+        # Essayer Finnhub
         result = self.finnhub.get_stock_price(symbol)
+        if result and result.get('price', 0) > 0:
+            result = self._adjust_currency_for_swiss_stocks(symbol, result)
+            self._cache_result(symbol, result)
+            return result
+
+        # Essayer yfinance en dernier
+        result = self.yfinance.get_stock_price(symbol)
         if result and result.get('price', 0) > 0:
             result = self._adjust_currency_for_swiss_stocks(symbol, result)
             self._cache_result(symbol, result)
