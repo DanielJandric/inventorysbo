@@ -58,7 +58,8 @@ class ImmoScout24Scraper:
         js_instructions = {
             "instructions": [
                 {"wait": 2000},
-                {"click": "#onetrust-accept-btn-handler", "optional": True},
+                # Clic optionnel sur le bouton des cookies via une évaluation JS robuste
+                {"evaluate": "document.querySelector('#onetrust-accept-btn-handler') && document.querySelector('#onetrust-accept-btn-handler').click()"},
                 {"wait": 1000},
                 {"wait_for": 'article[data-test="result-item"]'},
                 {"evaluate": "window.scrollTo(0, document.body.scrollHeight);"},
