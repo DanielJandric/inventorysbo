@@ -7,6 +7,7 @@ basé sur le code fourni par l'utilisateur.
 import os
 import asyncio
 import logging
+import json
 from typing import List, Dict, Optional
 from scrapingbee import ScrapingBeeClient # Synchrone par défaut, nous allons l'adapter.
 import aiohttp # Pour des appels asynchrones
