@@ -2869,6 +2869,32 @@ def get_live_exchange_rate(from_currency: str, to_currency: str = 'CHF') -> floa
         return 1.0
 
 
+def to_numeric_or_none(value):
+    """Convertit en float/int si possible; sinon retourne None (évite d'écrire 'N/A' en DB)."""
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        # Éviter NaN/inf
+        try:
+            if value != value or value in (float('inf'), float('-inf')):
+                return None
+        except Exception:
+            pass
+        return value
+    if isinstance(value, str):
+        v = value.strip().upper()
+        if v in ("N/A", "NA", "NONE", "NULL", ""):  # valeurs non numériques
+            return None
+        try:
+            # Essayer int puis float
+            if v.isdigit() or (v.startswith('-') and v[1:].isdigit()):
+                return int(v)
+            return float(v.replace('%', '').replace(',', ''))
+        except Exception:
+            return None
+    return None
+
+
 @app.route("/api/exchange-rate/<from_currency>/<to_currency>")
 def get_exchange_rate_route(from_currency: str, to_currency: str = 'CHF'):
     """Route pour récupérer le taux de change"""
@@ -2950,16 +2976,16 @@ def get_stock_price(symbol):
                 total_value = result.get('price') * (item.stock_quantity or 1)
                 
                 update_data = {
-                    'current_price': result.get('price'),
-                    'current_value': total_value,
+                    'current_price': to_numeric_or_none(result.get('price')),
+                    'current_value': to_numeric_or_none(total_value),
                     'last_price_update': datetime.now().isoformat(),
-                    'stock_volume': result.get('volume'),
-                    'stock_pe_ratio': result.get('pe_ratio'),
-                    'stock_52_week_high': result.get('fifty_two_week_high'),
-                    'stock_52_week_low': result.get('fifty_two_week_low'),
-                    'stock_change': result.get('change'),
-                    'stock_change_percent': result.get('change_percent'),
-                    'stock_average_volume': result.get('average_volume'),
+                    'stock_volume': to_numeric_or_none(result.get('volume')),
+                    'stock_pe_ratio': to_numeric_or_none(result.get('pe_ratio')),
+                    'stock_52_week_high': to_numeric_or_none(result.get('fifty_two_week_high')),
+                    'stock_52_week_low': to_numeric_or_none(result.get('fifty_two_week_low')),
+                    'stock_change': to_numeric_or_none(result.get('change')),
+                    'stock_change_percent': to_numeric_or_none(result.get('change_percent')),
+                    'stock_average_volume': to_numeric_or_none(result.get('average_volume')),
                     'stock_currency': result.get('currency')
                 }
                 
@@ -3164,16 +3190,16 @@ def update_all_stock_prices():
                     total_value = success_item['price'] * (item.stock_quantity or 1)
                     
                     update_data = {
-                        'current_price': success_item['price'],
-                        'current_value': total_value,
+                        'current_price': to_numeric_or_none(success_item['price']),
+                        'current_value': to_numeric_or_none(total_value),
                         'last_price_update': datetime.now().isoformat(),
-                        'stock_volume': success_item.get('volume', 0),
-                        'stock_52_week_high': success_item.get('fifty_two_week_high', 0),
-                        'stock_52_week_low': success_item.get('fifty_two_week_low', 0),
-                        'stock_change': success_item.get('change', 0),
-                        'stock_change_percent': success_item.get('change_percent', 0),
-                        'stock_average_volume': success_item.get('volume', 0),
-                        'stock_pe_ratio': success_item.get('pe_ratio', 0),
+                        'stock_volume': to_numeric_or_none(success_item.get('volume')),
+                        'stock_52_week_high': to_numeric_or_none(success_item.get('fifty_two_week_high')),
+                        'stock_52_week_low': to_numeric_or_none(success_item.get('fifty_two_week_low')),
+                        'stock_change': to_numeric_or_none(success_item.get('change')),
+                        'stock_change_percent': to_numeric_or_none(success_item.get('change_percent')),
+                        'stock_average_volume': to_numeric_or_none(success_item.get('volume')),
+                        'stock_pe_ratio': to_numeric_or_none(success_item.get('pe_ratio')),
                         'stock_currency': success_item.get('currency', 'USD')
                     }
                     
