@@ -54,20 +54,13 @@ class ImmoScout24Scraper:
         url = f"{self.base_url}?pn={page_num}"
         logger.info(f"Scraping de la page de résultats {page_num}: {url}")
 
-        
+        # Stratégie de la dernière chance : proxies résidentiels, pas de scénario, juste une longue attente.
         params = {
             'render_js': 'true',
-            'premium_proxy': 'true',
+            'residential_proxy': 'true', # Utilisation de proxies résidentiels, plus robustes
             'country_code': 'ch',
-            'block_resources': 'true', # Bloquer CSS/images/polices pour accélérer
-            'js_scenario': json.dumps({
-                "instructions": [
-                    # Clic optionnel sur le bouton des cookies
-                    {"evaluate": "document.querySelector('#onetrust-accept-btn-handler') && document.querySelector('#onetrust-accept-btn-handler').click()"},
-                    # Attendre simplement que l'élément clé soit là.
-                    {"wait_for": 'article[data-test="result-item"]'}
-                ]
-            })
+            'block_resources': 'true',   # On garde le blocage pour la vitesse
+            'wait': '10000',             # On attend 10 secondes, simplement.
         }
         return await self._send_scrapingbee_request(url, params)
 
