@@ -19,82 +19,79 @@ class RealEstateScraper:
         self.scraper = ScrapingBeeScraper()
         self.db = get_real_estate_db()
 
-    async def find_and_scrape_listings(self):
+    async def find_and_scrape_listings(self, num_pages_to_scrape: int = 3):
         """
-        Orchestre la recherche d'annonces sur les portails suisses et les sauvegarde.
+        Orchestre la recherche d'annonces sur les portails suisses, gère la pagination et sauvegarde les résultats.
         """
-        logger.info("🏠 Lancement du scraping d'annonces d'immeubles d'habitation (recherche d'immeubles de rendement)...")
-        # URL de recherche corrigée pour cibler la bonne catégorie sur ImmoScout24.
-        search_url = "https://www.immoscout24.ch/fr/immeuble-habitation/acheter/pays-suisse"
-        
-        try:
-            # Étape 1: Scraper la page de recherche pour trouver les URLs des annonces individuelles
-            listing_urls = await self._scrape_search_page(search_url)
+        logger.info(f"🏠 Lancement du scraping d'annonces sur {num_pages_to_scrape} pages...")
+        base_search_url = "https://www.immoscout24.ch/fr/immeuble-habitation/acheter/pays-suisse"
+        all_listing_urls = set()
+
+        # Étape 1: Parcourir les pages de résultats pour collecter les URLs
+        for page_num in range(1, num_pages_to_scrape + 1):
+            logger.info(f"--- Scraping de la page de résultats n°{page_num} ---")
+            search_url = f"{base_search_url}?pn={page_num}"
+            listing_urls_on_page = await self._scrape_search_page(search_url)
             
-            if not listing_urls:
-                logger.warning("Aucune annonce trouvée sur la page de recherche.")
-                return
+            if not listing_urls_on_page:
+                logger.warning(f"Aucune annonce trouvée sur la page {page_num}. Arrêt de la pagination.")
+                break
+            
+            new_urls = set(listing_urls_on_page) - all_listing_urls
+            if not new_urls:
+                logger.info(f"Aucune nouvelle annonce trouvée sur la page {page_num}. Arrêt de la pagination.")
+                break
+                
+            all_listing_urls.update(new_urls)
+            logger.info(f"{len(new_urls)} nouvelles annonces ajoutées. Total: {len(all_listing_urls)}.")
+            await asyncio.sleep(2) # Politesse envers le serveur
 
-            logger.info(f"Trouvé {len(listing_urls)} annonces potentielles. Début du scraping individuel...")
+        if not all_listing_urls:
+            logger.error("Aucune annonce n'a été trouvée sur l'ensemble des pages parcourues.")
+            return
 
-            # Étape 2: Scraper chaque annonce individuellement
-            for url in listing_urls:
-                await self._scrape_and_process_listing(url, "immoscout24.ch")
-
-        except Exception as e:
-            logger.error(f"Erreur majeure lors du scraping immobilier: {e}")
+        # Étape 2: Scraper chaque annonce individuellement
+        logger.info(f"Scraping des pages de recherche terminé. {len(all_listing_urls)} URLs uniques trouvées. Début du traitement individuel.")
+        tasks = [self._scrape_and_process_listing(url, "immoscout24.ch") for url in all_listing_urls]
+        await asyncio.gather(*tasks)
+        logger.info("✅ Scraping immobilier terminé.")
 
     async def _scrape_search_page(self, url: str) -> List[str]:
-        """Scrape une page de résultats pour en extraire les URLs des annonces."""
+        """Scrape une page de résultats pour en extraire les URLs des annonces avec BeautifulSoup."""
         logger.info(f"Scraping de la page de recherche: {url}")
-        # On demande à ScrapingBee d'attendre qu'un lien d'annonce soit présent.
-        # Les liens d'annonce sur ImmoScout24 sont dans des balises <a> avec un attribut data-testid="result-list-item-link"
-        # On remplace le 'wait_for' par un 'wait' simple pour plus de robustesse.
         params = {
             'render_js': 'true',
-            'wait': '5000' # Attendre 5 secondes
+            'wait': '7000', # Attendre 7 secondes pour être sûr que tout est chargé
         }
-        
-        # J'utilise directement la méthode interne de ScrapingBee pour plus de contrôle.
         html_content = await self.scraper._scrape_with_params(url, params)
         if not html_content:
             logger.warning("Le scraping de la page de recherche n'a retourné aucun contenu.")
             return []
         
-        logger.info(f"Contenu HTML de la page de recherche récupéré ({len(html_content)} caractères). Extraction des URLs via IA...")
-
-        # Utiliser l'IA pour extraire les URLs des annonces de manière fiable
-        from openai import OpenAI
-        client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-
-        prompt = f"""
-        Extrait TOUTES les URLs des annonces immobilières de ce code HTML.
-        Les liens sont dans des balises `<a>` et peuvent être relatifs (commençant par `/fr/`).
-        - Si une URL est relative, préfixe-la avec "https://www.immoscout24.ch".
-        - Ne retourne QUE les URLs pointant vers des annonces individuelles (généralement contenant "/d/"), pas les liens de navigation ou de publicité.
-        
-        HTML:
-        {html_content[:12000]}
-        
-        Réponds uniquement avec un objet JSON contenant une clé "urls" avec la liste des URLs complètes.
-        Exemple de réponse: {{"urls": ["https://www.immoscout24.ch/fr/d/immeuble-de-rapport-acheter-sion/12345", "https://..."]}}
-        """
-        
         try:
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt}],
-                response_format={"type": "json_object"}
-            )
-            data = json.loads(response.choices[0].message.content)
-            urls = data.get("urls", [])
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(html_content, 'html.parser')
+            # Ce sélecteur est très spécifique à ImmoScout24 et donc plus robuste
+            links = soup.find_all('a', attrs={'data-testid': 'result-list-item-link'})
+            found_urls = set()
+
+            for link in links:
+                href = link.get('href')
+                if href and href.startswith('/fr/'):
+                    full_url = f"https://www.immoscout24.ch{href}"
+                    found_urls.add(full_url)
             
-            # Sécurité supplémentaire pour s'assurer que les URLs sont uniques
-            unique_urls = sorted(list(set(urls)))
-            logger.info(f"IA a extrait {len(unique_urls)} URLs uniques.")
-            return unique_urls
+            if not found_urls:
+                logger.warning("Aucune annonce trouvée sur la page avec le sélecteur 'data-testid'. Le HTML sera sauvegardé pour débogage.")
+                with open("debug_real_estate_search_page.html", "w", encoding="utf-8") as f:
+                    f.write(soup.prettify())
+                logger.info("Contenu HTML de la page sauvegardé dans 'debug_real_estate_search_page.html'.")
+            
+            logger.info(f"{len(found_urls)} URLs trouvées sur la page.")
+            return list(found_urls)
+
         except Exception as e:
-            logger.error(f"Erreur d'extraction d'URL par IA: {e}")
+            logger.error(f"Erreur lors du parsing HTML avec BeautifulSoup: {e}")
             return []
 
     async def _scrape_and_process_listing(self, url: str, source_site: str):
@@ -145,7 +142,7 @@ class RealEstateScraper:
         from openai import OpenAI
         client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
         
-        prompt = f"""
+        prompt = f\"\"\"
         Analyse le code HTML suivant d'une annonce immobilière suisse pour un immeuble de rendement.
         Extrait les informations suivantes et retourne-les dans un format JSON.
         - is_yield_property: Un booléen (`true` ou `false`). Mettre `true` si l'annonce est clairement un "immeuble de rendement", "immeuble locatif", ou "maison plurifamiliale". Mettre `false` s'il s'agit d'une simple maison ou d'un seul appartement.
@@ -159,7 +156,7 @@ class RealEstateScraper:
 
         HTML:
         {html_content[:12000]}
-        """
+        \"\"\"
         
         try:
             response = client.chat.completions.create(
