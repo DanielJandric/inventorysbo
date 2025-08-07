@@ -2579,6 +2579,39 @@ def sold():
     """Page des objets vendus"""
     return render_template('sold.html')
 
+@app.route("/real-estate")
+def real_estate():
+    """Page pour les annonces immobilières"""
+    return render_template("real_estate.html")
+
+@app.route("/api/real-estate/listings", methods=["GET"])
+def get_real_estate_listings():
+    """Récupère toutes les annonces immobilières."""
+    from real_estate_db import get_real_estate_db
+    db = get_real_estate_db()
+    listings = db.get_all_listings()
+    return jsonify([listing.to_dict() for listing in listings])
+
+@app.route("/api/real-estate/scrape", methods=["POST"])
+def scrape_real_estate():
+    """Déclenche le scraping des annonces immobilières en arrière-plan."""
+    # Cette fonction pourrait être étendue pour utiliser une file d'attente
+    # comme pour l'analyse de marché, mais pour l'instant, on lance directement.
+    import threading
+    from real_estate_scraper import RealEstateScraper
+
+    def run_scraping():
+        logger.info("Démarrage du thread de scraping immobilier...")
+        scraper = RealEstateScraper()
+        asyncio.run(scraper.find_and_scrape_listings())
+        logger.info("Thread de scraping immobilier terminé.")
+
+    thread = threading.Thread(target=run_scraping)
+    thread.start()
+    
+    return jsonify({"success": True, "message": "Scraping lancé en arrière-plan."})
+
+
 @app.route("/web-search")
 def web_search():
     """Interface de test pour la recherche web OpenAI"""

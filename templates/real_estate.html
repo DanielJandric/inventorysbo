@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Immobilier de Rendement - InventorySBO</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f4f7f6; }
+        .sidebar { background-color: #343a40; }
+        .nav-link { color: white !important; }
+        .nav-link.active { font-weight: bold; }
+        .listing-card {
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .listing-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+        }
+        .listing-card img {
+            height: 200px;
+            object-fit: cover;
+        }
+        .card-footer {
+            background-color: #f8f9fa;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <nav class="col-md-3 col-lg-2 d-md-block sidebar collapse">
+                <div class="position-sticky pt-3">
+                    <ul class="nav flex-column">
+                        <li class="nav-item"><a class="nav-link" href="/"><i class="fas fa-home"></i> Accueil</a></li>
+                        <li class="nav-item"><a class="nav-link" href="/analytics"><i class="fas fa-chart-bar"></i> Analytics</a></li>
+                        <li class="nav-item"><a class="nav-link" href="/reports"><i class="fas fa-file-alt"></i> Rapports</a></li>
+                        <li class="nav-item"><a class="nav-link" href="/markets"><i class="fas fa-chart-line"></i> Marchés</a></li>
+                        <li class="nav-item"><a class="nav-link active" href="/real-estate"><i class="fas fa-building"></i> Immobilier</a></li>
+                        <li class="nav-item"><a class="nav-link" href="/settings"><i class="fas fa-cog"></i> Paramètres</a></li>
+                        <li class="nav-item"><a class="nav-link" href="/sold"><i class="fas fa-tags"></i> Vendu</a></li>
+                    </ul>
+                </div>
+            </nav>
+
+            <!-- Main content -->
+            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4 py-4">
+                <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                    <h1 class="h2"><i class="fas fa-building"></i> Annonces d'Immobilier de Rendement</h1>
+                    <button id="start-scraping-btn" class="btn btn-primary">
+                        <i class="fas fa-sync-alt"></i> Lancer une nouvelle recherche
+                    </button>
+                </div>
+
+                <div id="status-display" class="alert alert-info" style="display: none;">
+                    Recherche en cours...
+                </div>
+
+                <div id="listings-container" class="row">
+                    <!-- Les annonces seront injectées ici par JavaScript -->
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const container = document.getElementById('listings-container');
+            const startBtn = document.getElementById('start-scraping-btn');
+            const statusDisplay = document.getElementById('status-display');
+
+            async function fetchListings() {
+                try {
+                    const response = await fetch('/api/real-estate/listings');
+                    const listings = await response.json();
+                    
+                    container.innerHTML = ''; // Vider le conteneur
+                    if (listings.length === 0) {
+                        container.innerHTML = '<p class="text-muted">Aucune annonce trouvée. Lancez une recherche pour commencer.</p>';
+                        return;
+                    }
+
+                    listings.forEach(listing => {
+                        const card = `
+                            <div class="col-md-4 mb-4">
+                                <div class="card listing-card h-100">
+                                    <img src="${listing.image_url || 'https://via.placeholder.com/400x250.png?text=Image+non+disponible'}" class="card-img-top" alt="${listing.title}">
+                                    <div class="card-body">
+                                        <h5 class="card-title">${listing.title || 'Titre non disponible'}</h5>
+                                        <p class="card-text"><i class="fas fa-map-marker-alt"></i> ${listing.location || 'Lieu non disponible'}</p>
+                                        <p class="card-text"><strong>${listing.price ? new Intl.NumberFormat('fr-CH').format(listing.price) + ' CHF' : 'Prix non communiqué'}</strong></p>
+                                        <p class="card-text">${listing.description_summary || ''}</p>
+                                    </div>
+                                    <div class="card-footer">
+                                        <a href="${listing.source_url}" class="btn btn-secondary btn-sm" target="_blank">Voir l'annonce</a>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                        container.innerHTML += card;
+                    });
+                } catch (error) {
+                    console.error("Erreur lors de la récupération des annonces:", error);
+                    container.innerHTML = '<div class="alert alert-danger">Impossible de charger les annonces.</div>';
+                }
+            }
+
+            startBtn.addEventListener('click', async () => {
+                startBtn.disabled = true;
+                startBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Recherche...';
+                statusDisplay.style.display = 'block';
+
+                try {
+                    await fetch('/api/real-estate/scrape', { method: 'POST' });
+                    // Une fois le scraping lancé, on rafraîchit la liste
+                    await fetchListings();
+                } catch (error) {
+                    console.error("Erreur lors du lancement du scraping:", error);
+                    statusDisplay.textContent = 'Erreur lors du lancement de la recherche.';
+                    statusDisplay.className = 'alert alert-danger';
+                } finally {
+                    startBtn.disabled = false;
+                    startBtn.innerHTML = '<i class="fas fa-sync-alt"></i> Lancer une nouvelle recherche';
+                    statusDisplay.style.display = 'none';
+                }
+            });
+
+            // Charger les annonces au démarrage
+            fetchListings();
+        });
+    </script>
+</body>
+</html>

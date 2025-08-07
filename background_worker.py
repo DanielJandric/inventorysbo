@@ -113,6 +113,24 @@ class MarketAnalysisWorker:
                 logger.error(f"❌ Erreur dans la boucle principale: {e}")
                 await asyncio.sleep(60) # Attendre plus longtemps en cas d'erreur grave
 
+    async def run_real_estate_scrape_periodically(self):
+        """Lance le scraping immobilier à intervalle régulier."""
+        logger.info("🏡 Démarrage du scraping immobilier périodique...")
+        while self.is_running:
+            try:
+                from real_estate_scraper import RealEstateScraper
+                real_estate_scraper = RealEstateScraper()
+                await real_estate_scraper.find_and_scrape_listings()
+                
+                # Attendre 6 heures avant le prochain cycle
+                logger.info("Scraping immobilier terminé. Prochain cycle dans 6 heures.")
+                await asyncio.sleep(6 * 3600)
+
+            except Exception as e:
+                logger.error(f"❌ Erreur dans le scraping immobilier périodique: {e}")
+                await asyncio.sleep(3600) # Réessayer dans 1 heure en cas d'erreur
+
+
     def stop(self):
         """Arrête proprement le worker."""
         logger.info("🛑 Arrêt du Background Worker...")
@@ -125,7 +143,10 @@ async def main():
     worker = MarketAnalysisWorker()
     try:
         worker.initialize()
-        await worker.run_continuous_loop()
+        # Lancer les deux tâches en parallèle
+        market_analysis_task = asyncio.create_task(worker.run_continuous_loop())
+        real_estate_task = asyncio.create_task(worker.run_real_estate_scrape_periodically())
+        await asyncio.gather(market_analysis_task, real_estate_task)
     except (KeyboardInterrupt, SystemExit):
         logger.info("Arrêt initié.")
     except Exception as e:
