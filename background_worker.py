@@ -32,6 +32,7 @@ logger.info("--- DÉMARRAGE DU SCRIPT DU BACKGROUND WORKER ---")
 # Imports
 from scrapingbee_scraper import get_scrapingbee_scraper
 from market_analysis_db import get_market_analysis_db, MarketAnalysis
+from stock_api_manager import stock_api_manager
 
 class MarketAnalysisWorker:
     def __init__(self):
@@ -325,6 +326,95 @@ class MarketAnalysisWorker:
         except Exception as e:
             logger.error(f"❌ Erreur envoi email Market Brief: {e}")
 
+    # ──────────────────────────────────────────────────────────
+    #  Stock prices refresh (own currency, no conversion)
+    # ──────────────────────────────────────────────────────────
+    async def run_stock_prices_refresh_schedule(self):
+        """Met à jour périodiquement les prix des actions (sans conversion)."""
+        logger.info("📈 Démarrage du job périodique de mise à jour des prix d'actions...")
+        times_csv = os.getenv("STOCK_REFRESH_TIMES", "09:00,11:00,13:00,15:00,17:00,21:30")
+        times = [t.strip() for t in times_csv.split(",") if t.strip()]
+        while self.is_running:
+            try:
+                # Prochain créneau (approx Europe/Paris +120m)
+                now_utc = datetime.now(timezone.utc)
+                today_paris = now_utc + timedelta(minutes=120)
+                next_runs = []
+                for t in times:
+                    try:
+                        hh, mm = [int(x) for x in t.split(":")]
+                        nr = today_paris.replace(hour=hh, minute=mm, second=0, microsecond=0)
+                        if nr <= today_paris:
+                            nr += timedelta(days=1)
+                        next_runs.append(nr)
+                    except Exception:
+                        continue
+                if not next_runs:
+                    await asyncio.sleep(3600)
+                    continue
+                next_run_paris = min(next_runs)
+                sleep_seconds = int((next_run_paris - today_paris).total_seconds())
+                logger.info(f"🕒 Prochaine MAJ prix actions dans ~{max(0, sleep_seconds)//60} min")
+                await asyncio.sleep(max(30, sleep_seconds))
+
+                # Exécuter la mise à jour
+                await self._refresh_all_stocks()
+                await asyncio.sleep(60)
+            except Exception as e:
+                logger.error(f"❌ Erreur loop MAJ actions: {e}")
+                await asyncio.sleep(600)
+
+    async def _refresh_all_stocks(self):
+        """Rafraîchit tous les prix d'actions via StockAPIManager et sauvegarde dans Supabase."""
+        try:
+            from supabase import create_client
+            supabase_url = os.getenv("SUPABASE_URL")
+            supabase_key = os.getenv("SUPABASE_KEY")
+            if not (supabase_url and supabase_key):
+                logger.warning("⚠️ Supabase non configuré, MAJ des prix ignorée")
+                return
+            sb = create_client(supabase_url, supabase_key)
+
+            resp = sb.table('items').select('*').eq('category', 'Actions').execute()
+            rows = resp.data or []
+            if not rows:
+                logger.info("ℹ️ Aucune action à mettre à jour")
+                return
+            updated = 0
+            failed = 0
+            for row in rows:
+                symbol = row.get('stock_symbol')
+                if not symbol:
+                    continue
+                try:
+                    data = stock_api_manager.get_stock_price(symbol, force_refresh=True)
+                    if not data or not data.get('price'):
+                        failed += 1
+                        continue
+                    price = data.get('price')
+                    qty = row.get('stock_quantity') or 1
+                    update_data = {
+                        'current_price': price,
+                        'current_value': price * qty,
+                        'last_price_update': datetime.utcnow().isoformat(),
+                        'stock_volume': data.get('volume'),
+                        'stock_pe_ratio': data.get('pe_ratio'),
+                        'stock_52_week_high': data.get('fifty_two_week_high'),
+                        'stock_52_week_low': data.get('fifty_two_week_low'),
+                        'stock_change': data.get('change'),
+                        'stock_change_percent': data.get('change_percent'),
+                        'stock_average_volume': data.get('volume'),
+                        'stock_currency': data.get('currency')
+                    }
+                    sb.table('items').update(update_data).eq('id', row['id']).execute()
+                    updated += 1
+                except Exception as e:
+                    logger.warning(f"⚠️ Echec MAJ {symbol}: {e}")
+                    failed += 1
+            logger.info(f"✅ MAJ prix actions terminée: {updated} ok, {failed} échecs")
+        except Exception as e:
+            logger.error(f"❌ Erreur _refresh_all_stocks: {e}")
+
 
     def stop(self):
         """Arrête proprement le worker."""
@@ -342,7 +432,8 @@ async def main():
         market_analysis_task = asyncio.create_task(worker.run_continuous_loop())
         real_estate_task = asyncio.create_task(worker.run_real_estate_scrape_periodically())
         market_brief_task = asyncio.create_task(worker.run_nightly_market_brief())
-        await asyncio.gather(market_analysis_task, real_estate_task, market_brief_task)
+        stocks_refresh_task = asyncio.create_task(worker.run_stock_prices_refresh_schedule())
+        await asyncio.gather(market_analysis_task, real_estate_task, market_brief_task, stocks_refresh_task)
     except (KeyboardInterrupt, SystemExit):
         logger.info("Arrêt initié.")
     except Exception as e:
