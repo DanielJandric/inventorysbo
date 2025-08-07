@@ -23,10 +23,9 @@ class RealEstateScraper:
         """
         Orchestre la recherche d'annonces sur les portails suisses et les sauvegarde.
         """
-        logger.info("🏠 Lancement du scraping d'annonces immobilières...")
-        # Pour commencer, nous allons cibler un site. On pourra en ajouter d'autres plus tard.
-        # ImmoScout24 est un bon point de départ.
-        search_url = "https://www.immoscout24.ch/fr/recherche/acheter/type-immeuble-de-rapport/pays-suisse"
+        logger.info("🏠 Lancement du scraping d'annonces d'immeubles d'habitation (recherche d'immeubles de rendement)...")
+        # URL de recherche corrigée pour cibler la bonne catégorie sur ImmoScout24.
+        search_url = "https://www.immoscout24.ch/fr/immeuble-habitation/acheter/pays-suisse"
         
         try:
             # Étape 1: Scraper la page de recherche pour trouver les URLs des annonces individuelles
