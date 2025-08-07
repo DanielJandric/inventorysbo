@@ -6,6 +6,7 @@ Scraper pour les annonces immobilières suisses, spécialisé dans les immeubles
 import os
 import asyncio
 import logging
+import json
 from typing import List, Dict, Optional
 from scrapingbee_scraper import ScrapingBeeScraper
 from real_estate_db import RealEstateListing, get_real_estate_db
