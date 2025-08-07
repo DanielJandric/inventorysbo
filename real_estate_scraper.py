@@ -54,12 +54,12 @@ class ImmoScout24Scraper:
         url = f"{self.base_url}?pn={page_num}"
         logger.info(f"Scraping de la page de résultats {page_num}: {url}")
 
-        # Stratégie de la dernière chance : proxies résidentiels, pas de scénario, juste une longue attente.
+        # Stratégie minimaliste pour éviter les timeouts : proxies premium, pas de scénario, juste une longue attente.
         params = {
             'render_js': 'true',
-            'residential_proxy': 'true', # Utilisation de proxies résidentiels, plus robustes
+            'premium_proxy': 'true',     # Le paramètre correct pour les meilleurs proxies.
             'country_code': 'ch',
-            'block_resources': 'true',   # On garde le blocage pour la vitesse
+            'block_resources': 'true',   # On garde le blocage pour la vitesse.
             'wait': '10000',             # On attend 10 secondes, simplement.
         }
         return await self._send_scrapingbee_request(url, params)
