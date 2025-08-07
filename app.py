@@ -58,6 +58,8 @@ from google_cse_stock_data import GoogleCSEStockDataManager
 from enhanced_google_cse_ai_report import EnhancedGoogleCSEAIReport
 from intelligent_scraper import IntelligentScraper, get_scraper
 from scrapingbee_scraper import ScrapingBeeScraper, get_scrapingbee_scraper
+from app_routes import seeking_alpha_blueprint
+# Remplacé par l'API Manus unifiée
 # Remplacé par l'API Manus unifiée
 
 # Load environment variables from .env file
@@ -1538,6 +1540,7 @@ app.config.update(
     JSON_SORT_KEYS=False
 )
 CORS(app)
+app.register_blueprint(seeking_alpha_blueprint)
 
 # Gestionnaire de données sophistiqué
 class AdvancedDataManager:
