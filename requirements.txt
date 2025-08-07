@@ -20,3 +20,5 @@ lxml==4.9.3
 playwright==1.42.0
 asyncio-mqtt==0.16.1
 aiohttp>=3.9.0
+scrapingbee>=2.0.0
+

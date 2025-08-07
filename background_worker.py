@@ -118,17 +118,20 @@ class MarketAnalysisWorker:
         logger.info("🏡 Démarrage du scraping immobilier périodique...")
         while self.is_running:
             try:
-                from real_estate_scraper import RealEstateScraper
-                real_estate_scraper = RealEstateScraper()
-                await real_estate_scraper.find_and_scrape_listings()
+                # Importation de la fonction principale du nouveau scraper
+                from real_estate_scraper import run_real_estate_scraper
+                
+                logger.info("Lancement de la tâche de scraping immobilier...")
+                await run_real_estate_scraper()
                 
                 # Attendre 6 heures avant le prochain cycle
-                logger.info("Scraping immobilier terminé. Prochain cycle dans 6 heures.")
+                logger.info("Tâche de scraping immobilier terminée. Prochain cycle dans 6 heures.")
                 await asyncio.sleep(6 * 3600)
 
             except Exception as e:
-                logger.error(f"❌ Erreur dans le scraping immobilier périodique: {e}")
+                logger.error(f"❌ Erreur critique dans le scraping immobilier périodique: {e}")
                 await asyncio.sleep(3600) # Réessayer dans 1 heure en cas d'erreur
+
 
 
     def stop(self):

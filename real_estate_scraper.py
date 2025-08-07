@@ -1,163 +1,170 @@
 #!/usr/bin/env python3
 """
-Scraper pour les annonces immobilières suisses, spécialisé dans les immeubles de rendement.
+Scraper avancé pour les annonces d'immeubles de rendement sur ImmoScout24,
+basé sur le code fourni par l'utilisateur.
 """
 
 import os
 import asyncio
 import logging
-import json
 from typing import List, Dict, Optional
-from scrapingbee_scraper import ScrapingBeeScraper
+from scrapingbee import ScrapingBeeClient # Synchrone par défaut, nous allons l'adapter.
+import aiohttp # Pour des appels asynchrones
+from bs4 import BeautifulSoup
+
 from real_estate_db import RealEstateListing, get_real_estate_db
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-class RealEstateScraper:
-    def __init__(self):
-        self.scraper = ScrapingBeeScraper()
-        self.db = get_real_estate_db()
 
-    async def find_and_scrape_listings(self, num_pages_to_scrape: int = 3):
-        """
-        Orchestre la recherche d'annonces sur les portails suisses, gère la pagination et sauvegarde les résultats.
-        """
-        logger.info(f"🏠 Lancement du scraping d'annonces sur {num_pages_to_scrape} pages...")
-        base_search_url = "https://www.immoscout24.ch/fr/immeuble-habitation/acheter/pays-suisse"
-        all_listing_urls = set()
+class ImmoScout24Scraper:
+    def __init__(self, api_key: str):
+        if not api_key:
+            raise ValueError("La clé API ScrapingBee est requise.")
+        self.api_key = api_key
+        self.base_url = "https://www.immoscout24.ch/fr/immeuble-habitation/acheter/pays-suisse" # Recherche sur toute la suisse
 
-        # Étape 1: Parcourir les pages de résultats pour collecter les URLs
-        for page_num in range(1, num_pages_to_scrape + 1):
-            logger.info(f"--- Scraping de la page de résultats n°{page_num} ---")
-            search_url = f"{base_search_url}?pn={page_num}"
-            listing_urls_on_page = await self._scrape_search_page(search_url)
-            
-            if not listing_urls_on_page:
-                logger.warning(f"Aucune annonce trouvée sur la page {page_num}. Arrêt de la pagination.")
-                break
-            
-            new_urls = set(listing_urls_on_page) - all_listing_urls
-            if not new_urls:
-                logger.info(f"Aucune nouvelle annonce trouvée sur la page {page_num}. Arrêt de la pagination.")
-                break
-                
-            all_listing_urls.update(new_urls)
-            logger.info(f"{len(new_urls)} nouvelles annonces ajoutées. Total: {len(all_listing_urls)}.")
-            await asyncio.sleep(2) # Politesse envers le serveur
+    async def _send_scrapingbee_request(self, url: str, params: Dict) -> Optional[str]:
+        """Envoie une requête asynchrone à ScrapingBee."""
+        scraping_bee_url = "https://app.scrapingbee.com/api/v1/"
+        
+        # Les paramètres de base sont fusionnés avec les paramètres spécifiques
+        base_params = {'api_key': self.api_key, 'url': url}
+        final_params = {**base_params, **params}
 
-        if not all_listing_urls:
-            logger.error("Aucune annonce n'a été trouvée sur l'ensemble des pages parcourues.")
-            return
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(scraping_bee_url, params=final_params, timeout=180) as response:
+                    if response.status == 200:
+                        return await response.text()
+                    else:
+                        response_text = await response.text()
+                        logger.error(f"❌ Erreur ScrapingBee: {response.status}")
+                        logger.error(f"URL: {url}")
+                        logger.error(f"Réponse: {response_text}")
+                        return None
+        except Exception as e:
+            logger.error(f"❌ Exception lors de l'appel à ScrapingBee pour {url}: {e}")
+            return None
 
-        # Étape 2: Scraper chaque annonce individuellement
-        logger.info(f"Scraping des pages de recherche terminé. {len(all_listing_urls)} URLs uniques trouvées. Début du traitement individuel.")
-        tasks = [self._scrape_and_process_listing(url, "immoscout24.ch") for url in all_listing_urls]
-        await asyncio.gather(*tasks)
-        logger.info("✅ Scraping immobilier terminé.")
+    async def scrape_page(self, page_num: int = 1) -> Optional[str]:
+        """Scrape une page de résultats spécifique."""
+        url = f"{self.base_url}?pn={page_num}"
+        logger.info(f"Scraping de la page de résultats {page_num}: {url}")
 
-    async def _scrape_search_page(self, url: str) -> List[str]:
-        """Scrape une page de résultats pour en extraire les URLs des annonces avec BeautifulSoup."""
-        logger.info(f"Scraping de la page de recherche: {url}")
         params = {
             'render_js': 'true',
-            'wait': '7000', # Attendre 7 secondes pour être sûr que tout est chargé
+            'premium_proxy': 'true',
+            'country_code': 'ch',
+            'wait': '5000',
+            'wait_for': 'article[data-test="result-item"]',
+            'js_scenario': '{"instructions":[{"wait":2000},{"click":"#onetrust-accept-btn-handler","optional":true},{"wait":1000},{"wait_for":"article[data-test=\\"result-item\\"]"},{"scroll":"bottom"},{"wait":2000}]}'
         }
-        html_content = await self.scraper._scrape_with_params(url, params)
-        if not html_content:
-            logger.warning("Le scraping de la page de recherche n'a retourné aucun contenu.")
-            return []
-        
+        return await self._send_scrapingbee_request(url, params)
+
+    def _parse_listing_summary(self, article_soup: BeautifulSoup) -> Optional[Dict]:
+        """Extrait les données sommaires d'une annonce depuis la page de résultats."""
         try:
-            from bs4 import BeautifulSoup
-            soup = BeautifulSoup(html_content, 'html.parser')
-            # Ce sélecteur est très spécifique à ImmoScout24 et donc plus robuste
-            links = soup.find_all('a', attrs={'data-testid': 'result-list-item-link'})
-            found_urls = set()
+            title_elem = article_soup.find('h3', {'data-test': 'result-item-title'})
+            price_elem = article_soup.find('span', {'data-test': 'result-item-price'})
+            address_elem = article_soup.find('span', {'data-test': 'result-item-address'})
+            link_elem = article_soup.find('a', {'data-test': 'result-item-link'})
 
-            for link in links:
-                href = link.get('href')
-                if href and href.startswith('/fr/'):
-                    full_url = f"https://www.immoscout24.ch{href}"
-                    found_urls.add(full_url)
+            url = f"https://www.immoscout24.ch{link_elem['href']}" if link_elem and link_elem.get('href') else None
+            if not url:
+                return None
             
-            if not found_urls:
-                logger.warning("Aucune annonce trouvée sur la page avec le sélecteur 'data-testid'. Le HTML sera sauvegardé pour débogage.")
-                with open("debug_real_estate_search_page.html", "w", encoding="utf-8") as f:
-                    f.write(soup.prettify())
-                logger.info("Contenu HTML de la page sauvegardé dans 'debug_real_estate_search_page.html'.")
-            
-            logger.info(f"{len(found_urls)} URLs trouvées sur la page.")
-            return list(found_urls)
+            price_text = price_elem.text.strip() if price_elem else "0"
+            price = int("".join(filter(str.isdigit, price_text))) if "sur demande" not in price_text.lower() else 0
 
+            # Filtrage initial par prix
+            if price < 2000000:
+                logger.info(f"Annonce ignorée (prix < 2M): {title_elem.text.strip() if title_elem else 'Sans titre'}")
+                return None
+
+            return {
+                'source_url': url,
+                'title': title_elem.text.strip() if title_elem else 'Titre non trouvé',
+                'location': address_elem.text.strip() if address_elem else 'Lieu non trouvé',
+                'price': price
+            }
         except Exception as e:
-            logger.error(f"Erreur lors du parsing HTML avec BeautifulSoup: {e}")
-            return []
-
-    async def _scrape_and_process_listing(self, url: str, source_site: str):
-        """Scrape une annonce, l'analyse avec l'IA et la sauvegarde en BDD."""
-        logger.info(f"Scraping de l'annonce : {url}")
+            logger.error(f"Erreur lors du parsing d'une annonce sommaire: {e}")
+            return None
+    
+    async def scrape_and_save_all(self, max_pages: int = 5):
+        """
+        Orchestre le scraping de plusieurs pages, le traitement et la sauvegarde en BDD.
+        """
+        db = get_real_estate_db()
         
-        # Vérifier si l'annonce existe déjà pour éviter un scraping inutile
-        if self.db.supabase.table('real_estate_listings').select('id').eq('source_url', url).execute().data:
-            logger.info(f"Annonce déjà en base de données. Saut.")
-            return
+        for page_num in range(1, max_pages + 1):
+            html_content = await self.scrape_page(page_num)
+            if not html_content:
+                logger.error(f"Impossible de récupérer le contenu de la page {page_num}. Arrêt.")
+                break
 
-        html_content = await self.scraper._scrape_page(url)
+            soup = BeautifulSoup(html_content, 'html.parser')
+            articles = soup.find_all('article', {'data-test': 'result-item'})
+
+            if not articles:
+                logger.info(f"Aucune annonce trouvée sur la page {page_num}, fin du scraping.")
+                break
+            
+            logger.info(f"Trouvé {len(articles)} annonces sur la page {page_num}.")
+
+            for article in articles:
+                listing_summary = self._parse_listing_summary(article)
+                if not listing_summary:
+                    continue
+
+                # Vérifier si l'annonce existe déjà avant de continuer
+                if db.get_listing_by_url(listing_summary['source_url']):
+                    logger.info(f"Annonce déjà en base : {listing_summary['source_url']}")
+                    continue
+
+                # Ici, on pourrait enrichir avec l'IA ou un scraping de détail, mais pour l'instant on sauvegarde les infos de base
+                logger.info(f"Nouvelle annonce trouvée : {listing_summary['title']}")
+                
+                # Utiliser l'IA pour valider et enrichir
+                listing_details = await self._extract_data_with_llm(listing_summary['source_url'])
+                if not listing_details or not listing_details.get('is_yield_property'):
+                    logger.info(f"Annonce ignorée par l'IA: {listing_summary['source_url']}")
+                    continue
+                
+                # Fusionner les données et sauvegarder
+                final_listing_data = {**listing_summary, **listing_details}
+                listing = RealEstateListing(**final_listing_data)
+                db.save_listing(listing)
+
+                await asyncio.sleep(1) # Petite pause entre chaque annonce
+            
+            await asyncio.sleep(3) # Pause entre les pages
+
+    async def _extract_data_with_llm(self, url: str) -> Optional[Dict]:
+        """Scrape la page de détail et utilise l'IA pour extraire les données."""
+        logger.info(f"Extraction par IA pour {url}")
+        
+        params = {'render_js': 'true', 'wait': '3000'}
+        html_content = await self._send_scrapingbee_request(url, params)
         if not html_content:
-            logger.warning(f"Impossible de scraper le contenu de {url}")
-            return
-
-        # Utiliser l'IA pour extraire les informations structurées
-        listing_data = await self._extract_data_with_llm(html_content)
-
-        if not listing_data:
-            logger.warning(f"Impossible d'extraire les données de {url} via l'IA.")
-            return
-
-        # Étape de validation et filtrage
-        is_yield_property = listing_data.get('is_yield_property', False)
-        price = listing_data.get('price')
-
-        if not is_yield_property:
-            logger.info(f"Annonce {url} ignorée : n'est pas un immeuble de rendement.")
-            return
-        
-        if price is None or price < 2000000:
-            logger.info(f"Annonce {url} ignorée : prix ({price} CHF) inférieur à 2'000'000 CHF.")
-            return
-
-        logger.info(f"✅ Annonce validée : {listing_data.get('title')} à {price} CHF.")
-
-        # Créer l'objet et le sauvegarder
-        listing = RealEstateListing(
-            source_url=url,
-            source_site=source_site,
-            **listing_data
-        )
-        self.db.save_listing(listing)
-
-    async def _extract_data_with_llm(self, html_content: str) -> Optional[Dict]:
-        """Utilise GPT-4o pour extraire les données structurées d'une annonce."""
+            return None
+            
         from openai import OpenAI
         client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
         
         prompt = f\"\"\"
-        Analyse le code HTML suivant d'une annonce immobilière suisse pour un immeuble de rendement.
-        Extrait les informations suivantes et retourne-les dans un format JSON.
-        - is_yield_property: Un booléen (`true` ou `false`). Mettre `true` si l'annonce est clairement un "immeuble de rendement", "immeuble locatif", ou "maison plurifamiliale". Mettre `false` s'il s'agit d'une simple maison ou d'un seul appartement.
-        - title: Le titre principal de l'annonce.
-        - location: La localité (ville ou village).
-        - price: Le prix de vente en CHF (nombre entier, sans séparateurs). Si non trouvé, laisse null.
-        - rental_income_yearly: Le revenu locatif annuel en CHF (nombre entier). Si non trouvé, laisse null.
-        - number_of_apartments: Le nombre d'appartements dans l'immeuble (nombre entier).
-        - image_url: L'URL de l'image principale de l'annonce (doit être une URL complète .jpg, .png, etc.).
-        - description_summary: Un bref résumé de la description.
-
-        HTML:
-        {html_content[:12000]}
-        \"\"\"
+        Analyse le code HTML d'une annonce ImmoScout24. Extrait les informations suivantes en JSON:
+        - is_yield_property: booléen, `true` si c'est un "immeuble de rendement", "locatif", ou "maison plurifamiliale".
+        - image_url: L'URL de l'image principale.
+        - description_summary: Résumé de la description.
+        - rental_income_yearly: Revenu locatif annuel (nombre entier).
+        - number_of_apartments: Nombre d'appartements (nombre entier).
         
+        HTML:
+        {html_content[:15000]}
+        \"\"\"
         try:
             response = client.chat.completions.create(
                 model="gpt-4o",
@@ -166,13 +173,22 @@ class RealEstateScraper:
             )
             return json.loads(response.choices[0].message.content)
         except Exception as e:
-            logger.error(f"Erreur d'extraction de données par l'IA: {e}")
+            logger.error(f"Erreur d'extraction IA pour {url}: {e}")
             return None
 
-async def main():
-    """Fonction principale pour tester le scraper."""
-    scraper = RealEstateScraper()
-    await scraper.find_and_scrape_listings()
+
+# Point d'entrée pour le background worker
+async def run_real_estate_scraper():
+    logger.info("Lancement du scraper immobilier depuis le worker...")
+    api_key = os.getenv("SCRAPINGBEE_API_KEY")
+    if not api_key:
+        logger.error("La variable d'environnement SCRAPINGBEE_API_KEY est manquante.")
+        return
+    
+    scraper = ImmoScout24Scraper(api_key=api_key)
+    await scraper.scrape_and_save_all(max_pages=5)
+    logger.info("Scraping immobilier terminé.")
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    # Pour des tests manuels
+    asyncio.run(run_real_estate_scraper())
