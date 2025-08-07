@@ -47,24 +47,37 @@ class RealEstateScraper:
 
     async def _scrape_search_page(self, url: str) -> List[str]:
         """Scrape une page de résultats pour en extraire les URLs des annonces."""
-        html_content = await self.scraper._scrape_page(url)
+        logger.info(f"Scraping de la page de recherche: {url}")
+        # On demande à ScrapingBee d'attendre qu'un lien d'annonce soit présent.
+        # Les liens d'annonce sur ImmoScout24 sont dans des balises <a> avec un attribut data-testid="result-list-item-link"
+        params = {
+            'render_js': 'true',
+            'wait_for': '[data-testid="result-list-item-link"]'
+        }
+        
+        # J'utilise directement la méthode interne de ScrapingBee pour plus de contrôle.
+        html_content = await self.scraper._send_scrapingbee_request(url, params)
         if not html_content:
+            logger.warning("Le scraping de la page de recherche n'a retourné aucun contenu.")
             return []
         
+        logger.info(f"Contenu HTML de la page de recherche récupéré ({len(html_content)} caractères). Extraction des URLs via IA...")
+
         # Utiliser l'IA pour extraire les URLs des annonces de manière fiable
         from openai import OpenAI
         client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
         prompt = f"""
-        Extrait toutes les URLs des annonces individuelles de ce code HTML.
-        Ne retourne QUE les URLs pointant vers des annonces, pas les liens de navigation ou de publicité.
-        Les URLs doivent être complètes (commençant par https://).
+        Extrait TOUTES les URLs des annonces immobilières de ce code HTML.
+        Les liens sont dans des balises `<a>` et peuvent être relatifs (commençant par `/fr/`).
+        - Si une URL est relative, préfixe-la avec "https://www.immoscout24.ch".
+        - Ne retourne QUE les URLs pointant vers des annonces individuelles (généralement contenant "/d/"), pas les liens de navigation ou de publicité.
         
         HTML:
-        {html_content[:8000]}
+        {html_content[:12000]}
         
-        Réponds uniquement avec un objet JSON contenant une clé "urls" avec la liste des URLs.
-        Exemple de réponse: {{"urls": ["https://.../annonce1", "https://.../annonce2"]}}
+        Réponds uniquement avec un objet JSON contenant une clé "urls" avec la liste des URLs complètes.
+        Exemple de réponse: {{"urls": ["https://www.immoscout24.ch/fr/d/immeuble-de-rapport-acheter-sion/12345", "https://..."]}}
         """
         
         try:
@@ -74,7 +87,12 @@ class RealEstateScraper:
                 response_format={"type": "json_object"}
             )
             data = json.loads(response.choices[0].message.content)
-            return data.get("urls", [])
+            urls = data.get("urls", [])
+            
+            # Sécurité supplémentaire pour s'assurer que les URLs sont uniques
+            unique_urls = sorted(list(set(urls)))
+            logger.info(f"IA a extrait {len(unique_urls)} URLs uniques.")
+            return unique_urls
         except Exception as e:
             logger.error(f"Erreur d'extraction d'URL par IA: {e}")
             return []
