@@ -5031,7 +5031,10 @@ def generate_full_bank_report():
                 'last_update': getattr(item, 'last_price_update', None),
                 'pe_ratio': getattr(item, 'stock_pe_ratio', None),
                 'wk52_high': getattr(item, 'stock_52_week_high', None),
-                'wk52_low': getattr(item, 'stock_52_week_low', None)
+                'wk52_low': getattr(item, 'stock_52_week_low', None),
+                'for_sale': getattr(item, 'for_sale', False),
+                'sale_status': getattr(item, 'sale_status', None),
+                'current_offer': getattr(item, 'current_offer', None)
             }
 
             assets_by_class[bank_class][subcategory].append(asset_row)

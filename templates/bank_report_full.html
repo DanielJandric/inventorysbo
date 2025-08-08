@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8">
-  <title>Rapport Bancaire – Complet</title>
+  <title>Famille Bonvin Family Office – Rapport Bancaire Complet</title>
   <style>
     body { font-family: Arial, sans-serif; color:#111827; }
     .cover { text-align:center; padding: 40px 0; }
@@ -14,13 +14,16 @@
     .section-title { font-weight:700; font-size:16px; border-bottom:1px solid #e5e7eb; padding-bottom:6px; margin-bottom:10px; }
     .sub-title { font-weight:600; font-size:14px; margin:8px 0; color:#374151; }
     table { width:100%; border-collapse:collapse; font-size:12px; }
-    th, td { border:1px solid #e5e7eb; padding:6px 8px; text-align:left; }
+    th, td { border:1px solid #e5e7eb; padding:6px 8px; text-align:left; vertical-align:top; }
     th { background:#f3f4f6; text-transform:uppercase; font-size:11px; }
+    .two-col { display:grid; grid-template-columns: 1fr 1fr; gap:18px; }
+    .badge { padding:2px 6px; border-radius:4px; font-size:11px; }
+    .badge-sale { background:#fee2e2; color:#b91c1c; border:1px solid #fecaca; }
   </style>
   </head>
   <body>
     <div class="cover">
-      <h1>Rapport Bancaire Complet</h1>
+      <h1>Famille Bonvin Family Office – Rapport Bancaire Complet</h1>
       <div class="muted">Généré le {{ generation_date }}</div>
     </div>
 
@@ -57,46 +60,81 @@
         <div class="section-title">{{ cls }}</div>
         {% for sub, assets in submap.items() %}
           <div class="sub-title">{{ sub }}</div>
-          <table>
-            <thead>
-              <tr>
-                <th>Nom</th>
-                <th>Statut</th>
-                <th>Catégorie</th>
-                <th>Symbole</th>
-                <th>Quantité</th>
-                <th>Prix unitaire</th>
-                <th>Devise</th>
-                <th>Valeur</th>
-                <th>Année</th>
-                <th>État</th>
-                <th>MAJ</th>
-                <th>P/E</th>
-                <th>52W H</th>
-                <th>52W L</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for a in assets %}
-                <tr>
-                  <td>{{ a.name }}</td>
-                  <td>{{ a.status }}</td>
-                  <td>{{ a.category }}</td>
-                  <td>{{ a.symbol or '-' }}</td>
-                  <td>{{ a.quantity or '-' }}</td>
-                  <td>{{ a.unit_price or '-' }}</td>
-                  <td>{{ a.currency or '-' }}</td>
-                  <td>{{ a.value }}</td>
-                  <td>{{ a.construction_year or '-' }}</td>
-                  <td>{{ a.condition or '-' }}</td>
-                  <td>{{ a.last_update or '-' }}</td>
-                  <td>{{ a.pe_ratio or '-' }}</td>
-                  <td>{{ a.wk52_high or '-' }}</td>
-                  <td>{{ a.wk52_low or '-' }}</td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
+          <div class="two-col">
+            <div>
+              <h4 class="sub-title" style="margin-top:0">Actifs Disponibles</h4>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Nom</th>
+                    <th>Catégorie</th>
+                    <th>Symbole</th>
+                    <th>Qté</th>
+                    <th>Prix</th>
+                    <th>Devise</th>
+                    <th>Valeur</th>
+                    <th>MAJ</th>
+                    <th>52W H</th>
+                    <th>52W L</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for a in assets if a.status == 'Available' %}
+                    <tr>
+                      <td>
+                        {{ a.name }}
+                        {% if a.for_sale %}
+                          <span class="badge badge-sale">EN VENTE {{ a.sale_status or '' }}</span>
+                        {% endif %}
+                      </td>
+                      <td>{{ a.category }}</td>
+                      <td>{{ a.symbol or '-' }}</td>
+                      <td>{{ a.quantity or '-' }}</td>
+                      <td>{{ a.unit_price or '-' }}</td>
+                      <td>{{ a.currency or '-' }}</td>
+                      <td>{{ a.value }}</td>
+                      <td>{{ a.last_update or '-' }}</td>
+                      <td>{{ a.wk52_high or '-' }}</td>
+                      <td>{{ a.wk52_low or '-' }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            <div>
+              <h4 class="sub-title" style="margin-top:0">Actifs Vendus</h4>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Nom</th>
+                    <th>Catégorie</th>
+                    <th>Symbole</th>
+                    <th>Qté</th>
+                    <th>Prix</th>
+                    <th>Devise</th>
+                    <th>Valeur</th>
+                    <th>Année</th>
+                    <th>État</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for a in assets if a.status == 'Sold' %}
+                    <tr>
+                      <td>{{ a.name }}</td>
+                      <td>{{ a.category }}</td>
+                      <td>{{ a.symbol or '-' }}</td>
+                      <td>{{ a.quantity or '-' }}</td>
+                      <td>{{ a.unit_price or '-' }}</td>
+                      <td>{{ a.currency or '-' }}</td>
+                      <td>{{ a.value }}</td>
+                      <td>{{ a.construction_year or '-' }}</td>
+                      <td>{{ a.condition or '-' }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
         {% endfor %}
       </div>
     {% endfor %}
