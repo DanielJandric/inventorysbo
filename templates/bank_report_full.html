@@ -19,7 +19,7 @@
     th, td { border:1px solid #e5e7eb; padding:3px 4px; text-align:left; vertical-align:top; overflow:hidden; word-wrap:break-word; }
     th { background:#f3f4f6; text-transform:uppercase; font-size:11px; }
     .two-col { display:grid; grid-template-columns: 1fr 1fr; gap:18px; }
-    .badge { padding:2px 6px; border-radius:4px; font-size:11px; }
+    .badge { padding:1px 3px; border-radius:2px; font-size:6px; line-height:1; display:inline-block; }
     .badge-sale { background:#fee2e2; color:#b91c1c; border:1px solid #fecaca; }
     .num { text-align:right; font-variant-numeric: tabular-nums; font-feature-settings: 'tnum' 1; white-space: nowrap; }
     .nowrap { white-space: nowrap; }
@@ -88,7 +88,7 @@
                 {% for a in assets if a.status == 'Available' %}
                   <tr>
                     <td>
-                      {{ a.name }}
+                      <span style="font-size: 9px;">{{ a.name }}</span>
                       {% if a.for_sale %}
                         <span class="badge badge-sale">EN VENTE {{ a.sale_status or '' }}</span>
                       {% endif %}
