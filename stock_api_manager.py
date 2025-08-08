@@ -289,6 +289,9 @@ class YFinanceAPI:
             change_percent = None
             volume = None
             currency = None
+            fifty_two_week_high = None
+            fifty_two_week_low = None
+            pe_ratio = None
 
             # fast_info (plus fiable/rapide)
             fi = getattr(ticker, 'fast_info', None)
@@ -299,6 +302,8 @@ class YFinanceAPI:
                     prev_close = getter('previous_close') or getter('previousClose')
                     volume = getter('volume')
                     currency = getter('currency')
+                    fifty_two_week_high = getter('yearHigh') or getter('fifty_two_week_high')
+                    fifty_two_week_low = getter('yearLow') or getter('fifty_two_week_low')
                     if price and prev_close and prev_close != 0:
                         try:
                             change = float(price) - float(prev_close)
@@ -307,13 +312,22 @@ class YFinanceAPI:
                             pass
 
             # Fallback sur info
-            if price is None or currency is None:
+            if price is None or currency is None or fifty_two_week_high is None or fifty_two_week_low is None or pe_ratio is None:
                 try:
                     info = ticker.info or {}
                 except Exception:
                     info = {}
                 price = price if price is not None else info.get('currentPrice') or info.get('regularMarketPrice')
                 currency = currency if currency is not None else info.get('currency')
+                fifty_two_week_high = fifty_two_week_high if fifty_two_week_high is not None else (
+                    info.get('fiftyTwoWeekHigh') or info.get('fifty_two_week_high')
+                )
+                fifty_two_week_low = fifty_two_week_low if fifty_two_week_low is not None else (
+                    info.get('fiftyTwoWeekLow') or info.get('fifty_two_week_low')
+                )
+                pe_ratio = pe_ratio if pe_ratio is not None else (
+                    info.get('trailingPE') or info.get('trailingPe') or info.get('forwardPE')
+                )
                 if change is None and info.get('regularMarketChange') is not None:
                     change = info.get('regularMarketChange')
                 if change_percent is None and info.get('regularMarketChangePercent') is not None:
@@ -342,6 +356,9 @@ class YFinanceAPI:
                 'change': float(change) if change is not None else None,
                 'change_percent': float(change_percent) if change_percent is not None else None,
                 'volume': int(volume) if volume is not None else None,
+                'fifty_two_week_high': float(fifty_two_week_high) if fifty_two_week_high is not None else None,
+                'fifty_two_week_low': float(fifty_two_week_low) if fifty_two_week_low is not None else None,
+                'pe_ratio': float(pe_ratio) if pe_ratio is not None else None,
                 'timestamp': datetime.now().isoformat(),
                 'source': 'yfinance'
             }
