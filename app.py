@@ -5072,7 +5072,46 @@ def generate_full_bank_report():
 
         html_content = render_template('bank_report_full.html', **template_data)
 
-        # Générer le PDF A4 avec pied de page numéroté
+        # Choix du moteur: Puppeteer (Node) si demandé, sinon WeasyPrint
+        engine = request.args.get('engine', 'weasyprint').lower()
+
+        if engine == 'puppeteer':
+            try:
+                # Ecrire l'HTML dans un fichier temporaire
+                import tempfile
+                html_fd, html_path = tempfile.mkstemp(suffix='.html')
+                with os.fdopen(html_fd, 'w', encoding='utf-8') as f:
+                    f.write(html_content)
+
+                # Ecrire le PDF dans un fichier temporaire
+                pdf_fd, pdf_path = tempfile.mkstemp(suffix='.pdf')
+                os.close(pdf_fd)
+
+                # Construire la commande Node
+                # Sur Windows/Render, "node" doit être dans le PATH si npm install a été exécuté
+                node_cmd = os.getenv('NODE_BIN', 'node')
+                script_path = os.path.join(os.getcwd(), 'tools', 'puppeteer_print.js')
+                cmd = [node_cmd, script_path, '--file', html_path, '--out', pdf_path, '--landscape', 'true', '--format', 'A4', '--margin', '14mm']
+
+                import subprocess
+                completed = subprocess.run(cmd, capture_output=True)
+                if completed.returncode != 0:
+                    logger.error(f"Puppeteer error: {completed.stderr.decode('utf-8', errors='ignore')}")
+                    raise RuntimeError('Puppeteer PDF generation failed')
+
+                with open(pdf_path, 'rb') as fpdf:
+                    pdf_bytes = fpdf.read()
+                os.remove(html_path)
+                os.remove(pdf_path)
+
+                resp = Response(pdf_bytes, mimetype='application/pdf')
+                resp.headers['Content-Disposition'] = f'attachment; filename=bonvin_bank_full_{datetime.now().strftime("%Y%m%d_%H%M")}.pdf'
+                return resp
+            except Exception as e:
+                logger.error(f"Puppeteer failed, falling back to WeasyPrint: {e}")
+                # Fallback automatique vers WeasyPrint
+
+        # WeasyPrint par défaut
         try:
             from weasyprint import HTML, CSS
             from weasyprint.text.fonts import FontConfiguration
