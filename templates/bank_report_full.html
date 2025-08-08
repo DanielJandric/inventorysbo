@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>Rapport Bancaire – Complet</title>
+  <style>
+    body { font-family: Arial, sans-serif; color:#111827; }
+    .cover { text-align:center; padding: 40px 0; }
+    .muted { color:#6b7280; }
+    .kpi-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap:12px; margin:16px 0 24px; }
+    .kpi { border:1px solid #e5e7eb; border-radius:6px; padding:12px; background:#f9fafb; }
+    .kpi .v { font-weight:700; font-size:16px; }
+    .section { margin: 20px 0; }
+    .section-title { font-weight:700; font-size:16px; border-bottom:1px solid #e5e7eb; padding-bottom:6px; margin-bottom:10px; }
+    .sub-title { font-weight:600; font-size:14px; margin:8px 0; color:#374151; }
+    table { width:100%; border-collapse:collapse; font-size:12px; }
+    th, td { border:1px solid #e5e7eb; padding:6px 8px; text-align:left; }
+    th { background:#f3f4f6; text-transform:uppercase; font-size:11px; }
+  </style>
+  </head>
+  <body>
+    <div class="cover">
+      <h1>Rapport Bancaire Complet</h1>
+      <div class="muted">Généré le {{ generation_date }}</div>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi"><div class="t muted">Nombre total d'objets</div><div class="v">{{ total_items }}</div></div>
+      <div class="kpi"><div class="t muted">Disponibles</div><div class="v">{{ available_count }}</div></div>
+      <div class="kpi"><div class="t muted">Vendus</div><div class="v">{{ sold_count }}</div></div>
+      <div class="kpi"><div class="t muted">Valeur (disponible)</div><div class="v">{{ total_value_available }}</div></div>
+      <div class="kpi"><div class="t muted">Valeur (totale)</div><div class="v">{{ total_value_all }}</div></div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Résumé par classe bancaire</div>
+      <table>
+        <thead>
+          <tr><th>Classe</th><th>Nb actifs</th><th>Nb disponibles</th><th>Valeur dispo</th><th>Valeur totale</th></tr>
+        </thead>
+        <tbody>
+        {% for cls, s in classes_summary.items() %}
+          <tr>
+            <td>{{ cls }}</td>
+            <td>{{ s.count_all }}</td>
+            <td>{{ s.count_available }}</td>
+            <td>{{ s.value_available }}</td>
+            <td>{{ s.value_all }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% for cls, submap in assets_by_class.items() %}
+      <div class="section">
+        <div class="section-title">{{ cls }}</div>
+        {% for sub, assets in submap.items() %}
+          <div class="sub-title">{{ sub }}</div>
+          <table>
+            <thead>
+              <tr>
+                <th>Nom</th>
+                <th>Statut</th>
+                <th>Catégorie</th>
+                <th>Symbole</th>
+                <th>Quantité</th>
+                <th>Prix unitaire</th>
+                <th>Devise</th>
+                <th>Valeur</th>
+                <th>Année</th>
+                <th>État</th>
+                <th>MAJ</th>
+                <th>P/E</th>
+                <th>52W H</th>
+                <th>52W L</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for a in assets %}
+                <tr>
+                  <td>{{ a.name }}</td>
+                  <td>{{ a.status }}</td>
+                  <td>{{ a.category }}</td>
+                  <td>{{ a.symbol or '-' }}</td>
+                  <td>{{ a.quantity or '-' }}</td>
+                  <td>{{ a.unit_price or '-' }}</td>
+                  <td>{{ a.currency or '-' }}</td>
+                  <td>{{ a.value }}</td>
+                  <td>{{ a.construction_year or '-' }}</td>
+                  <td>{{ a.condition or '-' }}</td>
+                  <td>{{ a.last_update or '-' }}</td>
+                  <td>{{ a.pe_ratio or '-' }}</td>
+                  <td>{{ a.wk52_high or '-' }}</td>
+                  <td>{{ a.wk52_low or '-' }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% endfor %}
+      </div>
+    {% endfor %}
+  </body>
+  </html>
+
+

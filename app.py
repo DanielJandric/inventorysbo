@@ -4938,6 +4938,177 @@ def generate_all_asset_classes_report():
             "error": str(e)
         }), 500
 
+
+@app.route("/api/reports/bank/full", methods=["GET"])
+def generate_full_bank_report():
+    """Génère un rapport PDF exhaustif (mode bancaire, A4, toutes classes et objets)."""
+    try:
+        items = AdvancedDataManager.fetch_all_items()
+
+        # Classification bancaire (mêmes catégories que précédemment)
+        ASSET_CLASSIFICATION = {
+            'Actions': {'bankClass': 'Actions cotées', 'subCategory': 'Titres cotés en bourse (actions)'},
+            'Voitures': {'bankClass': 'Actifs réels', 'subCategory': 'Automobiles (véhicules de collection ou de luxe)'},
+            'Appartements / maison': {'bankClass': 'Immobilier direct ou indirect', 'subCategory': 'Immobilier résidentiel (logements)'},
+            'Be Capital': {'bankClass': 'Immobilier direct ou indirect', 'subCategory': 'Immobilier de rendement (biens générant des revenus locatifs)'},
+            'Bateaux': {'bankClass': 'Actifs réels', 'subCategory': 'Bateaux (yachts, bateaux de plaisance)'},
+            'Avions': {'bankClass': 'Actifs réels', 'subCategory': 'Avions (jets privés, aviation d\'affaires)'},
+            'Start-ups': {'bankClass': 'Private Equity / Venture Capital', 'subCategory': 'Start-ups (jeunes entreprises non cotées)'},
+            'Investis services': {'bankClass': 'Private Equity / Venture Capital', 'subCategory': 'Sociétés de rénovation (services immobiliers)'},
+            'Saanen': {'bankClass': 'Immobilier direct ou indirect', 'subCategory': 'Projet immobilier à Saanen (type d\'actif immobilier non précisé)'},
+            'Dixence Resort': {'bankClass': 'Immobilier direct ou indirect', 'subCategory': 'Immobilier hôtelier (complexe resort touristique)'},
+            'Investis properties': {'bankClass': 'Immobilier direct ou indirect', 'subCategory': 'Immobilier de rendement (portefeuille d\'immeubles locatifs)'},
+            'Mibo': {'bankClass': 'Immobilier direct ou indirect', 'subCategory': 'Actif immobilier (précision non fournie)'},
+            'Portfolio Rhône Hotels': {'bankClass': 'Immobilier direct ou indirect', 'subCategory': 'Immobilier hôtelier (portefeuille d\'hôtels, rendement locatif)'},
+            'Rhône Property – Portfolio IAM': {'bankClass': 'Immobilier direct ou indirect', 'subCategory': 'Immobilier de rendement (portefeuille immobilier)'},
+            'Be Capital Activities': {'bankClass': 'Private Equity / Venture Capital', 'subCategory': 'Sociétés de e-commerce (participations non cotées)'},
+            'IB': {'bankClass': 'Immobilier direct ou indirect', 'subCategory': 'Actif immobilier (précision non fournie)'}
+        }
+
+        def fmt_money(val, currency='CHF'):
+            try:
+                if not val:
+                    return f"0 {currency}"
+                return f"{float(val):,.0f} {currency}"
+            except Exception:
+                return f"0 {currency}"
+
+        # Résumés
+        classes_summary = {}
+        assets_by_class = {}
+        total_items = len(items)
+        available_count = 0
+        sold_count = 0
+        total_value_available = 0.0
+        total_value_all = 0.0
+
+        for item in items:
+            classification = ASSET_CLASSIFICATION.get(item.category)
+            if not classification:
+                continue
+            bank_class = classification['bankClass']
+            subcategory = classification['subCategory']
+
+            if bank_class not in assets_by_class:
+                assets_by_class[bank_class] = {}
+            if subcategory not in assets_by_class[bank_class]:
+                assets_by_class[bank_class][subcategory] = []
+
+            # Valeur (sans conversion FX; devise native pour actions)
+            value = 0.0
+            currency = 'CHF'
+            unit_price = None
+            qty = None
+            if item.category == 'Actions' and item.stock_quantity:
+                qty = item.stock_quantity
+                unit_price = item.current_price or item.stock_purchase_price
+                if unit_price:
+                    value = float(unit_price) * float(qty)
+                currency = (item.stock_currency or 'USD') if getattr(item, 'stock_currency', None) else (item.currency if hasattr(item, 'currency') else 'USD')
+            else:
+                value = float(item.current_value or item.sold_price or 0)
+
+            total_value_all += value
+            if item.status == 'Available':
+                available_count += 1
+                total_value_available += value
+            else:
+                sold_count += 1
+
+            asset_row = {
+                'name': item.name,
+                'status': item.status,
+                'category': item.category,
+                'subcategory': subcategory,
+                'symbol': getattr(item, 'stock_symbol', None),
+                'quantity': qty,
+                'unit_price': unit_price,
+                'currency': currency,
+                'value': value,
+                'acquisition_price': getattr(item, 'acquisition_price', None),
+                'construction_year': getattr(item, 'construction_year', None),
+                'condition': getattr(item, 'condition', None),
+                'last_update': getattr(item, 'last_price_update', None),
+                'pe_ratio': getattr(item, 'stock_pe_ratio', None),
+                'wk52_high': getattr(item, 'stock_52_week_high', None),
+                'wk52_low': getattr(item, 'stock_52_week_low', None)
+            }
+
+            assets_by_class[bank_class][subcategory].append(asset_row)
+
+            # summary per class
+            if bank_class not in classes_summary:
+                classes_summary[bank_class] = {
+                    'count_all': 0,
+                    'count_available': 0,
+                    'value_all': 0.0,
+                    'value_available': 0.0
+                }
+            classes_summary[bank_class]['count_all'] += 1
+            classes_summary[bank_class]['value_all'] += value
+            if item.status == 'Available':
+                classes_summary[bank_class]['count_available'] += 1
+                classes_summary[bank_class]['value_available'] += value
+
+        # Préparer données template
+        template_data = {
+            'generation_date': datetime.now().strftime('%d/%m/%Y à %H:%M'),
+            'total_items': total_items,
+            'available_count': available_count,
+            'sold_count': sold_count,
+            'total_value_available': fmt_money(total_value_available),
+            'total_value_all': fmt_money(total_value_all),
+            'classes_summary': {k: {
+                'count_all': v['count_all'],
+                'count_available': v['count_available'],
+                'value_all': fmt_money(v['value_all']),
+                'value_available': fmt_money(v['value_available'])
+            } for k, v in classes_summary.items()},
+            'assets_by_class': assets_by_class
+        }
+
+        html_content = render_template('bank_report_full.html', **template_data)
+
+        # Générer le PDF A4 avec pied de page numéroté
+        try:
+            from weasyprint import HTML, CSS
+            from weasyprint.text.fonts import FontConfiguration
+            font_config = FontConfiguration()
+            css_string = '''
+            @page {
+                size: A4;
+                margin: 18mm;
+                @bottom-center {
+                    content: "BONVIN – Rapport Bancaire | " counter(page) " / " counter(pages);
+                    font-size: 10px; color: #6b7280;
+                }
+            }
+            body { font-family: Arial, sans-serif; font-size: 11pt; color: #111827; }
+            h1,h2,h3 { color: #111827; }
+            .cover { text-align:center; padding: 60px 0; border-bottom:1px solid #e5e7eb; margin-bottom:24px; }
+            .kpi-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap:12px; margin:16px 0 24px; }
+            .kpi { border:1px solid #e5e7eb; border-radius:6px; padding:12px; background:#f9fafb; }
+            .kpi .v { font-weight:700; font-size:14pt; }
+            table { width:100%; border-collapse:collapse; font-size:10pt; margin:10px 0; }
+            th, td { border:1px solid #e5e7eb; padding:6px 8px; }
+            th { background:#f3f4f6; font-weight:700; text-transform:uppercase; font-size:9pt; }
+            .section { page-break-inside: avoid; margin: 18px 0; }
+            .section-title { font-weight:700; font-size:13pt; margin:8px 0; border-bottom:1px solid #e5e7eb; padding-bottom:4px; }
+            .sub-title { font-weight:600; font-size:11pt; margin:8px 0; color:#374151; }
+            .muted { color:#6b7280; font-size:9pt; }
+            '''
+            html_doc = HTML(string=html_content)
+            css_doc = CSS(string=css_string, font_config=font_config)
+            pdf = html_doc.write_pdf(stylesheets=[css_doc], font_config=font_config)
+            resp = Response(pdf, mimetype='application/pdf')
+            resp.headers['Content-Disposition'] = f'attachment; filename=bonvin_bank_full_{datetime.now().strftime("%Y%m%d_%H%M")}.pdf'
+            return resp
+        except ImportError:
+            return jsonify({"error": "WeasyPrint non installé"}), 500
+    except Exception as e:
+        logger.error(f"❌ Erreur full bank report: {e}")
+        return jsonify({"error": str(e)}), 500
+
 # Fonctions utilitaires
 def clean_date_format(date_str: str) -> Optional[str]:
     """Nettoie et valide le format de date pour PostgreSQL (YYYY-MM-DD HH:mm:ss)"""
