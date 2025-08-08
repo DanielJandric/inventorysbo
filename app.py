@@ -5079,8 +5079,8 @@ def generate_full_bank_report():
             font_config = FontConfiguration()
             css_string = '''
             @page {
-                size: A4 portrait;
-                margin: 16mm;
+                size: A4 landscape;
+                margin: 14mm;
                 @bottom-center {
                     content: "BONVIN – Rapport Bancaire | " counter(page) " / " counter(pages);
                     font-size: 10px; color: #6b7280;
