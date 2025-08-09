@@ -1385,7 +1385,6 @@ Date: {report_date}
 Heure: {report_time}
 Source: API Manus - Données temps réel
 Généré le: {timestamp}
-
 📊 ANALYSE DE MARCHÉ
 {report_content}
 
@@ -2140,7 +2139,6 @@ RÈGLES:
             # Prompt utilisateur simplifié
             user_prompt = f"""QUESTION: {query}
 DONNÉES: {complete_context}
-
 Réponds de manière concise et directe."""
 
             messages.append({"role": "user", "content": user_prompt})
@@ -3679,7 +3677,6 @@ INSTRUCTIONS IMPORTANTES:
 2. Utilise tes connaissances du marché automobile/horloger/immobilier actuel
 3. Compare avec des ventes récentes d'objets similaires sur le marché (pas dans ma collection)
 4. Prends en compte l'année, l'état et les spécificités du modèle
-
 Pour les voitures : considère les sites comme AutoScout24, Comparis, annonces spécialisées
 Pour les montres : marché des montres d'occasion, chrono24, enchères récentes
 Pour l'immobilier : prix au m² dans la région, transactions récentes
@@ -6826,6 +6823,10 @@ def trigger_background_worker():
 
         db = get_market_analysis_db()
         
+        # Récupérer le prompt du corps de la requête, avec une valeur par défaut
+        request_data = request.get_json() or {}
+        prompt = request_data.get('prompt', "Résume moi parfaitement et d'une façon exhaustive la situation sur les marchés financiers aujourd'hui. Aussi, je veux un focus particulier sur l'IA.")
+
         # Vérifier s'il y a déjà une analyse en cours
         latest_analysis = db.get_latest_analysis()
         if latest_analysis and latest_analysis.worker_status in ['pending', 'processing']:
@@ -6838,7 +6839,7 @@ def trigger_background_worker():
         new_analysis = MarketAnalysis(
             analysis_type='manual',
             worker_status='pending',
-            prompt="Résume moi parfaitement et d'une façon exhaustive la situation sur les marchés financiers aujourd'hui. Aussi, je veux un focus particulier sur l'IA."
+            prompt=prompt
         )
         analysis_id = db.save_analysis(new_analysis)
 

@@ -751,7 +751,7 @@
             statusDiv.textContent = 'Génération de l\'update en cours...';
             
             try {
-                const response = await fetch('/api/market-updates/trigger', {
+                const response = await fetch('/api/background-worker/trigger', {
                     method: 'POST'
                 });
                 const data = await response.json();
@@ -781,7 +781,7 @@
             
             try {
                 // We pass a specific prompt to signal the backend to use the new flow
-                const response = await fetch('/api/market-updates/trigger', {
+                const response = await fetch('/api/background-worker/trigger', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ prompt: 'newsapi_real_estate_analysis' })

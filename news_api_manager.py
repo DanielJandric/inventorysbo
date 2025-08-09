@@ -39,7 +39,7 @@ class NewsAPIManager:
             "dateEnd": datetime.now().strftime('%Y-%m-%d'),
             "dataType": ["news", "pr"],
             "articlesPage": 1,
-            "articlesCount": 100,
+            "articlesCount": 25,
             "articlesSortBy": "rel",
             "articlesSortByAsc": False,
             "articleBodyLen": -1,
