@@ -4092,6 +4092,104 @@ def chatbot():
                             "status_code": result.get('status_code')
                         }
                     })
+
+            # Follow-up completion flow: if previous reply asked for missing fields and
+            # user replied with "Name, Category" or "nom: ..., catégorie: ...",
+            # complete creation even without explicit add-intent keywords.
+            def _extract_last_prefill_json(history_list):
+                try:
+                    for h in reversed(history_list or []):
+                        content = h.get('content') if isinstance(h, dict) else str(h)
+                        if not content:
+                            continue
+                        marker = "Pré-rempli: "
+                        idx = content.rfind(marker)
+                        if idx != -1:
+                            pre = content[idx + len(marker):].strip()
+                            # Some UIs might wrap JSON in code fences
+                            pre = pre.strip('`').strip()
+                            return json.loads(pre)
+                except Exception:
+                    return None
+                return None
+
+            def _parse_name_category_from_message(text):
+                # Accept patterns: "Name, Category" or "nom: X, catégorie: Y"
+                t = text.strip()
+                # nom/catégorie pattern
+                lower = t.lower()
+                if 'nom' in lower and 'cat' in lower:
+                    # crude extraction
+                    name = None
+                    category = None
+                    try:
+                        # split by commas
+                        parts = [p.strip() for p in t.split(',')]
+                        for p in parts:
+                            pl = p.lower()
+                            if pl.startswith('nom:'):
+                                name = p.split(':', 1)[1].strip()
+                            if pl.startswith('cat'):
+                                category = p.split(':', 1)[1].strip()
+                    except Exception:
+                        pass
+                    return name, category
+                # simple "Name, Category"
+                if ',' in t:
+                    name_part, cat_part = t.split(',', 1)
+                    return name_part.strip(), cat_part.strip()
+                return None, None
+
+            def _normalize_category(cat):
+                if not cat:
+                    return cat
+                c = cat.strip()
+                mapping = {
+                    'avion': 'Avions', 'avions': 'Avions',
+                    'voiture': 'Voitures', 'voitures': 'Voitures',
+                    'bateau': 'Bateaux', 'bateaux': 'Bateaux',
+                    'montre': 'Montres', 'montres': 'Montres',
+                }
+                key = c.lower()
+                return mapping.get(key, c)
+
+            from chatbot_manager import ChatbotManager  # lazy import
+            cm2 = ChatbotManager()
+            prefilled = _extract_last_prefill_json(conversation_history)
+            if prefilled:
+                name_val, cat_val = _parse_name_category_from_message(query)
+                # Merge provided fields
+                payload = dict(prefilled)
+                if name_val:
+                    payload['name'] = name_val
+                if cat_val:
+                    payload['category'] = _normalize_category(cat_val)
+                # Attempt creation if now sufficient
+                missing_now = [k for k in ('name', 'category') if not payload.get(k)]
+                if not missing_now:
+                    result2 = cm2.create_from_payload(payload)
+                    if result2.get('success'):
+                        created2 = result2.get('item') or {}
+                        return jsonify({
+                            "reply": f"✅ Objet créé: {created2.get('name')} ({created2.get('category')}). ID: {created2.get('id', 'N/A')}",
+                            "metadata": {
+                                "mode": "chatbot_create_success",
+                                "created_item": created2,
+                                "items_analyzed": len(items)
+                            }
+                        })
+                    else:
+                        return jsonify({
+                            "reply": (
+                                "❌ Échec de création. \n" +
+                                (result2.get('error') or 'Erreur inconnue') +
+                                "\nPayload: " + json.dumps(payload, ensure_ascii=False)
+                            ),
+                            "metadata": {
+                                "mode": "chatbot_create_error_followup",
+                                "status_code": result2.get('status_code')
+                            }
+                        })
         except Exception as _e:
             # Fallback to standard chatbot if anything goes wrong
             pass
