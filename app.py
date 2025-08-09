@@ -4038,7 +4038,64 @@ def chatbot():
         # Récupération des données
         items = AdvancedDataManager.fetch_all_items()
         analytics = AdvancedDataManager.calculate_advanced_analytics(items)
-        
+
+        # Chatbot-assisted item creation (natural language → new asset)
+        try:
+            query_lower = query.lower()
+            add_intent_keywords = [
+                'ajoute', 'ajouter', 'ajout', 'crée', 'creer', 'créer',
+                'add', 'create', 'new asset', 'nouvel', 'nouveau'
+            ]
+            if any(k in query_lower for k in add_intent_keywords):
+                from chatbot_manager import ChatbotManager  # lazy import
+                cm = ChatbotManager()
+                extract = cm.extract_item(query)
+                missing = extract.get('missing') or []
+                extracted_payload = extract.get('data') or {}
+
+                if missing:
+                    return jsonify({
+                        "reply": (
+                            "Pour créer l'objet, il me manque: " + ", ".join(missing) + ".\n"
+                            "Indiquez ces informations dans un message (ex: 'nom: ..., catégorie: ...').\n\n"
+                            "Pré-rempli: " + json.dumps(extracted_payload, ensure_ascii=False)
+                        ),
+                        "metadata": {
+                            "mode": "chatbot_create_pending",
+                            "items_analyzed": len(items)
+                        }
+                    })
+
+                # Create immediately when sufficient
+                result = cm.create_from_payload(extracted_payload)
+                if result.get('success'):
+                    created = result.get('item') or {}
+                    name = created.get('name') or extracted_payload.get('name')
+                    category = created.get('category') or extracted_payload.get('category')
+                    return jsonify({
+                        "reply": f"✅ Objet créé: {name} ({category}). ID: {created.get('id', 'N/A')}",
+                        "metadata": {
+                            "mode": "chatbot_create_success",
+                            "created_item": created,
+                            "items_analyzed": len(items)
+                        }
+                    })
+                else:
+                    return jsonify({
+                        "reply": (
+                            "❌ Échec de création. \n" +
+                            (result.get('error') or 'Erreur inconnue') +
+                            "\nVérifiez/complétez ces champs: " + json.dumps(extracted_payload, ensure_ascii=False)
+                        ),
+                        "metadata": {
+                            "mode": "chatbot_create_error",
+                            "status_code": result.get('status_code')
+                        }
+                    })
+        except Exception as _e:
+            # Fallback to standard chatbot if anything goes wrong
+            pass
+
         if ai_engine:
             # Génération de réponse via OpenAI avec RAG et historique
             response = ai_engine.generate_response_with_history(query, items, analytics, conversation_history)
