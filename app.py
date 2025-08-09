@@ -5,6 +5,7 @@ import re
 import hashlib
 import smtplib
 import threading
+import queue
 import time
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, Tuple
@@ -646,10 +647,21 @@ class GmailNotificationManager:
         self.recipients = [email.strip() for email in EMAIL_RECIPIENTS if email.strip()]
         self.enabled = bool(EMAIL_USER and EMAIL_PASSWORD and self.recipients)
         self.app_url = APP_URL
+        # Lightweight in-memory queue with background worker (avoids spawning many threads)
+        self._queue: "queue.Queue[dict]" = queue.Queue()
+        self._worker_started = False
         
         if self.enabled:
             logger.info(f"Notifications Gmail activees pour {len(self.recipients)} destinataires")
             logger.info(f"🔗 URL de l'app: {self.app_url}")
+            # Start background worker once
+            try:
+                if not self._worker_started:
+                    t = threading.Thread(target=self._worker_loop, daemon=True)
+                    t.start()
+                    self._worker_started = True
+            except Exception as _:
+                pass
         else:
             logger.warning("⚠️ Notifications Gmail désactivées - configuration manquante")
     
@@ -658,14 +670,46 @@ class GmailNotificationManager:
         if not self.enabled:
             logger.warning("Notifications Gmail désactivées")
             return
-        
-        # Envoyer dans un thread séparé pour ne pas bloquer l'API
-        thread = threading.Thread(
-            target=self._send_email,
-            args=(subject, content, item_data),
-            daemon=True
-        )
-        thread.start()
+        # Enqueue for background worker (retry-friendly, avoids thread storms)
+        try:
+            self._queue.put({
+                "subject": subject,
+                "content": content,
+                "item_data": item_data,
+                "attempt": 0
+            }, block=False)
+        except Exception as e:
+            logger.error(f"❌ File d'emails saturée: {e}")
+
+    def _worker_loop(self):
+        """Background worker that drains the email queue with retries."""
+        while True:
+            try:
+                job = self._queue.get(timeout=5)
+            except Exception:
+                # nothing to do
+                continue
+            try:
+                self._send_email(job.get("subject"), job.get("content"), job.get("item_data"))
+            except Exception as e:
+                # retry up to 3 times with basic backoff
+                attempt = int(job.get("attempt") or 0) + 1
+                if attempt <= 3:
+                    backoff_seconds = min(60, 2 ** attempt)
+                    logger.warning(f"📧 Retry email in {backoff_seconds}s (attempt {attempt}/3): {e}")
+                    time.sleep(backoff_seconds)
+                    job["attempt"] = attempt
+                    try:
+                        self._queue.put(job, block=False)
+                    except Exception:
+                        pass
+                else:
+                    logger.error(f"❌ Echec email après 3 tentatives: {e}")
+            finally:
+                try:
+                    self._queue.task_done()
+                except Exception:
+                    pass
     
     def _send_email(self, subject: str, content: str, item_data: Optional[Dict] = None):
         """Envoie effectivement l'email via Gmail"""
