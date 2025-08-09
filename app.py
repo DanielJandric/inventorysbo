@@ -3221,6 +3221,21 @@ def create_item():
         if response.data:
             smart_cache.invalidate('items')
             smart_cache.invalidate('analytics')
+            try:
+                if ai_engine and ai_engine.semantic_search:
+                    inserted = response.data[0]
+                    def _embed_worker_main(itm: Dict[str, Any]):
+                        try:
+                            emb = ai_engine.semantic_search.generate_embedding_for_item(CollectionItem.from_dict(itm))
+                            if emb:
+                                supabase.table('items').update({'embedding': emb}).eq('id', itm.get('id')).execute()
+                                smart_cache.invalidate('items')
+                                smart_cache.invalidate('analytics')
+                        except Exception as e0:
+                            logger.warning(f"⚠️ Embedding async (create_item) échoué: {e0}")
+                    threading.Thread(target=_embed_worker_main, args=(inserted,), daemon=True).start()
+            except Exception:
+                pass
             
             # Notification Gmail pour nouvel objet (non bloquant et sous feature flag)
             try:
@@ -4704,6 +4719,21 @@ def chatbot():
                             if resp.data:
                                 smart_cache.invalidate('items')
                                 smart_cache.invalidate('analytics')
+                                try:
+                                    if ai_engine and ai_engine.semantic_search:
+                                        inserted = resp.data[0]
+                                        def _embed_worker2(itm: Dict[str, Any]):
+                                            try:
+                                                emb = ai_engine.semantic_search.generate_embedding_for_item(CollectionItem.from_dict(itm))
+                                                if emb:
+                                                    supabase.table('items').update({'embedding': emb}).eq('id', itm.get('id')).execute()
+                                                    smart_cache.invalidate('items')
+                                                    smart_cache.invalidate('analytics')
+                                            except Exception as e2:
+                                                logger.warning(f"⚠️ Embedding async (batch) échoué: {e2}")
+                                        threading.Thread(target=_embed_worker2, args=(inserted,), daemon=True).start()
+                                except Exception:
+                                    pass
                                 created.append(resp.data[0])
                             else:
                                 errors.append({"error": "insert_failed", "payload": payload})
@@ -4754,6 +4784,21 @@ def chatbot():
                                 if resp.data:
                                     smart_cache.invalidate('items')
                                     smart_cache.invalidate('analytics')
+                                    try:
+                                        if ai_engine and ai_engine.semantic_search:
+                                            inserted = resp.data[0]
+                                            def _embed_worker3(itm: Dict[str, Any]):
+                                                try:
+                                                    emb = ai_engine.semantic_search.generate_embedding_for_item(CollectionItem.from_dict(itm))
+                                                    if emb:
+                                                        supabase.table('items').update({'embedding': emb}).eq('id', itm.get('id')).execute()
+                                                        smart_cache.invalidate('items')
+                                                        smart_cache.invalidate('analytics')
+                                                except Exception as e3:
+                                                    logger.warning(f"⚠️ Embedding async (fallback) échoué: {e3}")
+                                            threading.Thread(target=_embed_worker3, args=(inserted,), daemon=True).start()
+                                    except Exception:
+                                        pass
                                     created.append(resp.data[0])
                                 else:
                                     errors.append({"error": "insert_failed", "payload": payload})
