@@ -148,14 +148,14 @@ class MarketAnalysisWorker:
 
         # 2. Concaténer les informations pertinentes pour le prompt de l'IA
         # On ne passe que les titres, les URL et les 300 premiers caractères du corps
-        # pour rester dans les limites de tokens du prompt.
+        # pour rester dans les limites de tokens du prompt. On limite à 15 articles.
         articles_summary = "\n\n".join([
             f"Title: {a.get('title', 'N/A')}\n"
             f"URL: {a.get('url', 'N/A')}\n"
             f"Source: {a.get('source', {}).get('title', 'N/A')}\n"
             f"Date: {a.get('date', 'N/A')}\n"
             f"Content Snippet: {a.get('body', '')[:300]}...\n"
-            for a in articles
+            for a in articles[:15]
         ])
         
         # 3. Construire le prompt final pour l'IA
