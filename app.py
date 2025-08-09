@@ -14,6 +14,7 @@ from functools import lru_cache, wraps
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from flask import Flask, jsonify, render_template, request, Response
+from metrics_api import metrics_bp
 from werkzeug.utils import secure_filename
 from pdf_optimizer import generate_optimized_pdf, create_summary_box, create_item_card_html, format_price_for_pdf
 from flask_cors import CORS
@@ -1538,6 +1539,11 @@ app.config.update(
     JSON_SORT_KEYS=False
 )
 CORS(app)
+# Register metrics blueprint under /api
+try:
+    app.register_blueprint(metrics_bp, url_prefix='/api')
+except Exception as _e:
+    pass
 
 # Configuration du dépôt de PDF marché
 app.config.setdefault('MARKET_PDF_UPLOAD_FOLDER', os.path.join(app.root_path, 'static', 'market_pdfs'))
@@ -4130,6 +4136,24 @@ def chatbot():
                 key = cat.strip().lower()
                 return mapping.get(key, cat)
 
+            # 0.b Fallback direct: si le message est "Name, Category", créer immédiatement
+            name_direct, cat_direct = _parse_name_category_from_message(query)
+            if name_direct and cat_direct:
+                from chatbot_manager import ChatbotManager
+                cm_direct = ChatbotManager()
+                payload_direct = {
+                    'name': name_direct,
+                    'category': _normalize_category(cat_direct),
+                    'status': 'Available'
+                }
+                result_direct = cm_direct.create_from_payload(payload_direct)
+                if result_direct.get('success'):
+                    created_d = result_direct.get('item') or {}
+                    return jsonify({
+                        "reply": f"✅ Objet créé: {created_d.get('name')} ({created_d.get('category')}). ID: {created_d.get('id', 'N/A')}",
+                        "metadata": {"mode": "chatbot_create_success", "created_item": created_d}
+                    })
+
             prefilled0 = _extract_last_prefill_json(conversation_history)
             if prefilled0:
                 name_v, cat_v = _parse_name_category_from_message(query)
@@ -4165,6 +4189,45 @@ def chatbot():
         # Récupération des données
         items = AdvancedDataManager.fetch_all_items()
         analytics = AdvancedDataManager.calculate_advanced_analytics(items)
+
+        # 1) INTENT: "combien de <catégorie>" (réponse déterministe depuis la DB)
+        try:
+            ql = query.lower()
+            if 'combien' in ql:
+                def _norm_cat(text: str) -> Optional[str]:
+                    mapping = {
+                        'voiture': 'Voitures', 'voitures': 'Voitures', 'vehicules': 'Voitures', 'véhicules': 'Voitures',
+                        'montre': 'Montres', 'montres': 'Montres',
+                        'avion': 'Avions', 'avions': 'Avions',
+                        'bateau': 'Bateaux', 'bateaux': 'Bateaux',
+                        'action': 'Actions', 'actions': 'Actions',
+                    }
+                    for k, v in mapping.items():
+                        if k in text:
+                            return v
+                    return None
+
+                cat = _norm_cat(ql)
+                if cat:
+                    total = [i for i in items if i.category == cat]
+                    sold = [i for i in total if (i.status or '') == 'Sold']
+                    available = [i for i in total if (i.status or '') != 'Sold']
+
+                    # par défaut: disponibles; si "total" mentionné → total
+                    total_mode = ('total' in ql) or ('toutes' in ql) or ('au total' in ql)
+                    count = len(total) if total_mode else len(available)
+                    if total_mode:
+                        return jsonify({
+                            "reply": f"Tu as {len(total)} {cat.lower()} au total, dont {len(sold)} vendues et {len(available)} disponibles.",
+                            "metadata": {"mode": "chatbot_count", "category": cat, "total": len(total), "sold": len(sold), "available": len(available)}
+                        })
+                    else:
+                        return jsonify({
+                            "reply": f"Tu as {len(available)} {cat.lower()} disponibles (non vendues).",
+                            "metadata": {"mode": "chatbot_count", "category": cat, "available": len(available), "sold": len(sold), "total": len(total)}
+                        })
+        except Exception:
+            pass
 
         # Chatbot-assisted item creation (natural language → new asset)
         try:
