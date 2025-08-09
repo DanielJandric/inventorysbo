@@ -1563,7 +1563,7 @@ class AdvancedDataManager:
             if not supabase:
                 return []
             
-            response = supabase.table("items").select("*").order("updated_at", desc=True).execute()
+            response = supabase.table("item").select("*").order("updated_at", desc=True).execute()
             raw_items = response.data or []
             
             items = []
@@ -2798,7 +2798,7 @@ def create_item():
         if 'id' in data:
             del data['id']
         
-        response = supabase.table("items").insert(data).execute()
+        response = supabase.table("item").insert(data).execute()
         if response.data:
             smart_cache.invalidate('items')
             smart_cache.invalidate('analytics')
@@ -2826,7 +2826,7 @@ def update_item(item_id):
             return jsonify({"error": "Données manquantes"}), 400
         
         # Récupérer l'ancien état avant modification
-        old_response = supabase.table("items").select("*").eq("id", item_id).execute()
+        old_response = supabase.table("item").select("*").eq("id", item_id).execute()
         old_data = old_response.data[0] if old_response.data else {}
         
         # Nettoyage sophistiqué des données
@@ -2855,7 +2855,7 @@ def update_item(item_id):
                 cleaned_data['embedding'] = new_embedding
                 logger.info(f"✅ Embedding mis à jour pour l'objet {item_id}")
         
-        response = supabase.table("items").update(cleaned_data).eq("id", item_id).execute()
+        response = supabase.table("item").update(cleaned_data).eq("id", item_id).execute()
         
         if response.data:
             smart_cache.invalidate('items')
@@ -2896,7 +2896,7 @@ def delete_item(item_id):
         return jsonify({"error": "Supabase non connecté"}), 500
     
     try:
-        response = supabase.table("items").delete().eq("id", item_id).execute()
+        response = supabase.table("item").delete().eq("id", item_id).execute()
         smart_cache.invalidate('items')
         smart_cache.invalidate('analytics')
         return "", 204
@@ -4289,7 +4289,7 @@ def generate_embeddings():
                 
                 if embedding:
                     # Sauvegarder dans Supabase
-                    supabase.table("items").update({"embedding": embedding}).eq("id", item.id).execute()
+                    supabase.table("item").update({"embedding": embedding}).eq("id", item.id).execute()
                     success_count += 1
                     logger.info(f"Embedding généré pour: {item.name}")
                 else:
