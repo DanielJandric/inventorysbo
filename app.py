@@ -4840,6 +4840,36 @@ def chatbot():
         except Exception:
             pass
 
+        # 0.d Résumé/état de la collection (déterministe, vendus exclus pour la valeur)
+        try:
+            ql = query.lower()
+            if any(k in ql for k in ['comment va', 'synthèse', 'synthese', 'résumé', 'resume', 'statistiques', 'etat', "état"]) and 'collection' in ql:
+                def _item_value(it) -> float:
+                    try:
+                        if it.category == 'Actions' and it.current_price and it.stock_quantity:
+                            return float(it.current_price) * float(it.stock_quantity)
+                        return float(it.current_value or 0)
+                    except Exception:
+                        return 0.0
+                total_items = len(items)
+                available_items = len([i for i in items if is_item_available(i)])
+                sold_items = len([i for i in items if is_item_sold(i)])
+                for_sale_items = len([i for i in items if is_item_available(i) and i.for_sale])
+                total_value_available = sum(_item_value(i) for i in items if is_item_available(i))
+                reply = (
+                    f"Ta collection (vendus exclus):\n"
+                    f"- Objets disponibles: {available_items}/{total_items}\n"
+                    f"- Objets vendus: {sold_items}\n"
+                    f"- Objets en vente: {for_sale_items}\n"
+                    f"- Valeur totale estimée (disponible): {total_value_available:,.0f} CHF"
+                )
+                return jsonify({
+                    "reply": reply,
+                    "metadata": {"mode": "chatbot_summary", "available": available_items, "sold": sold_items, "for_sale": for_sale_items, "value_available": total_value_available}
+                })
+        except Exception:
+            pass
+
         # 1) INTENT: "combien de <catégorie>" (réponse déterministe depuis la DB)
         try:
             ql = query.lower()
