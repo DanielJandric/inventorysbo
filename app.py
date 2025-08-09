@@ -3199,16 +3199,19 @@ def create_item():
         except Exception:
             pass
         
-        # Générer l'embedding si OpenAI disponible
-        if ai_engine and ai_engine.semantic_search:
-            # Ajouter un ID temporaire pour créer l'objet
-            temp_data = data.copy()
-            temp_data['id'] = 0  # ID temporaire pour la création de l'objet
-            temp_item = CollectionItem.from_dict(temp_data)
-            embedding = ai_engine.semantic_search.generate_embedding_for_item(temp_item)
-            if embedding:
-                data['embedding'] = embedding
-                logger.info("✅ Embedding généré pour le nouvel objet")
+            # Générer l'embedding (optionnel, pour éviter timeouts)
+            try:
+                if os.environ.get('EMBED_ON_CREATE', '0').lower() in {'1','true','yes','on'}:
+                    if ai_engine and ai_engine.semantic_search:
+                        temp_data = data.copy()
+                        temp_data['id'] = 0
+                        temp_item = CollectionItem.from_dict(temp_data)
+                        embedding = ai_engine.semantic_search.generate_embedding_for_item(temp_item)
+                        if embedding:
+                            data['embedding'] = embedding
+                            logger.info("✅ Embedding généré pour le nouvel objet")
+            except Exception:
+                pass
         
         # Ne pas inclure l'ID dans l'insertion Supabase
         if 'id' in data:
@@ -4682,14 +4685,18 @@ def chatbot():
                                     payload['current_value'] = payload['acquisition_price']
                             except Exception:
                                 pass
-                            # Generate embedding best-effort
-                            if ai_engine and ai_engine.semantic_search:
-                                temp = payload.copy()
-                                temp['id'] = 0
-                                temp_item = CollectionItem.from_dict(temp)
-                                emb = ai_engine.semantic_search.generate_embedding_for_item(temp_item)
-                                if emb:
-                                    payload['embedding'] = emb
+                            # Optional embedding generation (disabled by default to avoid timeouts)
+                            try:
+                                if os.environ.get('EMBED_ON_CREATE_IN_CHAT', '0').lower() in {'1','true','yes','on'}:
+                                    if ai_engine and ai_engine.semantic_search:
+                                        temp = payload.copy()
+                                        temp['id'] = 0
+                                        temp_item = CollectionItem.from_dict(temp)
+                                        emb = ai_engine.semantic_search.generate_embedding_for_item(temp_item)
+                                        if emb:
+                                            payload['embedding'] = emb
+                            except Exception:
+                                pass
                             # Never send id to DB
                             payload.pop('id', None)
                             # Insert directly
