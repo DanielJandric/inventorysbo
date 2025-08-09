@@ -114,7 +114,7 @@ class ChatbotManager:
                 raise ValueError("AI engine not configured.")
 
             response = self.ai_engine.openai_client.chat.completions.create(
-                model=os.getenv("AI_MODEL", "gpt-4-turbo"),
+                model=os.getenv("AI_MODEL", "gpt-4.1"),
                 messages=[{"role": "user", "content": prompt}],
                 response_format={"type": "json_object"},
                 temperature=0.2,

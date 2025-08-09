@@ -4503,7 +4503,7 @@ def chatbot():
                 many = cm0.extract_items(query) or {}
                 many_list = many.get('items') or []
                 many_list = [it for it in many_list if isinstance(it, dict)]
-                if len(many_list) >= 2:
+                if len(many_list) >= 1:
                     # Propose a list for confirmation
                     # Ensure category inference defaults to Available
                     for it in many_list:
