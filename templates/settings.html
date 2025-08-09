@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Settings - BONVIN Collection</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
     <script>
         tailwind.config = {
             theme: {
@@ -241,6 +242,40 @@
                 </div>
             </div>
 
+            <!-- Rapports PDF Manuels -->
+            <div class="glassmorphism rounded-xl p-6 lg:col-span-2">
+                <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl flex items-center justify-center bg-red-500/10 border border-red-400/30 text-red-300">
+                           <i class="fas fa-file-pdf"></i>
+                        </div>
+                        <div>
+                           <h3 class="text-xl font-semibold text-bonvin-gold">Rapports PDF Manuels</h3>
+                           <p class="text-sm text-gray-400">Gérez les rapports de marché PDF.</p>
+                        </div>
+                    </div>
+                    <button id="refresh-pdfs" class="w-full sm:w-auto px-4 py-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 text-sm transition-colors">
+                        <i class="fas fa-sync-alt mr-2"></i>Actualiser
+                    </button>
+                </div>
+
+                <!-- Formulaire d'upload -->
+                <div class="glassmorphism-dark p-4 rounded-xl mb-6">
+                     <form id="market-pdf-upload-form" class="flex flex-col sm:flex-row items-center gap-4">
+                        <input id="market-pdf-file" type="file" accept="application/pdf" required class="flex-grow w-full file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-bonvin-gold/20 file:text-bonvin-gold hover:file:bg-bonvin-gold/30 text-gray-300"/>
+                        <button type="submit" class="w-full sm:w-auto glowing-element px-5 py-3 rounded-xl bg-bonvin-gold/80 hover:bg-bonvin-gold text-black font-semibold transition">
+                            <i class="fas fa-upload mr-2"></i> Déposer
+                        </button>
+                    </form>
+                    <div id="market-pdf-upload-status" class="mt-3 text-sm text-center"></div>
+                </div>
+
+                <!-- Galerie de PDFs -->
+                <div id="market-pdf-gallery" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <!-- Les PDFs seront injectés ici par JS -->
+                </div>
+            </div>
+
             <!-- PDF Generation -->
             <div class="glassmorphism rounded-xl p-6">
                 <h3 class="text-xl font-semibold text-bonvin-gold mb-4">📄 PDF Generation</h3>
@@ -429,36 +464,55 @@
             await Promise.all([
                 loadSchedulerStatus(),
                 loadRecentUpdates(),
-                loadMarketPdfs(),
                 loadYahooStatus(),
                 loadCacheStatus(),
                 loadEmailConfig(),
                 loadApiEndpoints(),
-                loadSystemHealth()
+                loadSystemHealth(),
+                loadMarketPdfs()
             ]);
         }
 
         async function loadMarketPdfs() {
-            try {
-                const container = document.getElementById('market-pdf-list');
-                if (!container) return;
-                container.textContent = 'Chargement...';
+            const container = document.getElementById('market-pdf-gallery');
+            if (!container) return;
+             try {
+                container.innerHTML = '<p class="text-gray-400 col-span-full text-center">Chargement des rapports...</p>';
                 const resp = await fetch('/api/market-pdfs');
                 const data = await resp.json();
                 if (!resp.ok || !data.success) throw new Error(data.error || 'Erreur de chargement');
+
                 if (!data.files || data.files.length === 0) {
-                    container.textContent = 'Aucun PDF déposé pour le moment.';
+                    container.innerHTML = '<p class="text-gray-400 col-span-full text-center">Aucun rapport PDF déposé pour le moment.</p>';
                     return;
                 }
+                
+                // Trier les fichiers par date de modification, du plus récent au plus ancien
+                data.files.sort((a, b) => new Date(b.modified_at) - new Date(a.modified_at));
+
                 container.innerHTML = data.files.map(f => `
-                    <div class="flex items-center justify-between py-1">
-                        <a href="${f.url}" target="_blank" class="text-bonvin-gold hover:underline">${f.name}</a>
-                        <span class="text-gray-400 text-xs">${new Date(f.modified_at).toLocaleString('fr-FR')}</span>
-                    </div>
+                    <article class="glassmorphism-dark p-4 rounded-2xl flex flex-col gap-3 transition-all hover:ring-2 ring-bonvin-gold/50">
+                        <header class="flex items-start gap-3">
+                            <div class="w-10 h-10 rounded-xl flex items-center justify-center bg-red-500/10 border border-red-400/30 text-red-300 shrink-0">
+                                <i class="fas fa-file-pdf"></i>
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <h4 class="font-semibold text-bonvin-gold truncate" title="${f.name}">${f.name}</h4>
+                                <p class="text-gray-400 text-xs">${new Date(f.modified_at).toLocaleString('fr-FR')}</p>
+                            </div>
+                        </header>
+                         <div class="rounded-xl overflow-hidden border border-white/10 bg-black/30 aspect-video mt-2">
+                           <iframe src="${f.url}#toolbar=0&navpanes=0&scrollbar=0" class="w-full h-full border-0"></iframe>
+                        </div>
+                        <footer class="flex gap-2 justify-end mt-2">
+                            <a href="${f.url}" target="_blank" class="px-3 py-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 text-sm transition-colors">Ouvrir</a>
+                            <a href="${f.url}" download class="px-3 py-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 text-sm transition-colors">Télécharger</a>
+                        </footer>
+                    </article>
                 `).join('');
             } catch (e) {
-                const container = document.getElementById('market-pdf-list');
-                if (container) container.textContent = '❌ ' + e.message;
+                const container = document.getElementById('market-pdf-gallery');
+                if (container) container.innerHTML = `<p class="text-red-400 col-span-full text-center">❌ Erreur lors du chargement des PDFs: ${e.message}</p>`;
             }
         }
 
@@ -1276,27 +1330,44 @@
                     e.preventDefault();
                     const fileInput = document.getElementById('market-pdf-file');
                     const statusDiv = document.getElementById('market-pdf-upload-status');
+                    const uploadButton = uploadForm.querySelector('button[type="submit"]');
+
                     statusDiv.textContent = '';
                     if (!fileInput.files || fileInput.files.length === 0) {
-                        statusDiv.textContent = 'Veuillez sélectionner un fichier PDF.';
+                        statusDiv.innerHTML = `<span class="text-red-400">Veuillez sélectionner un fichier PDF.</span>`;
                         return;
                     }
                     const formData = new FormData();
                     formData.append('file', fileInput.files[0]);
+
+                    const originalButtonHtml = uploadButton.innerHTML;
+                    uploadButton.disabled = true;
+                    uploadButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Déversement...';
+                    statusDiv.innerHTML = '<span class="text-blue-400">Déversement en cours...</span>';
+
                     try {
                         const resp = await fetch('/api/market-pdfs/upload', { method: 'POST', body: formData });
                         const data = await resp.json();
                         if (!resp.ok || !data.success) {
                             throw new Error(data.error || 'Échec du téléversement');
                         }
-                        statusDiv.textContent = '✅ PDF déposé: ' + data.name;
+                        statusDiv.innerHTML = `<span class="text-green-400">✅ Fichier déposé: ${data.name}</span>`;
                         fileInput.value = '';
                         await loadMarketPdfs();
                     } catch (err) {
-                        statusDiv.textContent = '❌ ' + err.message;
+                        statusDiv.innerHTML = `<span class="text-red-400">❌ ${err.message}</span>`;
+                    } finally {
+                        uploadButton.disabled = false;
+                        uploadButton.innerHTML = originalButtonHtml;
                     }
                 });
             }
+
+            const refreshPdfsBtn = document.getElementById('refresh-pdfs');
+            if(refreshPdfsBtn) {
+                refreshPdfsBtn.addEventListener('click', loadMarketPdfs);
+            }
+
             const pushButton = document.getElementById('push-all-updates');
             const quickSyncButton = document.getElementById('quick-sync');
             const pushNotificationsButton = document.getElementById('push-notifications');

@@ -104,35 +104,6 @@
                 </div>
                 <div id="analysis-result" class="hidden mt-4"></div>
             </section>
-
-            <!-- Section Rapports PDF Manuels -->
-            <section class="glass p-6 rounded-2xl">
-                 <div class="flex items-center justify-between mb-4 flex-wrap gap-4">
-                    <div class="flex items-center gap-3">
-                         <div class="w-10 h-10 rounded-xl flex items-center justify-center bg-red-500/10 border border-red-400/30 text-red-300">
-                            <i class="fas fa-file-pdf"></i>
-                        </div>
-                        <h2 class="text-xl font-semibold">Rapports PDF Manuels</h2>
-                    </div>
-                    <button id="refresh-pdfs" class="px-3 py-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 text-sm">Actualiser</button>
-                </div>
-
-                <!-- Formulaire d'upload -->
-                <div class="glass p-4 rounded-xl mb-6">
-                     <form id="market-pdf-upload-form" class="flex items-center gap-4">
-                        <input id="market-pdf-file" type="file" accept="application/pdf" class="flex-grow file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-cyan-500/10 file:text-cyan-300 hover:file:bg-cyan-500/20 text-cyan-200/80" />
-                        <button type="submit" class="glowing-element px-5 py-3 rounded-xl bg-cyan-500/20 border border-cyan-400/30 hover:bg-cyan-500/30 text-cyan-100 font-semibold transition">
-                            <i class="fas fa-upload mr-2"></i> Déposer
-                        </button>
-                    </form>
-                    <div id="market-pdf-upload-status" class="mt-2 text-sm text-center"></div>
-                </div>
-
-                <!-- Galerie de PDFs -->
-                <div id="market-pdf-gallery" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    <div class="text-cyan-200/70">Chargement des rapports...</div>
-                </div>
-            </section>
         </main>
     </div>
 
@@ -283,72 +254,6 @@
                 }
             });
             checkStatus();
-
-            // --- PDFs Manuels ---
-            const uploadForm = document.getElementById('market-pdf-upload-form');
-            const fileInput = document.getElementById('market-pdf-file');
-            const uploadStatusDiv = document.getElementById('market-pdf-upload-status');
-            
-            async function loadMarketPdfs() {
-                const container = document.getElementById('market-pdf-gallery');
-                try {
-                    container.innerHTML = '<p class="text-cyan-200/70">Chargement des rapports...</p>';
-                    const resp = await fetch('/api/market-pdfs');
-                    const data = await resp.json();
-                    if (!resp.ok || !data.success) throw new Error(data.error || 'Erreur de chargement');
-                    
-                    if (!data.files || data.files.length === 0) {
-                        container.innerHTML = '<p class="text-cyan-200/70">Aucun rapport PDF déposé pour le moment.</p>';
-                        return;
-                    }
-                    container.innerHTML = data.files.map(f => `
-                        <article class="glass p-4 rounded-2xl flex flex-col gap-3">
-                            <header class="flex items-center gap-3">
-                                <div class="w-10 h-10 rounded-xl flex items-center justify-center bg-red-500/10 border border-red-400/30 text-red-300 shrink-0">
-                                    <i class="fas fa-file-pdf"></i>
-                                </div>
-                                <div class="min-w-0">
-                                    <h4 class="font-semibold text-cyan-100 truncate">${f.name}</h4>
-                                    <p class="text-cyan-200/60 text-xs">${new Date(f.modified_at).toLocaleString('fr-FR')}</p>
-                                </div>
-                            </header>
-                            <div class="rounded-xl overflow-hidden border border-white/10 bg-black/30 aspect-video">
-                                <iframe src="${f.url}#toolbar=0&navpanes=0&scrollbar=0" class="w-full h-full"></iframe>
-                            </div>
-                            <footer class="flex gap-2 justify-end">
-                                <a href="${f.url}" target="_blank" class="px-3 py-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 text-sm transition-colors">Ouvrir</a>
-                                <a href="${f.url}" download class="px-3 py-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 text-sm transition-colors">Télécharger</a>
-                            </footer>
-                        </article>
-                    `).join('');
-                } catch (e) {
-                    container.innerHTML = `<p class="text-red-400">❌ Erreur lors du chargement des PDFs: ${e.message}</p>`;
-                }
-            }
-
-            uploadForm.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                if (!fileInput.files.length) {
-                    uploadStatusDiv.textContent = 'Veuillez sélectionner un fichier.';
-                    return;
-                }
-                const formData = new FormData();
-                formData.append('file', fileInput.files[0]);
-                uploadStatusDiv.textContent = 'Déversement en cours...';
-                try {
-                    const resp = await fetch('/api/market-pdfs/upload', { method: 'POST', body: formData });
-                    const data = await resp.json();
-                    if (!resp.ok || !data.success) throw new Error(data.error || 'Échec du téléversement');
-                    uploadStatusDiv.innerHTML = `<span class="text-green-400">✅ Fichier déposé: ${data.name}</span>`;
-                    fileInput.value = '';
-                    await loadMarketPdfs();
-                } catch (err) {
-                    uploadStatusDiv.innerHTML = `<span class="text-red-400">❌ ${err.message}</span>`;
-                }
-            });
-
-            document.getElementById('refresh-pdfs').addEventListener('click', loadMarketPdfs);
-            loadMarketPdfs();
         });
     </script>
 </body>
