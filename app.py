@@ -5091,7 +5091,19 @@ def generate_full_bank_report():
                 # Sur Windows/Render, "node" doit être dans le PATH si npm install a été exécuté
                 node_cmd = os.getenv('NODE_BIN', 'node')
                 script_path = os.path.join(os.getcwd(), 'tools', 'puppeteer_print.js')
-                cmd = [node_cmd, script_path, '--file', html_path, '--out', pdf_path, '--landscape', 'true', '--format', 'A4', '--margin', '14mm']
+                # Paramètres réglables via query string
+                landscape = request.args.get('landscape', 'true').lower() in ['true', '1', 'yes']
+                fmt = request.args.get('format', 'A4')
+                margin = request.args.get('margin', '14mm')
+                scale = request.args.get('scale')  # optionnel
+                wait_until = request.args.get('wait_until', 'networkidle0')
+                timeout_ms = request.args.get('timeout_ms')
+
+                cmd = [node_cmd, script_path, '--file', html_path, '--out', pdf_path, '--landscape', 'true' if landscape else 'false', '--format', fmt, '--margin', margin, '--wait-until', wait_until]
+                if scale:
+                    cmd.extend(['--scale', str(scale)])
+                if timeout_ms:
+                    cmd.extend(['--timeout', str(timeout_ms)])
 
                 import subprocess
                 completed = subprocess.run(cmd, capture_output=True)
