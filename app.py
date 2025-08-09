@@ -630,7 +630,6 @@ def generate_optimized_pdf(html_content: str, css_string: str, filename: str):
         return jsonify({
             "error": f"Erreur lors de la generation PDF: {str(e)}"
         }), 500
-
 # Gestionnaire de notifications Gmail avec style exact de la web app
 class GmailNotificationManager:
     """Gestionnaire de notifications Gmail avec style identique à la web app"""
@@ -1381,7 +1380,6 @@ L'objet "<strong>{item_data.get('name', 'N/A')}</strong>" de la catégorie "<str
         return f"""
 BONVIN Collection - Rapport de Marché
 ====================================
-
 📋 INFORMATIONS DU RAPPORT
 Date: {report_date}
 Heure: {report_time}
@@ -2141,7 +2139,6 @@ RÈGLES:
             
             # Prompt utilisateur simplifié
             user_prompt = f"""QUESTION: {query}
-
 DONNÉES: {complete_context}
 
 Réponds de manière concise et directe."""
@@ -2932,8 +2929,6 @@ def get_live_exchange_rate(from_currency: str, to_currency: str = 'CHF') -> floa
     except Exception as e:
         logger.error(f"Erreur taux de change Manus: {e}")
         return 1.0
-
-
 def to_numeric_or_none(value):
     """Convertit en float/int si possible; sinon retourne None (évite d'écrire 'N/A' en DB)."""
     if value is None:
@@ -3679,7 +3674,6 @@ OBJET À ÉVALUER:
 - Année: {target_item.construction_year or 'N/A'}
 - État: {target_item.condition or 'N/A'}
 - Description: {target_item.description or 'N/A'}
-
 INSTRUCTIONS IMPORTANTES:
 1. Recherche les prix actuels du marché pour ce modèle exact ou des modèles très similaires
 2. Utilise tes connaissances du marché automobile/horloger/immobilier actuel
@@ -4346,7 +4340,6 @@ def list_endpoints():
             "Génération PDF pixel perfect"
         ]
     })
-
 @app.route("/api/portfolio/pdf", methods=["GET"])
 def generate_portfolio_pdf():
     """Génère un PDF pixel perfect du portefeuille complet"""
@@ -5002,8 +4995,6 @@ def generate_all_asset_classes_report():
         return jsonify({
             "error": str(e)
         }), 500
-
-
 @app.route("/api/reports/bank/full", methods=["GET"])
 def generate_full_bank_report():
     """Génère un rapport PDF exhaustif (mode bancaire, A4, toutes classes et objets)."""
@@ -5773,7 +5764,6 @@ def web_search_financial_markets():
     except Exception as e:
         logger.error(f"Erreur recherche web marchés: {e}")
         return jsonify({"error": str(e)}), 500
-
 @app.route("/api/web-search/stock/<symbol>", methods=["GET"])
 def web_search_stock_info(symbol):
     """Recherche web pour les informations d'une action spécifique"""
@@ -6565,7 +6555,6 @@ def intelligent_scraper_execute(task_id):
     except Exception as e:
         logger.error(f"Erreur exécution tâche scraping: {e}")
         return jsonify({"error": str(e)}), 500
-
 @app.route("/api/intelligent-scraper/status")
 def intelligent_scraper_overall_status():
     """Statut général du scraper intelligent"""
@@ -6887,9 +6876,17 @@ def get_background_worker_status():
                 "message": "Aucune analyse disponible."
             })
 
+        # Si la tâche est en attente ou en cours de traitement, ne pas renvoyer l'analyse complète
+        if latest_analysis.worker_status in ['pending', 'processing']:
+            return jsonify({
+                "status": latest_analysis.worker_status,
+                "message": f"Analyse en cours (status: {latest_analysis.worker_status})..."
+            })
+
+        # Si terminée ou en erreur, renvoyer les données complètes
         return jsonify({
             "status": latest_analysis.worker_status,
-            "analysis": latest_analysis.to_frontend_dict() if latest_analysis else None
+            "analysis": latest_analysis.to_frontend_dict()
         })
 
     except Exception as e:
