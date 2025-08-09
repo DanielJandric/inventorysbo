@@ -1,6 +1,7 @@
 import os
 import json
 from datetime import datetime
+from types import SimpleNamespace
 
 import requests
 
@@ -12,7 +13,15 @@ class ChatbotManager:
             from ai_engine import get_ai_engine  # type: ignore
             self.ai_engine = get_ai_engine()
         except Exception:
+            # Fallback: create a lightweight OpenAI client if possible
             self.ai_engine = None
+            try:
+                from openai import OpenAI  # type: ignore
+                api_key = os.getenv("OPENAI_API_KEY")
+                if api_key:
+                    self.ai_engine = SimpleNamespace(openai_client=OpenAI(api_key=api_key))
+            except Exception:
+                self.ai_engine = None
         # Prefer explicit API_BASE_URL, then APP_URL (public Render URL), then provided default
         base = os.getenv("API_BASE_URL") or os.getenv("APP_URL") or api_base_url
         # Ensure scheme
@@ -140,7 +149,7 @@ class ChatbotManager:
         Rules:
         - Split the user's sentence into distinct items if it mentions quantities or conjunctions.
         - For plurals with a number (e.g., "trois voitures mercedes"), create that many items.
-        - Infer 'category' from text (montre→Montres, voiture→Voitures, bateau→Bateaux, avion→Avions, action→Actions).
+        - Infer 'category' from text (montre→Montres, voiture→Voitures, bateau→Bateaux, avion→Avions, action→Actions). Use your general knowledge for brands (ex: Axopar is a boat brand; Mercedes is a car brand).
         - If brand/model appears (e.g., Mercedes, Axopar), include it in the "name" if no explicit name is provided.
         - Use numeric types for numeric fields.
         - If information is missing, omit the key (we'll fill defaults later). Default status is 'Available'.

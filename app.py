@@ -4427,7 +4427,10 @@ def chatbot():
                 many_list = [it for it in many_list if isinstance(it, dict)]
                 if len(many_list) >= 2:
                     # Propose a list for confirmation
-                    preview = [{k: it.get(k) for k in ('name','category','status','current_value') if it.get(k) is not None} for it in many_list]
+                    # Ensure category inference defaults to Available
+                    for it in many_list:
+                        it.setdefault('status', 'Available')
+                    preview = [{k: it.get(k) for k in ('name','category','status','current_value')} for it in many_list]
                     return jsonify({
                         "reply": "Je peux ajouter ces objets. Réponds 'oui' pour confirmer ou modifie les détails :\n" + json.dumps(preview, ensure_ascii=False),
                         "metadata": {"mode": "chatbot_create_batch_pending", "prefill_items": many_list}
