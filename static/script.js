@@ -2240,13 +2240,25 @@ async function handleChatSubmit(event) {
     
     const typingIndicator = addTypingIndicator();
     
+    // Ensure persistent session id for memory
     try {
+        if (!window.chatSessionId) {
+            try {
+                const existing = localStorage.getItem('chat_session_id');
+                window.chatSessionId = existing || (crypto && crypto.randomUUID ? crypto.randomUUID() : (Date.now() + '-' + Math.random().toString(36).slice(2)));
+                localStorage.setItem('chat_session_id', window.chatSessionId);
+            } catch (e) {
+                window.chatSessionId = window.chatSessionId || (Date.now() + '-' + Math.random().toString(36).slice(2));
+            }
+        }
+
         const response = await fetch('/api/chatbot', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 message: message,
-                history: conversationHistory.slice(-10)
+                history: conversationHistory.slice(-10),
+                session_id: window.chatSessionId
             })
         });
         
@@ -2260,6 +2272,12 @@ async function handleChatSubmit(event) {
             // Utiliser le streaming pour la réponse
             addChatMessage(data.reply, 'bot', true);
             conversationHistory.push({ role: 'assistant', content: data.reply });
+            try {
+                if (data.metadata && data.metadata.session_id && !localStorage.getItem('chat_session_id')) {
+                    localStorage.setItem('chat_session_id', data.metadata.session_id);
+                    window.chatSessionId = data.metadata.session_id;
+                }
+            } catch (e) { /* ignore */ }
             
             // Suggestions intelligentes après certaines réponses
             setTimeout(() => {

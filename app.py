@@ -13,16 +13,19 @@ from enum import Enum
 from functools import lru_cache, wraps
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from flask import Flask, jsonify, render_template, request, Response
+from flask import Flask, jsonify, render_template, request, Response, stream_with_context, make_response
 from metrics_api import metrics_bp
 from werkzeug.utils import secure_filename
 from pdf_optimizer import generate_optimized_pdf, create_summary_box, create_item_card_html, format_price_for_pdf
 from flask_cors import CORS
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.feature_extraction.text import TfidfVectorizer
 from dotenv import load_dotenv
 import requests
 import schedule
+import uuid
+import sqlite3
 from manus_integration import (
     manus_market_report_api,
     get_market_report_manus,
@@ -1532,6 +1535,95 @@ smart_cache = SmartCache()
 # Instance globale du gestionnaire Gmail
 gmail_manager = GmailNotificationManager()
 
+# ──────────────────────────────────────────────────────────
+# Conversation Memory (SQLite local store)
+# ──────────────────────────────────────────────────────────
+
+class ConversationMemoryStore:
+    """SQLite-backed memory store for conversation history per session_id."""
+
+    def __init__(self, db_filename: str = "chat_memory.db"):
+        try:
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+        except Exception:
+            base_dir = os.getcwd()
+        self.db_path = os.path.join(base_dir, db_filename)
+        self._ensure_schema()
+
+    def _connect(self):
+        return sqlite3.connect(self.db_path, check_same_thread=False)
+
+    def _ensure_schema(self):
+        with self._connect() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS messages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                )
+                """
+            )
+            # Index for quick retrieval
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, id)")
+            conn.commit()
+
+    def add_message(self, session_id: str, role: str, content: str):
+        try:
+            with self._connect() as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    "INSERT INTO messages(session_id, role, content, created_at) VALUES (?,?,?,?)",
+                    (session_id, role, content, datetime.utcnow().isoformat()),
+                )
+                conn.commit()
+        except Exception:
+            # Memory is best-effort; avoid breaking the request
+            pass
+
+    def get_recent_messages(self, session_id: str, limit: int = 12):
+        try:
+            with self._connect() as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    "SELECT role, content FROM messages WHERE session_id=? ORDER BY id DESC LIMIT ?",
+                    (session_id, max(1, int(limit))),
+                )
+                rows = cur.fetchall()
+                # Return in chronological order
+                return [{"role": r[0], "content": r[1]} for r in reversed(rows)]
+        except Exception:
+            return []
+
+conversation_memory = ConversationMemoryStore()
+
+# ──────────────────────────────────────────────────────────
+# Basic Chatbot Metrics
+# ──────────────────────────────────────────────────────────
+
+chatbot_metrics = {
+    "requests": 0,
+    "errors": 0,
+    "avg_latency_ms": 0.0,
+    "last_error": None,
+}
+
+def _update_chatbot_metrics(start_time: float, error: Exception = None):
+    try:
+        chatbot_metrics["requests"] += 1
+        if error is not None:
+            chatbot_metrics["errors"] += 1
+            chatbot_metrics["last_error"] = str(error)
+        elapsed_ms = max(0.0, (time.time() - start_time) * 1000.0)
+        # simple moving average
+        prev = chatbot_metrics["avg_latency_ms"]
+        chatbot_metrics["avg_latency_ms"] = (prev * 0.9) + (elapsed_ms * 0.1)
+    except Exception:
+        pass
+
 # Application Flask
 app = Flask(__name__)
 app.config.update(
@@ -1877,35 +1969,71 @@ class SemanticSearchRAG:
             return None
     
     def semantic_search(self, query: str, items: List[CollectionItem], top_k: int = 10) -> List[Tuple[CollectionItem, float]]:
-        """Recherche sémantique dans les items"""
-        query_embedding = self.get_query_embedding(query)
-        if not query_embedding:
-            logger.warning("Impossible de générer l'embedding pour la requête")
-            return []
-        
-        # Vérifier combien d'items ont des embeddings
-        items_with_embeddings = [item for item in items if item.embedding]
-        logger.info(f"Items avec embeddings: {len(items_with_embeddings)}/{len(items)}")
-        
-        if not items_with_embeddings:
-            logger.error("Aucun item n'a d'embedding ! La recherche sémantique ne peut pas fonctionner.")
-            return []
-        
-        # Calculer les similarités cosinus
-        similarities = []
-        for item in items_with_embeddings:
-            try:
-                similarity = self._cosine_similarity(query_embedding, item.embedding)
-                similarities.append((item, similarity))
-            except Exception as e:
-                logger.warning(f"Erreur calcul similarité pour {item.name}: {e}")
-                continue
-        
-        # Trier par similarité décroissante
-        similarities.sort(key=lambda x: x[1], reverse=True)
-        
-        # Retourner top_k résultats
-        return similarities[:top_k]
+        """Recherche sémantique hybride: embeddings + TF-IDF BM25-like fusion."""
+        # 1) Embedding route
+        embedding_scores: List[Tuple[CollectionItem, float]] = []
+        try:
+            query_embedding = self.get_query_embedding(query)
+            if query_embedding:
+                items_with_embeddings = [item for item in items if item.embedding]
+                for item in items_with_embeddings:
+                    try:
+                        s = self._cosine_similarity(query_embedding, item.embedding)
+                        embedding_scores.append((item, float(s)))
+                    except Exception:
+                        continue
+        except Exception:
+            pass
+
+        # 2) Sparse route (TF-IDF as a simple BM25-ish proxy)
+        sparse_scores: List[Tuple[CollectionItem, float]] = []
+        try:
+            corpus = []
+            corpus_items = []
+            for it in items:
+                parts = [it.name or "", it.category or "", it.description or ""]
+                if it.category == 'Actions':
+                    parts.extend([
+                        it.stock_symbol or "",
+                        it.stock_exchange or "",
+                    ])
+                doc = " \n".join([str(p) for p in parts if p])
+                corpus.append(doc)
+                corpus_items.append(it)
+            if corpus:
+                vectorizer = TfidfVectorizer(ngram_range=(1,2), min_df=1)
+                X = vectorizer.fit_transform(corpus)
+                qv = vectorizer.transform([query])
+                sims = (X @ qv.T).toarray().ravel()
+                for idx, score in enumerate(sims):
+                    sparse_scores.append((corpus_items[idx], float(score)))
+        except Exception:
+            pass
+
+        # 3) Fusion (Reciprocal Rank Fusion style simplified)
+        rank_map_embed = {id(item): rank for rank, (item, _) in enumerate(sorted(embedding_scores, key=lambda x: x[1], reverse=True), start=1)}
+        rank_map_sparse = {id(item): rank for rank, (item, _) in enumerate(sorted(sparse_scores, key=lambda x: x[1], reverse=True), start=1)}
+
+        all_ids = {id(item) for (item, _) in embedding_scores} | {id(item) for (item, _) in sparse_scores}
+        id_to_item = {}
+        for (it, _) in embedding_scores:
+            id_to_item[id(it)] = it
+        for (it, _) in sparse_scores:
+            id_to_item[id(it)] = it
+
+        fused: List[Tuple[CollectionItem, float]] = []
+        for iid in all_ids:
+            r1 = rank_map_embed.get(iid)
+            r2 = rank_map_sparse.get(iid)
+            score = 0.0
+            if r1:
+                score += 1.0 / (60.0 + r1)
+            if r2:
+                score += 1.0 / (60.0 + r2)
+            fused.append((id_to_item[iid], score))
+
+        fused.sort(key=lambda x: x[1], reverse=True)
+        return fused[:max(1, int(top_k))]
     
     def _cosine_similarity(self, vec1: List[float], vec2: List[float]) -> float:
         """Calcule la similarité cosinus entre deux vecteurs"""
@@ -4036,6 +4164,7 @@ def fix_vehicle_categories():
 def chatbot():
     """Chatbot utilisant OpenAI GPT-4 avec recherche sémantique RAG et mémoire conversationnelle"""
     try:
+        start_time = time.time()
         data = request.get_json()
         if not data:
             return jsonify({"error": "Données requises"}), 400
@@ -4044,8 +4173,12 @@ def chatbot():
         if not query:
             return jsonify({"error": "Message requis"}), 400
         
-        # Récupération de l'historique de conversation
-        conversation_history = data.get("history", [])
+        # Session et historique
+        session_id = (data.get("session_id") or request.headers.get("X-Session-Id") or str(uuid.uuid4())).strip()
+        history_client = data.get("history", [])
+        history_persisted = conversation_memory.get_recent_messages(session_id, limit=12)
+        # Fusion: mémoire persistée + derniers messages du client (max 8)
+        conversation_history = (history_persisted or []) + (list(history_client[-8:]) if isinstance(history_client, list) else [])
         logger.info(f"🎯 Requête: '{query}' avec {len(conversation_history)} messages d'historique")
         
         # 0) Tentative de création d'objet AVANT tout calcul lourd
@@ -4478,10 +4611,17 @@ def chatbot():
         if ai_engine:
             # Génération de réponse via OpenAI avec RAG et historique
             response = ai_engine.generate_response_with_history(query, items, analytics, conversation_history)
+            # Persister l'échange (best-effort)
+            try:
+                conversation_memory.add_message(session_id, 'user', query)
+                conversation_memory.add_message(session_id, 'assistant', response)
+            except Exception:
+                pass
             
             # Détecter si la recherche sémantique a été utilisée
             search_type = "semantic" if "🔍 **Recherche intelligente activée**" in response else "standard"
             
+            _update_chatbot_metrics(start_time)
             return jsonify({
                 "reply": response,
                 "metadata": {
@@ -4491,10 +4631,12 @@ def chatbot():
                     "search_type": search_type,
                     "embeddings_available": sum(1 for item in items if item.embedding),
                     "stocks_count": len([i for i in items if i.category == "Actions"]),
-                    "conversation_history_length": len(conversation_history)
+                    "conversation_history_length": len(conversation_history),
+                    "session_id": session_id
                 }
             })
         else:
+            _update_chatbot_metrics(start_time)
             return jsonify({
                 "reply": "❌ Moteur IA Indisponible",
                 "metadata": {
@@ -4504,10 +4646,71 @@ def chatbot():
         
     except Exception as e:
         logger.error(f"Erreur chatbot: {e}")
+        try:
+            _update_chatbot_metrics(start_time, error=e)  # type: ignore
+        except Exception:
+            pass
         return jsonify({
             "reply": "❌ Moteur IA Indisponible",
             "error": str(e)
         }), 500
+
+@app.route("/api/chatbot/metrics", methods=["GET"])
+def get_chatbot_metrics():
+    try:
+        return jsonify({"success": True, "metrics": chatbot_metrics})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route("/api/chatbot/stream", methods=["POST"])
+def chatbot_stream():
+    """SSE streaming endpoint returning incremental chunks (server-simulated)."""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Données requises"}), 400
+        query = (data.get("message") or "").strip()
+        if not query:
+            return jsonify({"error": "Message requis"}), 400
+        session_id = (data.get("session_id") or request.headers.get("X-Session-Id") or str(uuid.uuid4())).strip()
+        history_client = data.get("history", [])
+        history_persisted = conversation_memory.get_recent_messages(session_id, limit=12)
+        conversation_history = (history_persisted or []) + (list(history_client[-8:]) if isinstance(history_client, list) else [])
+
+        items = AdvancedDataManager.fetch_all_items()
+        analytics = AdvancedDataManager.calculate_advanced_analytics(items)
+
+        if not ai_engine:
+            def _gen_unavailable():
+                yield "data: {\"delta\": \"Moteur IA indisponible\", \"done\": false}\n\n"
+                yield "data: {\"done\": true}\n\n"
+            return Response(stream_with_context(_gen_unavailable()), mimetype='text/event-stream')
+
+        # Compute full reply once, then stream it progressively
+        full_reply = ai_engine.generate_response_with_history(query, items, analytics, conversation_history)
+
+        # Persist exchange
+        try:
+            conversation_memory.add_message(session_id, 'user', query)
+            conversation_memory.add_message(session_id, 'assistant', full_reply)
+        except Exception:
+            pass
+
+        def _gen():
+            chunk_size = 60
+            for i in range(0, len(full_reply), chunk_size):
+                part = full_reply[i:i+chunk_size]
+                safe = part.replace("\\", "\\\\").replace("\n", "\\n").replace("\"", "\\\"")
+                yield f"data: {{\"delta\": \"{safe}\", \"done\": false}}\n\n"
+                time.sleep(0.02)
+            yield f"data: {{\"done\": true, \"session_id\": \"{session_id}\"}}\n\n"
+
+        resp = Response(stream_with_context(_gen()), mimetype='text/event-stream')
+        resp.headers['Cache-Control'] = 'no-cache'
+        return resp
+    except Exception as e:
+        logger.error(f"Erreur chatbot_stream: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/embeddings/status")
 def embeddings_status():
