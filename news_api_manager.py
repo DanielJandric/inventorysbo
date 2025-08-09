@@ -28,11 +28,7 @@ class NewsAPIManager:
                 "handelszeitung.ch", "cash.ch", "swissinfo.ch", "24heures.ch", "tdg.ch", 
                 "bilan.ch", "allnews.ch"
             ],
-            "locationUri": [
-                "http://en.wikipedia.org/wiki/Switzerland", "http://en.wikipedia.org/wiki/Geneva", 
-                "http://en.wikipedia.org/wiki/Zurich", "http://en.wikipedia.org/wiki/Basel", 
-                "http://en.wikipedia.org/wiki/Lausanne", "http://en.wikipedia.org/wiki/Bern"
-            ],
+            "sourceLocationUri": "http://en.wikipedia.org/wiki/Switzerland",
             "lang": ["fra", "eng", "deu", "ita"],
             "dateStart": (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'),
             "dateEnd": datetime.now().strftime('%Y-%m-%d'),
