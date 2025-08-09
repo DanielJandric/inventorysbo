@@ -1625,6 +1625,29 @@ def _update_chatbot_metrics(start_time: float, error: Exception = None):
         pass
 
 # ──────────────────────────────────────────────────────────
+# Status normalization helpers
+# ──────────────────────────────────────────────────────────
+
+def is_item_sold(item: Any) -> bool:
+    """Detect if an item is sold using multiple signals (status, sale_status)."""
+    try:
+        status = str(getattr(item, 'status', '') or '').strip().lower()
+        sale_status = str(getattr(item, 'sale_status', '') or '').strip().lower()
+        if status in {'sold', 'vendu', 'vendue'}:
+            return True
+        if sale_status in {'completed', 'complete', 'finalisé', 'finalisee', 'finalise', 'completed sale', 'completed_sale'}:
+            return True
+    except Exception:
+        return False
+    return False
+
+def is_item_available(item: Any) -> bool:
+    try:
+        return not is_item_sold(item)
+    except Exception:
+        return True
+
+# ──────────────────────────────────────────────────────────
 # Simple moderation/guardrails
 # ──────────────────────────────────────────────────────────
 
@@ -2220,9 +2243,9 @@ class PureOpenAIEngineWithRAG:
                         return 0.0
                 chosen = [i for i in items if i.category == category]
                 if status == 'sold':
-                    chosen = [i for i in chosen if (i.status or '') == 'Sold']
+                    chosen = [i for i in chosen if is_item_sold(i)]
                 elif status == 'available':
-                    chosen = [i for i in chosen if (i.status or '') != 'Sold']
+                    chosen = [i for i in chosen if is_item_available(i)]
                 chosen.sort(key=_item_value, reverse=True)
                 top = chosen[:max(1, min(limit, 100))]
                 return {
@@ -4541,8 +4564,8 @@ def chatbot():
                 cat = _norm_cat(ql)
                 if cat:
                     total = [i for i in items if i.category == cat]
-                    sold = [i for i in total if (i.status or '') == 'Sold']
-                    available = [i for i in total if (i.status or '') != 'Sold']
+                    sold = [i for i in total if is_item_sold(i)]
+                    available = [i for i in total if is_item_available(i)]
 
                     # par défaut: disponibles; si "total" mentionné → total
                     total_mode = ('total' in ql) or ('toutes' in ql) or ('au total' in ql)
@@ -4590,7 +4613,7 @@ def chatbot():
                 if cat:
                     chosen = [i for i in items if i.category == cat]
                     if not mode_total:
-                        chosen = [i for i in chosen if (i.status or '') != 'Sold']
+                        chosen = [i for i in chosen if is_item_available(i)]
                     total_value = sum(_item_value(it) for it in chosen)
                     total_value = round(total_value, 2)
                     if mode_total:
@@ -4635,11 +4658,11 @@ def chatbot():
                 if cat:
                     chosen = [i for i in items if i.category == cat]
                     if 'vendu' in ql or 'vendues' in ql or 'sold' in ql:
-                        chosen = [i for i in chosen if (i.status or '') == 'Sold']
+                        chosen = [i for i in chosen if is_item_sold(i)]
                     elif 'toutes' in ql or 'tout' in ql:
                         pass
                     else:
-                        chosen = [i for i in chosen if (i.status or '') != 'Sold']
+                        chosen = [i for i in chosen if is_item_available(i)]
                     chosen.sort(key=_item_value, reverse=True)
                     top = chosen[:10]
                     lines = [f"- {i.name} ({_item_value(i):,.0f} CHF)" for i in top]
