@@ -4639,9 +4639,34 @@ def chatbot():
                     for it in pre_list:
                         try:
                             payload = dict(it or {})
+                            # Strict category normalization (avoid long free text)
+                            cat_map = {
+                                'voiture': 'Voitures','voitures': 'Voitures',
+                                'montre': 'Montres','montres': 'Montres','swatch': 'Montres',
+                                'bateau': 'Bateaux','bateaux': 'Bateaux','sunseeker': 'Bateaux','axopar': 'Bateaux',
+                                'avion': 'Avions','avions': 'Avions'
+                            }
+                            if payload.get('category'):
+                                key = str(payload['category']).strip().lower()
+                                payload['category'] = cat_map.get(key, payload['category'])
+                            else:
+                                # infer from name
+                                n = str(payload.get('name') or '').lower()
+                                if 'swatch' in n:
+                                    payload['category'] = 'Montres'
+                                elif 'sunseeker' in n or 'axopar' in n:
+                                    payload['category'] = 'Bateaux'
+                                elif any(k in n for k in ['renault','mercedes','bmw','audi','peugeot']):
+                                    payload['category'] = 'Voitures'
                             # Minimal normalization
                             if 'status' not in payload:
                                 payload['status'] = 'Available'
+                            # Infer condition
+                            text_all = (str(it) + " " + str(payload.get('name',''))).lower()
+                            if 'neuf' in text_all or 'neuve' in text_all:
+                                payload.setdefault('condition', 'Neuf')
+                            elif "occasion" in text_all or "d'occasion" in text_all or 'used' in text_all:
+                                payload.setdefault('condition', 'Bon')
                             payload['created_at'] = datetime.now().isoformat()
                             payload['updated_at'] = datetime.now().isoformat()
                             # Default value fallback for non-stocks

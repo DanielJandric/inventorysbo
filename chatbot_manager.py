@@ -149,7 +149,10 @@ class ChatbotManager:
         Rules:
         - Split the user's sentence into distinct items if it mentions quantities or conjunctions.
         - For plurals with a number (e.g., "trois voitures mercedes"), create that many items.
-        - Infer 'category' from text (montre→Montres, voiture→Voitures, bateau→Bateaux, avion→Avions, action→Actions). Use your general knowledge for brands (ex: Axopar is a boat brand; Mercedes is a car brand).
+        - Infer 'category' from text (montre→Montres, voiture→Voitures, bateau→Bateaux, avion→Avions, action→Actions). Use your general knowledge for brands (e.g., Axopar → Bateaux, Mercedes → Voitures, Swatch → Montres, Sunseeker → Bateaux).
+        - Infer 'condition' from wording: "neuf/neuve" → "Neuf"; "d'occasion/occasion/used" → "Bon".
+        - If the text implies buying (e.g., "acheté/achete"), put the amount into "acquisition_price"; otherwise use "current_value".
+        - Parse amounts like "20k", "30 kchf", "120kchf" into numbers (e.g., 20000, 30000, 120000). Currency always CHF.
         - If brand/model appears (e.g., Mercedes, Axopar), include it in the "name" if no explicit name is provided.
         - Use numeric types for numeric fields.
         - If information is missing, omit the key (we'll fill defaults later). Default status is 'Available'.
