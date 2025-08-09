@@ -29,6 +29,22 @@ class ChatbotManager:
         missing = [k for k in ("name", "category") if k not in normalized]
         return {"data": normalized, "missing": missing}
 
+    def extract_items(self, user_input: str) -> dict:
+        """Extract multiple items from a single natural language query.
+        Returns: {"items": [payload, ...]} with normalized payloads.
+        """
+        raw = self._extract_items_data_with_ai(user_input) or {}
+        items = raw.get("items") if isinstance(raw, dict) else None
+        if not isinstance(items, list):
+            # Fallback: try single extraction
+            one = self._extract_item_data_with_ai(user_input) or {}
+            items = [one] if one else []
+        normalized_items = []
+        for it in items:
+            norm = self._normalize_item_payload(it or {})
+            normalized_items.append(norm)
+        return {"items": normalized_items}
+
     def create_from_payload(self, payload: dict) -> dict:
         """Public method: create an item from a given JSON payload."""
         normalized = self._normalize_item_payload(payload or {})
@@ -81,6 +97,54 @@ class ChatbotManager:
         - Default status is 'Available' (we may set it later if missing).
         - If the asset is a stock, include stock_symbol and stock_quantity when possible.
         
+        User Request: "{user_input}"
+        """
+
+        try:
+            if not self.ai_engine or not getattr(self.ai_engine, 'openai_client', None):
+                raise ValueError("AI engine not configured.")
+
+            response = self.ai_engine.openai_client.chat.completions.create(
+                model=os.getenv("AI_MODEL", "gpt-4-turbo"),
+                messages=[{"role": "user", "content": prompt}],
+                response_format={"type": "json_object"},
+                temperature=0.2,
+            )
+            extracted_json = response.choices[0].message.content
+            if extracted_json:
+                return json.loads(extracted_json)
+            return None
+        except Exception:
+            return None
+
+    def _extract_items_data_with_ai(self, user_input: str) -> dict | None:
+        """
+        Uses AI to extract a list of items from the user's sentence.
+        Returns a JSON object: {"items": [ {...}, {...} ]}
+        Each item uses the same schema as _extract_item_data_with_ai.
+        """
+        allowed_keys = [
+            "name", "category", "status", "construction_year", "condition", "description",
+            "current_value", "sold_price", "acquisition_price", "for_sale", "sale_status",
+            "sale_progress", "buyer_contact", "intermediary", "current_offer", "commission_rate",
+            "last_action_date", "surface_m2", "rental_income_chf", "location",
+            "stock_symbol", "stock_quantity", "stock_purchase_price", "stock_exchange",
+            "stock_currency"
+        ]
+
+        prompt = f"""
+        You are an assistant that extracts a LIST of items from a user's sentence about assets to add.
+        Return ONLY a JSON object with an "items" array, where each item is a JSON object using any of these keys:
+        {json.dumps(allowed_keys)}
+
+        Rules:
+        - Split the user's sentence into distinct items if it mentions quantities or conjunctions.
+        - For plurals with a number (e.g., "trois voitures mercedes"), create that many items.
+        - Infer 'category' from text (montre→Montres, voiture→Voitures, bateau→Bateaux, avion→Avions, action→Actions).
+        - If brand/model appears (e.g., Mercedes, Axopar), include it in the "name" if no explicit name is provided.
+        - Use numeric types for numeric fields.
+        - If information is missing, omit the key (we'll fill defaults later). Default status is 'Available'.
+
         User Request: "{user_input}"
         """
 
