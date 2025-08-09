@@ -13,7 +13,9 @@ class ChatbotManager:
             self.ai_engine = get_ai_engine()
         except Exception:
             self.ai_engine = None
-        self.api_base_url = os.getenv("API_BASE_URL", api_base_url)
+        # Prefer explicit API_BASE_URL, then APP_URL (public Render URL), then provided default
+        base = os.getenv("API_BASE_URL") or os.getenv("APP_URL") or api_base_url
+        self.api_base_url = base.rstrip('/')
 
     def extract_item(self, user_input: str) -> dict:
         """Public method: extract and normalize item fields from natural language."""
