@@ -23,11 +23,6 @@ class NewsAPIManager:
                 "logements vacants", "vacancy rate", "leerstand"
             ],
             "keywordOper": "or",
-            "sourceUri": [
-                "nzz.ch", "themarket.ch", "agefi.com", "letemps.ch", "finews.ch", "finews.com", 
-                "handelszeitung.ch", "cash.ch", "swissinfo.ch", "24heures.ch", "tdg.ch", 
-                "bilan.ch", "allnews.ch"
-            ],
             "sourceLocationUri": "http://en.wikipedia.org/wiki/Switzerland",
             "lang": ["fra", "eng", "deu", "ita"],
             "dateStart": (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'),
