@@ -15,6 +15,9 @@ class ChatbotManager:
             self.ai_engine = None
         # Prefer explicit API_BASE_URL, then APP_URL (public Render URL), then provided default
         base = os.getenv("API_BASE_URL") or os.getenv("APP_URL") or api_base_url
+        # Ensure scheme
+        if not base.startswith("http://") and not base.startswith("https://"):
+            base = "https://" + base
         self.api_base_url = base.rstrip('/')
 
     def extract_item(self, user_input: str) -> dict:
