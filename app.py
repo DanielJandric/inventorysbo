@@ -1786,15 +1786,19 @@ class AdvancedDataManager:
     def _basic_metrics(items: List[CollectionItem]) -> Dict[str, Any]:
         """Métriques de base enrichies"""
         total = len(items)
-        available = len([i for i in items if i.status == 'Available'])
-        sold = len([i for i in items if i.status == 'Sold'])
+        # Utiliser la normalisation robuste (statuts/indices multiples)
+        available = len([i for i in items if is_item_available(i)])
+        sold = len([i for i in items if is_item_sold(i)])
         for_sale = len([i for i in items if i.for_sale])
+        # Valeur totale par défaut = somme des valeurs disponibles (hors vendus)
+        total_value = sum((i.current_value or 0) for i in items if is_item_available(i) and (i.current_value is not None))
         
         return {
             'total_items': total,
             'available_items': available,
             'sold_items': sold,
             'items_for_sale': for_sale,
+            'total_value': total_value,
             'availability_rate': (available / total * 100) if total > 0 else 0,
             'conversion_rate': (sold / total * 100) if total > 0 else 0,
             'active_sale_rate': (for_sale / available * 100) if available > 0 else 0
