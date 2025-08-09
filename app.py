@@ -645,7 +645,9 @@ class GmailNotificationManager:
         self.email_user = EMAIL_USER
         self.email_password = EMAIL_PASSWORD
         self.recipients = [email.strip() for email in EMAIL_RECIPIENTS if email.strip()]
-        self.enabled = bool(EMAIL_USER and EMAIL_PASSWORD and self.recipients)
+        # Feature flag to enable/disable emails easily (default OFF)
+        notif_flag = os.environ.get('EMAIL_NOTIFICATIONS_ENABLED', '0').lower() in {'1','true','yes','on'}
+        self.enabled = bool(EMAIL_USER and EMAIL_PASSWORD and self.recipients) and notif_flag
         self.app_url = APP_URL
         # Lightweight in-memory queue with background worker (avoids spawning many threads)
         self._queue: "queue.Queue[dict]" = queue.Queue()
@@ -3217,8 +3219,11 @@ def create_item():
             smart_cache.invalidate('items')
             smart_cache.invalidate('analytics')
             
-            # Notification Gmail pour nouvel objet
-            gmail_manager.notify_item_created(response.data[0])
+            # Notification Gmail pour nouvel objet (non bloquant et sous feature flag)
+            try:
+                gmail_manager.notify_item_created(response.data[0])
+            except Exception:
+                pass
             
             return jsonify(response.data[0]), 201
         else:
