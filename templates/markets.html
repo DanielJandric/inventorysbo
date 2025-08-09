@@ -1,86 +1,122 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="fr" class="h-full">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analyse de Marché - InventorySBO</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <title>Update Marchés - BONVIN</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
     <style>
-        body { background-color: #f4f7f6; }
-        .sidebar { background-color: #343a40; }
-        .nav-link { color: white !important; }
-        .nav-link.active { font-weight: bold; }
-        .main-content { padding-top: 20px; }
-        #analysis-section {
-            background: white;
-            border-radius: 12px;
-            padding: 30px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        :root {
+            --bg-color: #0A232A;
+            --glass-bg: rgba(10, 50, 60, 0.25);
+            --glass-border: rgba(0, 200, 220, 0.2);
+            --glass-glow: rgba(0, 220, 255, 0.15);
+            --text-primary: #e0e6e7;
+            --text-secondary: #88a0a8;
         }
-        #status-display {
-            border-radius: 8px;
-            padding: 15px;
-            font-size: 1.1rem;
-            transition: all 0.3s ease-in-out;
+        html { scroll-behavior: smooth; }
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
         }
-        #analysis-result { display: none; margin-top: 20px; }
+        body::before {
+            content: '';
+            position: fixed; inset: 0;
+            background: radial-gradient(circle at 15% 25%, rgba(0, 220, 255, 0.2), transparent 40%),
+                        radial-gradient(circle at 85% 75%, rgba(10, 50, 60, 0.3), transparent 40%);
+            z-index: -1; filter: blur(50px);
+            animation: moveGradient 20s linear infinite alternate;
+        }
+        @keyframes moveGradient { from { transform: translate(0,0); } to { transform: translate(5vw,-5vh); } }
+        .glass { background: var(--glass-bg); backdrop-filter: blur(15px); border: 1px solid var(--glass-border); border-radius: 1.5rem; }
+        .glass-dark { background: rgba(10, 40, 50, 0.4); backdrop-filter: blur(20px); border: 1px solid var(--glass-border); border-radius: 1.5rem; }
+        .glowing-element { position: relative; transition: all .3s ease; }
+        .glowing-element::before { content:''; position:absolute; inset:0; border-radius:inherit; background: radial-gradient(circle at 50% 50%, var(--glass-glow), transparent 70%); filter: blur(30px); opacity:.6; z-index:-1; transition: opacity .3s ease; }
+        .glowing-element:hover::before, .glowing-element.is-active::before { opacity: 1; }
     </style>
 </head>
-<body>
-    <div class="container-fluid">
-        <div class="row">
-            <!-- Sidebar -->
-            <nav class="col-md-3 col-lg-2 d-md-block sidebar collapse">
-                <div class="position-sticky pt-3">
-                    <ul class="nav flex-column">
-                        <li class="nav-item"><a class="nav-link" href="/"><i class="fas fa-home"></i> Accueil</a></li>
-                        <li class="nav-item"><a class="nav-link" href="/analytics"><i class="fas fa-chart-bar"></i> Analytics</a></li>
-                        <li class="nav-item"><a class="nav-link" href="/reports"><i class="fas fa-file-alt"></i> Rapports</a></li>
-                        <li class="nav-item"><a class="nav-link active" href="/markets"><i class="fas fa-chart-line"></i> Marchés</a></li>
-                        <li class="nav-item"><a class="nav-link" href="/settings"><i class="fas fa-cog"></i> Paramètres</a></li>
-                        <li class="nav-item"><a class="nav-link" href="/sold"><i class="fas fa-tags"></i> Vendu</a></li>
-                    </ul>
-                </div>
-            </nav>
+<body class="h-full">
+    <div class="min-h-screen p-4 md:p-8">
+        <!-- Header -->
+        <header class="text-center mb-10 pt-6">
+            <div class="flex justify-center mb-4">
+                <img src="/static/1da6a1fb-f4c3-401c-aa60-63e9b63360b0.png" alt="BONVIN Logo" class="w-40 h-auto md:w-48">
+            </div>
+            <h1 class="text-3xl md:text-4xl font-bold tracking-wider">Update Marchés</h1>
+            <p class="text-sm text-cyan-200/70 mt-2">Analyse automatisée et dépôt de PDFs</p>
+        </header>
 
-            <!-- Main content -->
-            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4 main-content">
-                <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-                    <h1 class="h2"><i class="fas fa-robot"></i> Analyse de Marché Automatisée</h1>
+        <!-- Hamburger Menu -->
+        <div class="fixed top-6 right-6 z-50">
+            <button id="hamburger-menu" class="glass glowing-element p-3 rounded-xl transition-all duration-300 hover:scale-105" onclick="toggleHamburgerMenu()">
+                <svg class="w-6 h-6 text-cyan-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                </svg>
+            </button>
+            <div id="hamburger-dropdown" class="glass-dark glowing-element absolute top-full right-0 mt-3 rounded-2xl p-4 min-w-64 transform scale-95 opacity-0 pointer-events-none transition-all duration-300 origin-top-right">
+                <div class="space-y-2">
+                    <a href="/" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white hover:bg-opacity-10">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+                        <span>Collection</span>
+                    </a>
+                    <a href="/analytics" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white hover:bg-opacity-10">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                        <span>Analytics</span>
+                    </a>
+                    <a href="/sold" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white hover:bg-opacity-10">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                        <span>Vendu</span>
+                    </a>
+                    <a href="/markets" class="flex items-center gap-3 px-3 py-2 rounded-lg bg-white bg-opacity-10">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                        <span>Update Marchés</span>
+                    </a>
+                    <a href="/settings" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white hover:bg-opacity-10">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                        <span>Settings</span>
+                    </a>
                 </div>
+            </div>
 
-                <div id="analysis-section">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <h4 class="mb-0">Analyse via Background Worker</h4>
-                        <button id="start-analysis-btn" class="btn btn-primary btn-lg">
-                            <i class="fas fa-play-circle"></i> Lancer une Nouvelle Analyse
-                        </button>
-                    </div>
-                    <hr>
-                    <!-- PDFs Déposés (Update Marchés) -->
-                    <div class="card mb-4">
-                        <div class="card-header d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0"><i class="fas fa-file-pdf"></i> PDFs (Update Marchés)</h5>
-                            <button id="refresh-pdfs" class="btn btn-sm btn-outline-secondary">Actualiser</button>
+        <main class="max-w-6xl mx-auto space-y-6">
+            <!-- Action + Status -->
+            <section class="glass p-6 rounded-2xl">
+                <div class="flex items-center justify-between gap-4 flex-wrap">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl flex items-center justify-center bg-cyan-500/10 border border-cyan-400/30 text-cyan-300">
+                            <i class="fas fa-robot"></i>
                         </div>
-                        <div class="card-body">
-                            <div id="market-pdf-gallery" class="row g-3">
-                                <div class="text-muted">Chargement...</div>
-                            </div>
-                        </div>
+                        <h2 class="text-xl font-semibold">Analyse via Background Worker</h2>
                     </div>
-                    <div id="status-display" class="alert alert-secondary text-center">
-                        <span id="status-icon"><i class="fas fa-info-circle"></i></span>
-                        <span id="status-text">Prêt à lancer une nouvelle analyse.</span>
-                    </div>
-
-                    <div id="analysis-result">
-                        <!-- Les résultats de l'analyse seront injectés ici -->
-                    </div>
+                    <button id="start-analysis-btn" class="glowing-element px-5 py-3 rounded-xl bg-cyan-500/20 border border-cyan-400/30 hover:bg-cyan-500/30 text-cyan-100 font-semibold transition">
+                        <i class="fas fa-play-circle mr-2"></i> Lancer une Nouvelle Analyse
+                    </button>
                 </div>
-            </main>
-        </div>
+                <div id="status-display" class="mt-4 rounded-xl p-4 text-center bg-white/5 border border-white/10">
+                    <span id="status-icon"><i class="fas fa-info-circle"></i></span>
+                    <span id="status-text" class="ml-2">Prêt à lancer une nouvelle analyse.</span>
+                </div>
+            </section>
+
+            <!-- PDFs déposés -->
+            <section class="glass p-6 rounded-2xl">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold"><i class="fas fa-file-pdf mr-2 text-red-300"></i>PDFs (Update Marchés)</h3>
+                    <button id="refresh-pdfs" class="px-3 py-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 text-sm">Actualiser</button>
+                </div>
+                <div id="market-pdf-gallery" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div class="text-cyan-200/70">Chargement...</div>
+                </div>
+            </section>
+
+            <!-- Résultats de l'analyse -->
+            <section id="analysis-result" class="glass p-6 rounded-2xl hidden"></section>
+        </main>
     </div>
 
     <script>
@@ -163,57 +199,57 @@
                 const snapshot = analysis.market_snapshot || {};
                 
                 resultDiv.innerHTML = `
-                    <h3 class="mt-4">Résultats de l'Analyse</h3>
+                    <h3 class="text-xl font-semibold mb-4">Résultats de l'Analyse</h3>
 
-                    <!-- Section Snapshot -->
-                    <div class="card mb-4">
-                        <div class="card-header">
-                            <h5><i class="fas fa-chart-pie"></i> Aperçu du Marché</h5>
-                        </div>
-                        <div class="card-body">
-                            <table class="table table-sm table-hover">
-                                <thead>
+                    <!-- Snapshot -->
+                    <div class="glass p-4 rounded-xl mb-4">
+                        <h5 class="font-medium mb-3"><i class="fas fa-chart-pie mr-2"></i>Aperçu du Marché</h5>
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full text-left text-sm">
+                                <thead class="text-cyan-200/70">
                                     <tr>
-                                        <th>Actif</th>
-                                        <th>Dernier Prix</th>
-                                        <th>Variation</th>
-                                        <th>Source</th>
+                                        <th class="py-2 pr-4">Actif</th>
+                                        <th class="py-2 pr-4">Dernier Prix</th>
+                                        <th class="py-2 pr-4">Variation</th>
+                                        <th class="py-2">Source</th>
                                     </tr>
                                 </thead>
-                                <tbody>
-                                    ${snapshot.indices ? `<tr><td colspan="4" class="table-group-divider"><strong>Indices</strong></td></tr>` + renderSnapshotRows(snapshot.indices) : ''}
-                                    ${snapshot.commodities ? `<tr><td colspan="4" class="table-group-divider"><strong>Matières Premières</strong></td></tr>` + renderSnapshotRows(snapshot.commodities) : ''}
-                                    ${snapshot.crypto ? `<tr><td colspan="4" class="table-group-divider"><strong>Cryptomonnaies</strong></td></tr>` + renderSnapshotRows(snapshot.crypto) : ''}
+                                <tbody class="divide-y divide-white/10">
+                                    ${snapshot.indices ? `<tr><td colspan=4 class='pt-4 pb-2 text-cyan-200/80 font-semibold'>Indices</td></tr>` + renderSnapshotRows(snapshot.indices) : ''}
+                                    ${snapshot.commodities ? `<tr><td colspan=4 class='pt-4 pb-2 text-cyan-200/80 font-semibold'>Matières Premières</td></tr>` + renderSnapshotRows(snapshot.commodities) : ''}
+                                    ${snapshot.crypto ? `<tr><td colspan=4 class='pt-4 pb-2 text-cyan-200/80 font-semibold'>Cryptomonnaies</td></tr>` + renderSnapshotRows(snapshot.crypto) : ''}
                                 </tbody>
                             </table>
                         </div>
                     </div>
 
-                    <!-- Section Analyse IA -->
-                    <div class="card"><div class="card-body">
-                        <h6><i class="fas fa-chart-line"></i> Résumé Exécutif</h6>
-                        <p>${analysis.summary || 'N/A'}</p>
-                    </div></div>
-                    <div class="card mt-3"><div class="card-body">
-                        <h6><i class="fas fa-list"></i> Points Clés</h6>
-                        <ul>${(analysis.key_points || []).map(p => `<li>${p}</li>`).join('')}</ul>
-                    </div></div>
-                    <div class="card mt-3"><div class="card-body">
-                        <h6><i class="fas fa-lightbulb"></i> Insights</h6>
-                         <ul>${(analysis.insights || []).map(p => `<li>${p}</li>`).join('')}</ul>
-                    </div></div>
-                     <div class="card mt-3"><div class="card-body">
-                        <h6><i class="fas fa-exclamation-triangle"></i> Risques</h6>
-                         <ul>${(analysis.risks || []).map(p => `<li>${p}</li>`).join('')}</ul>
-                    </div></div>
-                    <div class="card mt-3"><div class="card-body">
-                        <h6><i class="fas fa-star"></i> Opportunités</h6>
-                         <ul>${(analysis.opportunities || []).map(p => `<li>${p}</li>`).join('')}</ul>
-                    </div></div>
-                    <div class="card mt-3"><div class="card-body">
-                        <h6><i class="fas fa-link"></i> Sources</h6>
-                        <ul>${(analysis.sources || []).map(s => `<li><a href="${s.url}" target="_blank">${s.title}</a></li>`).join('')}</ul>
-                    </div></div>
+                    <!-- Analyse IA -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="glass p-4 rounded-xl">
+                            <h6 class="font-medium mb-2"><i class="fas fa-chart-line mr-2"></i>Résumé Exécutif</h6>
+                            <p class="text-cyan-100/80">${analysis.summary || 'N/A'}</p>
+                        </div>
+                        <div class="glass p-4 rounded-xl">
+                            <h6 class="font-medium mb-2"><i class="fas fa-list mr-2"></i>Points Clés</h6>
+                            <ul class="list-disc list-inside text-cyan-100/80">${(analysis.key_points || []).map(p => `<li>${p}</li>`).join('')}</ul>
+                        </div>
+                        <div class="glass p-4 rounded-xl">
+                            <h6 class="font-medium mb-2"><i class="fas fa-lightbulb mr-2"></i>Insights</h6>
+                            <ul class="list-disc list-inside text-cyan-100/80">${(analysis.insights || []).map(p => `<li>${p}</li>`).join('')}</ul>
+                        </div>
+                        <div class="glass p-4 rounded-xl">
+                            <h6 class="font-medium mb-2"><i class="fas fa-exclamation-triangle mr-2"></i>Risques</h6>
+                            <ul class="list-disc list-inside text-cyan-100/80">${(analysis.risks || []).map(p => `<li>${p}</li>`).join('')}</ul>
+                        </div>
+                        <div class="glass p-4 rounded-xl md:col-span-2">
+                            <h6 class="font-medium mb-2"><i class="fas fa-star mr-2"></i>Opportunités</h6>
+                            <ul class="list-disc list-inside text-cyan-100/80">${(analysis.opportunities || []).map(p => `<li>${p}</li>`).join('')}</ul>
+                        </div>
+                        <div class="glass p-4 rounded-xl md:col-span-2">
+                            <h6 class="font-medium mb-2"><i class="fas fa-link mr-2"></i>Sources</h6>
+                            <ul class="list-disc list-inside">${(analysis.sources || []).map(s => `<li><a class='text-cyan-300 hover:underline' href="${s.url}" target="_blank">${s.title}</a></li>`).join('')}</ul>
+                        </div>
+                    </div>
                 `;
             }
 
