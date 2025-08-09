@@ -27,3 +27,4 @@ Exemple: `/api/reports/bank/full?engine=puppeteer&scale=0.94&margin=12mm`
 
 
 
+
