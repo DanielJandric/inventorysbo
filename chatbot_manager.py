@@ -19,6 +19,8 @@ class ChatbotManager:
         if not base.startswith("http://") and not base.startswith("https://"):
             base = "https://" + base
         self.api_base_url = base.rstrip('/')
+        # Configurable HTTP timeout
+        self.request_timeout = int(os.getenv("CHATBOT_API_TIMEOUT", "60"))
 
     def extract_item(self, user_input: str) -> dict:
         """Public method: extract and normalize item fields from natural language."""
@@ -149,13 +151,20 @@ class ChatbotManager:
     def _create_item_via_api(self, item_data: dict) -> dict:
         url = f"{self.api_base_url}/api/items"
         headers = {"Content-Type": "application/json"}
-        try:
-            resp = requests.post(url, headers=headers, data=json.dumps(item_data), timeout=20)
-            if resp.status_code >= 400:
-                return {"success": False, "status_code": resp.status_code, "error": resp.text}
-            return {"success": True, "item": resp.json()}
-        except requests.exceptions.RequestException as e:
-            return {"success": False, "error": str(e)}
+        # Single retry on timeout
+        for attempt in range(2):
+            try:
+                resp = requests.post(url, headers=headers, data=json.dumps(item_data), timeout=self.request_timeout)
+                if resp.status_code >= 400:
+                    return {"success": False, "status_code": resp.status_code, "error": resp.text}
+                return {"success": True, "item": resp.json()}
+            except (requests.exceptions.ReadTimeout, requests.exceptions.ConnectTimeout):
+                if attempt == 0:
+                    continue
+                return {"success": False, "error": f"Timed out after {self.request_timeout}s"}
+            except requests.exceptions.RequestException as e:
+                return {"success": False, "error": str(e)}
+        return {"success": False, "error": "Unknown error"}
 
 
 if __name__ == '__main__':
