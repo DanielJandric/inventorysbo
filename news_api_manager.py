@@ -14,44 +14,25 @@ class NewsAPIManager:
         """
         Fetches real estate news articles from newsapi.ai based on a predefined query.
         """
-        # Using the advanced 'query' parameter for a complex OR query
-        query_payload = {
-            "$query": {
-                "$or": [
-                    {
-                        "keyword": {
-                            "$or": [
-                                "immobilier", "real estate", "immobilien", "taux d'intérêt", 
-                                "interest rates", "zinssätze", "hypothèque", "mortgage", 
-                                "PSP Swiss Property", "Swiss Prime Site", "Allreal", "Mobimo", 
-                                "Investis Group", "fonds immobilier", "real estate fund", 
-                                "immobilienfonds", "prix immobilier", "housing prices", 
-                                "immobilienpreise", "logements vacants", "vacancy rate", "leerstand"
-                            ]
-                        }
-                    },
-                    {
-                        "sourceLocationUri": "http://en.wikipedia.org/wiki/Switzerland"
-                    }
-                ]
-            },
-            "$filter": {
-                "lang": {
-                    "$or": ["fra", "eng", "deu", "ita"]
-                },
-                "dataType": {
-                    "$or": ["news", "pr"]
-                },
-                "dateStart": (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'),
-                "dateEnd": datetime.now().strftime('%Y-%m-%d'),
-            }
-        }
-        
+        keywords = [
+            "immobilier", "real estate", "immobilien", "taux d'intérêt", "interest rates",
+            "zinssätze", "hypothèque", "mortgage", "PSP Swiss Property", "Swiss Prime Site",
+            "Allreal", "Mobimo", "Investis Group", "fonds immobilier", "real estate fund",
+            "immobilienfonds", "prix immobilier", "housing prices", "immobilienpreise",
+            "logements vacants", "vacancy rate", "leerstand",
+            "Suisse", "Switzerland"  # Add explicit location keywords
+        ]
+
         request_params = {
             "action": "getArticles",
-            "query": json.dumps(query_payload),
+            "keyword": keywords,
+            "keywordOper": "or",
+            "lang": ["fra", "eng", "deu", "ita"],
+            "dateStart": (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'),
+            "dateEnd": datetime.now().strftime('%Y-%m-%d'),
+            "dataType": ["news", "pr"],
             "articlesPage": 1,
-            "articlesCount": 25,
+            "articlesCount": 50,  # Increased to 50 to get a richer selection
             "articlesSortBy": "rel",
             "articlesSortByAsc": False,
             "articleBodyLen": -1,
@@ -68,14 +49,14 @@ class NewsAPIManager:
             response = requests.get(self.base_url, params=request_params)
             response.raise_for_status()  # Raises an exception for bad status codes (4xx or 5xx)
             data = response.json()
-            
+
             if 'articles' in data and 'results' in data['articles']:
                 return data['articles']['results']
             else:
                 # Log or handle cases where the structure is not as expected
                 print(f"Warning: Unexpected API response structure from NewsAPI.ai: {data}")
                 return []
-                
+
         except requests.exceptions.RequestException as e:
             print(f"Error fetching news from NewsAPI.ai: {e}")
             return None
@@ -83,21 +64,22 @@ class NewsAPIManager:
             print(f"An unexpected error occurred in NewsAPIManager: {e}")
             return None
 
+
 if __name__ == '__main__':
     # This allows for direct testing of the manager
     # Make sure to have a .env file with NEWS_API_AI_KEY="YOUR_KEY" in the root
     # or have the environment variable set.
     from dotenv import load_dotenv
-    import json
+
     load_dotenv()
-    
+
     manager = NewsAPIManager()
     articles = manager.get_real_estate_news()
-    
+
     if articles:
         print(f"Successfully fetched {len(articles)} articles.")
-        for i, article in enumerate(articles[:3]): # Print first 3 articles for preview
-            print(f"\n--- Article {i+1} ---")
+        for i, article in enumerate(articles[:3]):  # Print first 3 articles for preview
+            print(f"\n--- Article {i + 1} ---")
             print(f"Title: {article.get('title')}")
             print(f"Source: {article.get('source', {}).get('title')}")
             print(f"Date: {article.get('date')}")
