@@ -1,6 +1,7 @@
 import os
 import requests
 from datetime import datetime, timedelta
+import json
 
 class NewsAPIManager:
     def __init__(self, api_key=None):
@@ -13,21 +14,42 @@ class NewsAPIManager:
         """
         Fetches real estate news articles from newsapi.ai based on a predefined query.
         """
-        query = {
+        # Using the advanced 'query' parameter for a complex OR query
+        query_payload = {
+            "$query": {
+                "$or": [
+                    {
+                        "keyword": {
+                            "$or": [
+                                "immobilier", "real estate", "immobilien", "taux d'intérêt", 
+                                "interest rates", "zinssätze", "hypothèque", "mortgage", 
+                                "PSP Swiss Property", "Swiss Prime Site", "Allreal", "Mobimo", 
+                                "Investis Group", "fonds immobilier", "real estate fund", 
+                                "immobilienfonds", "prix immobilier", "housing prices", 
+                                "immobilienpreise", "logements vacants", "vacancy rate", "leerstand"
+                            ]
+                        }
+                    },
+                    {
+                        "sourceLocationUri": "http://en.wikipedia.org/wiki/Switzerland"
+                    }
+                ]
+            },
+            "$filter": {
+                "lang": {
+                    "$or": ["fra", "eng", "deu", "ita"]
+                },
+                "dataType": {
+                    "$or": ["news", "pr"]
+                },
+                "dateStart": (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'),
+                "dateEnd": datetime.now().strftime('%Y-%m-%d'),
+            }
+        }
+        
+        request_params = {
             "action": "getArticles",
-            "keyword": [
-                "immobilier", "real estate", "immobilien", "taux d'intérêt", "interest rates", 
-                "zinssätze", "hypothèque", "mortgage", "PSP Swiss Property", "Swiss Prime Site", 
-                "Allreal", "Mobimo", "Investis Group", "fonds immobilier", "real estate fund", 
-                "immobilienfonds", "prix immobilier", "housing prices", "immobilienpreise", 
-                "logements vacants", "vacancy rate", "leerstand"
-            ],
-            "keywordOper": "or",
-            "sourceLocationUri": "http://en.wikipedia.org/wiki/Switzerland",
-            "lang": ["fra", "eng", "deu", "ita"],
-            "dateStart": (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'),
-            "dateEnd": datetime.now().strftime('%Y-%m-%d'),
-            "dataType": ["news", "pr"],
+            "query": json.dumps(query_payload),
             "articlesPage": 1,
             "articlesCount": 25,
             "articlesSortBy": "rel",
@@ -43,7 +65,7 @@ class NewsAPIManager:
         }
 
         try:
-            response = requests.get(self.base_url, params=query)
+            response = requests.get(self.base_url, params=request_params)
             response.raise_for_status()  # Raises an exception for bad status codes (4xx or 5xx)
             data = response.json()
             
@@ -66,6 +88,7 @@ if __name__ == '__main__':
     # Make sure to have a .env file with NEWS_API_AI_KEY="YOUR_KEY" in the root
     # or have the environment variable set.
     from dotenv import load_dotenv
+    import json
     load_dotenv()
     
     manager = NewsAPIManager()
