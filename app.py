@@ -1633,10 +1633,19 @@ def is_item_sold(item: Any) -> bool:
     try:
         status = str(getattr(item, 'status', '') or '').strip().lower()
         sale_status = str(getattr(item, 'sale_status', '') or '').strip().lower()
+        sale_progress = str(getattr(item, 'sale_progress', '') or '').strip().lower()
         if status in {'sold', 'vendu', 'vendue'}:
             return True
         if sale_status in {'completed', 'complete', 'finalisé', 'finalisee', 'finalise', 'completed sale', 'completed_sale'}:
             return True
+        if sale_progress in {'completed', 'complete', 'finalisé', 'finalisee', 'finalise'}:
+            return True
+        try:
+            sold_price = getattr(item, 'sold_price', None)
+            if sold_price is not None and float(sold_price) > 0:
+                return True
+        except Exception:
+            pass
     except Exception:
         return False
     return False
@@ -4618,12 +4627,12 @@ def chatbot():
                     total_value = round(total_value, 2)
                     if mode_total:
                         return jsonify({
-                            "reply": f"La valeur totale des {cat.lower()} est {total_value:,.0f} CHF.",
+                            "reply": f"La valeur totale (vendus inclus) des {cat.lower()} est {total_value:,.0f} CHF.",
                             "metadata": {"mode": "chatbot_value", "category": cat, "scope": "total", "value": total_value}
                         })
                     else:
                         return jsonify({
-                            "reply": f"La valeur disponible (non vendue) des {cat.lower()} est {total_value:,.0f} CHF.",
+                            "reply": f"La valeur disponible (hors vendus) des {cat.lower()} est {total_value:,.0f} CHF.",
                             "metadata": {"mode": "chatbot_value", "category": cat, "scope": "available", "value": total_value}
                         })
         except Exception:
@@ -4664,12 +4673,15 @@ def chatbot():
                     else:
                         chosen = [i for i in chosen if is_item_available(i)]
                     chosen.sort(key=_item_value, reverse=True)
-                    top = chosen[:10]
+                    top = chosen[:25]
                     lines = [f"- {i.name} ({_item_value(i):,.0f} CHF)" for i in top]
                     scope = 'vendues' if ('vendu' in ql or 'vendues' in ql or 'sold' in ql) else ('toutes' if ('toutes' in ql or 'tout' in ql) else 'disponibles')
+                    # Si l'utilisateur demande un 'top 5', tronquer à 5
+                    if re.search(r"\btop\s*5\b", ql):
+                        lines = lines[:5]
                     return jsonify({
-                        "reply": f"Top {len(top)} {cat.lower()} {scope} par valeur:\n" + "\n".join(lines),
-                        "metadata": {"mode": "chatbot_list", "category": cat, "scope": scope, "count": len(top)}
+                        "reply": f"Top {len(lines)} {cat.lower()} {scope} par valeur:\n" + "\n".join(lines),
+                        "metadata": {"mode": "chatbot_list", "category": cat, "scope": scope, "count": len(lines)}
                     })
         except Exception:
             pass
