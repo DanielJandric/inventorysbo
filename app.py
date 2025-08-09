@@ -4275,6 +4275,51 @@ def chatbot():
         except Exception:
             pass
 
+        # 3) INTENT: "liste (disponible|vendues|toutes) <catégorie>" → top par valeur
+        try:
+            ql = query.lower()
+            if 'liste' in ql or 'lister' in ql or 'montre-moi' in ql or 'affiche' in ql:
+                def _norm_cat(text: str) -> Optional[str]:
+                    mapping = {
+                        'voiture': 'Voitures', 'voitures': 'Voitures', 'vehicules': 'Voitures', 'véhicules': 'Voitures',
+                        'montre': 'Montres', 'montres': 'Montres',
+                        'avion': 'Avions', 'avions': 'Avions',
+                        'bateau': 'Bateaux', 'bateaux': 'Bateaux',
+                        'action': 'Actions', 'actions': 'Actions',
+                    }
+                    for k, v in mapping.items():
+                        if k in text:
+                            return v
+                    return None
+
+                def _item_value(it) -> float:
+                    try:
+                        if it.category == 'Actions' and it.current_price and it.stock_quantity:
+                            return float(it.current_price) * float(it.stock_quantity)
+                        return float(it.current_value or 0)
+                    except Exception:
+                        return 0.0
+
+                cat = _norm_cat(ql)
+                if cat:
+                    chosen = [i for i in items if i.category == cat]
+                    if 'vendu' in ql or 'vendues' in ql or 'sold' in ql:
+                        chosen = [i for i in chosen if (i.status or '') == 'Sold']
+                    elif 'toutes' in ql or 'tout' in ql:
+                        pass
+                    else:
+                        chosen = [i for i in chosen if (i.status or '') != 'Sold']
+                    chosen.sort(key=_item_value, reverse=True)
+                    top = chosen[:10]
+                    lines = [f"- {i.name} ({_item_value(i):,.0f} CHF)" for i in top]
+                    scope = 'vendues' if ('vendu' in ql or 'vendues' in ql or 'sold' in ql) else ('toutes' if ('toutes' in ql or 'tout' in ql) else 'disponibles')
+                    return jsonify({
+                        "reply": f"Top {len(top)} {cat.lower()} {scope} par valeur:\n" + "\n".join(lines),
+                        "metadata": {"mode": "chatbot_list", "category": cat, "scope": scope, "count": len(top)}
+                    })
+        except Exception:
+            pass
+
         # Chatbot-assisted item creation (natural language → new asset)
         try:
             query_lower = query.lower()

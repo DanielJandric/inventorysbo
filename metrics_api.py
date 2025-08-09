@@ -120,3 +120,33 @@ def api_knowledge_pack():
         return jsonify({"success": True, "pack": pack})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+@metrics_bp.route('/metrics/list', methods=['GET'])
+def api_metrics_list():
+    """List items deterministically by category/status, ordered by value desc (default)."""
+    try:
+        from app import AdvancedDataManager
+        category = request.args.get('category')
+        status = (request.args.get('status') or 'available').lower()  # available|sold|all
+        limit = int(request.args.get('limit') or 10)
+        items_list = AdvancedDataManager.fetch_all_items()
+        if category:
+            category = _normalize_category_label(category)
+            items_list = [i for i in items_list if i.category == category]
+        if status == 'available':
+            items_list = [i for i in items_list if (getattr(i, 'status', '') or '') != 'Sold']
+        elif status == 'sold':
+            items_list = [i for i in items_list if (getattr(i, 'status', '') or '') == 'Sold']
+        # sort by value desc
+        items_list.sort(key=_item_value, reverse=True)
+        data = [{
+            "id": i.id,
+            "name": i.name,
+            "category": i.category,
+            "status": i.status,
+            "value": _item_value(i)
+        } for i in items_list[:max(1, min(limit, 100))]]
+        return jsonify({"success": True, "items": data})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
