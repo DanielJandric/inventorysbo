@@ -28,7 +28,6 @@ class NewsAPIManager:
                 "handelszeitung.ch", "cash.ch", "swissinfo.ch", "24heures.ch", "tdg.ch", 
                 "bilan.ch", "allnews.ch"
             ],
-            "sourceLocationUri": "http://en.wikipedia.org/wiki/Switzerland",
             "locationUri": [
                 "http://en.wikipedia.org/wiki/Switzerland", "http://en.wikipedia.org/wiki/Geneva", 
                 "http://en.wikipedia.org/wiki/Zurich", "http://en.wikipedia.org/wiki/Basel", 
