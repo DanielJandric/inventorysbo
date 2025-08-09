@@ -4579,7 +4579,8 @@ def chatbot():
                         except Exception:
                             pre_list = None
                         break
-                if pre_list and query_lower.strip() in {'oui', 'ok', 'vas-y', 'go', 'confirm', 'confirme'}:
+                confirm_words = {'oui', 'ok', 'vas-y', 'go', 'confirm', 'confirme'}
+                if pre_list and query_lower.strip() in confirm_words:
                     created = []
                     errors = []
                     for it in pre_list:
@@ -4620,6 +4621,56 @@ def chatbot():
                         "reply": f"✅ {len(created)} objets créés" + (f", {len(errors)} erreurs" if errors else ""),
                         "metadata": {"mode": "chatbot_create_batch_result", "created_count": len(created), "error_count": len(errors)}
                     })
+                # Fallback: try to parse last assistant preview list from conversation_history (no session dependency)
+                if query_lower.strip() in confirm_words and not pre_list:
+                    extracted_list = None
+                    try:
+                        for h in reversed(conversation_history or []):
+                            if isinstance(h, dict) and h.get('role') == 'assistant':
+                                content = h.get('content') or ''
+                                if 'Je peux ajouter ces objets' in content or '[' in content:
+                                    si = content.find('[')
+                                    ei = content.rfind(']')
+                                    if si != -1 and ei != -1 and ei > si:
+                                        extracted_list = json.loads(content[si:ei+1])
+                                        break
+                    except Exception:
+                        extracted_list = None
+                    if extracted_list and isinstance(extracted_list, list):
+                        created = []
+                        errors = []
+                        for it in extracted_list:
+                            try:
+                                payload = dict(it or {})
+                                payload.setdefault('status', 'Available')
+                                payload['created_at'] = datetime.now().isoformat()
+                                payload['updated_at'] = datetime.now().isoformat()
+                                try:
+                                    if payload.get('category') != 'Actions' and not payload.get('current_value') and payload.get('acquisition_price'):
+                                        payload['current_value'] = payload['acquisition_price']
+                                except Exception:
+                                    pass
+                                if ai_engine and ai_engine.semantic_search:
+                                    temp = payload.copy()
+                                    temp['id'] = 0
+                                    temp_item = CollectionItem.from_dict(temp)
+                                    emb = ai_engine.semantic_search.generate_embedding_for_item(temp_item)
+                                    if emb:
+                                        payload['embedding'] = emb
+                                payload.pop('id', None)
+                                resp = supabase.table("items").insert(payload).execute()
+                                if resp.data:
+                                    smart_cache.invalidate('items')
+                                    smart_cache.invalidate('analytics')
+                                    created.append(resp.data[0])
+                                else:
+                                    errors.append({"error": "insert_failed", "payload": payload})
+                            except Exception as ex:
+                                errors.append({"error": str(ex), "payload": it})
+                        return jsonify({
+                            "reply": f"✅ {len(created)} objets créés" + (f", {len(errors)} erreurs" if errors else ""),
+                            "metadata": {"mode": "chatbot_create_batch_result", "created_count": len(created), "error_count": len(errors)}
+                        })
             except Exception:
                 pass
         except Exception:
