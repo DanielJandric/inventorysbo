@@ -4580,16 +4580,42 @@ def chatbot():
                             pre_list = None
                         break
                 if pre_list and query_lower.strip() in {'oui', 'ok', 'vas-y', 'go', 'confirm', 'confirme'}:
-                    from chatbot_manager import ChatbotManager
-                    cm = ChatbotManager()
                     created = []
                     errors = []
                     for it in pre_list:
-                        res = cm.create_from_payload(it)
-                        if res.get('success'):
-                            created.append(res.get('item'))
-                        else:
-                            errors.append(res)
+                        try:
+                            payload = dict(it or {})
+                            # Minimal normalization
+                            if 'status' not in payload:
+                                payload['status'] = 'Available'
+                            payload['created_at'] = datetime.now().isoformat()
+                            payload['updated_at'] = datetime.now().isoformat()
+                            # Default value fallback for non-stocks
+                            try:
+                                if payload.get('category') != 'Actions' and not payload.get('current_value') and payload.get('acquisition_price'):
+                                    payload['current_value'] = payload['acquisition_price']
+                            except Exception:
+                                pass
+                            # Generate embedding best-effort
+                            if ai_engine and ai_engine.semantic_search:
+                                temp = payload.copy()
+                                temp['id'] = 0
+                                temp_item = CollectionItem.from_dict(temp)
+                                emb = ai_engine.semantic_search.generate_embedding_for_item(temp_item)
+                                if emb:
+                                    payload['embedding'] = emb
+                            # Never send id to DB
+                            payload.pop('id', None)
+                            # Insert directly
+                            resp = supabase.table("items").insert(payload).execute()
+                            if resp.data:
+                                smart_cache.invalidate('items')
+                                smart_cache.invalidate('analytics')
+                                created.append(resp.data[0])
+                            else:
+                                errors.append({"error": "insert_failed", "payload": payload})
+                        except Exception as ex:
+                            errors.append({"error": str(ex), "payload": it})
                     return jsonify({
                         "reply": f"✅ {len(created)} objets créés" + (f", {len(errors)} erreurs" if errors else ""),
                         "metadata": {"mode": "chatbot_create_batch_result", "created_count": len(created), "error_count": len(errors)}
