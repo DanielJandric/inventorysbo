@@ -4431,9 +4431,14 @@ def chatbot():
                     for it in many_list:
                         it.setdefault('status', 'Available')
                     preview = [{k: it.get(k) for k in ('name','category','status','current_value')} for it in many_list]
+                    # Persist a machine-readable prefill marker in memory for confirmation
+                    try:
+                        conversation_memory.add_message(session_id, 'assistant', 'BATCH_PREFILL:' + json.dumps(many_list, ensure_ascii=False))
+                    except Exception:
+                        pass
                     return jsonify({
                         "reply": "Je peux ajouter ces objets. Réponds 'oui' pour confirmer ou modifie les détails :\n" + json.dumps(preview, ensure_ascii=False),
-                        "metadata": {"mode": "chatbot_create_batch_pending", "prefill_items": many_list}
+                        "metadata": {"mode": "chatbot_create_batch_pending", "prefill_items": many_list, "session_id": session_id}
                     })
                 # Fallback to single item flow
                 extract0 = cm0.extract_item(query)
@@ -4564,39 +4569,31 @@ def chatbot():
 
             # If previous turn proposed a batch (prefill_items) and user confirms
             try:
-                last_meta = None
-                for h in reversed(conversation_history or []):
-                    if isinstance(h, dict) and h.get('role') == 'assistant':
-                        # Try to detect JSON prefill batch in content
-                        content = h.get('content') or ''
-                        if '"prefill_items"' in content or '"mode": "chatbot_create_batch_pending"' in content:
-                            last_meta = h
-                            break
-                if last_meta and query_lower.strip() in {'oui', 'ok', 'vas-y', 'go', 'confirm', 'confirme'}:
-                    # Re-extract from last assistant content
-                    pre = None
-                    try:
-                        start = last_meta['content'].find('[')
-                        end = last_meta['content'].rfind(']')
-                        if start != -1 and end != -1 and end > start:
-                            pre = json.loads(last_meta['content'][start:end+1])
-                    except Exception:
-                        pre = None
-                    if pre and isinstance(pre, list):
-                        from chatbot_manager import ChatbotManager
-                        cm = ChatbotManager()
-                        created = []
-                        errors = []
-                        for it in pre:
-                            res = cm.create_from_payload(it)
-                            if res.get('success'):
-                                created.append(res.get('item'))
-                            else:
-                                errors.append(res)
-                        return jsonify({
-                            "reply": f"✅ {len(created)} objets créés" + (f", {len(errors)} erreurs" if errors else ""),
-                            "metadata": {"mode": "chatbot_create_batch_result", "created_count": len(created), "error_count": len(errors)}
-                        })
+                # Look for explicit machine-readable prefill in persisted memory
+                persisted = conversation_memory.get_recent_messages(session_id, limit=20)
+                pre_list = None
+                for m in reversed(persisted or []):
+                    if m.get('role') == 'assistant' and isinstance(m.get('content'), str) and m['content'].startswith('BATCH_PREFILL:'):
+                        try:
+                            pre_list = json.loads(m['content'].split('BATCH_PREFILL:',1)[1])
+                        except Exception:
+                            pre_list = None
+                        break
+                if pre_list and query_lower.strip() in {'oui', 'ok', 'vas-y', 'go', 'confirm', 'confirme'}:
+                    from chatbot_manager import ChatbotManager
+                    cm = ChatbotManager()
+                    created = []
+                    errors = []
+                    for it in pre_list:
+                        res = cm.create_from_payload(it)
+                        if res.get('success'):
+                            created.append(res.get('item'))
+                        else:
+                            errors.append(res)
+                    return jsonify({
+                        "reply": f"✅ {len(created)} objets créés" + (f", {len(errors)} erreurs" if errors else ""),
+                        "metadata": {"mode": "chatbot_create_batch_result", "created_count": len(created), "error_count": len(errors)}
+                    })
             except Exception:
                 pass
         except Exception:
