@@ -2,6 +2,11 @@ import os
 import requests
 from datetime import datetime, timedelta
 import json
+import logging
+
+# Configure logger for this module
+logger = logging.getLogger(__name__)
+
 
 class NewsAPIManager:
     def __init__(self, api_key=None):
@@ -48,11 +53,14 @@ class NewsAPIManager:
         try:
             # Log the prepared request URL for debugging
             prepared_request = requests.Request('GET', self.base_url, params=request_params).prepare()
-            print(f"DEBUG: Requesting URL: {prepared_request.url}")
+            logger.info(f"DEBUG: Requesting URL: {prepared_request.url}")
 
             response = requests.get(self.base_url, params=request_params)
             response.raise_for_status()  # Raises an exception for bad status codes (4xx or 5xx)
             data = response.json()
+
+            # Log the raw API response for debugging
+            logger.info(f"DEBUG: API Response: {json.dumps(data, indent=2)}")
 
             if 'articles' in data and 'results' in data['articles']:
                 return data['articles']['results']
