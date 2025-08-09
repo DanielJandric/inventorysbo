@@ -134,36 +134,36 @@
                     case 'idle':
                         startBtn.disabled = false;
                         startBtn.innerHTML = '<i class="fas fa-play-circle"></i> Lancer une Nouvelle Analyse';
-                        statusDisplay.className = 'alert alert-secondary text-center';
+                        statusDisplay.className = 'mt-4 rounded-xl p-4 text-center bg-white/5 border border-white/10';
                         statusIcon.innerHTML = '<i class="fas fa-info-circle"></i>';
                         statusText.textContent = 'Prêt à lancer une nouvelle analyse.';
-                        resultDiv.style.display = 'none';
+                        resultDiv.classList.add('hidden');
                         break;
                     case 'pending':
                     case 'processing':
                         startBtn.disabled = true;
                         startBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analyse en cours...';
-                        statusDisplay.className = 'alert alert-info text-center';
-                        statusIcon.innerHTML = '<div class="spinner-border spinner-border-sm" role="status"></div>';
+                        statusDisplay.className = 'mt-4 rounded-xl p-4 text-center bg-cyan-500/10 border border-cyan-400/30';
+                        statusIcon.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
                         statusText.textContent = 'Analyse en cours... Veuillez patienter.';
-                        resultDiv.style.display = 'none';
+                        resultDiv.classList.add('hidden');
                         break;
                     case 'completed':
                         startBtn.disabled = false;
                         startBtn.innerHTML = '<i class="fas fa-play-circle"></i> Lancer une Nouvelle Analyse';
-                        statusDisplay.className = 'alert alert-success text-center';
+                        statusDisplay.className = 'mt-4 rounded-xl p-4 text-center bg-green-500/10 border border-green-400/30';
                         statusIcon.innerHTML = '<i class="fas fa-check-circle"></i>';
                         statusText.textContent = `Analyse terminée le ${new Date(data.timestamp).toLocaleString('fr-FR')}.`;
                         renderAnalysis(data);
-                        resultDiv.style.display = 'block';
+                        resultDiv.classList.remove('hidden');
                         break;
                     case 'error':
                         startBtn.disabled = false;
                         startBtn.innerHTML = '<i class="fas fa-play-circle"></i> Lancer une Nouvelle Analyse';
-                        statusDisplay.className = 'alert alert-danger text-center';
+                        statusDisplay.className = 'mt-4 rounded-xl p-4 text-center bg-red-500/10 border border-red-400/30';
                         statusIcon.innerHTML = '<i class="fas fa-exclamation-triangle"></i>';
                         statusText.textContent = `Erreur lors de l'analyse : ${data.error_message}`;
-                        resultDiv.style.display = 'none';
+                        resultDiv.classList.add('hidden');
                         break;
                 }
             }
@@ -175,7 +175,7 @@
                     if (change === undefined || percent === undefined) return '';
                     const changeValue = parseFloat(change);
                     const percentValue = parseFloat(percent);
-                    const color = changeValue >= 0 ? 'text-success' : 'text-danger';
+                    const color = changeValue >= 0 ? 'text-green-400' : 'text-red-400';
                     const icon = changeValue >= 0 ? '<i class="fas fa-arrow-up"></i>' : '<i class="fas fa-arrow-down"></i>';
                     return `<span class="${color}">${icon} ${changeValue.toFixed(2)} (${percentValue.toFixed(2)}%)</span>`;
                 };
@@ -189,7 +189,7 @@
                                 <td><strong>${name}</strong></td>
                                 <td>${values.price ? values.price.toFixed(2) : 'N/A'}</td>
                                 <td>${formatChange(values.change, values.change_percent)}</td>
-                                <td class="text-muted"><small>${values.source || 'N/A'}</small></td>
+                                <td class="text-cyan-200/60 text-xs">${values.source || 'N/A'}</td>
                             </tr>
                         `;
                     }
@@ -312,33 +312,37 @@
                 try {
                     const container = document.getElementById('market-pdf-gallery');
                     if (!container) return;
-                    container.innerHTML = '<div class="text-muted">Chargement...</div>';
+                    container.innerHTML = '<div class="text-cyan-200/70">Chargement...</div>';
                     const resp = await fetch('/api/market-pdfs');
                     const data = await resp.json();
                     if (!resp.ok || !data.success) throw new Error(data.error || 'Erreur de chargement');
                     if (!data.files || data.files.length === 0) {
-                        container.innerHTML = '<div class="text-muted">Aucun PDF déposé pour le moment.</div>';
+                        container.innerHTML = '<div class="text-cyan-200/70">Aucun PDF déposé pour le moment.</div>';
                         return;
                     }
                     container.innerHTML = data.files.map(f => `
-                        <div class="col-12 col-md-6 col-lg-4">
-                            <div class="border rounded p-3 h-100 d-flex flex-column">
-                                <div class="mb-2"><i class="fas fa-file-pdf text-danger"></i> <strong>${f.name}</strong></div>
-                                <div class="text-muted small mb-2">${new Date(f.modified_at).toLocaleString('fr-FR')}</div>
-                                <div class="mt-auto d-flex gap-2">
-                                    <a href="${f.url}" target="_blank" class="btn btn-sm btn-outline-primary">
-                                        Ouvrir
-                                    </a>
-                                    <a href="${f.url}" download class="btn btn-sm btn-outline-secondary">
-                                        Télécharger
-                                    </a>
+                        <article class="glass rounded-2xl p-4 flex flex-col gap-3">
+                            <header class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-xl flex items-center justify-center bg-red-500/10 border border-red-400/30 text-red-300">
+                                    <i class="fas fa-file-pdf"></i>
                                 </div>
+                                <div>
+                                    <h4 class="font-semibold text-cyan-100">${f.name}</h4>
+                                    <div class="text-cyan-200/60 text-xs">${new Date(f.modified_at).toLocaleString('fr-FR')}</div>
+                                </div>
+                            </header>
+                            <div class="rounded-xl overflow-hidden border border-white/10 bg-black/30 aspect-[4/3]">
+                                <iframe src="${f.url}#toolbar=0&navpanes=0&scrollbar=0" class="w-full h-full"></iframe>
                             </div>
-                        </div>
+                            <footer class="flex gap-2 justify-end">
+                                <a href="${f.url}" target="_blank" class="px-3 py-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 text-sm">Ouvrir</a>
+                                <a href="${f.url}" download class="px-3 py-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 text-sm">Télécharger</a>
+                            </footer>
+                        </article>
                     `).join('');
                 } catch (e) {
                     const container = document.getElementById('market-pdf-gallery');
-                    if (container) container.innerHTML = '<div class="text-danger">❌ ' + e.message + '</div>';
+                    if (container) container.innerHTML = '<div class="text-red-300">❌ ' + e.message + '</div>';
                 }
             }
 
