@@ -2328,7 +2328,7 @@ class PureOpenAIEngineWithRAG:
             loop_messages = list(messages)
             for _ in range(3):  # up to 3 tool iterations
                 resp = self.client.chat.completions.create(
-                    model="gpt-4o",
+                    model=os.getenv("AI_MODEL", "gpt-4.1"),
                     messages=loop_messages,
                     temperature=0.2,
                     max_tokens=900,
@@ -2486,7 +2486,7 @@ Si la question fait référence à des éléments mentionnés précédemment, ut
             messages.append({"role": "user", "content": user_prompt})
 
             response = self.client.chat.completions.create(
-                model="gpt-4o",
+                model=os.getenv("AI_MODEL", "gpt-4.1"),
                 messages=messages,
                 temperature=0.2,
                 max_tokens=1000,
@@ -2554,7 +2554,7 @@ Réponds de manière concise et directe."""
             if not ai_response:
                 # Fallback to plain completion
                 response = self.client.chat.completions.create(
-                    model="gpt-4o",
+                    model=os.getenv("AI_MODEL", "gpt-4.1"),
                     messages=messages,
                     temperature=0.2,
                     max_tokens=800,
