@@ -4890,6 +4890,24 @@ def chatbot():
                             return v
                     return None
 
+                def _infer_cat_from_history(history_list) -> Optional[str]:
+                    try:
+                        mapping_tokens = [
+                            (['maison', 'maisons', 'appartement', 'appartements'], 'Appartements / maison'),
+                            (['voiture', 'voitures', 'vehicule', 'vehicules', 'véhicule', 'véhicules'], 'Voitures'),
+                            (['montre', 'montres', 'swatch', 'rolex', 'patek'], 'Montres'),
+                            (['bateau', 'bateaux', 'yacht', 'sunseeker', 'axopar', 'feadship'], 'Bateaux'),
+                            (['action', 'actions', 'bourse', 'portefeuille'], 'Actions'),
+                        ]
+                        for h in reversed(history_list or []):
+                            content = (h.get('content') if isinstance(h, dict) else str(h) or '').lower()
+                            for tokens, catv in mapping_tokens:
+                                if any(tok in content for tok in tokens):
+                                    return catv
+                        return None
+                    except Exception:
+                        return None
+
                 def _item_value(it) -> float:
                     try:
                         if it.category == 'Actions' and it.current_price and it.stock_quantity:
@@ -4899,6 +4917,9 @@ def chatbot():
                         return 0.0
 
                 cat = _norm_cat(ql)
+                if not cat:
+                    # Essayer d'inférer depuis l'historique (follow-up du type "donne la liste ?")
+                    cat = _infer_cat_from_history(conversation_history)
                 if cat:
                     chosen = [i for i in items if i.category == cat]
                     if 'vendu' in ql or 'vendues' in ql or 'sold' in ql:
