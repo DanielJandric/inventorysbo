@@ -14,6 +14,7 @@ from functools import lru_cache, wraps
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from flask import Flask, jsonify, render_template, request, Response
+from werkzeug.utils import secure_filename
 from pdf_optimizer import generate_optimized_pdf, create_summary_box, create_item_card_html, format_price_for_pdf
 from flask_cors import CORS
 import numpy as np
@@ -1540,6 +1541,13 @@ app.config.update(
     JSON_SORT_KEYS=False
 )
 CORS(app)
+
+# Configuration du dépôt de PDF marché
+app.config.setdefault('MARKET_PDF_UPLOAD_FOLDER', os.path.join(app.root_path, 'static', 'market_pdfs'))
+app.config.setdefault('MARKET_PDF_ALLOWED_EXTENSIONS', {'.pdf'})
+
+# Créer le dossier si nécessaire
+os.makedirs(app.config['MARKET_PDF_UPLOAD_FOLDER'], exist_ok=True)
 app.register_blueprint(seeking_alpha_blueprint)
 
 # Gestionnaire de données sophistiqué
@@ -2629,6 +2637,63 @@ def google_search():
 def unified_market():
     """Interface du gestionnaire de marché unifié"""
     return render_template("unified_market.html")
+
+def _is_allowed_market_pdf(filename: str) -> bool:
+    try:
+        _, ext = os.path.splitext(filename)
+        return ext.lower() in app.config['MARKET_PDF_ALLOWED_EXTENSIONS']
+    except Exception:
+        return False
+
+@app.route("/api/market-pdfs", methods=["GET"])
+def list_market_pdfs():
+    """Liste les PDFs déposés pour les updates de marché."""
+    try:
+        folder_path = app.config['MARKET_PDF_UPLOAD_FOLDER']
+        files = []
+        for entry in os.scandir(folder_path):
+            if entry.is_file() and _is_allowed_market_pdf(entry.name):
+                stat = entry.stat()
+                files.append({
+                    "name": entry.name,
+                    "url": f"/static/market_pdfs/{entry.name}",
+                    "size_bytes": stat.st_size,
+                    "modified_at": datetime.fromtimestamp(stat.st_mtime).isoformat()
+                })
+        # Les plus récents d'abord
+        files.sort(key=lambda f: f["modified_at"], reverse=True)
+        return jsonify({"success": True, "files": files})
+    except Exception as e:
+        logger.error(f"Erreur list_market_pdfs: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route("/api/market-pdfs/upload", methods=["POST"])
+def upload_market_pdf():
+    """Upload d'un PDF pour les updates de marché via Settings."""
+    try:
+        if 'file' not in request.files:
+            return jsonify({"success": False, "error": "Aucun fichier fourni"}), 400
+
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({"success": False, "error": "Nom de fichier vide"}), 400
+
+        if not _is_allowed_market_pdf(file.filename):
+            return jsonify({"success": False, "error": "Extension non autorisée (PDF uniquement)"}), 400
+
+        base_name = secure_filename(file.filename)
+        # Préfixer d'un timestamp pour éviter les collisions
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        final_name = f"{timestamp}__{base_name}"
+
+        save_path = os.path.join(app.config['MARKET_PDF_UPLOAD_FOLDER'], final_name)
+        file.save(save_path)
+
+        file_url = f"/static/market_pdfs/{final_name}"
+        return jsonify({"success": True, "name": final_name, "url": file_url})
+    except Exception as e:
+        logger.error(f"Erreur upload_market_pdf: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route("/health")
 def health():

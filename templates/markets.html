@@ -58,6 +58,18 @@
                         </button>
                     </div>
                     <hr>
+                    <!-- PDFs Déposés (Update Marchés) -->
+                    <div class="card mb-4">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="fas fa-file-pdf"></i> PDFs (Update Marchés)</h5>
+                            <button id="refresh-pdfs" class="btn btn-sm btn-outline-secondary">Actualiser</button>
+                        </div>
+                        <div class="card-body">
+                            <div id="market-pdf-gallery" class="row g-3">
+                                <div class="text-muted">Chargement...</div>
+                            </div>
+                        </div>
+                    </div>
                     <div id="status-display" class="alert alert-secondary text-center">
                         <span id="status-icon"><i class="fas fa-info-circle"></i></span>
                         <span id="status-text">Prêt à lancer une nouvelle analyse.</span>
@@ -258,6 +270,47 @@
 
             // Vérifier le statut au chargement de la page
             checkStatus();
+
+            // Charger les PDFs
+            async function loadMarketPdfs() {
+                try {
+                    const container = document.getElementById('market-pdf-gallery');
+                    if (!container) return;
+                    container.innerHTML = '<div class="text-muted">Chargement...</div>';
+                    const resp = await fetch('/api/market-pdfs');
+                    const data = await resp.json();
+                    if (!resp.ok || !data.success) throw new Error(data.error || 'Erreur de chargement');
+                    if (!data.files || data.files.length === 0) {
+                        container.innerHTML = '<div class="text-muted">Aucun PDF déposé pour le moment.</div>';
+                        return;
+                    }
+                    container.innerHTML = data.files.map(f => `
+                        <div class="col-12 col-md-6 col-lg-4">
+                            <div class="border rounded p-3 h-100 d-flex flex-column">
+                                <div class="mb-2"><i class="fas fa-file-pdf text-danger"></i> <strong>${f.name}</strong></div>
+                                <div class="text-muted small mb-2">${new Date(f.modified_at).toLocaleString('fr-FR')}</div>
+                                <div class="mt-auto d-flex gap-2">
+                                    <a href="${f.url}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                        Ouvrir
+                                    </a>
+                                    <a href="${f.url}" download class="btn btn-sm btn-outline-secondary">
+                                        Télécharger
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('');
+                } catch (e) {
+                    const container = document.getElementById('market-pdf-gallery');
+                    if (container) container.innerHTML = '<div class="text-danger">❌ ' + e.message + '</div>';
+                }
+            }
+
+            loadMarketPdfs();
+            const refreshBtn = document.getElementById('refresh-pdfs');
+            if (refreshBtn) {
+                refreshBtn.addEventListener('click', loadMarketPdfs);
+            }
         });
     </script>
 </body>

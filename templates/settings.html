@@ -86,6 +86,26 @@
             <!-- Market Updates Section -->
             <div class="glassmorphism rounded-xl p-6">
                 <h3 class="text-xl font-semibold text-bonvin-gold mb-4">📰 Market Updates</h3>
+
+                <!-- Upload PDF Marché -->
+                <div class="mb-6">
+                    <h4 class="text-lg font-medium mb-3">Déposer un PDF (Update Marchés)</h4>
+                    <form id="market-pdf-upload-form" class="space-y-3">
+                        <input id="market-pdf-file" type="file" accept="application/pdf" class="w-full text-gray-200" />
+                        <button type="submit" class="w-full bg-bonvin-gold hover:bg-yellow-600 text-black font-semibold py-3 px-4 rounded-lg transition-colors">
+                            📤 Déposer le PDF
+                        </button>
+                    </form>
+                    <div id="market-pdf-upload-status" class="mt-2 text-sm text-gray-300"></div>
+                </div>
+
+                <!-- PDFs déposés -->
+                <div class="mb-6">
+                    <h4 class="text-lg font-medium mb-3">PDFs déposés</h4>
+                    <div id="market-pdf-list" class="bg-black bg-opacity-30 rounded-lg p-4 max-h-64 overflow-y-auto text-sm text-gray-200">
+                        Chargement...
+                    </div>
+                </div>
                 
                 <!-- Scheduler Status -->
                 <div class="mb-6">
@@ -429,12 +449,37 @@
             await Promise.all([
                 loadSchedulerStatus(),
                 loadRecentUpdates(),
+                loadMarketPdfs(),
                 loadYahooStatus(),
                 loadCacheStatus(),
                 loadEmailConfig(),
                 loadApiEndpoints(),
                 loadSystemHealth()
             ]);
+        }
+
+        async function loadMarketPdfs() {
+            try {
+                const container = document.getElementById('market-pdf-list');
+                if (!container) return;
+                container.textContent = 'Chargement...';
+                const resp = await fetch('/api/market-pdfs');
+                const data = await resp.json();
+                if (!resp.ok || !data.success) throw new Error(data.error || 'Erreur de chargement');
+                if (!data.files || data.files.length === 0) {
+                    container.textContent = 'Aucun PDF déposé pour le moment.';
+                    return;
+                }
+                container.innerHTML = data.files.map(f => `
+                    <div class="flex items-center justify-between py-1">
+                        <a href="${f.url}" target="_blank" class="text-bonvin-gold hover:underline">${f.name}</a>
+                        <span class="text-gray-400 text-xs">${new Date(f.modified_at).toLocaleString('fr-FR')}</span>
+                    </div>
+                `).join('');
+            } catch (e) {
+                const container = document.getElementById('market-pdf-list');
+                if (container) container.textContent = '❌ ' + e.message;
+            }
         }
 
         // Scheduler Status
@@ -1244,6 +1289,34 @@
 
         // Add event listeners for push buttons
         document.addEventListener('DOMContentLoaded', function() {
+            // Upload PDF Marché
+            const uploadForm = document.getElementById('market-pdf-upload-form');
+            if (uploadForm) {
+                uploadForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const fileInput = document.getElementById('market-pdf-file');
+                    const statusDiv = document.getElementById('market-pdf-upload-status');
+                    statusDiv.textContent = '';
+                    if (!fileInput.files || fileInput.files.length === 0) {
+                        statusDiv.textContent = 'Veuillez sélectionner un fichier PDF.';
+                        return;
+                    }
+                    const formData = new FormData();
+                    formData.append('file', fileInput.files[0]);
+                    try {
+                        const resp = await fetch('/api/market-pdfs/upload', { method: 'POST', body: formData });
+                        const data = await resp.json();
+                        if (!resp.ok || !data.success) {
+                            throw new Error(data.error || 'Échec du téléversement');
+                        }
+                        statusDiv.textContent = '✅ PDF déposé: ' + data.name;
+                        fileInput.value = '';
+                        await loadMarketPdfs();
+                    } catch (err) {
+                        statusDiv.textContent = '❌ ' + err.message;
+                    }
+                });
+            }
             const pushButton = document.getElementById('push-all-updates');
             const quickSyncButton = document.getElementById('quick-sync');
             const pushNotificationsButton = document.getElementById('push-notifications');
