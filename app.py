@@ -1624,6 +1624,27 @@ def _update_chatbot_metrics(start_time: float, error: Exception = None):
     except Exception:
         pass
 
+# ──────────────────────────────────────────────────────────
+# Simple moderation/guardrails
+# ──────────────────────────────────────────────────────────
+
+SENSITIVE_PATTERNS = [
+    "api key", "apikey", "token", "mot de passe", "password", "secret", "clé privée", "private key",
+    "carte de crédit", "credit card", "cvv"
+]
+
+def _should_block_query(user_text: str) -> Optional[str]:
+    try:
+        t = (user_text or "").lower()
+        if len(t) > 8000:
+            return "Votre message est trop long. Veuillez le résumer."
+        for pat in SENSITIVE_PATTERNS:
+            if pat in t:
+                return "Pour votre sécurité, je ne peux pas aider avec des informations sensibles (mots de passe, clés API, etc.)."
+    except Exception:
+        pass
+    return None
+
 # Application Flask
 app = Flask(__name__)
 app.config.update(
@@ -2108,6 +2129,175 @@ class PureOpenAIEngineWithRAG:
     def __init__(self, client):
         self.client = client
         self.semantic_search = SemanticSearchRAG(client) if client else None
+        self._tool_runtime_context: Dict[str, Any] = {}
+
+    def _get_tools_schema(self) -> List[Dict[str, Any]]:
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_stock_price",
+                    "description": "Obtenir le prix actuel d'une action et ses métriques (devise, variation, volume).",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "symbol": {"type": "string", "description": "Symbole boursier, ex: IREN.SW, AAPL, BTC-USD"},
+                            "force_refresh": {"type": "boolean", "description": "Ignorer le cache et rafraîchir", "default": False}
+                        },
+                        "required": ["symbol"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_market_snapshot",
+                    "description": "Obtenir un aperçu du marché (indices, matières premières, crypto).",
+                    "parameters": {"type": "object", "properties": {}}
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_analytics_summary",
+                    "description": "Résumé analytique (métriques de base, financières, pipeline).",
+                    "parameters": {"type": "object", "properties": {}}
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "list_items_by_category",
+                    "description": "Lister les objets par catégorie et statut, triés par valeur décroissante.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "category": {"type": "string"},
+                            "status": {"type": "string", "enum": ["available", "sold", "all"], "default": "available"},
+                            "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 10}
+                        },
+                        "required": ["category"]
+                    }
+                }
+            }
+        ]
+
+    def _execute_tool(self, name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        try:
+            if name == "get_stock_price":
+                symbol = str(arguments.get("symbol", "")).strip()
+                if not symbol or not re.match(r"^[A-Za-z0-9.+\-]{1,32}$", symbol):
+                    return {"error": "Symbole invalide"}
+                force_refresh = bool(arguments.get("force_refresh", False))
+                from stock_api_manager import stock_api_manager  # local import to avoid cycles
+                data = stock_api_manager.get_stock_price(symbol, force_refresh)
+                return data or {"error": "Prix indisponible"}
+
+            if name == "get_market_snapshot":
+                from stock_api_manager import stock_api_manager
+                return stock_api_manager.get_market_snapshot()
+
+            if name == "get_analytics_summary":
+                items: List[CollectionItem] = self._tool_runtime_context.get("items", [])
+                analytics: Dict[str, Any] = self._tool_runtime_context.get("analytics", {})
+                if not analytics:
+                    analytics = AdvancedDataManager.calculate_advanced_analytics(items)
+                basic = analytics.get('basic_metrics', {})
+                perf = analytics.get('performance_kpis', {})
+                return {"basic_metrics": basic, "performance_kpis": perf}
+
+            if name == "list_items_by_category":
+                items: List[CollectionItem] = self._tool_runtime_context.get("items", [])
+                category = str(arguments.get("category", "")).strip()
+                status = (arguments.get("status") or "available").lower()
+                limit = int(arguments.get("limit") or 10)
+                def _item_value(it: CollectionItem) -> float:
+                    try:
+                        if it.category == 'Actions' and it.current_price and it.stock_quantity:
+                            return float(it.current_price) * float(it.stock_quantity)
+                        return float(it.current_value or 0)
+                    except Exception:
+                        return 0.0
+                chosen = [i for i in items if i.category == category]
+                if status == 'sold':
+                    chosen = [i for i in chosen if (i.status or '') == 'Sold']
+                elif status == 'available':
+                    chosen = [i for i in chosen if (i.status or '') != 'Sold']
+                chosen.sort(key=_item_value, reverse=True)
+                top = chosen[:max(1, min(limit, 100))]
+                return {
+                    "items": [{
+                        "id": it.id,
+                        "name": it.name,
+                        "category": it.category,
+                        "status": it.status,
+                        "value": _item_value(it)
+                    } for it in top]
+                }
+        except Exception as e:
+            return {"error": str(e)}
+        return {"error": "Outil inconnu"}
+
+    def _run_with_tools(self, messages: List[Dict[str, Any]], items: List[CollectionItem], analytics: Dict[str, Any]) -> Optional[str]:
+        """Run the model with tool-calling and return final assistant text."""
+        try:
+            self._tool_runtime_context = {"items": items, "analytics": analytics}
+            tools = self._get_tools_schema()
+            loop_messages = list(messages)
+            for _ in range(3):  # up to 3 tool iterations
+                resp = self.client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=loop_messages,
+                    temperature=0.2,
+                    max_tokens=900,
+                    tools=tools,
+                    tool_choice="auto",
+                    timeout=45,
+                )
+                msg = resp.choices[0].message
+                # If tool calls present
+                tool_calls = getattr(msg, 'tool_calls', None)
+                if not tool_calls and isinstance(msg, dict):
+                    tool_calls = msg.get('tool_calls')
+                if tool_calls:
+                    # Append assistant message containing tool calls
+                    loop_messages.append({
+                        "role": "assistant",
+                        "content": msg.content or "",
+                        "tool_calls": [
+                            {
+                                "id": tc.id,
+                                "type": tc.type,
+                                "function": {"name": tc.function.name, "arguments": tc.function.arguments}
+                            } for tc in tool_calls
+                        ]
+                    })
+                    for tc in tool_calls:
+                        try:
+                            fn_name = tc.function.name
+                            args_json = tc.function.arguments or "{}"
+                            args = json.loads(args_json) if isinstance(args_json, str) else args_json
+                        except Exception:
+                            fn_name, args = "", {}
+                        result = self._execute_tool(fn_name, args or {})
+                        loop_messages.append({
+                            "role": "tool",
+                            "tool_call_id": tc.id,
+                            "content": json.dumps(result, ensure_ascii=False)
+                        })
+                    # continue loop → another model call
+                    continue
+                # No tool calls: final message
+                content = getattr(msg, 'content', None) if not isinstance(msg, dict) else msg.get('content')
+                if content:
+                    return content.strip()
+                break
+        except Exception as e:
+            logger.error(f"Erreur tool-calling: {e}")
+            return None
+        finally:
+            self._tool_runtime_context = {}
+        return None
     
     def detect_query_intent(self, query: str) -> QueryIntent:
         """Détecte l'intention de la requête"""
@@ -2277,15 +2467,18 @@ Réponds de manière concise et directe."""
 
             messages.append({"role": "user", "content": user_prompt})
 
-            response = self.client.chat.completions.create(
-                model="gpt-4o",
-                messages=messages,
-                temperature=0.2,
-                max_tokens=800,  # Réponses plus courtes
-                timeout=45
-            )
-            
-            ai_response = response.choices[0].message.content.strip()
+            # Try tool-calling path first
+            ai_response = self._run_with_tools(messages, items, analytics)
+            if not ai_response:
+                # Fallback to plain completion
+                response = self.client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=messages,
+                    temperature=0.2,
+                    max_tokens=800,
+                    timeout=45
+                )
+                ai_response = response.choices[0].message.content.strip()
             
             # Cache la réponse
             smart_cache.set('ai_responses', ai_response, cache_key)
@@ -4173,6 +4366,11 @@ def chatbot():
         if not query:
             return jsonify({"error": "Message requis"}), 400
         
+        # Guardrails
+        blocked = _should_block_query(query)
+        if blocked:
+            return jsonify({"reply": blocked, "metadata": {"mode": "guardrail"}})
+
         # Session et historique
         session_id = (data.get("session_id") or request.headers.get("X-Session-Id") or str(uuid.uuid4())).strip()
         history_client = data.get("history", [])
