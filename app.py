@@ -4229,6 +4229,52 @@ def chatbot():
         except Exception:
             pass
 
+        # 2) INTENT: "valeur (disponible|totale) <catégorie>" → utiliser logique déterministe
+        try:
+            ql = query.lower()
+            if 'valeur' in ql:
+                def _norm_cat(text: str) -> Optional[str]:
+                    mapping = {
+                        'voiture': 'Voitures', 'voitures': 'Voitures', 'vehicules': 'Voitures', 'véhicules': 'Voitures',
+                        'montre': 'Montres', 'montres': 'Montres',
+                        'avion': 'Avions', 'avions': 'Avions',
+                        'bateau': 'Bateaux', 'bateaux': 'Bateaux',
+                        'action': 'Actions', 'actions': 'Actions',
+                    }
+                    for k, v in mapping.items():
+                        if k in text:
+                            return v
+                    return None
+
+                def _item_value(it) -> float:
+                    try:
+                        if it.category == 'Actions' and it.current_price and it.stock_quantity:
+                            return float(it.current_price) * float(it.stock_quantity)
+                        return float(it.current_value or 0)
+                    except Exception:
+                        return 0.0
+
+                cat = _norm_cat(ql)
+                mode_total = ('total' in ql) or ('totale' in ql)
+                if cat:
+                    chosen = [i for i in items if i.category == cat]
+                    if not mode_total:
+                        chosen = [i for i in chosen if (i.status or '') != 'Sold']
+                    total_value = sum(_item_value(it) for it in chosen)
+                    total_value = round(total_value, 2)
+                    if mode_total:
+                        return jsonify({
+                            "reply": f"La valeur totale des {cat.lower()} est {total_value:,.0f} CHF.",
+                            "metadata": {"mode": "chatbot_value", "category": cat, "scope": "total", "value": total_value}
+                        })
+                    else:
+                        return jsonify({
+                            "reply": f"La valeur disponible (non vendue) des {cat.lower()} est {total_value:,.0f} CHF.",
+                            "metadata": {"mode": "chatbot_value", "category": cat, "scope": "available", "value": total_value}
+                        })
+        except Exception:
+            pass
+
         # Chatbot-assisted item creation (natural language → new asset)
         try:
             query_lower = query.lower()
