@@ -4467,11 +4467,18 @@ def chatbot():
         # 0) Tentative de création d'objet AVANT tout calcul lourd
         try:
             query_lower = query.lower()
-            add_intent_keywords = [
-                'ajoute', 'ajouter', 'ajout', 'crée', 'creer', 'créer',
-                'add', 'create', 'new asset', 'nouvel', 'nouveau'
+            # Création d'objet: patterns plus stricts (éviter faux positifs comme "de nouveau")
+            add_intent_patterns = [
+                r"\bajout(?:e|er)?\b",
+                r"\brajout(?:e|er)?\b",
+                r"\bcr(?:ée|éer|eer|e)\b",
+                r"\badd\b",
+                r"\bcreate\b",
+                r"\bnouvel(?:le)?\s+",  # ex: "un nouvel ..."
+                r"\bmets?\s+(?:le|la|les)\s+.*\bcollection\b"
             ]
-            if any(k in query_lower for k in add_intent_keywords):
+            import re as _re
+            if any(_re.search(p, query_lower) for p in add_intent_patterns):
                 from chatbot_manager import ChatbotManager  # lazy import
                 cm0 = ChatbotManager()
                 # Try multi-item extraction first
@@ -4758,6 +4765,29 @@ def chatbot():
         items = AdvancedDataManager.fetch_all_items()
         analytics = AdvancedDataManager.calculate_advanced_analytics(items)
 
+        # 0.c Valeur nette déterministe
+        try:
+            ql = query.lower()
+            if 'valeur nette' in ql or ('valeur' in ql and 'nette' in ql):
+                def _item_value(it) -> float:
+                    try:
+                        if it.category == 'Actions' and it.current_price and it.stock_quantity:
+                            return float(it.current_price) * float(it.stock_quantity)
+                        return float(it.current_value or 0)
+                    except Exception:
+                        return 0.0
+                include_actions = 'hors actions' not in ql
+                chosen = [i for i in items if is_item_available(i) and (_item_value(i) > 0)]
+                if not include_actions:
+                    chosen = [i for i in chosen if i.category != 'Actions']
+                total_value = sum(_item_value(i) for i in chosen)
+                return jsonify({
+                    "reply": f"La valeur nette (hors vendus){' hors actions' if not include_actions else ''} est de {total_value:,.0f} CHF.",
+                    "metadata": {"mode": "chatbot_net_worth", "include_actions": include_actions, "count": len(chosen)}
+                })
+        except Exception:
+            pass
+
         # 1) INTENT: "combien de <catégorie>" (réponse déterministe depuis la DB)
         try:
             ql = query.lower()
@@ -4888,6 +4918,34 @@ def chatbot():
                         "reply": f"Top {len(lines)} {cat.lower()} {scope} par valeur:\n" + "\n".join(lines),
                         "metadata": {"mode": "chatbot_list", "category": cat, "scope": scope, "count": len(lines)}
                     })
+        except Exception:
+            pass
+
+        # 4) INTENT: "top N positions" (déterministe, exclut vendus par défaut)
+        try:
+            ql = query.lower()
+            if 'top' in ql and ('positions' in ql or 'objets' in ql or 'biens' in ql or 'actifs' in ql):
+                import re as _re2
+                m = _re2.search(r"top\s*(\d+)", ql)
+                top_n = int(m.group(1)) if m else 10
+                def _item_value(it) -> float:
+                    try:
+                        if it.category == 'Actions' and it.current_price and it.stock_quantity:
+                            return float(it.current_price) * float(it.stock_quantity)
+                        return float(it.current_value or 0)
+                    except Exception:
+                        return 0.0
+                chosen = [i for i in items if is_item_available(i)]
+                if 'hors actions' in ql:
+                    chosen = [i for i in chosen if i.category != 'Actions']
+                chosen.sort(key=_item_value, reverse=True)
+                top = [i for i in chosen if _item_value(i) > 0][:max(1, min(top_n, 50))]
+                lines = [f"- {i.name} ({i.category}) - {_item_value(i):,.0f} CHF" for i in top]
+                scope = 'hors actions' if 'hors actions' in ql else 'avec actions'
+                return jsonify({
+                    "reply": f"Top {len(top)} positions ({scope}) par valeur (vendus exclus):\n" + "\n".join(lines),
+                    "metadata": {"mode": "chatbot_top_positions", "count": len(top), "scope": scope}
+                })
         except Exception:
             pass
 
