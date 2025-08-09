@@ -2782,6 +2782,13 @@ def create_item():
         # Enrichissement
         data['created_at'] = datetime.now().isoformat()
         data['updated_at'] = datetime.now().isoformat()
+        # Valeur par défaut: si non-action et current_value manquant, utiliser acquisition_price
+        try:
+            if (data.get('category') != 'Actions'):
+                if not data.get('current_value') and data.get('acquisition_price'):
+                    data['current_value'] = data['acquisition_price']
+        except Exception:
+            pass
         
         # Générer l'embedding si OpenAI disponible
         if ai_engine and ai_engine.semantic_search:
