@@ -46,6 +46,10 @@ class NewsAPIManager:
         }
 
         try:
+            # Log the prepared request URL for debugging
+            prepared_request = requests.Request('GET', self.base_url, params=request_params).prepare()
+            print(f"DEBUG: Requesting URL: {prepared_request.url}")
+
             response = requests.get(self.base_url, params=request_params)
             response.raise_for_status()  # Raises an exception for bad status codes (4xx or 5xx)
             data = response.json()
