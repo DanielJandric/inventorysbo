@@ -8172,6 +8172,7 @@ def markets_chat():
         if not user_message:
             return jsonify({"success": False, "error": "Message vide"}), 400
         limit = int(data.get("limit", 10))
+        extra_context = (data.get("context") or "").strip()
 
         from market_analysis_db import get_market_analysis_db
         db = get_market_analysis_db()
@@ -8192,6 +8193,8 @@ def markets_chat():
             except Exception:
                 continue
         context_text = "\n".join(context_parts)
+        if extra_context:
+            context_text = f"Contexte additionnel (utilisateur):\n{extra_context}\n---\n" + context_text
 
         # Appel LLM
         try:
@@ -8213,7 +8216,7 @@ def markets_chat():
             model=model_name,
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Contexte (derniers rapports):\n{context_text}\n\nQuestion: {user_message}"},
+                {"role": "user", "content": f"{context_text}\n\nQuestion: {user_message}"},
             ],
             temperature=0.2,
             max_tokens=1200,

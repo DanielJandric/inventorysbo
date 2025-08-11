@@ -119,6 +119,7 @@
                         <input id="chat-input" class="flex-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10" placeholder="Posez votre question (ex: patterns, risques, scénarios)..."/>
                         <button id="chat-send" class="px-4 py-2 rounded-lg bg-cyan-500/20 border border-cyan-400/30 hover:bg-cyan-500/30">Envoyer</button>
                     </div>
+                    <textarea id="chat-context" class="mt-2 w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs" rows="3" placeholder="Optionnel: Collez ici un extrait de rapport ou un contexte métier pour guider l'analyse (utilisé en plus des 10-15 derniers rapports)."></textarea>
                 </div>
             </section>
 
@@ -438,7 +439,8 @@
                 addMsg('user', msg);
                 inputEl.value = '';
                 try {
-                    const r = await fetch('/api/markets/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: msg, limit: 12 })});
+                    const extra = (document.getElementById('chat-context').value || '').trim();
+                    const r = await fetch('/api/markets/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: msg, limit: 12, context: extra })});
                     const d = await r.json();
                     if (!d.success) throw new Error(d.error || 'Erreur API');
                     addMsg('assistant', d.reply);
