@@ -281,7 +281,7 @@ class MarketAnalysisWorker:
                 <div class="risks">
                     <h3>⚠️ Risques Identifiés</h3>
                     <ul>
-                        {chr(10).join([f'<li>{risk}</li>' for insight in (result.get('risks', []) or [])])}
+                        {chr(10).join([f'<li>{risk}</li>' for risk in (result.get('risks', []) or [])])}
                     </ul>
                 </div>
                 
