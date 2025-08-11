@@ -546,8 +546,150 @@ class StockAPIManager:
             else:
                 snapshot[category][display_name] = {"error": "Data not available"}
 
+        # Calculs dérivés (analytics)
+        analytics: Dict[str, Any] = {}
+
+        # Gold/Silver ratio
+        try:
+            gold = snapshot.get('commodities', {}).get('Or (Gold)', {}).get('price')
+            # Ajouter Silver si absent
+            if 'Silver' not in snapshot.get('commodities', {}):
+                logger.info("⏳ Attente 10s avant la requête yfinance pour SI=F (Silver)...")
+                time.sleep(10)
+                silver_data = self.yfinance.get_stock_price('SI=F')
+                snapshot['commodities']['Silver'] = {
+                    'price': silver_data.get('price') if silver_data else None,
+                    'change': silver_data.get('change') if silver_data else None,
+                    'change_percent': silver_data.get('change_percent') if silver_data else None,
+                    'source': (silver_data or {}).get('source') if silver_data else None
+                }
+            silver = snapshot.get('commodities', {}).get('Silver', {}).get('price')
+            if gold and silver and silver != 0:
+                analytics['gold_silver_ratio'] = round(float(gold) / float(silver), 2)
+        except Exception as e:
+            logger.warning(f"⚠️ Impossible de calculer le ratio Or/Argent: {e}")
+
+        # Courbe 2-10Y
+        try:
+            ten_y = snapshot.get('bonds', {}).get('US 10Y', {}).get('yield')
+            # 2Y
+            if 'US 2Y' not in snapshot.get('bonds', {}):
+                logger.info("⏳ Attente 10s avant la requête yfinance pour ^UST2Y (US 2Y)...")
+                time.sleep(10)
+                two_y_raw = self.yfinance.get_stock_price('^UST2Y')
+                if two_y_raw and two_y_raw.get('price') is not None:
+                    two_y_yield = float(two_y_raw.get('price')) / 10.0
+                    snapshot.setdefault('bonds', {})['US 2Y'] = {
+                        'yield': round(two_y_yield, 3),
+                        'change_bps': float(two_y_raw.get('change')) * 10.0 if two_y_raw.get('change') is not None else None,
+                        'source': two_y_raw.get('source')
+                    }
+            two_y = snapshot.get('bonds', {}).get('US 2Y', {}).get('yield')
+            if isinstance(ten_y, (int, float)) and isinstance(two_y, (int, float)):
+                analytics['spread_2_10_bps'] = round((float(ten_y) - float(two_y)) * 100.0, 1)
+        except Exception as e:
+            logger.warning(f"⚠️ Impossible de calculer le spread 2-10Y: {e}")
+
+        # RSI(14) sur S&P 500 (^GSPC)
+        try:
+            rsi = self._get_yfinance_rsi('^GSPC', period=14)
+            if rsi is not None:
+                analytics['rsi_spx_14'] = round(rsi, 1)
+        except Exception as e:
+            logger.warning(f"⚠️ RSI SPX indisponible: {e}")
+
+        # Crypto Fear & Greed (Alternative.me)
+        try:
+            analytics['btc_fear_greed'] = self._get_crypto_fng()
+        except Exception as e:
+            logger.warning(f"⚠️ Fear&Greed indisponible: {e}")
+
+        # BTC Dominance (CoinGecko)
+        try:
+            analytics['btc_dominance_pct'] = self._get_btc_dominance_pct()
+        except Exception as e:
+            logger.warning(f"⚠️ BTC dominance indisponible: {e}")
+
+        # VIX régime
+        try:
+            vix = snapshot.get('volatility', {}).get('VIX', {}).get('price')
+            if isinstance(vix, (int, float)):
+                regime = 'Crisis (>30)'
+                if vix < 15: regime = 'Low (<15)'
+                elif vix < 20: regime = 'Normal (15-20)'
+                elif vix < 30: regime = 'Elevated (20-30)'
+                analytics['vix_regime'] = regime
+        except Exception:
+            pass
+
+        # Market phase (US)
+        try:
+            now_utc = datetime.utcnow()
+            wd = now_utc.weekday()
+            hour = now_utc.hour
+            minute = now_utc.minute
+            # Approximation: Marchés US ouverts ~ 13:30-20:00 UTC (selon DST)
+            trading = (hour > 13 or (hour == 13 and minute >= 30)) and (hour < 20)
+            weekend = wd >= 5
+            phase = 'Weekend' if weekend else ('Trading' if trading else ('Pre-market' if hour < 13 else 'After-hours'))
+            analytics['market_phase'] = phase
+        except Exception:
+            pass
+
+        snapshot['analytics'] = analytics
+
         logger.info("✅ Aperçu du marché (strict) récupéré.")
         return snapshot
+
+    def _get_yfinance_rsi(self, symbol: str, period: int = 14) -> Optional[float]:
+        """Calcule le RSI(period) via yfinance (données journalières)."""
+        try:
+            logger.info(f"⏳ Attente 10s avant la requête yfinance historique pour {symbol} (RSI)...")
+            time.sleep(10)
+            import yfinance as yf  # type: ignore
+            hist = yf.download(symbol, period='6mo', interval='1d', progress=False, auto_adjust=True)
+            import pandas as pd  # type: ignore
+            if hist is None or hist.empty or 'Close' not in hist:
+                return None
+            close = hist['Close']
+            delta = close.diff()
+            gain = delta.clip(lower=0)
+            loss = -delta.clip(upper=0)
+            avg_gain = gain.rolling(window=period, min_periods=period).mean()
+            avg_loss = loss.rolling(window=period, min_periods=period).mean()
+            rs = (avg_gain / avg_loss).replace([float('inf'), -float('inf')], 0)
+            rsi = 100 - (100 / (1 + rs))
+            val = float(rsi.iloc[-1]) if not rsi.empty else None
+            return val
+        except Exception as e:
+            logger.warning(f"⚠️ RSI indisponible pour {symbol}: {e}")
+            return None
+
+    def _get_crypto_fng(self) -> Optional[int]:
+        """Crypto Fear & Greed Index (Alternative.me) value 0-100."""
+        try:
+            url = 'https://api.alternative.me/fng/?limit=1&format=json'
+            resp = requests.get(url, timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+            val = int(data['data'][0]['value'])
+            return val
+        except Exception as e:
+            logger.warning(f"⚠️ Crypto FNG API error: {e}")
+            return None
+
+    def _get_btc_dominance_pct(self) -> Optional[float]:
+        """BTC dominance percentage via CoinGecko global endpoint."""
+        try:
+            url = 'https://api.coingecko.com/api/v3/global'
+            resp = requests.get(url, timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+            pct = float(data['data']['market_cap_percentage']['btc'])
+            return round(pct, 2)
+        except Exception as e:
+            logger.warning(f"⚠️ CoinGecko API error: {e}")
+            return None
 
 
 # Instance globale

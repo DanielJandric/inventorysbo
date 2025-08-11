@@ -392,22 +392,28 @@ class ScrapingBeeScraper:
             logger.debug(f"Contexte complet pour OpenAI: {context}")
 
             # Prompt système enrichi (strict: aucune invention de chiffres)
-            system_prompt = """Tu es un expert analyste financier et géopolitique de classe mondiale. Ta mission est de produire un rapport de marché EXHAUSTIF intégrant les dimensions ÉCONOMIQUES et GÉOPOLITIQUES. Combine les données factuelles (market_snapshot) avec l'analyse des textes (données collectées).
+            system_prompt = """Tu es un analyste senior (finance + géopolitique). Tu produis un rapport institutionnel lu par des C-Level. Analyse quantitative rigoureuse + vision stratégique. Combine les données factuelles (market_snapshot) avec l'analyse des textes (données collectées).
 
 RÈGLES NUMÉRIQUES STRICTES:
 - Tu NE DOIS JAMAIS inventer des chiffres.
 - Utilise UNIQUEMENT les valeurs présentes explicitement dans "market_snapshot" ou déduites clairement du contexte fourni.
 - Si une valeur n'est pas disponible, écris "N/A" (ne mets ni 0, ni une estimation).
 
-STRUCTURE OBLIGATOIRE DE LA RÉPONSE JSON :
+STRUCTURE OBLIGATOIRE DE LA RÉPONSE JSON (ADAPTÉE À NOTRE SYSTÈME):
 {
     "executive_summary": [
-        "• S&P 500: [valeur ou N/A] ([variation% ou N/A]) - [impact/context]",
-        "• Nasdaq: [valeur ou N/A] ([variation% ou N/A]) - [impact/context]",
-        "• VIX: [valeur ou N/A] ([variation% ou N/A]) - [impact/context]",
-        "• Or: [valeur ou N/A] ([variation% ou N/A]) - [impact/context]",
-        "• Bitcoin: [valeur ou N/A] ([variation% ou N/A]) - [impact/context]"
+        "• S&P 500: [valeur/N/A] ([var%/N/A]) - [impact]",
+        "• Nasdaq: [valeur/N/A] ([var%/N/A]) - [impact]",
+        "• VIX: [valeur/N/A] ([var%/N/A]) - [signal]",
+        "• Or: [valeur/N/A] ([var%/N/A]) - [impact]",
+        "• Bitcoin: [valeur/N/A] ([var%/N/A]) - [impact]"
     ],
+    "metadata": {
+        "report_date": "YYYY-MM-DD HH:MM UTC",
+        "confidence_level": 0.0,
+        "data_freshness": "",
+        "market_phase": ""
+    },
     "market_snapshot": {
         "indices": {
             "S&P 500": {"price": 5447.87, "change": -8.55, "change_percent": -0.16},
@@ -427,6 +433,20 @@ STRUCTURE OBLIGATOIRE DE LA RÉPONSE JSON :
         "central_banks": ["Fed: pause à 5.5%", "BCE: maintien à 4.5%"],
         "gdp_growth": {"US": "2.8%", "EU": "0.6%", "China": "5.2%"},
         "unemployment": {"US": "3.7%", "EU": "6.5%"}
+    },
+    "dashboard": {
+        "market_mood": "",
+        "vix_regime": "",
+        "key_metrics": [
+            "• S&P 500: [valeur/N/A] ([var%/N/A]) | RSI: [val/N/A] | Support: [N/A] | Résistance: [N/A]",
+            "• Nasdaq: [valeur/N/A] ([var%/N/A]) | P/E: [N/A] | Volume vs 20D: [N/A]",
+            "• VIX: [val/N/A] ([var%/N/A]) | Regime: [val/N/A]",
+            "• Or: [val/N/A] ([var%/N/A]) | Ratio Or/Argent: [val/N/A]",
+            "• Bitcoin: [val/N/A] ([var%/N/A]) | Dominance: [val/N/A] | Fear&Greed: [val/N/A]",
+            "• DXY: [val/N/A] ([var%/N/A])",
+            "• WTI: [val/N/A] ([var%/N/A])",
+            "• US 10Y: [val%/N/A] ([var bp/N/A]) | 2-10Y: [spread/N/A]"
+        ]
     },
     "summary": "Un résumé exécutif substantiel intégrant l'analyse économique ET géopolitique. Minimum 500 mots.",
     "key_points": [
