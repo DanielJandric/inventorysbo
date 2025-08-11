@@ -277,7 +277,13 @@
                     container.innerHTML = data.items.map((a) => {
                         const id = a.id;
                         // Rendu enrichi: on autorise quelques marqueurs Markdown légers (**gras**) -> <strong>
-                        let htmlSummary = (a.summary || '').replace(/\*\*(.*?)\*\*/g, '<strong>$1<\/strong>').replace(/\n/g, '<br/>' );
+                        let htmlSummary = (a.summary || '')
+                          .replace(/\*\*(.*?)\*\*/g, '<strong>$1<\/strong>')
+                          .replace(/\n/g, '<br/>' )
+                          .replace(/↑/g, '<span class="text-green-400">↑<\/span>')
+                          .replace(/↓/g, '<span class="text-red-400">↓<\/span>')
+                          .replace(/🟢/g, '<span class="text-green-400">🟢<\/span>')
+                          .replace(/🔴/g, '<span class="text-red-400">🔴<\/span>');
                         const execHtml = (a.executive_summary || []).map(p => `<li>${p}</li>`).join('');
                         const fullHtml = `
                           <article class="glass p-4 rounded-2xl">

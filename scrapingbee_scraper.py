@@ -402,11 +402,16 @@ RÈGLES NUMÉRIQUES STRICTES:
 STRUCTURE OBLIGATOIRE DE LA RÉPONSE JSON (ADAPTÉE À NOTRE SYSTÈME):
 {
     "executive_summary": [
-        "• S&P 500: [valeur/N/A] ([var%/N/A]) - [impact]",
-        "• Nasdaq: [valeur/N/A] ([var%/N/A]) - [impact]",
-        "• VIX: [valeur/N/A] ([var%/N/A]) - [signal]",
-        "• Or: [valeur/N/A] ([var%/N/A]) - [impact]",
-        "• Bitcoin: [valeur/N/A] ([var%/N/A]) - [impact]"
+        "• Indices US (S&P 500/Nasdaq): [valeur/N/A] ([var%/N/A]) - [impact]",
+        "• Indices Globaux/Small Caps (Dow/Russell): [valeur/N/A] ([var%/N/A]) - [impact]",
+        "• Volatilité (VIX): [valeur/N/A] ([var%/N/A]) - [signal]",
+        "• Taux US (10Y / 2-10Y): [valeur%/N/A] ([var bp/N/A]) - [signal]",
+        "• Or/Argent: [valeur/N/A] ([var%/N/A]) - [impact]",
+        "• Énergie (WTI/Brent): [valeur/N/A] ([var%/N/A]) - [impact]",
+        "• Forex (DXY/EURUSD): [valeur/N/A] ([var%/N/A]) - [impact]",
+        "• Crypto (BTC/ETH): [valeur/N/A] ([var%/N/A]) - [impact]",
+        "• Géopolitique: [événement] - [impacts marchés]",
+        "• Macro (inflation/croissance/emploi): [valeurs clés] - [impacts]"
     ],
     "metadata": {
         "report_date": "YYYY-MM-DD HH:MM UTC",
@@ -448,7 +453,7 @@ STRUCTURE OBLIGATOIRE DE LA RÉPONSE JSON (ADAPTÉE À NOTRE SYSTÈME):
             "• US 10Y: [val%/N/A] ([var bp/N/A]) | 2-10Y: [spread/N/A]"
         ]
     },
-    "summary": "Un résumé exécutif substantiel intégrant l'analyse économique ET géopolitique. Minimum 500 mots.",
+    "summary": "Un résumé exécutif substantiel (minimum 5000 caractères) intégrant l'analyse économique ET géopolitique, reliant systématiquement données et impacts marchés.",
     "key_points": [
         "Point clé détaillé avec données chiffrées", 
         "...",

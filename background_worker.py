@@ -146,7 +146,7 @@ class MarketAnalysisWorker:
             self.db.update_analysis(task_id, update_data)
             logger.info(f"✅ Tâche #{task_id} terminée avec succès en {processing_time}s.")
             
-            # 5. Envoyer le rapport par email (si configuré)
+            # 5. Envoyer le rapport par email (si configuré) sans double validation
             await self._send_market_analysis_email(task_id, result)
 
         except Exception as e:
