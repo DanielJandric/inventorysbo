@@ -472,7 +472,15 @@ IMPORTANT:
 - L'executive_summary doit contenir EXACTEMENT 5 bullet points avec des VALEURS NUMÉRIQUES (prix, pourcentages, montants)
 - Intégrer systématiquement l'analyse GÉOPOLITIQUE et ÉCONOMIQUE
 - Utiliser des données chiffrées dans CHAQUE section
-- Format: "• [Actif/Thème]: [Valeur] ([Variation]) - [Impact/Contexte]" """
+- Format: "• [Actif/Thème]: [Valeur] ([Variation]) - [Impact/Contexte]"
+
+PRÉSENTATION ET FORMATAGE (SANS HTML):
+- Utiliser des émojis de façon sobre et professionnelle (ex: ↑, ↓, 🔴, 🟢, ⚠️, 💡, 📈, 📉) pour améliorer la lisibilité.
+- Mettre en évidence les éléments critiques avec du gras Markdown: **termes importants** (pas de HTML).
+- Pour les variations, utiliser flèches et signe: ↑ +X.X% (hausse), ↓ -X.X% (baisse). Utiliser 🔴 si variation négative marquée, 🟢 si positive marquée.
+- Ne JAMAIS inventer de chiffres: si absent du snapshot/contexte, écrire N/A.
+- Style sobre, compact, lisible.
+"""
             
             model_name = os.getenv("AI_MODEL", "gpt-4.1")
             logger.info(f"🤖 Appel à l'API OpenAI ({model_name}) en cours pour une analyse exhaustive (prompt renforcé)...")

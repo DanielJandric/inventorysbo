@@ -276,7 +276,8 @@
                     }
                     container.innerHTML = data.items.map((a) => {
                         const id = a.id;
-                        const htmlSummary = (a.summary || '').replace(/\n/g, '<br/>');
+                        // Rendu enrichi: on autorise quelques marqueurs Markdown légers (**gras**) -> <strong>
+                        let htmlSummary = (a.summary || '').replace(/\*\*(.*?)\*\*/g, '<strong>$1<\/strong>').replace(/\n/g, '<br/>' );
                         const execHtml = (a.executive_summary || []).map(p => `<li>${p}</li>`).join('');
                         const fullHtml = `
                           <article class="glass p-4 rounded-2xl">
