@@ -748,12 +748,21 @@
             
             try {
                 const response = await fetch('/api/background-worker/trigger', {
-                    method: 'POST'
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        prompt: "Analyse marché globale aujourd'hui avec focus IA",
+                        force: true
+                    })
                 });
                 const data = await response.json();
                 
                 if (data.success) {
+                    if (data.status === 'already_in_progress') {
+                        statusDiv.innerHTML = '<span class="text-yellow-400">ℹ️ Une analyse est déjà en cours. Actualisation automatique de l\'état...</span>';
+                    } else {
                     statusDiv.innerHTML = '<span class="text-green-400">✅ Update généré avec succès!</span>';
+                    }
                     await loadRecentUpdates(); // Refresh the list
                 } else {
                     statusDiv.innerHTML = `<span class="text-red-400">❌ Erreur: ${data.error}</span>`;
