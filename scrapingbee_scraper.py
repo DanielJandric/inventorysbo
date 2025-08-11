@@ -455,7 +455,7 @@ IMPORTANT:
 - Format: "• [Actif/Thème]: [Valeur] ([Variation]) - [Impact/Contexte]" """
             
             model_name = os.getenv("AI_MODEL", "gpt-4.1")
-            logger.info(f"🤖 Appel à l'API OpenAI ({model_name}) en cours pour une analyse exhaustive...")
+            logger.info(f"🤖 Appel à l'API OpenAI ({model_name}) en cours pour une analyse exhaustive (prompt renforcé)...")
             
             # Essayer jusqu'à 3 fois en cas d'erreur
             for attempt in range(3):

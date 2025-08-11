@@ -488,7 +488,9 @@ class StockAPIManager:
             "indices": {},
             "volatility": {},
             "commodities": {},
-            "crypto": {}
+            "crypto": {},
+            "forex": {},
+            "bonds": {}
         }
 
         # Liste ordonnée des requêtes à effectuer (avec affichage)
@@ -502,21 +504,45 @@ class StockAPIManager:
             ("indices", "S&P 500", "^GSPC"),
             ("indices", "NASDAQ", "^IXIC"),
             ("indices", "Dow Jones", "^DJI"),
+            ("indices", "Russell 2000", "^RUT"),
             ("volatility", "VIX", "^VIX"),
+            ("commodities", "WTI", "CL=F"),
+            ("commodities", "Brent", "BZ=F"),
+            ("commodities", "Natural Gas", "NG=F"),
+            ("crypto", "Ethereum", "ETH-USD"),
+            ("forex", "DXY", "DX=F"),
+            ("bonds", "US 10Y", "^TNX"),
         ]
 
         # Utiliser exclusivement yfinance
         for category, display_name, symbol in ordered_symbols:
-            logger.info(f"⏳ Attente 11s avant la requête yfinance pour {symbol} ({display_name})...")
-            time.sleep(11)
+            logger.info(f"⏳ Attente 10s avant la requête yfinance pour {symbol} ({display_name})...")
+            time.sleep(10)
             data = self.yfinance.get_stock_price(symbol)
-            if data and data.get('price'):
-                snapshot[category][display_name] = {
-                    "price": data.get('price'),
-                    "change": data.get('change'),
-                    "change_percent": data.get('change_percent'),
-                    "source": data.get('source')
-                }
+            if data and data.get('price') is not None:
+                if category == 'bonds' and display_name == 'US 10Y':
+                    # Yahoo ^TNX: 1 unit = 0.1% yield
+                    yield_pct = float(data.get('price')) / 10.0
+                    change_bps = float(data.get('change')) * 10.0 if data.get('change') is not None else None
+                    snapshot[category][display_name] = {
+                        "yield": round(yield_pct, 3),
+                        "change_bps": round(change_bps, 1) if change_bps is not None else None,
+                        "source": data.get('source')
+                    }
+                elif category == 'forex' and display_name == 'DXY':
+                    snapshot[category][display_name] = {
+                        "value": data.get('price'),
+                        "change": data.get('change'),
+                        "change_percent": data.get('change_percent'),
+                        "source": data.get('source')
+                    }
+                else:
+                    snapshot[category][display_name] = {
+                        "price": data.get('price'),
+                        "change": data.get('change'),
+                        "change_percent": data.get('change_percent'),
+                        "source": data.get('source')
+                    }
             else:
                 snapshot[category][display_name] = {"error": "Data not available"}
 
