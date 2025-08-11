@@ -97,12 +97,12 @@ class MarketAnalysisWorker:
             self.db.update_analysis_status(task_id, 'processing')
 
             # 2. Exécuter l'analyse (ScrapingBee uniquement)
-                prompt = task.prompt or "Analyse générale des marchés financiers avec focus sur l'IA."
+            prompt = task.prompt or "Analyse générale des marchés financiers avec focus sur l'IA."
             logger.info(f"🕷️ Création de la tâche ScrapingBee avec prompt: {prompt[:100]}...")
-                scraper_task_id = await self.scraper.create_scraping_task(prompt, 3)
+            scraper_task_id = await self.scraper.create_scraping_task(prompt, 3)
             
             logger.info(f"🚀 Exécution de la tâche ScrapingBee {scraper_task_id}...")
-                result = await self.scraper.execute_scraping_task(scraper_task_id)
+            result = await self.scraper.execute_scraping_task(scraper_task_id)
 
 
             # 3. Traiter le résultat
