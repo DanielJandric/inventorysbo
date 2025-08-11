@@ -335,7 +335,7 @@ class ScrapingBeeScraper:
         text = re.sub(r'\s+', ' ', text)
         text = re.sub(r'[^\w\s\.\,\!\?\-\:\;\(\)\-\$\%]', '', text)
         
-        return text.strip()[:8000]
+        return text.strip()[:15000]
     
     async def _scrape_with_params(self, url: str, params: Dict) -> Optional[str]:
         """Scrape une page avec des paramètres ScrapingBee spécifiques."""
@@ -375,7 +375,7 @@ class ScrapingBeeScraper:
         content = re.sub(r'[^\w\s\.\,\!\?\-\:\;\(\)]', '', content)
         
         # Limiter la longueur
-        return content.strip()[:8000]
+        return content.strip()[:15000]
     
     async def process_with_llm(self, prompt: str, scraped_data: List[ScrapedData], market_snapshot: Dict) -> Dict:
         """Traite les données scrapées avec OpenAI"""
@@ -387,19 +387,21 @@ class ScrapingBeeScraper:
             # Préparer le contexte
             context = self._prepare_context(scraped_data)
             logger.info(f"🧠 Contexte préparé pour OpenAI ({len(context)} caractères).")
+            logger.info(f"📊 Nombre de sources: {len(scraped_data)}")
+            logger.info(f"📈 Market snapshot disponible: {'Oui' if market_snapshot else 'Non'}")
             logger.debug(f"Contexte complet pour OpenAI: {context}")
 
             # Prompt système enrichi
-            system_prompt = """Tu es un expert analyste financier de classe mondiale. Ta mission est de produire un rapport de marché EXHAUSTIF, DÉTAILLÉ et HAUTEMENT STRUCTURÉ. Combine les données factuelles (market_snapshot) avec l'analyse des textes (données collectées).
+            system_prompt = """Tu es un expert analyste financier et géopolitique de classe mondiale. Ta mission est de produire un rapport de marché EXHAUSTIF intégrant les dimensions ÉCONOMIQUES et GÉOPOLITIQUES. Combine les données factuelles (market_snapshot) avec l'analyse des textes (données collectées).
 
 STRUCTURE OBLIGATOIRE DE LA RÉPONSE JSON :
 {
     "executive_summary": [
-        "• Point majeur 1: Description concise et percutante",
-        "• Point majeur 2: Description concise et percutante",
-        "• Point majeur 3: Description concise et percutante",
-        "• Point majeur 4: Description concise et percutante",
-        "• Point majeur 5: Description concise et percutante"
+        "• S&P 500: 5447.87 (-0.16%) - Impact de la politique monétaire restrictive",
+        "• Bitcoin: $69,304 (+0.65%) - Afflux institutionnel suite aux ETF",
+        "• Tensions géopolitiques: Escalade au Moyen-Orient fait grimper le pétrole à $85/baril",
+        "• BCE: Maintien des taux à 4.5% - Inflation zone euro à 2.9%",
+        "• Tech/IA: NVIDIA +3.2% - Demande IA dépasse les prévisions Q4"
     ],
     "market_snapshot": {
         "indices": {
@@ -409,42 +411,71 @@ STRUCTURE OBLIGATOIRE DE LA RÉPONSE JSON :
         "commodities": {"Gold": {"price": 2330.20, "change": -1.20, "change_percent": -0.05}},
         "crypto": {"Bitcoin": {"price": 69304.58, "change": 450.15, "change_percent": 0.65}}
     },
-    "summary": "Un résumé exécutif substantiel et approfondi. Intègre les données du snapshot pour contextualiser l'analyse. Minimum 500 mots.",
+    "geopolitical_analysis": {
+        "conflicts": ["Conflit/tension actuel et impact sur les marchés"],
+        "trade_relations": ["Évolutions commerciales majeures"],
+        "sanctions": ["Nouvelles sanctions et leurs conséquences"],
+        "energy_security": ["Enjeux énergétiques actuels"]
+    },
+    "economic_indicators": {
+        "inflation": {"US": "3.2%", "EU": "2.9%", "trend": "décélération"},
+        "central_banks": ["Fed: pause à 5.5%", "BCE: maintien à 4.5%"],
+        "gdp_growth": {"US": "2.8%", "EU": "0.6%", "China": "5.2%"},
+        "unemployment": {"US": "3.7%", "EU": "6.5%"}
+    },
+    "summary": "Un résumé exécutif substantiel intégrant l'analyse économique ET géopolitique. Minimum 500 mots.",
     "key_points": [
-        "Point clé détaillé 1, intégrant une donnée factuelle si pertinent", 
+        "Point clé détaillé avec données chiffrées", 
         "...",
-        "Point clé détaillé 10"
+        "Minimum 10 points"
     ],
     "structured_data": {
-        "market_sentiment": "Analyse du sentiment de marché (haussier, baissier, neutre) avec justification.",
-        "key_trends": ["Tendance majeure 1 identifiée", "Tendance majeure 2", "..."],
-        "major_events": ["Événement majeur 1 et son impact", "Événement majeur 2", "..."],
-        "sector_analysis": "Analyse détaillée des secteurs mentionnés, en particulier l'IA."
+        "market_sentiment": "Analyse du sentiment avec justification économique et géopolitique",
+        "key_trends": ["Tendance majeure avec impact chiffré"],
+        "major_events": ["Événement géopolitique/économique et conséquences"],
+        "sector_analysis": "Analyse sectorielle avec performances chiffrées"
     },
-    "insights": ["Insight actionnable 1 basé sur une corrélation de données", "..."],
-    "risks": ["Risque potentiel 1 avec explication", "..."],
-    "opportunities": ["Opportunité d'investissement 1 avec justification", "..."],
-    "sources_analysis": "Une brève critique de la fiabilité des sources textuelles fournies.",
+    "insights": ["Insight actionnable avec données quantitatives"],
+    "risks": ["Risque géopolitique/économique quantifié"],
+    "opportunities": ["Opportunité avec potentiel de rendement"],
+    "sources_analysis": "Critique de la fiabilité des sources.",
     "confidence_score": 0.95,
-    "sources": [{"title": "Titre de la source 1", "url": "URL de la source 1"}]
+    "sources": [{"title": "Titre de la source", "url": "URL"}]
 }
 
-IMPORTANT: L'executive_summary doit contenir EXACTEMENT 5 bullet points percutants qui capturent l'essence de la situation actuelle des marchés. Chaque point doit commencer par "•" et être court mais informatif."""
+IMPORTANT: 
+- L'executive_summary doit contenir EXACTEMENT 5 bullet points avec des VALEURS NUMÉRIQUES (prix, pourcentages, montants)
+- Intégrer systématiquement l'analyse GÉOPOLITIQUE et ÉCONOMIQUE
+- Utiliser des données chiffrées dans CHAQUE section
+- Format: "• [Actif/Thème]: [Valeur] ([Variation]) - [Impact/Contexte]" """
             
             model_name = os.getenv("AI_MODEL", "gpt-4.1")
             logger.info(f"🤖 Appel à l'API OpenAI ({model_name}) en cours pour une analyse exhaustive...")
-            response = client.chat.completions.create(
-                model=model_name,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Demande: {prompt}\n\nDONNÉES FACTUELLES (snapshot):\n{json.dumps(market_snapshot, indent=2)}\n\nDONNÉES COLLECTÉES (articles):\n{context}"}
-                ],
-                response_format={"type": "json_object"},
-                temperature=0.2,
-                max_tokens=4000
-            )
             
-            return json.loads(response.choices[0].message.content)
+            # Essayer jusqu'à 3 fois en cas d'erreur
+            for attempt in range(3):
+                try:
+                    response = client.chat.completions.create(
+                        model=model_name,
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": f"Demande: {prompt}\n\nDONNÉES FACTUELLES (snapshot):\n{json.dumps(market_snapshot, indent=2)}\n\nDONNÉES COLLECTÉES (articles):\n{context}"}
+                        ],
+                        response_format={"type": "json_object"},
+                        temperature=0.2,
+                        max_tokens=4000
+                    )
+                    
+                    result = json.loads(response.choices[0].message.content)
+                    logger.info(f"✅ OpenAI a retourné une réponse complète")
+                    return result
+                    
+                except Exception as e:
+                    logger.warning(f"⚠️ Tentative {attempt + 1}/3 échouée: {e}")
+                    if attempt < 2:
+                        await asyncio.sleep(2)  # Attendre 2 secondes avant de réessayer
+                    else:
+                        raise
             
         except Exception as e:
             logger.error(f"❌ Erreur traitement LLM: {e}")
@@ -464,7 +495,7 @@ IMPORTANT: L'executive_summary doit contenir EXACTEMENT 5 bullet points percutan
             context_parts.append(f"""
 Source {idx}: {data.title}
 URL: {data.url}
-Contenu: {data.content[:4000]}
+Contenu: {data.content[:8000]}
 ---
 """)
         
@@ -481,8 +512,8 @@ Contenu: {data.content[:4000]}
         try:
             logger.info(f"🚀 Début exécution tâche: {task_id}")
             
-            # Scraping - Utiliser 3 sources pour un rapport plus complet
-            scraped_data = await self.search_and_scrape(task.prompt, num_results=3)
+            # Scraping - Utiliser 8 sources pour un rapport vraiment complet
+            scraped_data = await self.search_and_scrape(task.prompt, num_results=8)
             
             if not scraped_data:
                 task.status = "failed"

@@ -97,12 +97,12 @@ class MarketAnalysisWorker:
             self.db.update_analysis_status(task_id, 'processing')
 
             # 2. Exécuter l'analyse (ScrapingBee uniquement)
-            prompt = task.prompt or "Analyse générale des marchés financiers avec focus sur l'IA."
+                prompt = task.prompt or "Analyse générale des marchés financiers avec focus sur l'IA."
             logger.info(f"🕷️ Création de la tâche ScrapingBee avec prompt: {prompt[:100]}...")
-            scraper_task_id = await self.scraper.create_scraping_task(prompt, 3)
+                scraper_task_id = await self.scraper.create_scraping_task(prompt, 3)
             
             logger.info(f"🚀 Exécution de la tâche ScrapingBee {scraper_task_id}...")
-            result = await self.scraper.execute_scraping_task(scraper_task_id)
+                result = await self.scraper.execute_scraping_task(scraper_task_id)
 
 
             # 3. Traiter le résultat
@@ -197,32 +197,198 @@ class MarketAnalysisWorker:
         from stock_api_manager import stock_api_manager
         market_snapshot = stock_api_manager.get_market_snapshot()
         
-        # Générer le HTML
+        # Générer le HTML optimisé pour mobile
         html = f"""
         <!DOCTYPE html>
         <html>
         <head>
             <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <style>
-                body {{ font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }}
-                .container {{ max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
-                .header {{ text-align: center; border-bottom: 3px solid #1e3a8a; padding-bottom: 20px; margin-bottom: 30px; }}
-                .header h1 {{ color: #1e3a8a; margin: 0; }}
-                .header .date {{ color: #666; font-size: 14px; margin-top: 10px; }}
-                .executive-summary {{ background: linear-gradient(135deg, #1e3a8a, #3b82f6); color: white; padding: 20px; border-radius: 8px; margin-bottom: 30px; }}
-                .executive-summary h2 {{ margin-top: 0; color: #fbbf24; }}
-                .executive-summary ul {{ margin: 0; padding-left: 20px; }}
-                .executive-summary li {{ margin-bottom: 8px; font-size: 16px; }}
-                .section {{ margin-bottom: 30px; }}
-                .section h3 {{ color: #1e3a8a; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px; }}
-                .market-snapshot {{ background: #f8fafc; padding: 20px; border-radius: 8px; border-left: 4px solid #3b82f6; }}
-                .market-snapshot table {{ width: 100%; border-collapse: collapse; }}
-                .market-snapshot th, .market-snapshot td {{ padding: 8px; text-align: left; border-bottom: 1px solid #e5e7eb; }}
-                .market-snapshot th {{ background: #3b82f6; color: white; }}
-                .insights {{ background: #fef3c7; padding: 20px; border-radius: 8px; border-left: 4px solid #f59e0b; }}
-                .risks {{ background: #fee2e2; padding: 20px; border-radius: 8px; border-left: 4px solid #ef4444; }}
-                .opportunities {{ background: #dcfce7; padding: 20px; border-radius: 8px; border-left: 4px solid #22c55e; }}
-                .footer {{ text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e7eb; color: #666; font-size: 12px; }}
+                /* Reset et base */
+                body {{ 
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; 
+                    margin: 0; 
+                    padding: 0; 
+                    background-color: #f0f2f5; 
+                    color: #1a1a1a;
+                    line-height: 1.6;
+                }}
+                
+                /* Container principal */
+                .container {{ 
+                    max-width: 100%; 
+                    margin: 0 auto; 
+                    background: white; 
+                    padding: 0;
+                }}
+                
+                /* Header */
+                .header {{ 
+                    background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+                    color: white;
+                    padding: 20px 15px;
+                    text-align: center;
+                }}
+                .header h1 {{ 
+                    margin: 0;
+                    font-size: 24px;
+                    font-weight: 700;
+                    letter-spacing: -0.5px;
+                }}
+                .header .date {{ 
+                    font-size: 13px;
+                    opacity: 0.9;
+                    margin-top: 5px;
+                }}
+                
+                /* Executive Summary */
+                .executive-summary {{ 
+                    background: #0f172a;
+                    color: white;
+                    padding: 20px 15px;
+                    margin: 0;
+                }}
+                .executive-summary h2 {{ 
+                    margin: 0 0 15px 0;
+                    font-size: 18px;
+                    color: #fbbf24;
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                }}
+                .executive-summary ul {{ 
+                    margin: 0;
+                    padding: 0;
+                    list-style: none;
+                }}
+                .executive-summary li {{ 
+                    padding: 10px 0;
+                    border-bottom: 1px solid rgba(255,255,255,0.1);
+                    font-size: 14px;
+                    line-height: 1.5;
+                }}
+                .executive-summary li:last-child {{ border-bottom: none; }}
+                
+                /* Sections avec séparateurs visuels */
+                .section {{ 
+                    padding: 20px 15px;
+                    border-bottom: 8px solid #f0f2f5;
+                }}
+                .section:last-child {{ border-bottom: none; }}
+                
+                .section h3 {{ 
+                    margin: 0 0 15px 0;
+                    font-size: 18px;
+                    color: #1e3a8a;
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                }}
+                
+                /* Cartes thématiques */
+                .card {{
+                    border-radius: 12px;
+                    padding: 15px;
+                    margin-bottom: 15px;
+                }}
+                
+                /* Market Snapshot Table */
+                .market-table {{
+                    width: 100%;
+                    border-collapse: collapse;
+                    font-size: 14px;
+                }}
+                .market-table th {{
+                    background: #1e3a8a;
+                    color: white;
+                    padding: 10px 8px;
+                    text-align: left;
+                    font-weight: 600;
+                }}
+                .market-table td {{
+                    padding: 10px 8px;
+                    border-bottom: 1px solid #e5e7eb;
+                }}
+                .market-table tr:last-child td {{ border-bottom: none; }}
+                
+                /* Indicateurs économiques */
+                .economic-grid {{
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 10px;
+                    margin-top: 15px;
+                }}
+                .economic-card {{
+                    background: #f8fafc;
+                    border-radius: 8px;
+                    padding: 12px;
+                    border-left: 3px solid #3b82f6;
+                }}
+                .economic-card h4 {{
+                    margin: 0 0 5px 0;
+                    font-size: 13px;
+                    color: #64748b;
+                    text-transform: uppercase;
+                }}
+                .economic-card .value {{
+                    font-size: 20px;
+                    font-weight: 700;
+                    color: #1e3a8a;
+                }}
+                
+                /* Géopolitique */
+                .geopolitical {{
+                    background: #fef3c7;
+                    border-radius: 12px;
+                    padding: 15px;
+                    border-left: 4px solid #f59e0b;
+                }}
+                
+                /* Insights/Risques/Opportunités */
+                .insights {{ 
+                    background: #e0f2fe;
+                    border-left: 4px solid #0284c7;
+                }}
+                .risks {{ 
+                    background: #fee2e2;
+                    border-left: 4px solid #ef4444;
+                }}
+                .opportunities {{ 
+                    background: #dcfce7;
+                    border-left: 4px solid #22c55e;
+                }}
+                
+                /* Listes optimisées */
+                ul {{
+                    margin: 0;
+                    padding-left: 20px;
+                }}
+                li {{
+                    margin-bottom: 8px;
+                    font-size: 14px;
+                }}
+                
+                /* Footer */
+                .footer {{ 
+                    background: #f8fafc;
+                    padding: 20px 15px;
+                    text-align: center;
+                    font-size: 12px;
+                    color: #64748b;
+                }}
+                
+                /* Couleurs variations */
+                .positive {{ color: #22c55e; font-weight: 600; }}
+                .negative {{ color: #ef4444; font-weight: 600; }}
+                
+                /* Responsive */
+                @media (max-width: 600px) {{
+                    .header h1 {{ font-size: 20px; }}
+                    .section h3 {{ font-size: 16px; }}
+                    .executive-summary li {{ font-size: 13px; }}
+                    .economic-grid {{ grid-template-columns: 1fr; }}
+                }}
             </style>
         </head>
         <body>
@@ -232,7 +398,7 @@ class MarketAnalysisWorker:
                     <div class="date">Généré le {datetime.now().strftime('%d/%m/%Y à %H:%M')}</div>
                 </div>
                 
-                <!-- Executive Summary -->
+                <!-- Executive Summary avec valeurs -->
                 <div class="executive-summary">
                     <h2>🎯 EXECUTIVE SUMMARY</h2>
                     <ul>
@@ -240,25 +406,39 @@ class MarketAnalysisWorker:
                     </ul>
                 </div>
                 
-                <!-- Résumé détaillé -->
+                <!-- Indicateurs Économiques -->
                 <div class="section">
-                    <h3>📝 Résumé de l'Analyse</h3>
-                    <p>{result.get('summary', 'Aucun résumé disponible')}</p>
+                    <h3>📊 Indicateurs Économiques</h3>
+                    <div class="economic-grid">
+                        {self._generate_economic_indicators(result.get('economic_indicators', {}))}
+                    </div>
+                </div>
+                
+                <!-- Analyse Géopolitique -->
+                <div class="section">
+                    <h3>🌍 Analyse Géopolitique</h3>
+                    <div class="geopolitical card">
+                        {self._generate_geopolitical_analysis(result.get('geopolitical_analysis', {}))}
+                    </div>
                 </div>
                 
                 <!-- Aperçu du marché -->
                 <div class="section">
                     <h3>📈 Aperçu du Marché</h3>
-                    <div class="market-snapshot">
-                        <table>
-                            <thead>
-                                <tr><th>Actif</th><th>Prix</th><th>Variation</th><th>Source</th></tr>
-                            </thead>
-                            <tbody>
-                                {self._generate_market_snapshot_rows(market_snapshot)}
-                            </tbody>
-                        </table>
-                    </div>
+                    <table class="market-table">
+                        <thead>
+                            <tr><th>Actif</th><th>Prix</th><th>Variation</th></tr>
+                        </thead>
+                        <tbody>
+                            {self._generate_market_snapshot_rows(market_snapshot)}
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- Résumé détaillé -->
+                <div class="section">
+                    <h3>📝 Analyse Approfondie</h3>
+                    <p style="font-size: 14px; line-height: 1.8;">{result.get('summary', 'Aucun résumé disponible')}</p>
                 </div>
                 
                 <!-- Points clés -->
@@ -270,34 +450,40 @@ class MarketAnalysisWorker:
                 </div>
                 
                 <!-- Insights -->
-                <div class="insights">
-                    <h3>💡 Insights</h3>
-                    <ul>
-                        {chr(10).join([f'<li>{insight}</li>' for insight in (result.get('insights', []) or [])])}
-                    </ul>
+                <div class="section">
+                    <div class="insights card">
+                        <h3>💡 Insights</h3>
+                        <ul>
+                            {chr(10).join([f'<li>{insight}</li>' for insight in (result.get('insights', []) or [])])}
+                        </ul>
+                    </div>
                 </div>
                 
                 <!-- Risques -->
-                <div class="risks">
-                    <h3>⚠️ Risques Identifiés</h3>
-                    <ul>
-                        {chr(10).join([f'<li>{risk}</li>' for risk in (result.get('risks', []) or [])])}
-                    </ul>
+                <div class="section">
+                    <div class="risks card">
+                        <h3>⚠️ Risques Identifiés</h3>
+                        <ul>
+                            {chr(10).join([f'<li>{risk}</li>' for risk in (result.get('risks', []) or [])])}
+                        </ul>
+                    </div>
                 </div>
                 
                 <!-- Opportunités -->
-                <div class="opportunities">
-                    <h3>🚀 Opportunités</h3>
-                    <ul>
-                        {chr(10).join([f'<li>{opp}</li>' for opp in (result.get('opportunities', []) or [])])}
-                    </ul>
+                <div class="section">
+                    <div class="opportunities card">
+                        <h3>🚀 Opportunités</h3>
+                        <ul>
+                            {chr(10).join([f'<li>{opp}</li>' for opp in (result.get('opportunities', []) or [])])}
+                        </ul>
+                    </div>
                 </div>
                 
                 <!-- Sources -->
                 <div class="section">
-                    <h3>📚 Sources</h3>
-                    <ul>
-                        {chr(10).join([f'<li><a href="{source.get("url", "#")}" target="_blank">{source.get("title", "Source")}</a></li>' for source in (result.get('sources', []) or [])])}
+                    <h3>📚 Sources d'Information</h3>
+                    <ul style="list-style: none; padding: 0;">
+                        {chr(10).join([f'<li style="margin-bottom: 8px;">📎 <a href="{source.get("url", "#")}" target="_blank" style="color: #3b82f6; text-decoration: none;">{source.get("title", "Source")}</a></li>' for source in (result.get('sources', []) or [])])}
                     </ul>
                 </div>
                 
@@ -317,45 +503,130 @@ class MarketAnalysisWorker:
         rows = []
         
         if snapshot.get('indices'):
-            rows.append('<tr><td colspan="4" style="background: #e5e7eb; font-weight: bold; padding: 10px;">Indices</td></tr>')
+            rows.append('<tr><td colspan="3" style="background: #e5e7eb; font-weight: bold; padding: 10px;">📊 Indices</td></tr>')
             for name, data in snapshot['indices'].items():
-                change_color = 'green' if data.get('change', 0) >= 0 else 'red'
+                change_class = 'positive' if data.get('change', 0) >= 0 else 'negative'
                 rows.append(f'''
                     <tr>
                         <td><strong>{name}</strong></td>
-                        <td>{data.get('price', 'N/A')}</td>
-                        <td style="color: {change_color}">{data.get('change', 'N/A')} ({data.get('change_percent', 'N/A')}%)</td>
-                        <td>yfinance</td>
+                        <td>${data.get('price', 'N/A'):,.2f}</td>
+                        <td class="{change_class}">{data.get('change_percent', 0):+.2f}%</td>
                     </tr>
                 ''')
         
         if snapshot.get('commodities'):
-            rows.append('<tr><td colspan="4" style="background: #e5e7eb; font-weight: bold; padding: 10px;">Matières Premières</td></tr>')
+            rows.append('<tr><td colspan="3" style="background: #e5e7eb; font-weight: bold; padding: 10px;">🏭 Matières Premières</td></tr>')
             for name, data in snapshot['commodities'].items():
-                change_color = 'green' if data.get('change', 0) >= 0 else 'red'
+                change_class = 'positive' if data.get('change', 0) >= 0 else 'negative'
                 rows.append(f'''
                     <tr>
                         <td><strong>{name}</strong></td>
-                        <td>{data.get('price', 'N/A')}</td>
-                        <td style="color: {change_color}">{data.get('change', 'N/A')} ({data.get('change_percent', 'N/A')}%)</td>
-                        <td>yfinance</td>
+                        <td>${data.get('price', 'N/A'):,.2f}</td>
+                        <td class="{change_class}">{data.get('change_percent', 0):+.2f}%</td>
                     </tr>
                 ''')
         
         if snapshot.get('crypto'):
-            rows.append('<tr><td colspan="4" style="background: #e5e7eb; font-weight: bold; padding: 10px;">Cryptomonnaies</td></tr>')
+            rows.append('<tr><td colspan="3" style="background: #e5e7eb; font-weight: bold; padding: 10px;">🪙 Cryptomonnaies</td></tr>')
             for name, data in snapshot['crypto'].items():
-                change_color = 'green' if data.get('change', 0) >= 0 else 'red'
+                change_class = 'positive' if data.get('change', 0) >= 0 else 'negative'
                 rows.append(f'''
                     <tr>
                         <td><strong>{name}</strong></td>
-                        <td>{data.get('price', 'N/A')}</td>
-                        <td style="color: {change_color}">{data.get('change', 'N/A')} ({data.get('change_percent', 'N/A')}%)</td>
-                        <td>yfinance</td>
+                        <td>${data.get('price', 'N/A'):,.2f}</td>
+                        <td class="{change_class}">{data.get('change_percent', 0):+.2f}%</td>
                     </tr>
                 ''')
         
-        return chr(10).join(rows) if rows else '<tr><td colspan="4">Aucune donnée disponible</td></tr>'
+        return chr(10).join(rows) if rows else '<tr><td colspan="3">Aucune donnée disponible</td></tr>'
+    
+    def _generate_economic_indicators(self, indicators: Dict) -> str:
+        """Génère les cartes d'indicateurs économiques."""
+        html_parts = []
+        
+        # Inflation
+        if indicators.get('inflation'):
+            inflation = indicators['inflation']
+            html_parts.append(f'''
+                <div class="economic-card">
+                    <h4>Inflation</h4>
+                    <div class="value">{inflation.get('US', 'N/A')} 🇺🇸</div>
+                    <div style="font-size: 12px; color: #64748b;">Europe: {inflation.get('EU', 'N/A')}</div>
+                </div>
+            ''')
+        
+        # Taux directeurs
+        if indicators.get('central_banks'):
+            banks = indicators['central_banks']
+            html_parts.append(f'''
+                <div class="economic-card">
+                    <h4>Taux Directeurs</h4>
+                    <div class="value">Fed: {banks[0] if banks else 'N/A'}</div>
+                    <div style="font-size: 12px; color: #64748b;">{banks[1] if len(banks) > 1 else 'BCE: N/A'}</div>
+                </div>
+            ''')
+        
+        # Croissance GDP
+        if indicators.get('gdp_growth'):
+            gdp = indicators['gdp_growth']
+            html_parts.append(f'''
+                <div class="economic-card">
+                    <h4>Croissance PIB</h4>
+                    <div class="value">{gdp.get('US', 'N/A')} 🇺🇸</div>
+                    <div style="font-size: 12px; color: #64748b;">Chine: {gdp.get('China', 'N/A')}</div>
+                </div>
+            ''')
+        
+        # Chômage
+        if indicators.get('unemployment'):
+            unemployment = indicators['unemployment']
+            html_parts.append(f'''
+                <div class="economic-card">
+                    <h4>Chômage</h4>
+                    <div class="value">{unemployment.get('US', 'N/A')} 🇺🇸</div>
+                    <div style="font-size: 12px; color: #64748b;">Europe: {unemployment.get('EU', 'N/A')}</div>
+                </div>
+            ''')
+        
+        return chr(10).join(html_parts) if html_parts else '<p>Aucun indicateur économique disponible</p>'
+    
+    def _generate_geopolitical_analysis(self, analysis: Dict) -> str:
+        """Génère l'analyse géopolitique."""
+        html_parts = []
+        
+        # Conflits
+        if analysis.get('conflicts'):
+            html_parts.append('<h4 style="margin-top: 0;">🔥 Conflits et Tensions</h4>')
+            html_parts.append('<ul>')
+            for conflict in analysis['conflicts']:
+                html_parts.append(f'<li>{conflict}</li>')
+            html_parts.append('</ul>')
+        
+        # Relations commerciales
+        if analysis.get('trade_relations'):
+            html_parts.append('<h4>🤝 Relations Commerciales</h4>')
+            html_parts.append('<ul>')
+            for relation in analysis['trade_relations']:
+                html_parts.append(f'<li>{relation}</li>')
+            html_parts.append('</ul>')
+        
+        # Sanctions
+        if analysis.get('sanctions'):
+            html_parts.append('<h4>⚖️ Sanctions Économiques</h4>')
+            html_parts.append('<ul>')
+            for sanction in analysis['sanctions']:
+                html_parts.append(f'<li>{sanction}</li>')
+            html_parts.append('</ul>')
+        
+        # Sécurité énergétique
+        if analysis.get('energy_security'):
+            html_parts.append('<h4>⚡ Sécurité Énergétique</h4>')
+            html_parts.append('<ul>')
+            for energy in analysis['energy_security']:
+                html_parts.append(f'<li>{energy}</li>')
+            html_parts.append('</ul>')
+        
+        return chr(10).join(html_parts) if html_parts else '<p>Aucune analyse géopolitique disponible</p>'
 
     # NewsAPI analysis path removed
 
