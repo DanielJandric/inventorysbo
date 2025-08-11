@@ -33,13 +33,13 @@ logger.info("--- DÉMARRAGE DU SCRIPT DU BACKGROUND WORKER ---")
 from scrapingbee_scraper import get_scrapingbee_scraper
 from market_analysis_db import get_market_analysis_db, MarketAnalysis
 from stock_api_manager import stock_api_manager
-from news_api_manager import NewsAPIManager
+ 
 
 class MarketAnalysisWorker:
     def __init__(self):
         self.scraper = get_scrapingbee_scraper()
         self.db = get_market_analysis_db()
-        self.news_api_manager = NewsAPIManager()
+        # NewsAPI removed; ScrapingBee is the only source for analysis
         self.poll_interval_seconds = 15  # Vérifier les nouvelles tâches toutes les 15 secondes
         self.is_running = False
         self.redis_client = None
@@ -92,14 +92,10 @@ class MarketAnalysisWorker:
             # 1. Mettre à jour le statut à "processing"
             self.db.update_analysis_status(task_id, 'processing')
 
-            # 2. Exécuter l'analyse
-            # Si le prompt contient "newsapi", utiliser le nouveau flow
-            if task.prompt and "newsapi" in task.prompt.lower():
-                result = await self._execute_newsapi_analysis(task)
-            else: # Sinon, utiliser l'ancien flow de scraping web
-                prompt = task.prompt or "Analyse générale des marchés financiers avec focus sur l'IA."
-                scraper_task_id = await self.scraper.create_scraping_task(prompt, 3)
-                result = await self.scraper.execute_scraping_task(scraper_task_id)
+            # 2. Exécuter l'analyse (ScrapingBee uniquement)
+            prompt = task.prompt or "Analyse générale des marchés financiers avec focus sur l'IA."
+            scraper_task_id = await self.scraper.create_scraping_task(prompt, 3)
+            result = await self.scraper.execute_scraping_task(scraper_task_id)
 
 
             # 3. Traiter le résultat
@@ -133,58 +129,7 @@ class MarketAnalysisWorker:
                 'processing_time_seconds': processing_time
             })
 
-    async def _execute_newsapi_analysis(self, task: MarketAnalysis):
-        """
-        Récupère les articles via NewsAPIManager et lance l'analyse IA.
-        """
-        logger.info(f"📰 Tâche #{task.id}: Lancement de l'analyse via NewsAPI.ai...")
-        
-        # 1. Récupérer les articles
-        articles = self.news_api_manager.get_real_estate_news()
-        if not articles:
-            raise ValueError("Aucun article retourné par NewsAPI.ai. L'analyse ne peut continuer.")
-            
-        logger.info(f"Fetched {len(articles)} articles from NewsAPI.ai.")
-
-        # 2. Concaténer les informations pertinentes pour le prompt de l'IA
-        # On ne passe que les titres, les URL et les 300 premiers caractères du corps
-        # pour rester dans les limites de tokens du prompt. On limite à 15 articles.
-        articles_summary = "\n\n".join([
-            f"Title: {a.get('title', 'N/A')}\n"
-            f"URL: {a.get('url', 'N/A')}\n"
-            f"Source: {a.get('source', {}).get('title', 'N/A')}\n"
-            f"Date: {a.get('date', 'N/A')}\n"
-            f"Content Snippet: {a.get('body', '')[:300]}...\n"
-            for a in articles[:15]
-        ])
-        
-        # 3. Construire le prompt final pour l'IA
-        final_prompt = (
-            "En tant qu'analyste financier expert pour un family office, analyse les articles de presse suivants "
-            "sur le marché immobilier suisse. Fournis une analyse concise et pertinente.\n\n"
-            "--- DÉBUT DES ARTICLES ---\n"
-            f"{articles_summary}\n"
-            "--- FIN DES ARTICLES ---\n\n"
-            "Ton analyse doit inclure les sections suivantes, en français:\n"
-            "- Résumé (summary): Un résumé global des tendances et des nouvelles importantes.\n"
-            "- Points Clés (key_points): Une liste à puces des 3-5 points les plus importants.\n"
-            "- Tendances (insights): Dégage les tendances de fond (hausse/baisse des prix, taux d'intérêt, etc.).\n"
-            "- Risques (risks): Identifie les risques potentiels pour un investisseur.\n"
-            "- Opportunités (opportunities): Identifie les opportunités d'investissement ou les secteurs prometteurs.\n"
-            "- Score de Confiance (confidence_score): Un score de 0.0 à 1.0 sur la fiabilité de ton analyse.\n"
-            "Ne te contente pas de lister les articles, synthétise l'information."
-        )
-
-        # 4. Appeler le scraper/analyseur IA avec ce nouveau prompt
-        # Note: On réutilise la logique du scrapingbee_scraper qui encapsule l'appel à l'IA.
-        # On ne fait pas de "scraping" ici, on passe directement le contenu.
-        scraper_task_id = await self.scraper.create_scraping_task(final_prompt, 0) # 0 sources car on fournit le contenu
-        result = await self.scraper.execute_scraping_task(scraper_task_id)
-
-        # Ajouter les sources (URL des articles) au résultat final
-        result['sources'] = [{'title': a.get('title'), 'url': a.get('url')} for a in articles if a.get('url')]
-        
-        return result
+    # NewsAPI analysis path removed
 
     async def run_continuous_loop(self):
         """Boucle principale qui recherche et traite les tâches."""
