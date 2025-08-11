@@ -8139,6 +8139,11 @@ def get_background_worker_status():
         })
 
 
+    except Exception as e:
+        logger.error(f"Erreur statut Background Worker: {e}")
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
 @app.route("/api/market-analyses/recent", methods=["GET"])
 def get_recent_market_analyses():
     """Retourne les 15 dernières analyses pour affichage dans la page marchés."""
