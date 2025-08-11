@@ -8160,6 +8160,70 @@ def get_recent_market_analyses():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+@app.route("/api/markets/chat", methods=["POST"])
+def markets_chat():
+    """Chatbot marchés: répond en français en s'appuyant sur les 10-15 derniers rapports.
+    Entrée JSON: { message: str, limit?: int }
+    Sortie JSON: { success: bool, reply?: str, error?: str }
+    """
+    try:
+        data = request.get_json(silent=True) or {}
+        user_message = (data.get("message") or "").strip()
+        if not user_message:
+            return jsonify({"success": False, "error": "Message vide"}), 400
+        limit = int(data.get("limit", 10))
+
+        from market_analysis_db import get_market_analysis_db
+        db = get_market_analysis_db()
+        recent_items = db.get_recent_analyses(limit=limit)
+
+        # Construire un contexte compact à partir des rapports récents
+        context_parts = []
+        for a in recent_items:
+            try:
+                exec_summary = "\n".join([f"- {p}" for p in (a.executive_summary or [])]) if a.executive_summary else ""
+                summary_compact = (a.summary or "")[:1200]
+                ts = a.timestamp or a.created_at or ""
+                context_parts.append(
+                    f"[Rapport ID {a.id or '?'} | {a.analysis_type or 'auto'} | {ts}]\n"
+                    f"Executive Summary:\n{exec_summary}\n"
+                    f"Résumé:\n{summary_compact}\n---\n"
+                )
+            except Exception:
+                continue
+        context_text = "\n".join(context_parts)
+
+        # Appel LLM
+        try:
+            from openai import OpenAI
+            client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+        except Exception as e:
+            logger.error(f"OpenAI init error: {e}")
+            return jsonify({"success": False, "error": "OpenAI non configuré"}), 500
+
+        system_prompt = (
+            "Tu es un analyste marchés. Réponds en français, de manière concise et actionnable. "
+            "Reconnais des patterns (tendance, corrélations, régimes de volatilité), et commente les risques/opportunités. "
+            "N'invente jamais de chiffres. Utilise **gras** pour les points critiques, et des emojis sobres (↑, ↓, 🟢, 🔴, ⚠️, 💡). "
+            "Si l'utilisateur demande un conseil d'investissement, réponds par une analyse des scénarios et un avertissement de risque."
+        )
+
+        model_name = os.getenv("AI_MODEL", "gpt-4.1")
+        resp = client.chat.completions.create(
+            model=model_name,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Contexte (derniers rapports):\n{context_text}\n\nQuestion: {user_message}"},
+            ],
+            temperature=0.2,
+            max_tokens=1200,
+        )
+        reply = resp.choices[0].message.content
+        return jsonify({"success": True, "reply": reply})
+    except Exception as e:
+        logger.error(f"Erreur markets_chat: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
 @app.route("/api/market-analyses/<int:analysis_id>", methods=["DELETE"])
 def delete_market_analysis(analysis_id: int):
     """Supprime un rapport d'analyse par ID."""

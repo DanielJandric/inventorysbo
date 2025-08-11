@@ -105,6 +105,23 @@
                 <div id="analysis-result" class="hidden mt-4"></div>
             </section>
 
+            <!-- Chatbot Marchés -->
+            <section class="glass p-6 rounded-2xl">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="w-10 h-10 rounded-xl flex items-center justify-center bg-cyan-500/10 border border-cyan-400/30 text-cyan-300">
+                        <i class="fas fa-comments"></i>
+                    </div>
+                    <h2 class="text-xl font-semibold">Chatbot Marchés</h2>
+                </div>
+                <div id="chatbox" class="space-y-3">
+                    <div id="chat-messages" class="bg-white/5 border border-white/10 rounded-xl p-4 h-64 overflow-y-auto text-sm"></div>
+                    <div class="flex gap-2">
+                        <input id="chat-input" class="flex-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10" placeholder="Posez votre question (ex: patterns, risques, scénarios)..."/>
+                        <button id="chat-send" class="px-4 py-2 rounded-lg bg-cyan-500/20 border border-cyan-400/30 hover:bg-cyan-500/30">Envoyer</button>
+                    </div>
+                </div>
+            </section>
+
             <!-- Derniers rapports -->
             <section class="glass p-6 rounded-2xl">
                 <div class="flex items-center gap-3 mb-4">
@@ -403,6 +420,34 @@
             document.getElementById('refresh-pdfs').addEventListener('click', loadMarketPdfs);
             loadMarketPdfs();
             loadRecentAnalyses();
+
+            // Chat events
+            const messagesDiv = document.getElementById('chat-messages');
+            const inputEl = document.getElementById('chat-input');
+            const sendBtn = document.getElementById('chat-send');
+            function addMsg(role, text) {
+                const color = role === 'user' ? 'text-cyan-100' : 'text-cyan-200/80';
+                const who = role === 'user' ? 'Vous' : 'Assistant';
+                const html = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br/>');
+                messagesDiv.insertAdjacentHTML('beforeend', `<div class='${color}'><strong>${who}:</strong> ${html}</div>`);
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            }
+            async function sendChat() {
+                const msg = (inputEl.value || '').trim();
+                if (!msg) return;
+                addMsg('user', msg);
+                inputEl.value = '';
+                try {
+                    const r = await fetch('/api/markets/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: msg, limit: 12 })});
+                    const d = await r.json();
+                    if (!d.success) throw new Error(d.error || 'Erreur API');
+                    addMsg('assistant', d.reply);
+                } catch (e) {
+                    addMsg('assistant', `❌ ${e.message}`);
+                }
+            }
+            sendBtn.addEventListener('click', sendChat);
+            inputEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendChat(); });
         });
     </script>
 </body>
