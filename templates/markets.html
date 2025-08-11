@@ -9,6 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" integrity="sha512-/eK2mJas5n8o3oV5bJHcE8a5l9d3oS0xQ2y0Oa+QzO0h2bQK0n3j8mQyqZ8WgPZyl9uBieeBmh0PPRZ6T3NRWQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     <style>
         :root {
             --bg-color: #0A232A;
@@ -120,6 +121,11 @@
                         <button id="chat-send" class="px-4 py-2 rounded-lg bg-cyan-500/20 border border-cyan-400/30 hover:bg-cyan-500/30">Envoyer</button>
                     </div>
                     <textarea id="chat-context" class="mt-2 w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs" rows="3" placeholder="Optionnel: Collez ici un extrait de rapport ou un contexte métier pour guider l'analyse (utilisé en plus des 10-15 derniers rapports)."></textarea>
+                    <div class="flex justify-end">
+                        <button id="chat-export" class="mt-2 px-3 py-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 text-xs">
+                            <i class="fas fa-file-pdf mr-1"></i> Exporter en PDF
+                        </button>
+                    </div>
                 </div>
             </section>
 
@@ -426,6 +432,7 @@
             const messagesDiv = document.getElementById('chat-messages');
             const inputEl = document.getElementById('chat-input');
             const sendBtn = document.getElementById('chat-send');
+            const exportBtn = document.getElementById('chat-export');
             function addMsg(role, text) {
                 const color = role === 'user' ? 'text-cyan-100' : 'text-cyan-200/80';
                 const who = role === 'user' ? 'Vous' : 'Assistant';
@@ -450,6 +457,44 @@
             }
             sendBtn.addEventListener('click', sendChat);
             inputEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendChat(); });
+
+            // Export PDF de la dernière discussion
+            exportBtn.addEventListener('click', async () => {
+                try {
+                    const { jsPDF } = window.jspdf;
+                    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+                    const margin = 40;
+                    let y = margin;
+                    doc.setFont('helvetica', '');
+                    doc.setFontSize(12);
+                    // En-tête
+                    doc.setFontSize(14);
+                    doc.text('Discussion Chatbot Marchés', margin, y);
+                    y += 20;
+                    doc.setFontSize(10);
+                    doc.text(new Date().toLocaleString('fr-FR'), margin, y);
+                    y += 20;
+                    doc.setFontSize(12);
+                    // Contenu
+                    const lines = Array.from(messagesDiv.querySelectorAll('div')).map(el => el.textContent || '');
+                    const pageWidth = doc.internal.pageSize.getWidth() - margin * 2;
+                    lines.forEach((line) => {
+                        const split = doc.splitTextToSize(line, pageWidth);
+                        split.forEach((l) => {
+                            if (y > doc.internal.pageSize.getHeight() - margin) {
+                                doc.addPage();
+                                y = margin;
+                            }
+                            doc.text(l, margin, y);
+                            y += 16;
+                        });
+                        y += 6;
+                    });
+                    doc.save('chat_update_marches.pdf');
+                } catch (e) {
+                    alert('Erreur export PDF: ' + e.message);
+                }
+            });
         });
     </script>
 </body>
