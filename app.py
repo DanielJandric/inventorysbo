@@ -8154,10 +8154,6 @@ def get_recent_market_analyses():
         logger.error(f"Erreur get_recent_market_analyses: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
-    except Exception as e:
-        logger.error(f"Erreur statut Background Worker: {e}")
-        return jsonify({"status": "error", "error": str(e)}), 500
-
 
 if __name__ == "__main__":
     app.run(debug=True)
