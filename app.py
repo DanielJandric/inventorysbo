@@ -64,7 +64,6 @@ from google_cse_stock_data import GoogleCSEStockDataManager
 from enhanced_google_cse_ai_report import EnhancedGoogleCSEAIReport
 from intelligent_scraper import IntelligentScraper, get_scraper
 from scrapingbee_scraper import ScrapingBeeScraper, get_scrapingbee_scraper
-from app_routes import seeking_alpha_blueprint
 # Remplacé par l'API Manus unifiée
 # Remplacé par l'API Manus unifiée
 
@@ -1742,8 +1741,6 @@ app.config.setdefault('MARKET_PDF_ALLOWED_EXTENSIONS', {'.pdf'})
 
 # Créer le dossier si nécessaire
 os.makedirs(app.config['MARKET_PDF_UPLOAD_FOLDER'], exist_ok=True)
-app.register_blueprint(seeking_alpha_blueprint)
-
 # Gestionnaire de données sophistiqué
 class AdvancedDataManager:
     """Gestionnaire de données avec logique métier avancée"""
@@ -8069,10 +8066,14 @@ def trigger_background_worker():
         # Vérifier s'il y a déjà une analyse en cours
         latest_analysis = db.get_latest_analysis()
         if latest_analysis and latest_analysis.worker_status in ['pending', 'processing']:
+            # Ne pas considérer comme une erreur: indiquer que le job est déjà en cours
             return jsonify({
-                "success": False,
-                "error": "Une analyse est déjà en cours. Veuillez patienter."
-            }), 409 # Conflict
+                "success": True,
+                "status": "already_in_progress",
+                "message": "Une analyse est déjà en cours.",
+                "analysis_id": latest_analysis.id,
+                "timestamp": datetime.now().isoformat()
+            })
 
         # Créer une nouvelle analyse avec le statut 'pending'
         new_analysis = MarketAnalysis(
