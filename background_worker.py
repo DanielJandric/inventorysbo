@@ -755,7 +755,13 @@ class MarketAnalysisWorker:
         if analysis_id:
             logger.info(f"✅ Rapport mensuel {month_key} inséré (ID {analysis_id}). Envoi email...")
             try:
-                asyncio.run(self._send_market_analysis_email(analysis_id, payload))
+                # Si une loop est déjà active, créer une tâche; sinon, exécuter directement
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(self._send_market_analysis_email(analysis_id, payload))
+                    logger.info("📧 Envoi email mensuel planifié dans la boucle existante")
+                except RuntimeError:
+                    asyncio.run(self._send_market_analysis_email(analysis_id, payload))
             except Exception as e:
                 logger.warning(f"⚠️ Envoi email mensuel échoué: {e}")
             # Renommer le fichier pour éviter retraits
