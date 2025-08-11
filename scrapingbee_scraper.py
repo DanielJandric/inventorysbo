@@ -391,17 +391,22 @@ class ScrapingBeeScraper:
             logger.info(f"📈 Market snapshot disponible: {'Oui' if market_snapshot else 'Non'}")
             logger.debug(f"Contexte complet pour OpenAI: {context}")
 
-            # Prompt système enrichi
+            # Prompt système enrichi (strict: aucune invention de chiffres)
             system_prompt = """Tu es un expert analyste financier et géopolitique de classe mondiale. Ta mission est de produire un rapport de marché EXHAUSTIF intégrant les dimensions ÉCONOMIQUES et GÉOPOLITIQUES. Combine les données factuelles (market_snapshot) avec l'analyse des textes (données collectées).
+
+RÈGLES NUMÉRIQUES STRICTES:
+- Tu NE DOIS JAMAIS inventer des chiffres.
+- Utilise UNIQUEMENT les valeurs présentes explicitement dans "market_snapshot" ou déduites clairement du contexte fourni.
+- Si une valeur n'est pas disponible, écris "N/A" (ne mets ni 0, ni une estimation).
 
 STRUCTURE OBLIGATOIRE DE LA RÉPONSE JSON :
 {
     "executive_summary": [
-        "• S&P 500: 5447.87 (-0.16%) - Impact de la politique monétaire restrictive",
-        "• Bitcoin: $69,304 (+0.65%) - Afflux institutionnel suite aux ETF",
-        "• Tensions géopolitiques: Escalade au Moyen-Orient fait grimper le pétrole à $85/baril",
-        "• BCE: Maintien des taux à 4.5% - Inflation zone euro à 2.9%",
-        "• Tech/IA: NVIDIA +3.2% - Demande IA dépasse les prévisions Q4"
+        "• S&P 500: [valeur ou N/A] ([variation% ou N/A]) - [impact/context]",
+        "• Nasdaq: [valeur ou N/A] ([variation% ou N/A]) - [impact/context]",
+        "• VIX: [valeur ou N/A] ([variation% ou N/A]) - [impact/context]",
+        "• Or: [valeur ou N/A] ([variation% ou N/A]) - [impact/context]",
+        "• Bitcoin: [valeur ou N/A] ([variation% ou N/A]) - [impact/context]"
     ],
     "market_snapshot": {
         "indices": {

@@ -400,11 +400,11 @@ class MarketAnalysisWorker:
                     <div class="date">Généré le {datetime.now().strftime('%d/%m/%Y à %H:%M')}</div>
                 </div>
                 
-                <!-- Executive Summary avec valeurs -->
+                <!-- Executive Summary avec valeurs (validées) -->
                 <div class="executive-summary">
                     <h2>🎯 EXECUTIVE SUMMARY</h2>
                     <ul>
-                        {chr(10).join([f'<li>{point}</li>' for point in (result.get('executive_summary', []) or [])])}
+                        {self._render_validated_executive_summary(result.get('executive_summary', []), market_snapshot)}
                     </ul>
                 </div>
                 
@@ -629,6 +629,59 @@ class MarketAnalysisWorker:
             html_parts.append('</ul>')
         
         return chr(10).join(html_parts) if html_parts else '<p>Aucune analyse géopolitique disponible</p>'
+
+    def _render_validated_executive_summary(self, summary_points: List[str], snapshot: Dict) -> str:
+        """Valide et rend les points de l'executive summary en interdisant toute invention de chiffres.
+
+        Règle: si un point contient un actif dont la valeur n'est pas dans le snapshot, remplacer les parties chiffrées par 'N/A'.
+        """
+        try:
+            if not summary_points:
+                return ''
+
+            # Construire une map de valeurs disponibles par nom logique simplifié
+            def get_known_value(name: str) -> Optional[Dict]:
+                name_l = name.lower()
+                # Indices
+                for k, v in (snapshot.get('indices') or {}).items():
+                    if k.lower() in name_l:
+                        return v
+                # Volatility (VIX)
+                for k, v in (snapshot.get('volatility') or {}).items():
+                    if k.lower() in name_l:
+                        return v
+                # Commodities
+                for k, v in (snapshot.get('commodities') or {}).items():
+                    if k.lower() in name_l or name_l in k.lower():
+                        return v
+                # Crypto
+                for k, v in (snapshot.get('crypto') or {}).items():
+                    if k.lower() in name_l:
+                        return v
+                # Stocks
+                for k, v in (snapshot.get('stocks') or {}).items():
+                    if k.lower() in name_l:
+                        return v
+                return None
+
+            rendered = []
+            import re
+            num_pattern = re.compile(r"\$?\d+[\d,\.]*%?|")
+
+            for point in summary_points:
+                checked_point = point
+                # Déterminer un actif probable par mots-clés connus
+                possible_keys = ['s&p', 'nasdaq', 'dow', 'vix', 'or', 'gold', 'bitcoin', 'btc', 'nvda', 'nvidia', 'msft', 'microsoft', 'amd', 'aapl', 'apple']
+                matched_key = next((k for k in possible_keys if k in point.lower()), None)
+                val = get_known_value(matched_key) if matched_key else None
+                if not val or not isinstance(val, dict) or val.get('price') is None:
+                    # Remplacer toute occurrence numérique par N/A
+                    checked_point = re.sub(r"\$?\d+[\d,\.]*%?", "N/A", checked_point)
+                rendered.append(f"<li>{checked_point}</li>")
+            return chr(10).join(rendered)
+        except Exception:
+            # En cas de doute, retourner brut sans bloquer l'envoi
+            return chr(10).join([f"<li>{p}</li>" for p in (summary_points or [])])
 
     # NewsAPI analysis path removed
 

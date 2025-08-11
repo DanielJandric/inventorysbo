@@ -473,36 +473,54 @@ class StockAPIManager:
         return result
 
     def get_market_snapshot(self) -> Dict[str, Any]:
-        """Récupère un aperçu des principaux indicateurs de marché."""
-        logger.info("📊 Récupération de l'aperçu du marché...")
-        
-        snapshot = {
+        """Récupère un aperçu des principaux indicateurs de marché (version stricte yfinance).
+
+        Exigences:
+        - Utiliser yfinance uniquement
+        - Attendre 11 secondes AVANT chaque requête
+        - Inclure: NVDA, MSFT, AMD, AAPL, Or (Gold), Bitcoin, S&P 500, Nasdaq, Dow Jones, VIX
+        - Ne pas inventer: si indisponible, retourner {"error": "Data not available"}
+        """
+        logger.info("📊 Récupération de l'aperçu du marché (mode strict yfinance)...")
+
+        snapshot: Dict[str, Any] = {
+            "stocks": {},
             "indices": {},
+            "volatility": {},
             "commodities": {},
             "crypto": {}
         }
 
-        # Symboles à suivre
-        symbols = {
-            "indices": {"S&P 500": "^GSPC", "NASDAQ": "^IXIC", "Dow Jones": "^DJI"},
-            "commodities": {"Gold": "GC=F", "Silver": "SI=F"},
-            "crypto": {"Bitcoin": "BTC-USD", "Ethereum": "ETH-USD"}
-        }
+        # Liste ordonnée des requêtes à effectuer (avec affichage)
+        ordered_symbols = [
+            ("stocks", "NVDA", "NVDA"),
+            ("stocks", "MSFT", "MSFT"),
+            ("stocks", "AMD", "AMD"),
+            ("stocks", "AAPL", "AAPL"),
+            ("commodities", "Or (Gold)", "GC=F"),
+            ("crypto", "Bitcoin", "BTC-USD"),
+            ("indices", "S&P 500", "^GSPC"),
+            ("indices", "NASDAQ", "^IXIC"),
+            ("indices", "Dow Jones", "^DJI"),
+            ("volatility", "VIX", "^VIX"),
+        ]
 
-        for category, items in symbols.items():
-            for name, symbol in items.items():
-                data = self.get_stock_price(symbol)
-                if data:
-                    snapshot[category][name] = {
-                        "price": data.get('price'),
-                        "change": data.get('change'),
-                        "change_percent": data.get('change_percent'),
-                        "source": data.get('source')
-                    }
-                else:
-                    snapshot[category][name] = {"error": "Data not available"}
-        
-        logger.info("✅ Aperçu du marché récupéré.")
+        # Utiliser exclusivement yfinance
+        for category, display_name, symbol in ordered_symbols:
+            logger.info(f"⏳ Attente 11s avant la requête yfinance pour {symbol} ({display_name})...")
+            time.sleep(11)
+            data = self.yfinance.get_stock_price(symbol)
+            if data and data.get('price'):
+                snapshot[category][display_name] = {
+                    "price": data.get('price'),
+                    "change": data.get('change'),
+                    "change_percent": data.get('change_percent'),
+                    "source": data.get('source')
+                }
+            else:
+                snapshot[category][display_name] = {"error": "Data not available"}
+
+        logger.info("✅ Aperçu du marché (strict) récupéré.")
         return snapshot
 
 
