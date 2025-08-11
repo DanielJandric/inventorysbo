@@ -12,7 +12,7 @@ from datetime import datetime, timezone, timedelta
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import smtplib
-from typing import Dict
+from typing import Dict, List
 from dotenv import load_dotenv
 
 # Optional Redis cache
