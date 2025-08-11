@@ -432,12 +432,11 @@ async def main():
     worker = MarketAnalysisWorker()
     try:
         worker.initialize()
-        # Lancer les tâches en parallèle (analyses, immobilier, market brief)
+        # Lancer uniquement les tâches orientées marchés (pas de scraping immobilier)
         market_analysis_task = asyncio.create_task(worker.run_continuous_loop())
-        real_estate_task = asyncio.create_task(worker.run_real_estate_scrape_periodically())
         market_brief_task = asyncio.create_task(worker.run_nightly_market_brief())
         stocks_refresh_task = asyncio.create_task(worker.run_stock_prices_refresh_schedule())
-        await asyncio.gather(market_analysis_task, real_estate_task, market_brief_task, stocks_refresh_task)
+        await asyncio.gather(market_analysis_task, market_brief_task, stocks_refresh_task)
     except (KeyboardInterrupt, SystemExit):
         logger.info("Arrêt initié.")
     except Exception as e:
