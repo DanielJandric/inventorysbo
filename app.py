@@ -8062,18 +8062,26 @@ def trigger_background_worker():
         # Tolérant au manque d'en-tête Content-Type: application/json
         request_data = request.get_json(silent=True) or {}
         prompt = request_data.get('prompt', "Résume moi parfaitement et d'une façon exhaustive la situation sur les marchés financiers aujourd'hui. Aussi, je veux un focus particulier sur l'IA.")
+        force = bool(request_data.get('force', False))
 
         # Vérifier s'il y a déjà une analyse en cours
         latest_analysis = db.get_latest_analysis()
         if latest_analysis and latest_analysis.worker_status in ['pending', 'processing']:
-            # Ne pas considérer comme une erreur: indiquer que le job est déjà en cours
-            return jsonify({
-                "success": True,
-                "status": "already_in_progress",
-                "message": "Une analyse est déjà en cours.",
-                "analysis_id": latest_analysis.id,
-                "timestamp": datetime.now().isoformat()
-            })
+            if force:
+                try:
+                    # Marquer l'ancienne analyse comme erreur pour débloquer la file
+                    db.update_analysis_status(latest_analysis.id, 'error')
+                except Exception:
+                    pass
+            else:
+                # Ne pas considérer comme une erreur: indiquer que le job est déjà en cours
+                return jsonify({
+                    "success": True,
+                    "status": "already_in_progress",
+                    "message": "Une analyse est déjà en cours.",
+                    "analysis_id": latest_analysis.id,
+                    "timestamp": datetime.now().isoformat()
+                })
 
         # Créer une nouvelle analyse avec le statut 'pending'
         new_analysis = MarketAnalysis(
