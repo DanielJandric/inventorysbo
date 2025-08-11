@@ -8160,5 +8160,20 @@ def get_recent_market_analyses():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+@app.route("/api/market-analyses/<int:analysis_id>", methods=["DELETE"])
+def delete_market_analysis(analysis_id: int):
+    """Supprime un rapport d'analyse par ID."""
+    try:
+        from market_analysis_db import get_market_analysis_db
+        db = get_market_analysis_db()
+        ok = db.delete_analysis(analysis_id)
+        if not ok:
+            return jsonify({"success": False, "error": "Suppression échouée"}), 500
+        return jsonify({"success": True})
+    except Exception as e:
+        logger.error(f"Erreur delete_market_analysis: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 if __name__ == "__main__":
     app.run(debug=True)

@@ -289,6 +289,25 @@ class MarketAnalysisDB:
             logger.error(f"❌ Erreur update_analysis: {e}")
             return False
 
+    def delete_analysis(self, analysis_id: int) -> bool:
+        """Supprime une analyse par son ID."""
+        try:
+            if not self.is_connected():
+                return False
+            result = self.supabase.table('market_analyses') \
+                .delete() \
+                .eq('id', analysis_id) \
+                .execute()
+
+            if result.data is not None:
+                logger.info(f"🗑️ Analyse ID {analysis_id} supprimée")
+                return True
+            logger.error(f"❌ Échec suppression analyse ID {analysis_id}")
+            return False
+        except Exception as e:
+            logger.error(f"❌ Erreur delete_analysis: {e}")
+            return False
+
     def get_analysis_by_id(self, analysis_id: int) -> Optional[MarketAnalysis]:
         """Récupère une analyse spécifique par son ID."""
         try:

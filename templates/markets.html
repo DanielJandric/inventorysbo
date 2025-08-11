@@ -274,15 +274,41 @@
                         container.innerHTML = '<p class="text-cyan-200/70">Aucun rapport pour le moment.</p>';
                         return;
                     }
-                    container.innerHTML = data.items.map((a) => `
-                      <article class="glass p-4 rounded-2xl">
-                        <header class="flex items-center justify-between">
-                          <h6 class="font-semibold">${a.analysis_type || 'auto'} • ${new Date(a.timestamp || a.created_at).toLocaleString('fr-FR')}</h6>
-                          <span class="text-xs text-cyan-200/60">${a.worker_status}</span>
-                        </header>
-                        ${a.executive_summary ? `<ul class='mt-2 text-sm text-cyan-100/90 list-disc list-inside'>${a.executive_summary.map(p=>`<li>${p}</li>`).join('')}</ul>` : ''}
-                      </article>
-                    `).join('');
+                    container.innerHTML = data.items.map((a) => {
+                        const id = a.id;
+                        const htmlSummary = (a.summary || '').replace(/\n/g, '<br/>');
+                        const execHtml = (a.executive_summary || []).map(p => `<li>${p}</li>`).join('');
+                        const fullHtml = `
+                          <article class="glass p-4 rounded-2xl">
+                            <header class="flex items-center justify-between gap-3">
+                              <div>
+                                <h6 class="font-semibold">${a.analysis_type || 'auto'} • ${new Date(a.timestamp || a.created_at).toLocaleString('fr-FR')}</h6>
+                                <span class="text-xs text-cyan-200/60">${a.worker_status}</span>
+                              </div>
+                              <button data-id="${id}" class="delete-btn px-3 py-1.5 rounded-lg bg-red-500/20 border border-red-500/40 text-red-200 text-xs hover:bg-red-500/30">Supprimer</button>
+                            </header>
+                            ${a.executive_summary ? `<div class='mt-3'><h6 class='font-semibold mb-1'>Executive Summary</h6><ul class='text-sm text-cyan-100/90 list-disc list-inside'>${execHtml}</ul></div>` : ''}
+                            ${htmlSummary ? `<div class='mt-3 text-sm leading-6'>${htmlSummary}</div>` : ''}
+                          </article>`;
+                        return fullHtml;
+                    }).join('');
+
+                    // Bind suppression
+                    container.querySelectorAll('.delete-btn').forEach(btn => {
+                        btn.addEventListener('click', async (e) => {
+                            const id = e.currentTarget.getAttribute('data-id');
+                            if (!id) return;
+                            if (!confirm('Confirmer la suppression de ce rapport ?')) return;
+                            try {
+                                const r = await fetch(`/api/market-analyses/${id}`, { method: 'DELETE' });
+                                const d = await r.json();
+                                if (!d.success) throw new Error(d.error || 'Suppression échouée');
+                                loadRecentAnalyses();
+                            } catch (err) {
+                                alert('Erreur: ' + err.message);
+                            }
+                        });
+                    });
                 } catch (e) {
                     const container = document.getElementById(recentContainerId);
                     if (container) container.innerHTML = `<p class='text-red-400'>${e.message}</p>`;
