@@ -1,0 +1,67 @@
+{
+  "metadata": {
+    "report_date": "2025-08-01T00:00:00Z",
+    "confidence_level": 0.9,
+    "data_freshness": "Mensuel",
+    "market_phase": "Weekend"
+  },
+  "executive_summary": [
+    "• États‑Unis: CPI 2,7% (core 2,9%), Fed 4,25–4,50%, PIB T2 +3,0% (annualisé), chômage 4,2%, NFP +73k",
+    "• Zone euro: HICP 2,0% (core 2,3%), T2 +0,1% QoQ / +1,4% YoY, BCE dépôt 2,00% / refi 2,15%",
+    "• Suisse: CPI 0,2% (core 0,8%), BNS 0,00%, chômage 2,7% (2,9% SA), PIB T1 +0,5% QoQ",
+    "• Chine: PIB T2 +5,2% YoY (+1,1% QoQ) → dynamique robuste malgré tensions",
+    "• Divergence monétaire: Fed restrictive, BCE modérée, BNS à 0% → impacts FX et flux sectoriels"
+  ],
+  "summary": "Rapport mensuel – Août 2025\n\nÉtats‑Unis: désinflation graduelle (CPI 2,7%, core 2,9%), croissance T2 solide (+3,0% annualisé) mais normalisation du marché du travail (chômage 4,2%, NFP +73k). Fed maintient une posture restrictive en attente de signaux plus nets sur prix/salaires.\n\nZone euro: désinflation validée (HICP 2,0%, core 2,3%), activité quasi-stable (T2 +0,1% QoQ / +1,4% YoY). Contraintes structurelles limitent l'élan de croissance.\n\nSuisse: environnement quasi‑déflationniste (CPI 0,2%, core 0,8%) avec BNS à 0,00%. CHF valeur refuge continue de peser, mais l'économie reste résiliente (PIB T1 +0,5% QoQ).\n\nChine: T2 solide (+5,2% YoY, +1,1% QoQ), soutenu par politiques ciblées; risques: immobilier, commerce, géopolitique.\n\nThèmes: divergence monétaire (Fed/BCE/BNS), désinflation à vitesses différenciées, stabilisation cyclique en Chine.",
+  "key_points": [
+    "Divergence de politiques: USD soutenu vs EUR/CHF (tendance de fond)",
+    "Désinflation globale mais hétérogène: duration/qualité favorisées en Europe/Suisse",
+    "Stabilisation Chine: potentiels soutiens matières premières si l'élan perdure",
+    "Risque US: ré‑accélération prix/salaires prolongerait la restriction"
+  ],
+  "geopolitical_analysis": {
+    "conflicts": [
+      "Tensions commerciales récurrentes US–Chine: vigilance sur chaînes d'approvisionnement"
+    ],
+    "trade_relations": [
+      "Europe: normalisation lente des flux, dépendance au cycle US/Asie"
+    ],
+    "sanctions": [
+      "Veille continue: effets principalement visibles sur énergie et logistique"
+    ],
+    "energy_security": [
+      "Prix énergie: surveillance WTI/Brent et stocks US pour biais inflation"
+    ]
+  },
+  "economic_indicators": {
+    "inflation": { "US": "2.7%", "EU": "2.0%", "CH": "0.2%", "trend": "désinflation hétérogène" },
+    "central_banks": [ "Fed: 4.25–4.50%", "BCE: 2.00–2.15%", "BNS: 0.00%" ],
+    "gdp_growth": { "US": "+3.0% (T2 annualisé)", "Eurozone": "+0.1% QoQ / +1.4% YoY", "China": "+5.2% YoY" },
+    "unemployment": { "US": "4.2%", "CH": "2.7% (2.9% SA)" }
+  },
+  "insights": [],
+  "risks": [
+    "US: risque de ré‑accélération de l'inflation (énergie/salaires)",
+    "EU: activité molle prolongée, bénéfices fragiles",
+    "CH: force du CHF pèse sur marges exportatrices",
+    "CN: aléas immobiliers et tensions commerciales"
+  ],
+  "opportunities": [
+    "Qualité défensive US, leaders suisses globaux",
+    "Valeur/rendement en Europe si inflation ancrée à 2%",
+    "Exposition sélective matières premières si Chine confirme l'élan"
+  ],
+  "sources": [
+    { "title": "BEA – GDP", "url": "https://www.bea.gov/" },
+    { "title": "BLS – Employment Situation", "url": "https://www.bls.gov/" },
+    { "title": "Federal Reserve (FOMC)", "url": "https://www.federalreserve.gov/" },
+    { "title": "Eurostat", "url": "https://ec.europa.eu/eurostat" },
+    { "title": "ECB SDW", "url": "https://sdw.ecb.europa.eu/" },
+    { "title": "BNS Data", "url": "https://data.snb.ch/" },
+    { "title": "Trading Economics", "url": "https://tradingeconomics.com/" },
+    { "title": "FRED API", "url": "https://fred.stlouisfed.org/docs/api/" }
+  ],
+  "confidence_score": 0.9
+}
+
+
