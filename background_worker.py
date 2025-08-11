@@ -79,6 +79,12 @@ class MarketAnalysisWorker:
             
             self.is_running = True
             logger.info(f"✅ Worker prêt. Intervalle de vérification: {self.poll_interval_seconds}s")
+
+            # Traitement automatique d'un rapport mensuel si un payload est présent dans le repo
+            try:
+                self._process_monthly_payload_file()
+            except Exception as e:
+                logger.warning(f"⚠️ Impossible de traiter le payload mensuel automatique: {e}")
         except Exception as e:
             logger.error(f"❌ Erreur d'initialisation fatale: {e}")
             raise
@@ -682,6 +688,85 @@ class MarketAnalysisWorker:
         except Exception:
             # En cas de doute, retourner brut sans bloquer l'envoi
             return chr(10).join([f"<li>{p}</li>" for p in (summary_points or [])])
+
+    def _process_monthly_payload_file(self) -> None:
+        """Traite un fichier monthly_report_payload.json s'il est présent (post-déploiement)."""
+        file_path = os.getenv('MONTHLY_PAYLOAD_FILE', 'monthly_report_payload.json')
+        if not os.path.isfile(file_path):
+            logger.info("ℹ️ Aucun payload mensuel détecté")
+            return
+
+        logger.info(f"📥 Payload mensuel détecté: {file_path} — traitement en cours...")
+        with open(file_path, 'r', encoding='utf-8') as f:
+            payload = json.load(f)
+
+        # Déterminer le mois cible
+        report_date = None
+        try:
+            report_date = payload.get('metadata', {}).get('report_date')
+        except Exception:
+            report_date = None
+
+        if report_date:
+            try:
+                dt = datetime.fromisoformat(report_date.replace('Z', '+00:00'))
+            except Exception:
+                dt = datetime.now(timezone.utc)
+        else:
+            dt = datetime.now(timezone.utc)
+        month_key = dt.strftime('%Y-%m')
+
+        # Vérifier si un rapport mensuel existe déjà pour ce mois
+        try:
+            existing = self.db.get_analyses_by_type('monthly', limit=12)
+        except Exception:
+            existing = []
+        for a in existing:
+            try:
+                if a.timestamp:
+                    adt = datetime.fromisoformat(a.timestamp.replace('Z', '+00:00'))
+                    if adt.strftime('%Y-%m') == month_key:
+                        logger.info(f"ℹ️ Rapport mensuel {month_key} déjà présent (ID {a.id}), annulation du traitement.")
+                        return
+            except Exception:
+                continue
+
+        # Insérer le rapport mensuel
+        analysis = MarketAnalysis(
+            analysis_type='monthly',
+            prompt=f'Rapport mensuel – {month_key}',
+            executive_summary=payload.get('executive_summary'),
+            summary=payload.get('summary'),
+            key_points=payload.get('key_points'),
+            structured_data=payload.get('structured_data', {}),
+            geopolitical_analysis=payload.get('geopolitical_analysis'),
+            economic_indicators=payload.get('economic_indicators'),
+            insights=payload.get('insights', []),
+            risks=payload.get('risks', []),
+            opportunities=payload.get('opportunities', []),
+            sources=payload.get('sources', []),
+            confidence_score=payload.get('confidence_score', 0.0),
+            worker_status='completed',
+            processing_time_seconds=0,
+            timestamp=dt.isoformat(),
+        )
+
+        analysis_id = self.db.save_analysis(analysis)
+        if analysis_id:
+            logger.info(f"✅ Rapport mensuel {month_key} inséré (ID {analysis_id}). Envoi email...")
+            try:
+                asyncio.run(self._send_market_analysis_email(analysis_id, payload))
+            except Exception as e:
+                logger.warning(f"⚠️ Envoi email mensuel échoué: {e}")
+            # Renommer le fichier pour éviter retraits
+            try:
+                processed = f"{os.path.splitext(file_path)[0]}.processed_{datetime.now().strftime('%Y%m%d%H%M%S')}.json"
+                os.rename(file_path, processed)
+                logger.info(f"🗂️ Payload archivé: {processed}")
+            except Exception as e:
+                logger.warning(f"⚠️ Impossible d'archiver le payload: {e}")
+        else:
+            logger.error("❌ Échec d'insertion du rapport mensuel")
 
     # NewsAPI analysis path removed
 
