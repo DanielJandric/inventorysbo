@@ -2639,7 +2639,7 @@ Réponds de manière concise et directe."""
             messages.append({"role": "user", "content": user_prompt})
 
             response = self.client.chat.completions.create(
-                model="gpt-4o",
+                model=os.getenv("AI_MODEL", "gpt-4.1"),
                 messages=messages,
                 temperature=0.3,
                 max_tokens=600,
@@ -4013,7 +4013,7 @@ Réponds en JSON avec:
 - price_range (objet avec min et max basés sur le marché)"""
 
         response = openai_client.chat.completions.create(
-            model="gpt-4o",
+            model=os.getenv("AI_MODEL", "gpt-4.1"),
             messages=[
                 {"role": "system", "content": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."},
                 {"role": "user", "content": prompt}
@@ -4125,7 +4125,7 @@ Réponds en JSON avec:
 - market_trend (hausse/stable/baisse)"""
 
             response = openai_client.chat.completions.create(
-                model="gpt-4o",
+                model=os.getenv("AI_MODEL", "gpt-4.1"),
                 messages=[
                     {"role": "system", "content": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."},
                     {"role": "user", "content": prompt}
@@ -4260,7 +4260,7 @@ Réponds en JSON avec:
 - market_trend (hausse/stable/baisse)"""
 
                 response = openai_client.chat.completions.create(
-                    model="gpt-4o",
+                    model=os.getenv("AI_MODEL", "gpt-4.1"),
                     messages=[
                         {"role": "system", "content": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."},
                         {"role": "user", "content": prompt}
@@ -6884,7 +6884,7 @@ Recherche les données de marché actuelles pour :
 Si une classe d'actif n'a pas bougé, dis-le clairement sans meubler. Génère un briefing pour aujourd'hui basé sur les données de marché réelles trouvées."""
 
         response = openai_client.chat.completions.create(
-            model="gpt-4o",
+            model=os.getenv("AI_MODEL", "gpt-4.1"),
             messages=[
                 {"role": "system", "content": "Tu es un expert en marchés financiers. Utilise la recherche web pour des données actuelles."},
                 {"role": "user", "content": prompt}

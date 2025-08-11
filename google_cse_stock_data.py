@@ -216,7 +216,7 @@ class GoogleCSEStockDataManager:
         
         try:
             response = self.openai_client.chat.completions.create(
-                model="gpt-4",
+                model=os.getenv("AI_MODEL", "gpt-4.1"),
                 messages=[
                     {"role": "system", "content": "Tu es un analyste financier expert spécialisé dans les rapports de marché."},
                     {"role": "user", "content": prompt}

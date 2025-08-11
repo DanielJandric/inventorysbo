@@ -98,7 +98,7 @@ class OpenAIWebSearchManager:
             
             # Effectuer la recherche via OpenAI
             response = self.openai_client.responses.create(
-                model="gpt-4o",
+                model=os.getenv("AI_MODEL", "gpt-4.1"),
                 tools=tools_config,
                 input=query
             )
@@ -280,7 +280,7 @@ Si une classe d'actif n'a pas bougé, dis-le clairement sans meubler. Génère u
             
             # Effectuer la recherche via OpenAI
             response = self.openai_client.responses.create(
-                model="gpt-4o",
+                model=os.getenv("AI_MODEL", "gpt-4.1"),
                 tools=tools_config,
                 input=prompt
             )

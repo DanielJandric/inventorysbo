@@ -259,8 +259,9 @@ Format JSON:
     def _generate_ai_report(self, prompt: str) -> EnhancedMarketReport:
         """Génère le rapport avec l'IA"""
         try:
+            import os
             response = self.openai_client.chat.completions.create(
-                model="gpt-4",
+                model=os.getenv("AI_MODEL", "gpt-4.1"),
                 messages=[
                     {"role": "system", "content": "Tu es un analyste financier expert avec 20 ans d'expérience. Tu utilises Google CSE comme source principale pour tes analyses."},
                     {"role": "user", "content": prompt}
