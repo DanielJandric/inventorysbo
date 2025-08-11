@@ -87,22 +87,35 @@ class MarketAnalysisWorker:
         start_time = time.time()
         task_id = task.id
         logger.info(f"📊 Prise en charge de la tâche #{task_id}...")
+        logger.info(f"   - Type: {task.analysis_type}")
+        logger.info(f"   - Prompt: {task.prompt[:100]}...")
 
         try:
             # 1. Mettre à jour le statut à "processing"
+            logger.info(f"🔄 Mise à jour du statut de la tâche #{task_id} à 'processing'...")
             self.db.update_analysis_status(task_id, 'processing')
 
             # 2. Exécuter l'analyse (ScrapingBee uniquement)
             prompt = task.prompt or "Analyse générale des marchés financiers avec focus sur l'IA."
+            logger.info(f"🕷️ Création de la tâche ScrapingBee avec prompt: {prompt[:100]}...")
             scraper_task_id = await self.scraper.create_scraping_task(prompt, 3)
+            
+            logger.info(f"🚀 Exécution de la tâche ScrapingBee {scraper_task_id}...")
             result = await self.scraper.execute_scraping_task(scraper_task_id)
 
 
             # 3. Traiter le résultat
             if "error" in result:
+                logger.error(f"❌ Erreur reçue de ScrapingBee: {result['error']}")
                 raise ValueError(result['error'])
 
             processing_time = int(time.time() - start_time)
+            
+            logger.info(f"📊 Résultats obtenus:")
+            logger.info(f"   - Résumé: {len(result.get('summary', ''))} caractères")
+            logger.info(f"   - Points clés: {len(result.get('key_points', []))} points")
+            logger.info(f"   - Insights: {len(result.get('insights', []))} insights")
+            logger.info(f"   - Sources: {len(result.get('sources', []))} sources")
             
             # 4. Mettre à jour la tâche avec les résultats complets
             update_data = {
@@ -117,6 +130,8 @@ class MarketAnalysisWorker:
                 'worker_status': 'completed',
                 'processing_time_seconds': processing_time
             }
+            
+            logger.info(f"💾 Sauvegarde des résultats dans la base de données...")
             self.db.update_analysis(task_id, update_data)
             logger.info(f"✅ Tâche #{task_id} terminée avec succès en {processing_time}s.")
 
@@ -134,12 +149,18 @@ class MarketAnalysisWorker:
     async def run_continuous_loop(self):
         """Boucle principale qui recherche et traite les tâches."""
         logger.info("🔄 Démarrage de la boucle de traitement des tâches...")
+        check_count = 0
         while self.is_running:
             try:
+                check_count += 1
+                if check_count % 20 == 1:  # Log toutes les 5 minutes environ
+                    logger.info(f"👀 Vérification #{check_count} des tâches en attente...")
+                
                 # Chercher une tâche en attente
                 pending_task = self.db.get_pending_analysis()
 
                 if pending_task:
+                    logger.info(f"🎯 Tâche trouvée! ID: {pending_task.id}, Type: {pending_task.analysis_type}")
                     await self.process_task(pending_task)
                 else:
                     # Pas de tâche, on attend avant de vérifier à nouveau
