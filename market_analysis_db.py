@@ -22,6 +22,7 @@ class MarketAnalysis:
     timestamp: Optional[str] = None
     analysis_type: str = 'automatic'
     prompt: Optional[str] = None
+    executive_summary: Optional[List[str]] = None
     summary: Optional[str] = None
     key_points: Optional[List[str]] = None
     structured_data: Optional[Dict[str, Any]] = None
@@ -40,6 +41,8 @@ class MarketAnalysis:
         """Convertit en dictionnaire pour Supabase"""
         data = asdict(self)
         # Convertir les listes en JSONB pour Supabase
+        if self.executive_summary:
+            data['executive_summary'] = json.dumps(self.executive_summary)
         if self.key_points:
             data['key_points'] = json.dumps(self.key_points)
         if self.insights:
@@ -60,7 +63,7 @@ class MarketAnalysis:
         """Convertit en dictionnaire pour le frontend (JSON valide)."""
         data = asdict(self)
         # Assurer que les champs JSON sont des listes/dict et non des strings
-        for field in ['key_points', 'insights', 'risks', 'opportunities', 'sources', 'structured_data']:
+        for field in ['executive_summary', 'key_points', 'insights', 'risks', 'opportunities', 'sources', 'structured_data']:
             if isinstance(data.get(field), str):
                 try:
                     data[field] = json.loads(data[field])
@@ -79,6 +82,8 @@ class MarketAnalysis:
     def from_dict(cls, data: Dict[str, Any]) -> 'MarketAnalysis':
         """Crée une instance depuis un dictionnaire de Supabase"""
         # Convertir les JSONB en listes/dictionnaires
+        if isinstance(data.get('executive_summary'), str):
+            data['executive_summary'] = json.loads(data['executive_summary'])
         if isinstance(data.get('key_points'), str):
             data['key_points'] = json.loads(data['key_points'])
         if isinstance(data.get('insights'), str):

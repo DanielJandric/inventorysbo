@@ -112,6 +112,7 @@ class MarketAnalysisWorker:
             processing_time = int(time.time() - start_time)
             
             logger.info(f"📊 Résultats obtenus:")
+            logger.info(f"   - Executive Summary: {len(result.get('executive_summary', []))} points")
             logger.info(f"   - Résumé: {len(result.get('summary', ''))} caractères")
             logger.info(f"   - Points clés: {len(result.get('key_points', []))} points")
             logger.info(f"   - Insights: {len(result.get('insights', []))} insights")
@@ -119,6 +120,7 @@ class MarketAnalysisWorker:
             
             # 4. Mettre à jour la tâche avec les résultats complets
             update_data = {
+                'executive_summary': result.get('executive_summary', []),
                 'summary': result.get('summary'),
                 'key_points': result.get('key_points', []),
                 'structured_data': result.get('structured_data', {}),

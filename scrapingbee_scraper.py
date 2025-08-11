@@ -394,6 +394,13 @@ class ScrapingBeeScraper:
 
 STRUCTURE OBLIGATOIRE DE LA RÉPONSE JSON :
 {
+    "executive_summary": [
+        "• Point majeur 1: Description concise et percutante",
+        "• Point majeur 2: Description concise et percutante",
+        "• Point majeur 3: Description concise et percutante",
+        "• Point majeur 4: Description concise et percutante",
+        "• Point majeur 5: Description concise et percutante"
+    ],
     "market_snapshot": {
         "indices": {
             "S&P 500": {"price": 5447.87, "change": -8.55, "change_percent": -0.16},
@@ -420,7 +427,9 @@ STRUCTURE OBLIGATOIRE DE LA RÉPONSE JSON :
     "sources_analysis": "Une brève critique de la fiabilité des sources textuelles fournies.",
     "confidence_score": 0.95,
     "sources": [{"title": "Titre de la source 1", "url": "URL de la source 1"}]
-}"""
+}
+
+IMPORTANT: L'executive_summary doit contenir EXACTEMENT 5 bullet points percutants qui capturent l'essence de la situation actuelle des marchés. Chaque point doit commencer par "•" et être court mais informatif."""
             
             model_name = os.getenv("AI_MODEL", "gpt-4.1")
             logger.info(f"🤖 Appel à l'API OpenAI ({model_name}) en cours pour une analyse exhaustive...")
