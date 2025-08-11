@@ -136,6 +136,9 @@ class MarketAnalysisWorker:
             logger.info(f"💾 Sauvegarde des résultats dans la base de données...")
             self.db.update_analysis(task_id, update_data)
             logger.info(f"✅ Tâche #{task_id} terminée avec succès en {processing_time}s.")
+            
+            # 5. Envoyer le rapport par email (si configuré)
+            await self._send_market_analysis_email(task_id, result)
 
         except Exception as e:
             logger.error(f"❌ Erreur lors du traitement de la tâche #{task_id}: {e}")
@@ -145,6 +148,213 @@ class MarketAnalysisWorker:
                 'error_message': str(e),
                 'processing_time_seconds': processing_time
             })
+
+    async def _send_market_analysis_email(self, task_id: int, analysis_result: Dict):
+        """Envoie le rapport d'analyse de marché par email."""
+        try:
+            # Vérifier la configuration email
+            email_host = os.getenv("EMAIL_HOST", "smtp.gmail.com")
+            email_port = int(os.getenv("EMAIL_PORT", "587"))
+            email_user = os.getenv("EMAIL_USER")
+            email_password = os.getenv("EMAIL_PASSWORD")
+            recipients = [e.strip() for e in os.getenv("EMAIL_RECIPIENTS", "").split(",") if e.strip()]
+            
+            if not (email_user and email_password and recipients):
+                logger.info("ℹ️ Configuration email incomplète, pas d'envoi")
+                return
+            
+            # Récupérer l'analyse complète depuis la DB
+            analysis = self.db.get_analysis_by_id(task_id)
+            if not analysis:
+                logger.warning(f"⚠️ Impossible de récupérer l'analyse #{task_id} pour l'email")
+                return
+            
+            # Préparer le contenu HTML
+            html_content = self._generate_market_analysis_html(analysis, analysis_result)
+            
+            # Créer et envoyer l'email
+            msg = MIMEMultipart('alternative')
+            msg['From'] = email_user
+            msg['To'] = ", ".join(recipients)
+            msg['Subject'] = f"[BONVIN] Rapport d'Analyse de Marché - {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+            
+            msg.attach(MIMEText(html_content, 'html', 'utf-8'))
+            
+            with smtplib.SMTP(email_host, email_port) as server:
+                server.starttls()
+                server.login(email_user, email_password)
+                server.send_message(msg)
+            
+            logger.info(f"📧 Rapport d'analyse #{task_id} envoyé par email à {len(recipients)} destinataires")
+            
+        except Exception as e:
+            logger.error(f"❌ Erreur envoi email rapport #{task_id}: {e}")
+
+    def _generate_market_analysis_html(self, analysis: 'MarketAnalysis', result: Dict) -> str:
+        """Génère le contenu HTML pour l'email."""
+        # Récupérer les données du snapshot de marché
+        from stock_api_manager import stock_api_manager
+        market_snapshot = stock_api_manager.get_market_snapshot()
+        
+        # Générer le HTML
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <style>
+                body {{ font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }}
+                .container {{ max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+                .header {{ text-align: center; border-bottom: 3px solid #1e3a8a; padding-bottom: 20px; margin-bottom: 30px; }}
+                .header h1 {{ color: #1e3a8a; margin: 0; }}
+                .header .date {{ color: #666; font-size: 14px; margin-top: 10px; }}
+                .executive-summary {{ background: linear-gradient(135deg, #1e3a8a, #3b82f6); color: white; padding: 20px; border-radius: 8px; margin-bottom: 30px; }}
+                .executive-summary h2 {{ margin-top: 0; color: #fbbf24; }}
+                .executive-summary ul {{ margin: 0; padding-left: 20px; }}
+                .executive-summary li {{ margin-bottom: 8px; font-size: 16px; }}
+                .section {{ margin-bottom: 30px; }}
+                .section h3 {{ color: #1e3a8a; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px; }}
+                .market-snapshot {{ background: #f8fafc; padding: 20px; border-radius: 8px; border-left: 4px solid #3b82f6; }}
+                .market-snapshot table {{ width: 100%; border-collapse: collapse; }}
+                .market-snapshot th, .market-snapshot td {{ padding: 8px; text-align: left; border-bottom: 1px solid #e5e7eb; }}
+                .market-snapshot th {{ background: #3b82f6; color: white; }}
+                .insights {{ background: #fef3c7; padding: 20px; border-radius: 8px; border-left: 4px solid #f59e0b; }}
+                .risks {{ background: #fee2e2; padding: 20px; border-radius: 8px; border-left: 4px solid #ef4444; }}
+                .opportunities {{ background: #dcfce7; padding: 20px; border-radius: 8px; border-left: 4px solid #22c55e; }}
+                .footer {{ text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e7eb; color: #666; font-size: 12px; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>📊 RAPPORT D'ANALYSE DE MARCHÉ</h1>
+                    <div class="date">Généré le {datetime.now().strftime('%d/%m/%Y à %H:%M')}</div>
+                </div>
+                
+                <!-- Executive Summary -->
+                <div class="executive-summary">
+                    <h2>🎯 EXECUTIVE SUMMARY</h2>
+                    <ul>
+                        {chr(10).join([f'<li>{point}</li>' for point in (result.get('executive_summary', []) or [])])}
+                    </ul>
+                </div>
+                
+                <!-- Résumé détaillé -->
+                <div class="section">
+                    <h3>📝 Résumé de l'Analyse</h3>
+                    <p>{result.get('summary', 'Aucun résumé disponible')}</p>
+                </div>
+                
+                <!-- Aperçu du marché -->
+                <div class="section">
+                    <h3>📈 Aperçu du Marché</h3>
+                    <div class="market-snapshot">
+                        <table>
+                            <thead>
+                                <tr><th>Actif</th><th>Prix</th><th>Variation</th><th>Source</th></tr>
+                            </thead>
+                            <tbody>
+                                {self._generate_market_snapshot_rows(market_snapshot)}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <!-- Points clés -->
+                <div class="section">
+                    <h3>🔑 Points Clés</h3>
+                    <ul>
+                        {chr(10).join([f'<li>{point}</li>' for point in (result.get('key_points', []) or [])])}
+                    </ul>
+                </div>
+                
+                <!-- Insights -->
+                <div class="insights">
+                    <h3>💡 Insights</h3>
+                    <ul>
+                        {chr(10).join([f'<li>{insight}</li>' for insight in (result.get('insights', []) or [])])}
+                    </ul>
+                </div>
+                
+                <!-- Risques -->
+                <div class="risks">
+                    <h3>⚠️ Risques Identifiés</h3>
+                    <ul>
+                        {chr(10).join([f'<li>{risk}</li>' for insight in (result.get('risks', []) or [])])}
+                    </ul>
+                </div>
+                
+                <!-- Opportunités -->
+                <div class="opportunities">
+                    <h3>🚀 Opportunités</h3>
+                    <ul>
+                        {chr(10).join([f'<li>{opp}</li>' for opp in (result.get('opportunities', []) or [])])}
+                    </ul>
+                </div>
+                
+                <!-- Sources -->
+                <div class="section">
+                    <h3>📚 Sources</h3>
+                    <ul>
+                        {chr(10).join([f'<li><a href="{source.get("url", "#")}" target="_blank">{source.get("title", "Source")}</a></li>' for source in (result.get('sources', []) or [])])}
+                    </ul>
+                </div>
+                
+                <div class="footer">
+                    <p>Rapport généré automatiquement par le système BONVIN Collection</p>
+                    <p>Confiance: {result.get('confidence_score', 0) * 100:.1f}%</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        return html
+
+    def _generate_market_snapshot_rows(self, snapshot: Dict) -> str:
+        """Génère les lignes du tableau de snapshot de marché."""
+        rows = []
+        
+        if snapshot.get('indices'):
+            rows.append('<tr><td colspan="4" style="background: #e5e7eb; font-weight: bold; padding: 10px;">Indices</td></tr>')
+            for name, data in snapshot['indices'].items():
+                change_color = 'green' if data.get('change', 0) >= 0 else 'red'
+                rows.append(f'''
+                    <tr>
+                        <td><strong>{name}</strong></td>
+                        <td>{data.get('price', 'N/A')}</td>
+                        <td style="color: {change_color}">{data.get('change', 'N/A')} ({data.get('change_percent', 'N/A')}%)</td>
+                        <td>yfinance</td>
+                    </tr>
+                ''')
+        
+        if snapshot.get('commodities'):
+            rows.append('<tr><td colspan="4" style="background: #e5e7eb; font-weight: bold; padding: 10px;">Matières Premières</td></tr>')
+            for name, data in snapshot['commodities'].items():
+                change_color = 'green' if data.get('change', 0) >= 0 else 'red'
+                rows.append(f'''
+                    <tr>
+                        <td><strong>{name}</strong></td>
+                        <td>{data.get('price', 'N/A')}</td>
+                        <td style="color: {change_color}">{data.get('change', 'N/A')} ({data.get('change_percent', 'N/A')}%)</td>
+                        <td>yfinance</td>
+                    </tr>
+                ''')
+        
+        if snapshot.get('crypto'):
+            rows.append('<tr><td colspan="4" style="background: #e5e7eb; font-weight: bold; padding: 10px;">Cryptomonnaies</td></tr>')
+            for name, data in snapshot['crypto'].items():
+                change_color = 'green' if data.get('change', 0) >= 0 else 'red'
+                rows.append(f'''
+                    <tr>
+                        <td><strong>{name}</strong></td>
+                        <td>{data.get('price', 'N/A')}</td>
+                        <td style="color: {change_color}">{data.get('change', 'N/A')} ({data.get('change_percent', 'N/A')}%)</td>
+                        <td>yfinance</td>
+                    </tr>
+                ''')
+        
+        return chr(10).join(rows) if rows else '<tr><td colspan="4">Aucune donnée disponible</td></tr>'
 
     # NewsAPI analysis path removed
 

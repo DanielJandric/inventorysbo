@@ -249,6 +249,31 @@ class MarketAnalysisDB:
             logger.error(f"❌ Erreur update_analysis: {e}")
             return False
 
+    def get_analysis_by_id(self, analysis_id: int) -> Optional[MarketAnalysis]:
+        """Récupère une analyse spécifique par son ID."""
+        try:
+            if not self.is_connected():
+                logger.error("❌ Pas de connexion à Supabase")
+                return None
+            
+            result = self.supabase.table('market_analyses')\
+                .select('*')\
+                .eq('id', analysis_id)\
+                .execute()
+            
+            if result.data:
+                analysis_data = result.data[0]
+                analysis = MarketAnalysis.from_dict(analysis_data)
+                logger.info(f"✅ Analyse #{analysis_id} récupérée")
+                return analysis
+            else:
+                logger.warning(f"⚠️ Aucune analyse trouvée avec l'ID {analysis_id}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"❌ Erreur récupération analyse #{analysis_id}: {e}")
+            return None
+
     
     def get_worker_status(self) -> Dict[str, Any]:
         """Récupère le statut du Background Worker"""
