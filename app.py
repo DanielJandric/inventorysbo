@@ -8062,7 +8062,8 @@ def trigger_background_worker():
         db = get_market_analysis_db()
         
         # Récupérer le prompt du corps de la requête, avec une valeur par défaut
-        request_data = request.get_json() or {}
+        # Tolérant au manque d'en-tête Content-Type: application/json
+        request_data = request.get_json(silent=True) or {}
         prompt = request_data.get('prompt', "Résume moi parfaitement et d'une façon exhaustive la situation sur les marchés financiers aujourd'hui. Aussi, je veux un focus particulier sur l'IA.")
 
         # Vérifier s'il y a déjà une analyse en cours

@@ -335,8 +335,10 @@ class IntelligentScraper:
             }
             """
             
+            from os import getenv
+            model_name = getenv("AI_MODEL", "gpt-4.1")
             response = self.openai_client.chat.completions.create(
-                model="gpt-4-turbo-preview",
+                model=model_name,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"Demande: {prompt}\n\nDonnées collectées:\n{context}"}

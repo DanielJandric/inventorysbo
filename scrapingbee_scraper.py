@@ -422,9 +422,10 @@ STRUCTURE OBLIGATOIRE DE LA RÉPONSE JSON :
     "sources": [{"title": "Titre de la source 1", "url": "URL de la source 1"}]
 }"""
             
-            logger.info("🤖 Appel à l'API OpenAI (gpt-4o) en cours pour une analyse exhaustive...")
+            model_name = os.getenv("AI_MODEL", "gpt-4.1")
+            logger.info(f"🤖 Appel à l'API OpenAI ({model_name}) en cours pour une analyse exhaustive...")
             response = client.chat.completions.create(
-                model="gpt-4o",
+                model=model_name,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"Demande: {prompt}\n\nDONNÉES FACTUELLES (snapshot):\n{json.dumps(market_snapshot, indent=2)}\n\nDONNÉES COLLECTÉES (articles):\n{context}"}
