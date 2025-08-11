@@ -26,6 +26,8 @@ class MarketAnalysis:
     summary: Optional[str] = None
     key_points: Optional[List[str]] = None
     structured_data: Optional[Dict[str, Any]] = None
+    geopolitical_analysis: Optional[Dict[str, Any]] = None
+    economic_indicators: Optional[Dict[str, Any]] = None
     insights: Optional[List[str]] = None
     risks: Optional[List[str]] = None
     opportunities: Optional[List[str]] = None
@@ -55,6 +57,10 @@ class MarketAnalysis:
             data['sources'] = json.dumps(self.sources)
         if self.structured_data:
             data['structured_data'] = json.dumps(self.structured_data)
+        if self.geopolitical_analysis:
+            data['geopolitical_analysis'] = json.dumps(self.geopolitical_analysis)
+        if self.economic_indicators:
+            data['economic_indicators'] = json.dumps(self.economic_indicators)
         
         # Supprimer les champs None
         return {k: v for k, v in data.items() if v is not None}
@@ -63,15 +69,19 @@ class MarketAnalysis:
         """Convertit en dictionnaire pour le frontend (JSON valide)."""
         data = asdict(self)
         # Assurer que les champs JSON sont des listes/dict et non des strings
-        for field in ['executive_summary', 'key_points', 'insights', 'risks', 'opportunities', 'sources', 'structured_data']:
+        json_fields = ['executive_summary', 'key_points', 'insights', 'risks', 'opportunities', 'sources', 'structured_data', 'geopolitical_analysis', 'economic_indicators']
+        dict_fields = {'structured_data', 'geopolitical_analysis', 'economic_indicators'}
+        for field in json_fields:
             if isinstance(data.get(field), str):
                 try:
                     data[field] = json.loads(data[field])
                 except (json.JSONDecodeError, TypeError):
                     logger.warning(f"Impossible de décoder le JSON pour le champ {field}")
                     # Remplacer par une valeur par défaut en cas d'erreur
-                    if field in ['structured_data', 'sources']:
-                        data[field] = {} if field == 'structured_data' else []
+                    if field in dict_fields:
+                        data[field] = {}
+                    elif field == 'sources':
+                        data[field] = []
                     else:
                         data[field] = []
         
@@ -96,6 +106,10 @@ class MarketAnalysis:
             data['sources'] = json.loads(data['sources'])
         if isinstance(data.get('structured_data'), str):
             data['structured_data'] = json.loads(data['structured_data'])
+        if isinstance(data.get('geopolitical_analysis'), str):
+            data['geopolitical_analysis'] = json.loads(data['geopolitical_analysis'])
+        if isinstance(data.get('economic_indicators'), str):
+            data['economic_indicators'] = json.loads(data['economic_indicators'])
         
         return cls(**data)
 

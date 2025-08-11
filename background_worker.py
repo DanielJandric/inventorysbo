@@ -125,6 +125,8 @@ class MarketAnalysisWorker:
                 'summary': result.get('summary'),
                 'key_points': result.get('key_points', []),
                 'structured_data': result.get('structured_data', {}),
+                'geopolitical_analysis': result.get('geopolitical_analysis', {}),
+                'economic_indicators': result.get('economic_indicators', {}),
                 'insights': result.get('insights', []),
                 'risks': result.get('risks', []),
                 'opportunities': result.get('opportunities', []),
