@@ -215,6 +215,32 @@ class MarketAnalysisDB:
             logger.error(f"❌ Erreur récupération analyses par type: {e}")
             return []
 
+    def get_recent_analyses(self, limit: int = 15) -> List[MarketAnalysis]:
+        """Retourne les dernières analyses (tous types), triées par created_at décroissant."""
+        try:
+            if not self.is_connected():
+                logger.error("❌ Pas de connexion à Supabase")
+                return []
+
+            result = self.supabase.table('market_analyses') \
+                .select('*') \
+                .order('created_at', desc=True) \
+                .limit(limit) \
+                .execute()
+
+            analyses: List[MarketAnalysis] = []
+            for data in result.data or []:
+                try:
+                    analyses.append(MarketAnalysis.from_dict(data))
+                except Exception as e:
+                    logger.warning(f"⚠️ Analyse ignorée (deserialization): {e}")
+
+            logger.info(f"✅ {len(analyses)} analyses récentes récupérées")
+            return analyses
+        except Exception as e:
+            logger.error(f"❌ Erreur get_recent_analyses: {e}")
+            return []
+
     def get_pending_analysis(self) -> Optional[MarketAnalysis]:
         """Récupère la plus ancienne analyse en attente."""
         try:

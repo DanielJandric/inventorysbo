@@ -8138,6 +8138,22 @@ def get_background_worker_status():
             "analysis": latest_analysis.to_frontend_dict()
         })
 
+
+@app.route("/api/market-analyses/recent", methods=["GET"])
+def get_recent_market_analyses():
+    """Retourne les 15 dernières analyses pour affichage dans la page marchés."""
+    try:
+        from market_analysis_db import get_market_analysis_db
+        db = get_market_analysis_db()
+        items = db.get_recent_analyses(limit=15)
+        return jsonify({
+            "success": True,
+            "items": [a.to_frontend_dict() for a in items]
+        })
+    except Exception as e:
+        logger.error(f"Erreur get_recent_market_analyses: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
     except Exception as e:
         logger.error(f"Erreur statut Background Worker: {e}")
         return jsonify({"status": "error", "error": str(e)}), 500
