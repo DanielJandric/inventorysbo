@@ -474,7 +474,7 @@ STRUCTURE OBLIGATOIRE DE LA RÉPONSE JSON (ADAPTÉE À NOTRE SYSTÈME):
 }
 
 IMPORTANT: 
-- L'executive_summary doit contenir EXACTEMENT 5 bullet points avec des VALEURS NUMÉRIQUES (prix, pourcentages, montants)
+- L'executive_summary doit contenir EXACTEMENT 10 bullet points, bien répartis entre catégories, avec des VALEURS NUMÉRIQUES (prix, pourcentages, montants)
 - Intégrer systématiquement l'analyse GÉOPOLITIQUE et ÉCONOMIQUE
 - Utiliser des données chiffrées dans CHAQUE section
 - Format: "• [Actif/Thème]: [Valeur] ([Variation]) - [Impact/Contexte]"
