@@ -13,6 +13,10 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import smtplib
 from typing import Dict, List, Optional
+try:
+    from zoneinfo import ZoneInfo  # Python 3.9+
+except Exception:
+    ZoneInfo = None  # fallback
 from dotenv import load_dotenv
 
 # Optional Redis cache
@@ -209,11 +213,20 @@ class MarketAnalysisWorker:
             # Préparer le contenu HTML
             html_content = self._generate_market_analysis_html(analysis, analysis_result)
             
-            # Créer et envoyer l'email
+            # Créer et envoyer l'email (horodatage CET/CEST par défaut: Europe/Zurich)
             msg = MIMEMultipart('alternative')
             msg['From'] = email_user
             msg['To'] = ", ".join(recipients)
-            msg['Subject'] = f"[BONVIN] Rapport d'Analyse de Marché - {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+            try:
+                tz_name = os.getenv("REPORT_TIMEZONE", "Europe/Zurich")
+                if ZoneInfo:
+                    now_local = datetime.now(ZoneInfo(tz_name))
+                else:
+                    now_local = datetime.utcnow()  # fallback
+                ts_str = now_local.strftime('%d/%m/%Y %H:%M %Z')
+            except Exception:
+                ts_str = datetime.utcnow().strftime('%d/%m/%Y %H:%M UTC')
+            msg['Subject'] = f"[BONVIN] Rapport d'Analyse de Marché - {ts_str}"
             
             msg.attach(MIMEText(html_content, 'html', 'utf-8'))
             
@@ -229,9 +242,19 @@ class MarketAnalysisWorker:
 
     def _generate_market_analysis_html(self, analysis: 'MarketAnalysis', result: Dict) -> str:
         """Génère le contenu HTML pour l'email."""
-        # Récupérer les données du snapshot de marché
+        # Récupérer les données du snapshot de marché (chiffres en quasi temps réel via yfinance)
         from stock_api_manager import stock_api_manager
         market_snapshot = stock_api_manager.get_market_snapshot()
+        # Timestamp local pour affichage
+        try:
+            tz_name = os.getenv("REPORT_TIMEZONE", "Europe/Zurich")
+            if ZoneInfo:
+                now_local = datetime.now(ZoneInfo(tz_name))
+            else:
+                now_local = datetime.utcnow()
+            ts_str = now_local.strftime('%d/%m/%Y à %H:%M %Z')
+        except Exception:
+            ts_str = datetime.utcnow().strftime('%d/%m/%Y à %H:%M UTC')
         
         # Générer le HTML optimisé pour mobile
         html = f"""
@@ -431,7 +454,7 @@ class MarketAnalysisWorker:
             <div class="container">
                 <div class="header">
                     <h1>📊 RAPPORT D'ANALYSE DE MARCHÉ</h1>
-                    <div class="date">Généré le {datetime.now().strftime('%d/%m/%Y à %H:%M')}</div>
+                    <div class="date">Généré le {ts_str}</div>
                 </div>
                 
                 <!-- Executive Summary avec valeurs (validées) -->

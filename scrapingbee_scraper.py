@@ -475,6 +475,10 @@ STRUCTURE OBLIGATOIRE DE LA RÉPONSE JSON (ADAPTÉE À NOTRE SYSTÈME):
     "sources": [{"title": "Titre de la source", "url": "URL"}]
 }
 
+PRIORITÉ TEMPORELLE:
+- Accorde une importance élevée aux informations TEXTUELLES très récentes (news/headlines, mouvements récents, changements de régimes). Mets à jour ton analyse en conséquence.
+- Les CHIFFRES (prix, variations) proviennent du market_snapshot en quasi temps réel: ne les contredis pas. Utilise-les comme vérité de référence.
+
 IMPORTANT: 
 - L'executive_summary doit contenir EXACTEMENT 10 bullet points, bien répartis entre catégories, avec des VALEURS NUMÉRIQUES (prix, pourcentages, montants)
 - Intégrer systématiquement l'analyse GÉOPOLITIQUE et ÉCONOMIQUE
