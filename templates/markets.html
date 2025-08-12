@@ -227,24 +227,6 @@
 
             function renderAnalysis(analysis) {
                 resultDiv.classList.remove('hidden');
-                const snapshot = analysis.market_snapshot || {};
-
-                const renderSnapshotRows = (data) => Object.entries(data).map(([name, values]) => {
-                    const formatChange = (change, percent) => {
-                        if (change === undefined || percent === undefined) return '';
-                        const changeValue = parseFloat(change);
-                        const color = changeValue >= 0 ? 'text-green-400' : 'text-red-400';
-                        const icon = changeValue >= 0 ? '<i class="fas fa-arrow-up"></i>' : '<i class="fas fa-arrow-down"></i>';
-                        return `<span class="${color}">${icon} ${changeValue.toFixed(2)} (${parseFloat(percent).toFixed(2)}%)</span>`;
-                    };
-                    return `<tr>
-                                <td class="py-2 pr-4 font-semibold">${name}</td>
-                                <td class="py-2 pr-4">${values.price ? values.price.toFixed(2) : 'N/A'}</td>
-                                <td class="py-2 pr-4">${formatChange(values.change, values.change_percent)}</td>
-                                <td class="py-2 text-cyan-200/60 text-xs">${values.source || 'N/A'}</td>
-                            </tr>`;
-                }).join('');
-
                 resultDiv.innerHTML = `
                     <h3 class="text-xl font-semibold mb-4">Résultats de l'Analyse</h3>
                     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -257,29 +239,13 @@
                             </div>
                         </div>
                         ` : ''}
-                        <!-- Snapshot -->
-                        <div class="glass p-4 rounded-xl lg:col-span-2">
-                            <h5 class="font-medium mb-3"><i class="fas fa-chart-pie mr-2"></i>Aperçu du Marché</h5>
-                            <div class="overflow-x-auto">
-                                <table class="min-w-full text-left text-sm">
-                                    <thead class="text-cyan-200/70">
-                                        <tr><th class="py-2 pr-4">Actif</th><th class="py-2 pr-4">Dernier Prix</th><th class="py-2 pr-4">Variation</th><th class="py-2">Source</th></tr>
-                                    </thead>
-                                    <tbody class="divide-y divide-white/10">
-                                        ${snapshot.indices ? `<tr><td colspan=4 class='pt-4 pb-2 text-cyan-200/80 font-semibold'>Indices</td></tr>${renderSnapshotRows(snapshot.indices)}` : ''}
-                                        ${snapshot.commodities ? `<tr><td colspan=4 class='pt-4 pb-2 text-cyan-200/80 font-semibold'>Matières Premières</td></tr>${renderSnapshotRows(snapshot.commodities)}` : ''}
-                                        ${snapshot.crypto ? `<tr><td colspan=4 class='pt-4 pb-2 text-cyan-200/80 font-semibold'>Cryptomonnaies</td></tr>${renderSnapshotRows(snapshot.crypto)}` : ''}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                        <!-- Analyse IA -->
-                        <div class="glass p-4 rounded-xl"><h6 class="font-medium mb-2"><i class="fas fa-chart-line mr-2"></i>Résumé</h6><p class="text-cyan-100/80 text-sm">${analysis.summary || 'N/A'}</p></div>
-                        <div class="glass p-4 rounded-xl"><h6 class="font-medium mb-2"><i class="fas fa-list mr-2"></i>Points Clés</h6><ul class="list-disc list-inside text-cyan-100/80 text-sm">${(analysis.key_points || []).map(p => `<li>${p}</li>`).join('')}</ul></div>
-                        <div class="glass p-4 rounded-xl"><h6 class="font-medium mb-2"><i class="fas fa-lightbulb mr-2"></i>Insights</h6><ul class="list-disc list-inside text-cyan-100/80 text-sm">${(analysis.insights || []).map(p => `<li>${p}</li>`).join('')}</ul></div>
-                        <div class="glass p-4 rounded-xl"><h6 class="font-medium mb-2"><i class="fas fa-exclamation-triangle mr-2"></i>Risques</h6><ul class="list-disc list-inside text-cyan-100/80 text-sm">${(analysis.risks || []).map(p => `<li>${p}</li>`).join('')}</ul></div>
-                        <div class="glass p-4 rounded-xl lg:col-span-2"><h6 class="font-medium mb-2"><i class="fas fa-star mr-2"></i>Opportunités</h6><ul class="list-disc list-inside text-cyan-100/80 text-sm">${(analysis.opportunities || []).map(p => `<li>${p}</li>`).join('')}</ul></div>
-                        <div class="glass p-4 rounded-xl lg:col-span-2"><h6 class="font-medium mb-2"><i class="fas fa-link mr-2"></i>Sources</h6><ul class="list-disc list-inside text-sm">${(analysis.sources || []).map(s => `<li><a class='text-cyan-300 hover:underline' href="${s.url}" target="_blank">${s.title}</a></li>`).join('')}</ul></div>
+                        <!-- Analyse IA (cartes colorées sobres) -->
+                        <div class="glass p-4 rounded-xl bg-indigo-500/10 border border-indigo-400/30"><h6 class="font-medium mb-2"><i class="fas fa-chart-line mr-2"></i>Résumé</h6><p class="text-indigo-100/80 text-sm">${analysis.summary || 'N/A'}</p></div>
+                        <div class="glass p-4 rounded-xl bg-fuchsia-500/10 border border-fuchsia-400/30"><h6 class="font-medium mb-2"><i class="fas fa-list mr-2"></i>Points Clés</h6><ul class="list-disc list-inside text-fuchsia-100/90 text-sm">${(analysis.key_points || []).map(p => `<li>${p}</li>`).join('')}</ul></div>
+                        <div class="glass p-4 rounded-xl bg-amber-500/10 border border-amber-400/30"><h6 class="font-medium mb-2"><i class="fas fa-lightbulb mr-2"></i>Insights</h6><ul class="list-disc list-inside text-amber-100/90 text-sm">${(analysis.insights || []).map(p => `<li>${p}</li>`).join('')}</ul></div>
+                        <div class="glass p-4 rounded-xl bg-rose-500/10 border border-rose-400/30"><h6 class="font-medium mb-2"><i class="fas fa-exclamation-triangle mr-2"></i>Risques</h6><ul class="list-disc list-inside text-rose-100/90 text-sm">${(analysis.risks || []).map(p => `<li>${p}</li>`).join('')}</ul></div>
+                        <div class="glass p-4 rounded-xl lg:col-span-2 bg-emerald-500/10 border border-emerald-400/30"><h6 class="font-medium mb-2"><i class="fas fa-star mr-2"></i>Opportunités</h6><ul class="list-disc list-inside text-emerald-100/90 text-sm">${(analysis.opportunities || []).map(p => `<li>${p}</li>`).join('')}</ul></div>
+                        <div class="glass p-4 rounded-xl lg:col-span-2 bg-violet-500/10 border border-violet-400/30"><h6 class="font-medium mb-2"><i class="fas fa-link mr-2"></i>Sources</h6><ul class="list-disc list-inside text-violet-100/90 text-sm">${(analysis.sources || []).map(s => `<li><a class='text-violet-300 hover:underline' href="${s.url}" target="_blank">${s.title}</a></li>`).join('')}</ul></div>
                     </div>`;
             }
 
