@@ -650,43 +650,6 @@ class StockAPIManager:
         logger.info("✅ Aperçu du marché (strict) récupéré.")
         return snapshot
 
-class FredAPI:
-    """FRED (Federal Reserve) simple client pour rendements US."""
-    def __init__(self):
-        self.api_key = os.environ.get('FRED_API_KEY')
-        self.base = 'https://api.stlouisfed.org/fred/series/observations'
-
-    @rate_limit(calls_per_minute=60)
-    def get_latest_yield(self, series_id: str) -> Optional[Dict[str, Any]]:
-        if not self.api_key:
-            return None
-        try:
-            import requests
-            params = {
-                'series_id': series_id,
-                'api_key': self.api_key,
-                'file_type': 'json',
-                'sort_order': 'desc',
-                'limit': 10
-            }
-            r = requests.get(self.base, params=params, timeout=15)
-            r.raise_for_status()
-            data = r.json()
-            obs = [o for o in (data.get('observations') or []) if o.get('value') not in (None, '.', '')]
-            if not obs:
-                return None
-            latest = float(obs[0]['value'])
-            change_bps = None
-            if len(obs) > 1:
-                try:
-                    prev = float(obs[1]['value'])
-                    change_bps = round((latest - prev) * 100.0, 1)
-                except Exception:
-                    change_bps = None
-            return {"yield": round(latest, 3), "change_bps": change_bps, "source": 'FRED'}
-        except Exception:
-            return None
-
     def _get_yfinance_rsi(self, symbol: str, period: int = 14) -> Optional[float]:
         """Calcule le RSI(period) via yfinance (données journalières)."""
         try:
@@ -735,6 +698,43 @@ class FredAPI:
             return round(pct, 2)
         except Exception as e:
             logger.warning(f"⚠️ CoinGecko API error: {e}")
+            return None
+
+class FredAPI:
+    """FRED (Federal Reserve) simple client pour rendements US."""
+    def __init__(self):
+        self.api_key = os.environ.get('FRED_API_KEY')
+        self.base = 'https://api.stlouisfed.org/fred/series/observations'
+
+    @rate_limit(calls_per_minute=60)
+    def get_latest_yield(self, series_id: str) -> Optional[Dict[str, Any]]:
+        if not self.api_key:
+            return None
+        try:
+            import requests
+            params = {
+                'series_id': series_id,
+                'api_key': self.api_key,
+                'file_type': 'json',
+                'sort_order': 'desc',
+                'limit': 10
+            }
+            r = requests.get(self.base, params=params, timeout=15)
+            r.raise_for_status()
+            data = r.json()
+            obs = [o for o in (data.get('observations') or []) if o.get('value') not in (None, '.', '')]
+            if not obs:
+                return None
+            latest = float(obs[0]['value'])
+            change_bps = None
+            if len(obs) > 1:
+                try:
+                    prev = float(obs[1]['value'])
+                    change_bps = round((latest - prev) * 100.0, 1)
+                except Exception:
+                    change_bps = None
+            return {"yield": round(latest, 3), "change_bps": change_bps, "source": 'FRED'}
+        except Exception:
             return None
 
 
