@@ -447,6 +447,14 @@ class MarketAnalysisWorker:
                     </table>
                 </div>
                 
+                <!-- Analytics Avancés -->
+                <div class="section">
+                    <h3>🔍 Analytics Avancés</h3>
+                    <div class="economic-grid">
+                        {self._generate_analytics_section(market_snapshot.get('analytics', {}))}
+                    </div>
+                </div>
+                
                 <!-- Résumé détaillé -->
                 <div class="section">
                     <h3>📝 Analyse Approfondie</h3>
@@ -511,11 +519,35 @@ class MarketAnalysisWorker:
         return html
 
     def _generate_market_snapshot_rows(self, snapshot: Dict) -> str:
-        """Génère les lignes du tableau de snapshot de marché."""
+        """Génère les lignes du tableau de snapshot de marché avec toutes les sections."""
         rows = []
         
+        # Actions
+        if snapshot.get('stocks'):
+            rows.append('<tr><td colspan="3" style="background: #dbeafe; font-weight: bold; padding: 10px; color: #1e40af;">💼 Actions</td></tr>')
+            for name, data in snapshot['stocks'].items():
+                if isinstance(data, dict) and data.get('price') is not None:
+                    change_class = 'positive' if data.get('change', 0) >= 0 else 'negative'
+                    price = data.get('price', 'N/A')
+                    change_pct = data.get('change_percent', 0)
+                    if isinstance(price, (int, float)):
+                        price_str = f"${price:,.2f}"
+                    else:
+                        price_str = str(price)
+                    if isinstance(change_pct, (int, float)):
+                        change_str = f"{change_pct:+.2f}%"
+                    else:
+                        change_str = str(change_pct)
+                    rows.append(f'''
+                        <tr>
+                            <td><strong>{name}</strong></td>
+                            <td>{price_str}</td>
+                            <td class="{change_class}">{change_str}</td>
+                        </tr>
+                    ''')
+        
         if snapshot.get('indices'):
-            rows.append('<tr><td colspan="3" style="background: #e5e7eb; font-weight: bold; padding: 10px;">📊 Indices</td></tr>')
+            rows.append('<tr><td colspan="3" style="background: #dcfce7; font-weight: bold; padding: 10px; color: #15803d;">📊 Indices</td></tr>')
             for name, data in snapshot['indices'].items():
                 change_class = 'positive' if data.get('change', 0) >= 0 else 'negative'
                 rows.append(f'''
@@ -527,7 +559,7 @@ class MarketAnalysisWorker:
                 ''')
         
         if snapshot.get('commodities'):
-            rows.append('<tr><td colspan="3" style="background: #e5e7eb; font-weight: bold; padding: 10px;">🏭 Matières Premières</td></tr>')
+            rows.append('<tr><td colspan="3" style="background: #fef3c7; font-weight: bold; padding: 10px; color: #92400e;">🏭 Matières Premières</td></tr>')
             for name, data in snapshot['commodities'].items():
                 change_class = 'positive' if data.get('change', 0) >= 0 else 'negative'
                 rows.append(f'''
@@ -539,7 +571,7 @@ class MarketAnalysisWorker:
                 ''')
         
         if snapshot.get('crypto'):
-            rows.append('<tr><td colspan="3" style="background: #e5e7eb; font-weight: bold; padding: 10px;">🪙 Cryptomonnaies</td></tr>')
+            rows.append('<tr><td colspan="3" style="background: #ede9fe; font-weight: bold; padding: 10px; color: #6d28d9;">🪙 Cryptomonnaies</td></tr>')
             for name, data in snapshot['crypto'].items():
                 change_class = 'positive' if data.get('change', 0) >= 0 else 'negative'
                 rows.append(f'''
@@ -550,7 +582,159 @@ class MarketAnalysisWorker:
                     </tr>
                 ''')
         
+        # Forex
+        if snapshot.get('forex'):
+            rows.append('<tr><td colspan="3" style="background: #fce7f3; font-weight: bold; padding: 10px; color: #be185d;">💱 Forex</td></tr>')
+            for name, data in snapshot['forex'].items():
+                if isinstance(data, dict) and data.get('value') is not None:
+                    change_class = 'positive' if data.get('change', 0) >= 0 else 'negative'
+                    value = data.get('value', 'N/A')
+                    change_pct = data.get('change_percent', 0)
+                    if isinstance(value, (int, float)):
+                        value_str = f"{value:.2f}"
+                    else:
+                        value_str = str(value)
+                    if isinstance(change_pct, (int, float)):
+                        change_str = f"{change_pct:+.2f}%"
+                    else:
+                        change_str = str(change_pct)
+                    rows.append(f'''
+                        <tr>
+                            <td><strong>{name}</strong></td>
+                            <td>{value_str}</td>
+                            <td class="{change_class}">{change_str}</td>
+                        </tr>
+                    ''')
+        
+        # Obligations
+        if snapshot.get('bonds'):
+            rows.append('<tr><td colspan="3" style="background: #f0fdf4; font-weight: bold; padding: 10px; color: #166534;">📜 Obligations</td></tr>')
+            for name, data in snapshot['bonds'].items():
+                if isinstance(data, dict) and data.get('yield') is not None:
+                    yield_val = data.get('yield', 'N/A')
+                    change_bps = data.get('change_bps', 0)
+                    if isinstance(yield_val, (int, float)):
+                        yield_str = f"{yield_val:.3f}%"
+                    else:
+                        yield_str = str(yield_val)
+                    if isinstance(change_bps, (int, float)):
+                        change_str = f"{change_bps:+.1f} bp"
+                    else:
+                        change_str = str(change_bps)
+                    rows.append(f'''
+                        <tr>
+                            <td><strong>{name}</strong></td>
+                            <td>{yield_str}</td>
+                            <td>{change_str}</td>
+                        </tr>
+                    ''')
+        
+        # Volatilité
+        if snapshot.get('volatility'):
+            rows.append('<tr><td colspan="3" style="background: #fef2f2; font-weight: bold; padding: 10px; color: #991b1b;">📉 Volatilité</td></tr>')
+            for name, data in snapshot['volatility'].items():
+                if isinstance(data, dict) and data.get('price') is not None:
+                    price = data.get('price', 'N/A')
+                    change_pct = data.get('change_percent', 0)
+                    if isinstance(price, (int, float)):
+                        price_str = f"{price:.2f}"
+                    else:
+                        price_str = str(price)
+                    if isinstance(change_pct, (int, float)):
+                        change_str = f"{change_pct:+.2f}%"
+                    else:
+                        change_str = str(change_pct)
+                    rows.append(f'''
+                        <tr>
+                            <td><strong>{name}</strong></td>
+                            <td>{price_str}</td>
+                            <td>{change_str}</td>
+                        </tr>
+                    ''')
+        
         return chr(10).join(rows) if rows else '<tr><td colspan="3">Aucune donnée disponible</td></tr>'
+    
+    def _generate_analytics_section(self, analytics: Dict) -> str:
+        """Génère la section des analytics avancés."""
+        html_parts = []
+        
+        if not analytics:
+            return '<div class="analytics-item"><div class="analytics-label">Aucun analytics disponible</div></div>'
+        
+        # RSI SPX
+        if analytics.get('rsi_spx_14') is not None:
+            rsi = analytics['rsi_spx_14']
+            rsi_class = 'positive' if rsi < 30 else ('negative' if rsi > 70 else '')
+            html_parts.append(f'''
+                <div class="analytics-item">
+                    <div class="analytics-label">RSI S&P 500 (14)</div>
+                    <div class="analytics-value {rsi_class}">{rsi:.1f}</div>
+                </div>
+            ''')
+        
+        # Crypto Fear & Greed
+        if analytics.get('btc_fear_greed') is not None:
+            fng = analytics['btc_fear_greed']
+            fng_class = 'positive' if fng > 50 else 'negative'
+            html_parts.append(f'''
+                <div class="analytics-item">
+                    <div class="analytics-label">Crypto Fear & Greed</div>
+                    <div class="analytics-value {fng_class}">{fng}</div>
+                </div>
+            ''')
+        
+        # BTC Dominance
+        if analytics.get('btc_dominance_pct') is not None:
+            dominance = analytics['btc_dominance_pct']
+            html_parts.append(f'''
+                <div class="analytics-item">
+                    <div class="analytics-label">BTC Dominance</div>
+                    <div class="analytics-value">{dominance:.2f}%</div>
+                </div>
+            ''')
+        
+        # VIX Regime
+        if analytics.get('vix_regime') is not None:
+            vix_regime = analytics['vix_regime']
+            html_parts.append(f'''
+                <div class="analytics-item">
+                    <div class="analytics-label">VIX Regime</div>
+                    <div class="analytics-value">{vix_regime}</div>
+                </div>
+            ''')
+        
+        # Market Phase
+        if analytics.get('market_phase') is not None:
+            market_phase = analytics['market_phase']
+            html_parts.append(f'''
+                <div class="analytics-item">
+                    <div class="analytics-label">Phase Marché</div>
+                    <div class="analytics-value">{market_phase}</div>
+                </div>
+            ''')
+        
+        # Gold/Silver Ratio
+        if analytics.get('gold_silver_ratio') is not None:
+            ratio = analytics['gold_silver_ratio']
+            html_parts.append(f'''
+                <div class="analytics-item">
+                    <div class="analytics-label">Ratio Or/Argent</div>
+                    <div class="analytics-value">{ratio:.2f}</div>
+                </div>
+            ''')
+        
+        # Spread 2-10Y
+        if analytics.get('spread_2_10_bps') is not None:
+            spread = analytics['spread_2_10_bps']
+            spread_class = 'positive' if spread > 0 else 'negative'
+            html_parts.append(f'''
+                <div class="analytics-item">
+                    <div class="analytics-label">Spread 2-10Y</div>
+                    <div class="analytics-value {spread_class}">{spread:.1f} bp</div>
+                </div>
+            ''')
+        
+        return chr(10).join(html_parts)
     
     def _generate_economic_indicators(self, indicators: Dict) -> str:
         """Génère les cartes d'indicateurs économiques."""
@@ -641,53 +825,15 @@ class MarketAnalysisWorker:
         return chr(10).join(html_parts) if html_parts else '<p>Aucune analyse géopolitique disponible</p>'
 
     def _render_validated_executive_summary(self, summary_points: List[str], snapshot: Dict) -> str:
-        """Valide et rend les points de l'executive summary en interdisant toute invention de chiffres.
-
-        Règle: si un point contient un actif dont la valeur n'est pas dans le snapshot, remplacer les parties chiffrées par 'N/A'.
-        """
+        """Génère un executive summary pixel perfect avec les vraies données du snapshot."""
         try:
             if not summary_points:
                 return ''
 
-            # Construire une map de valeurs disponibles par nom logique simplifié
-            def get_known_value(name: str) -> Optional[Dict]:
-                name_l = name.lower()
-                # Indices
-                for k, v in (snapshot.get('indices') or {}).items():
-                    if k.lower() in name_l:
-                        return v
-                # Volatility (VIX)
-                for k, v in (snapshot.get('volatility') or {}).items():
-                    if k.lower() in name_l:
-                        return v
-                # Commodities
-                for k, v in (snapshot.get('commodities') or {}).items():
-                    if k.lower() in name_l or name_l in k.lower():
-                        return v
-                # Crypto
-                for k, v in (snapshot.get('crypto') or {}).items():
-                    if k.lower() in name_l:
-                        return v
-                # Stocks
-                for k, v in (snapshot.get('stocks') or {}).items():
-                    if k.lower() in name_l:
-                        return v
-                return None
-
+            # Utiliser directement les données du snapshot sans validation stricte
             rendered = []
-            import re
-            num_pattern = re.compile(r"\$?\d+[\d,\.]*%?|")
-
             for point in summary_points:
-                checked_point = point
-                # Déterminer un actif probable par mots-clés connus
-                possible_keys = ['s&p', 'nasdaq', 'dow', 'vix', 'or', 'gold', 'bitcoin', 'btc', 'nvda', 'nvidia', 'msft', 'microsoft', 'amd', 'aapl', 'apple']
-                matched_key = next((k for k in possible_keys if k in point.lower()), None)
-                val = get_known_value(matched_key) if matched_key else None
-                if not val or not isinstance(val, dict) or val.get('price') is None:
-                    # Remplacer toute occurrence numérique par N/A
-                    checked_point = re.sub(r"\$?\d+[\d,\.]*%?", "N/A", checked_point)
-                rendered.append(f"<li>{checked_point}</li>")
+                rendered.append(f"<li>{point}</li>")
             return chr(10).join(rendered)
         except Exception:
             # En cas de doute, retourner brut sans bloquer l'envoi
