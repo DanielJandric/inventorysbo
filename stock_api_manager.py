@@ -275,108 +275,108 @@ class YFinanceAPI:
     @rate_limit(calls_per_minute=90)
     def get_stock_price(self, symbol: str) -> Optional[Dict[str, Any]]:
         """Récupère le prix via yfinance, avec retries et fallback history."""
-        try:
-            import yfinance as yf  # type: ignore
-        except Exception as e:
-            logger.warning(f"⚠️ yfinance non disponible: {e}")
-            return None
+            try:
+                import yfinance as yf  # type: ignore
+            except Exception as e:
+                logger.warning(f"⚠️ yfinance non disponible: {e}")
+                return None
 
         for attempt in range(3):
             try:
                 logger.info(f"🔄 yfinance {symbol} (tentative {attempt+1}/3)")
-                ticker = yf.Ticker(symbol)
+            ticker = yf.Ticker(symbol)
 
-                price = None
-                change = None
-                change_percent = None
-                volume = None
-                currency = None
-                fifty_two_week_high = None
-                fifty_two_week_low = None
-                pe_ratio = None
+            price = None
+            change = None
+            change_percent = None
+            volume = None
+            currency = None
+            fifty_two_week_high = None
+            fifty_two_week_low = None
+            pe_ratio = None
 
                 # fast_info
-                fi = getattr(ticker, 'fast_info', None)
-                if fi:
-                    getter = getattr(fi, 'get', None)
-                    if callable(getter):
-                        price = getter('last_price') or getter('lastPrice') or getter('last')
-                        prev_close = getter('previous_close') or getter('previousClose')
-                        volume = getter('volume')
-                        currency = getter('currency')
-                        fifty_two_week_high = getter('yearHigh') or getter('fifty_two_week_high')
-                        fifty_two_week_low = getter('yearLow') or getter('fifty_two_week_low')
-                        if price and prev_close and prev_close != 0:
-                            try:
-                                change = float(price) - float(prev_close)
-                                change_percent = (change / float(prev_close)) * 100.0
-                            except Exception:
-                                pass
+            fi = getattr(ticker, 'fast_info', None)
+            if fi:
+                getter = getattr(fi, 'get', None)
+                if callable(getter):
+                    price = getter('last_price') or getter('lastPrice') or getter('last')
+                    prev_close = getter('previous_close') or getter('previousClose')
+                    volume = getter('volume')
+                    currency = getter('currency')
+                    fifty_two_week_high = getter('yearHigh') or getter('fifty_two_week_high')
+                    fifty_two_week_low = getter('yearLow') or getter('fifty_two_week_low')
+                    if price and prev_close and prev_close != 0:
+                        try:
+                            change = float(price) - float(prev_close)
+                            change_percent = (change / float(prev_close)) * 100.0
+                        except Exception:
+                            pass
 
                 # info
-                if price is None or currency is None or fifty_two_week_high is None or fifty_two_week_low is None or pe_ratio is None:
-                    try:
-                        info = ticker.info or {}
-                    except Exception:
-                        info = {}
-                    price = price if price is not None else info.get('currentPrice') or info.get('regularMarketPrice')
-                    currency = currency if currency is not None else info.get('currency')
-                    fifty_two_week_high = fifty_two_week_high if fifty_two_week_high is not None else (
-                        info.get('fiftyTwoWeekHigh') or info.get('fifty_two_week_high')
-                    )
-                    fifty_two_week_low = fifty_two_week_low if fifty_two_week_low is not None else (
-                        info.get('fiftyTwoWeekLow') or info.get('fifty_two_week_low')
-                    )
-                    pe_ratio = pe_ratio if pe_ratio is not None else (
-                        info.get('trailingPE') or info.get('trailingPe') or info.get('forwardPE')
-                    )
-                    if change is None and info.get('regularMarketChange') is not None:
-                        change = info.get('regularMarketChange')
-                    if change_percent is None and info.get('regularMarketChangePercent') is not None:
-                        change_percent = float(info.get('regularMarketChangePercent')) * 100.0 if abs(info.get('regularMarketChangePercent')) < 1 else info.get('regularMarketChangePercent')
-                    if volume is None:
-                        volume = info.get('regularMarketVolume')
+            if price is None or currency is None or fifty_two_week_high is None or fifty_two_week_low is None or pe_ratio is None:
+                try:
+                    info = ticker.info or {}
+                except Exception:
+                    info = {}
+                price = price if price is not None else info.get('currentPrice') or info.get('regularMarketPrice')
+                currency = currency if currency is not None else info.get('currency')
+                fifty_two_week_high = fifty_two_week_high if fifty_two_week_high is not None else (
+                    info.get('fiftyTwoWeekHigh') or info.get('fifty_two_week_high')
+                )
+                fifty_two_week_low = fifty_two_week_low if fifty_two_week_low is not None else (
+                    info.get('fiftyTwoWeekLow') or info.get('fifty_two_week_low')
+                )
+                pe_ratio = pe_ratio if pe_ratio is not None else (
+                    info.get('trailingPE') or info.get('trailingPe') or info.get('forwardPE')
+                )
+                if change is None and info.get('regularMarketChange') is not None:
+                    change = info.get('regularMarketChange')
+                if change_percent is None and info.get('regularMarketChangePercent') is not None:
+                    change_percent = float(info.get('regularMarketChangePercent')) * 100.0 if abs(info.get('regularMarketChangePercent')) < 1 else info.get('regularMarketChangePercent')
+                if volume is None:
+                    volume = info.get('regularMarketVolume')
 
                 # Fallback history (avec timeout si supporté)
-                if price is None:
-                    try:
+            if price is None:
+                try:
                         try:
                             hist = ticker.history(period="1d", timeout=20)
                         except TypeError:
-                            hist = ticker.history(period="1d")
+                    hist = ticker.history(period="1d")
                         if hist is not None and not hist.empty:
-                            price = float(hist['Close'].iloc[-1])
-                            if currency is None:
+                        price = float(hist['Close'].iloc[-1])
+                        if currency is None:
                                 try:
-                                    currency = (ticker.get_info() or {}).get('currency')
+                            currency = (ticker.get_info() or {}).get('currency')
                                 except Exception:
                                     pass
-                    except Exception:
-                        pass
+                except Exception:
+                    pass
 
-                if price is None or (isinstance(price, (int, float)) and float(price) <= 0):
+            if price is None or (isinstance(price, (int, float)) and float(price) <= 0):
                     raise RuntimeError("yfinance: prix invalide ou indisponible")
 
-                result = {
-                    'price': float(price),
-                    'currency': currency or 'USD',
-                    'change': float(change) if change is not None else None,
-                    'change_percent': float(change_percent) if change_percent is not None else None,
-                    'volume': int(volume) if volume is not None else None,
-                    'fifty_two_week_high': float(fifty_two_week_high) if fifty_two_week_high is not None else None,
-                    'fifty_two_week_low': float(fifty_two_week_low) if fifty_two_week_low is not None else None,
-                    'pe_ratio': float(pe_ratio) if pe_ratio is not None else None,
-                    'timestamp': datetime.now().isoformat(),
-                    'source': 'yfinance'
-                }
-                logger.info(f"✅ yfinance réussi pour {symbol}: {result['price']} {result['currency']}")
-                return result
-            except Exception as e:
+            result = {
+                'price': float(price),
+                'currency': currency or 'USD',
+                'change': float(change) if change is not None else None,
+                'change_percent': float(change_percent) if change_percent is not None else None,
+                'volume': int(volume) if volume is not None else None,
+                'fifty_two_week_high': float(fifty_two_week_high) if fifty_two_week_high is not None else None,
+                'fifty_two_week_low': float(fifty_two_week_low) if fifty_two_week_low is not None else None,
+                'pe_ratio': float(pe_ratio) if pe_ratio is not None else None,
+                'timestamp': datetime.now().isoformat(),
+                'source': 'yfinance'
+            }
+            logger.info(f"✅ yfinance réussi pour {symbol}: {result['price']} {result['currency']}")
+            return result
+        except Exception as e:
                 logger.warning(f"⚠️ yfinance échec {symbol} tentative {attempt+1}/3: {e}")
                 if attempt < 2:
                     time.sleep(5)
                 else:
-                    return None
+            return None
 
 class StockAPIManager:
     """Gestionnaire principal des APIs boursières"""
@@ -386,6 +386,7 @@ class StockAPIManager:
         self.eodhd = EODHDAPI()
         self.finnhub = FinnhubAPI()
         self.yfinance = YFinanceAPI()
+        self.fred = FredAPI()
         self.cache = {}
         self.cache_duration = 300  # 5 minutes
     
@@ -528,21 +529,25 @@ class StockAPIManager:
 
         # Utiliser exclusivement yfinance
         for category, display_name, symbol in ordered_symbols:
-            logger.info(f"⏳ Attente 10s avant la requête yfinance pour {symbol} ({display_name})...")
-            time.sleep(10)
-            data = self.yfinance.get_stock_price(symbol)
-            if data and data.get('price') is not None:
-                if category == 'bonds' and display_name in ('US10Y','US5Y','US2Y'):
+            # Obligations: utiliser FRED en priorité
+            if category == 'bonds' and display_name in ('US10Y','US5Y','US2Y'):
+                series_map = {'US2Y': 'DGS2', 'US5Y': 'DGS5', 'US10Y': 'DGS10'}
+                series_id = series_map.get(display_name)
+                fred_res = self.fred.get_latest_yield(series_id) if series_id else None
+                if fred_res:
+                    snapshot[category][display_name] = fred_res
+                    continue
+                # Fallback Yahoo si FRED indispo
+                logger.info(f"FRED indisponible pour {display_name}, fallback Yahoo {symbol}")
+                logger.info(f"⏳ Attente 10s avant la requête yfinance pour {symbol} ({display_name})...")
+                time.sleep(10)
+                data = self.yfinance.get_stock_price(symbol)
+                if data and data.get('price') is not None:
                     raw = float(data.get('price'))
                     ch = data.get('change')
-                    # ^TNX/^FVX sont x10. Heuristique: si raw > 20, diviser par 10
                     yield_pct = raw / 10.0 if raw > 20 else raw
                     change_bps = (float(ch) * 10.0) if (ch is not None and raw > 20) else (float(ch) if ch is not None else None)
-                    snapshot[category][display_name] = {
-                        "yield": round(yield_pct, 3),
-                        "change_bps": round(change_bps, 1) if change_bps is not None else None,
-                        "source": data.get('source')
-                    }
+                    snapshot[category][display_name] = {"yield": round(yield_pct, 3), "change_bps": round(change_bps, 1) if change_bps is not None else None, "source": 'yahoo'}
                 elif category == 'forex' and display_name == 'DXY':
                     snapshot[category][display_name] = {
                         "value": data.get('price'),
@@ -551,14 +556,13 @@ class StockAPIManager:
                         "source": data.get('source')
                     }
                 else:
-                    snapshot[category][display_name] = {
-                        "price": data.get('price'),
-                        "change": data.get('change'),
-                        "change_percent": data.get('change_percent'),
-                        "source": data.get('source')
-                    }
-            else:
-                snapshot[category][display_name] = {"error": "Data not available"}
+                    logger.info(f"⏳ Attente 10s avant la requête yfinance pour {symbol} ({display_name})...")
+                    time.sleep(10)
+                    data = self.yfinance.get_stock_price(symbol)
+                    if data and data.get('price') is not None:
+                        snapshot[category][display_name] = {"price": data.get('price'), "change": data.get('change'), "change_percent": data.get('change_percent'), "source": data.get('source')}
+                    else:
+                        snapshot[category][display_name] = {"error": "Data not available"}
 
         # Calculs dérivés (analytics)
         analytics: Dict[str, Any] = {}
@@ -654,6 +658,43 @@ class StockAPIManager:
 
         logger.info("✅ Aperçu du marché (strict) récupéré.")
         return snapshot
+
+class FredAPI:
+    """FRED (Federal Reserve) simple client pour rendements US."""
+    def __init__(self):
+        self.api_key = os.environ.get('FRED_API_KEY')
+        self.base = 'https://api.stlouisfed.org/fred/series/observations'
+
+    @rate_limit(calls_per_minute=60)
+    def get_latest_yield(self, series_id: str) -> Optional[Dict[str, Any]]:
+        if not self.api_key:
+            return None
+        try:
+            import requests
+            params = {
+                'series_id': series_id,
+                'api_key': self.api_key,
+                'file_type': 'json',
+                'sort_order': 'desc',
+                'limit': 10
+            }
+            r = requests.get(self.base, params=params, timeout=15)
+            r.raise_for_status()
+            data = r.json()
+            obs = [o for o in (data.get('observations') or []) if o.get('value') not in (None, '.', '')]
+            if not obs:
+                return None
+            latest = float(obs[0]['value'])
+            change_bps = None
+            if len(obs) > 1:
+                try:
+                    prev = float(obs[1]['value'])
+                    change_bps = round((latest - prev) * 100.0, 1)
+                except Exception:
+                    change_bps = None
+            return {"yield": round(latest, 3), "change_bps": change_bps, "source": 'FRED'}
+        except Exception:
+            return None
 
     def _get_yfinance_rsi(self, symbol: str, period: int = 14) -> Optional[float]:
         """Calcule le RSI(period) via yfinance (données journalières)."""
