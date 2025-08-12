@@ -536,19 +536,22 @@ class StockAPIManager:
                 fred_res = self.fred.get_latest_yield(series_id) if series_id else None
                 if fred_res:
                     snapshot[category][display_name] = fred_res
-                    continue
-                # Fallback Yahoo si FRED indispo
-                logger.info(f"FRED indisponible pour {display_name}, fallback Yahoo {symbol}")
-                logger.info(f"⏳ Attente 10s avant la requête yfinance pour {symbol} ({display_name})...")
-                time.sleep(10)
-                data = self.yfinance.get_stock_price(symbol)
-                if data and data.get('price') is not None:
-                    raw = float(data.get('price'))
-                    ch = data.get('change')
-                    yield_pct = raw / 10.0 if raw > 20 else raw
-                    change_bps = (float(ch) * 10.0) if (ch is not None and raw > 20) else (float(ch) if ch is not None else None)
-                    snapshot[category][display_name] = {"yield": round(yield_pct, 3), "change_bps": round(change_bps, 1) if change_bps is not None else None, "source": 'yahoo'}
-                elif category == 'forex' and display_name == 'DXY':
+                else:
+                    # Si FRED échoue pour les bonds, mettre N/A au lieu d'essayer yfinance
+                    logger.warning(f"⚠️ FRED indisponible pour {display_name}, mise à N/A")
+                    snapshot[category][display_name] = {
+                        'yield': 'N/A',
+                        'change_bps': 'N/A',
+                        'source': 'FRED (indisponible)'
+                    }
+                continue  # Ne pas essayer yfinance pour les bonds
+            
+            # Pour tous les autres actifs, utiliser yfinance
+            logger.info(f"⏳ Attente 10s avant la requête yfinance pour {symbol} ({display_name})...")
+            time.sleep(10)
+            data = self.yfinance.get_stock_price(symbol)
+            if data and data.get('price') is not None:
+                if category == 'forex' and display_name == 'DXY':
                     snapshot[category][display_name] = {
                         "value": data.get('price'),
                         "change": data.get('change'),
@@ -590,18 +593,6 @@ class StockAPIManager:
         # Courbe 2-10Y
         try:
             ten_y = snapshot.get('bonds', {}).get('US 10Y', {}).get('yield')
-            # 2Y
-            if 'US 2Y' not in snapshot.get('bonds', {}):
-                logger.info("⏳ Attente 10s avant la requête yfinance pour ^UST2Y (US 2Y)...")
-                time.sleep(10)
-                two_y_raw = self.yfinance.get_stock_price('^UST2Y')
-                if two_y_raw and two_y_raw.get('price') is not None:
-                    two_y_yield = float(two_y_raw.get('price')) / 10.0
-                    snapshot.setdefault('bonds', {})['US 2Y'] = {
-                        'yield': round(two_y_yield, 3),
-                        'change_bps': float(two_y_raw.get('change')) * 10.0 if two_y_raw.get('change') is not None else None,
-                        'source': two_y_raw.get('source')
-                    }
             two_y = snapshot.get('bonds', {}).get('US 2Y', {}).get('yield')
             if isinstance(ten_y, (int, float)) and isinstance(two_y, (int, float)):
                 analytics['spread_2_10_bps'] = round((float(ten_y) - float(two_y)) * 100.0, 1)
