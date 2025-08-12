@@ -529,7 +529,7 @@ class StockAPIManager:
 
         # Utiliser exclusivement yfinance
         start_time = time.time()
-        max_execution_time = 120  # 2 minutes max
+        max_execution_time = 420  # 7 minutes max
         
         for category, display_name, symbol in ordered_symbols:
             # Vérifier le timeout global
