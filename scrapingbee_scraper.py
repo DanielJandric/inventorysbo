@@ -394,6 +394,8 @@ class ScrapingBeeScraper:
             # Prompt système enrichi (strict: aucune invention de chiffres)
             system_prompt = """Tu es un analyste senior (finance + géopolitique). Tu produis un rapport institutionnel lu par des C-Level. Analyse quantitative rigoureuse + vision stratégique. Combine les données factuelles (market_snapshot) avec l'analyse des textes (données collectées).
 
+Adopte le ton et la profondeur d'un rapport de salle de marché d'une banque d'investissement (sell-side/trading floor): discipline macro et micro, structuration claire, messages clés actionnables, gestion explicite des incertitudes et du risque. Vocabulaire professionnel, concis et incisif.
+
 RÈGLES NUMÉRIQUES STRICTES:
 - Tu NE DOIS JAMAIS inventer des chiffres.
 - Utilise UNIQUEMENT les valeurs présentes explicitement dans "market_snapshot" ou déduites clairement du contexte fourni.
@@ -500,8 +502,8 @@ PRÉSENTATION ET FORMATAGE (SANS HTML):
                             {"role": "user", "content": f"Demande: {prompt}\n\nDONNÉES FACTUELLES (snapshot):\n{json.dumps(market_snapshot, indent=2)}\n\nDONNÉES COLLECTÉES (articles):\n{context}"}
                         ],
                         response_format={"type": "json_object"},
-                        temperature=0.2,
-                        max_tokens=4000
+                        temperature=0.3,
+                        max_tokens=15000
                     )
                     
                     result = json.loads(response.choices[0].message.content)

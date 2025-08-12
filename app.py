@@ -8266,8 +8266,8 @@ def markets_chat():
         resp = client.chat.completions.create(
             model=model_name,
             messages=messages,
-            temperature=0.2,
-            max_tokens=900,
+            temperature=0.3,
+            max_tokens=15000,
         )
         reply = resp.choices[0].message.content
 
