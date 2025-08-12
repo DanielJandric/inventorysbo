@@ -8162,28 +8162,63 @@ def get_recent_market_analyses():
 
 @app.route("/api/markets/chat", methods=["POST"])
 def markets_chat():
-    """Chatbot marchés: répond en français en s'appuyant sur les 10-15 derniers rapports.
-    Entrée JSON: { message: str, limit?: int }
-    Sortie JSON: { success: bool, reply?: str, error?: str }
+    """Chatbot marchés: RAG compact (3 rapports) + mémoire de session persistante.
+    Entrée JSON: { message: str, context?: str, session_id?: str }
+    Sortie JSON: { success: bool, reply?: str, error?: str, metadata?: { session_id } }
     """
     try:
+        import uuid
+        import re as _re
+
         data = request.get_json(silent=True) or {}
         user_message = (data.get("message") or "").strip()
         if not user_message:
             return jsonify({"success": False, "error": "Message vide"}), 400
-        limit = int(data.get("limit", 10))
+        # Limite stricte à 3 rapports (plus pertinent et plus rapide)
+        limit = min(int(data.get("limit", 3)), 3)
         extra_context = (data.get("context") or "").strip()
+        session_id = (data.get("session_id") or "").strip() or str(uuid.uuid4())
 
+        # Récupérer mémoire de session (messages précédents)
+        try:
+            history_persisted = conversation_memory.get_recent_messages(session_id, limit=8)
+        except Exception:
+            history_persisted = []
+
+        # Charger les analyses récentes et sélectionner les plus pertinentes (top-3)
         from market_analysis_db import get_market_analysis_db
         db = get_market_analysis_db()
-        recent_items = db.get_recent_analyses(limit=limit)
+        recent_items = db.get_recent_analyses(limit=12)  # pool initial
 
-        # Construire un contexte compact à partir des rapports récents
-        context_parts = []
+        # Scoring naïf par recouvrement de mots-clés question/contexte vs contenu des rapports
+        def _tokenize(txt: str) -> set:
+            words = _re.findall(r"[\w\-]+", (txt or "").lower())
+            return {w for w in words if len(w) >= 3}
+
+        query_terms = _tokenize(user_message + " " + extra_context)
+
+        scored = []
         for a in recent_items:
             try:
+                exec_text = "\n".join(a.executive_summary or []) if a.executive_summary else ""
+                base = f"{exec_text}\n{(a.summary or '')[:1200]}"
+                report_terms = _tokenize(base)
+                score = len(query_terms & report_terms)
+                scored.append((score, a))
+            except Exception:
+                continue
+        scored.sort(key=lambda x: x[0], reverse=True)
+        top_items = [a for _, a in (scored[:limit] if scored else [])]
+        if not top_items:
+            # Fallback: prendre simplement les 3 plus récents
+            top_items = (recent_items or [])[:limit]
+
+        # Construire le contexte compact
+        context_parts = []
+        for a in top_items:
+            try:
                 exec_summary = "\n".join([f"- {p}" for p in (a.executive_summary or [])]) if a.executive_summary else ""
-                summary_compact = (a.summary or "")[:1200]
+                summary_compact = (a.summary or "")[:800]
                 ts = a.timestamp or a.created_at or ""
                 context_parts.append(
                     f"[Rapport ID {a.id or '?'} | {a.analysis_type or 'auto'} | {ts}]\n"
@@ -8196,7 +8231,7 @@ def markets_chat():
         if extra_context:
             context_text = f"Contexte additionnel (utilisateur):\n{extra_context}\n---\n" + context_text
 
-        # Appel LLM
+        # Client OpenAI
         try:
             from openai import OpenAI
             client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
@@ -8204,25 +8239,46 @@ def markets_chat():
             logger.error(f"OpenAI init error: {e}")
             return jsonify({"success": False, "error": "OpenAI non configuré"}), 500
 
+        # Prompt système plus direct, avec mémoire et consignes
         system_prompt = (
-            "Tu es un analyste marchés. Réponds en français, de manière concise et actionnable. "
-            "Reconnais des patterns (tendance, corrélations, régimes de volatilité), et commente les risques/opportunités. "
+            "Tu es un analyste marchés. Réponds en français, de manière concise, actionnable et contextuelle. "
+            "Utilise la mémoire de conversation (si pertinente) pour assurer la continuité. "
+            "Reconnais patterns (tendance, corrélations, régimes de volatilité) et commente risques/opportunités. "
             "N'invente jamais de chiffres. Utilise **gras** pour les points critiques, et des emojis sobres (↑, ↓, 🟢, 🔴, ⚠️, 💡). "
-            "Si l'utilisateur demande un conseil d'investissement, réponds par une analyse des scénarios et un avertissement de risque."
+            "Structure la réponse en 3–5 points maximum, puis une phrase de conclusion claire."
         )
+
+        # Construire les messages avec historique (user/assistant uniquement)
+        messages = [{"role": "system", "content": system_prompt}]
+        try:
+            for m in reversed(history_persisted or []):
+                r, c = (m or {}).get('role'), (m or {}).get('content')
+                if r in {"user", "assistant"} and c:
+                    messages.append({"role": r, "content": str(c)})
+        except Exception:
+            pass
+
+        # Message utilisateur courant avec RAG compact
+        user_payload = f"Contexte (rapports):\n{context_text}\n\nQuestion: {user_message}"
+        messages.append({"role": "user", "content": user_payload})
 
         model_name = os.getenv("AI_MODEL", "gpt-4.1")
         resp = client.chat.completions.create(
             model=model_name,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"{context_text}\n\nQuestion: {user_message}"},
-            ],
+            messages=messages,
             temperature=0.2,
-            max_tokens=1200,
+            max_tokens=900,
         )
         reply = resp.choices[0].message.content
-        return jsonify({"success": True, "reply": reply})
+
+        # Persister dans la mémoire
+        try:
+            conversation_memory.add_message(session_id, 'user', user_message)
+            conversation_memory.add_message(session_id, 'assistant', reply)
+        except Exception:
+            pass
+
+        return jsonify({"success": True, "reply": reply, "metadata": {"session_id": session_id}})
     except Exception as e:
         logger.error(f"Erreur markets_chat: {e}")
         return jsonify({"success": False, "error": str(e)}), 500

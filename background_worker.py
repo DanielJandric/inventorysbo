@@ -24,6 +24,30 @@ except Exception:  # pragma: no cover
 # Charger les variables d'environnement
 load_dotenv()
 
+# Charger éventuellement une configuration locale (comme dans app.py)
+# Cela permet au worker de récupérer SUPABASE_URL/SUPABASE_KEY/etc. depuis un config.py
+# si les variables d'environnement ne sont pas présentes (cas fréquent en local).
+try:
+    import config  # type: ignore
+    # Propager dans l'environnement uniquement les clés manquantes
+    for _key in (
+        "SUPABASE_URL",
+        "SUPABASE_KEY",
+        "OPENAI_API_KEY",
+        "SCRAPINGBEE_API_KEY",
+        "EMAIL_HOST",
+        "EMAIL_PORT",
+        "EMAIL_USER",
+        "EMAIL_PASSWORD",
+        "EMAIL_RECIPIENTS",
+    ):
+        _val = getattr(config, _key, None)
+        if _val and not os.getenv(_key):
+            os.environ[_key] = str(_val)
+except Exception:
+    # Pas de config.py ou pas d'attributs : on reste sur les variables d'environnement
+    pass
+
 # Configuration du logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)

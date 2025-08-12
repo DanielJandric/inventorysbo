@@ -411,10 +411,24 @@
                 inputEl.value = '';
                 try {
                     const extra = (document.getElementById('chat-context').value || '').trim();
-                    const r = await fetch('/api/markets/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: msg, limit: 12, context: extra })});
+                    // Gestion d'une session_id persistée pour la mémoire conversationnelle
+                    let sid = localStorage.getItem('markets_chat_session_id');
+                    if (!sid) {
+                        sid = (crypto && crypto.randomUUID) ? crypto.randomUUID() : (Date.now() + '-' + Math.random().toString(36).slice(2));
+                        localStorage.setItem('markets_chat_session_id', sid);
+                    }
+                    const r = await fetch('/api/markets/chat', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ message: msg, limit: 3, context: extra, session_id: sid })
+                    });
                     const d = await r.json();
                     if (!d.success) throw new Error(d.error || 'Erreur API');
                     addMsg('assistant', d.reply);
+                    // Mettre à jour session_id si renvoyée par le serveur
+                    if (d.metadata && d.metadata.session_id) {
+                        localStorage.setItem('markets_chat_session_id', d.metadata.session_id);
+                    }
                 } catch (e) {
                     addMsg('assistant', `❌ ${e.message}`);
                 }
