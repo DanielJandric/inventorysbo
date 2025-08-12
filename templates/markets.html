@@ -427,8 +427,26 @@
             // Export PDF de la dernière discussion
             exportBtn.addEventListener('click', async () => {
                 try {
-                    const { jsPDF } = window.jspdf;
-                    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+                    // Charger jsPDF de manière robuste
+                    let jsPDFCtor = undefined;
+                    if (window.jspdf && window.jspdf.jsPDF) {
+                        jsPDFCtor = window.jspdf.jsPDF;
+                    } else if (window.jsPDF) {
+                        jsPDFCtor = window.jsPDF;
+                    } else {
+                        await new Promise((resolve, reject) => {
+                            const s = document.createElement('script');
+                            s.src = 'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js';
+                            s.onload = resolve;
+                            s.onerror = reject;
+                            document.head.appendChild(s);
+                        });
+                        if (window.jspdf && window.jspdf.jsPDF) jsPDFCtor = window.jspdf.jsPDF;
+                        else if (window.jsPDF) jsPDFCtor = window.jsPDF;
+                    }
+                    if (!jsPDFCtor) throw new Error('jsPDF non chargé');
+
+                    const doc = new jsPDFCtor({ unit: 'pt', format: 'a4' });
                     const margin = 40;
                     let y = margin;
                     doc.setFont('helvetica', '');
