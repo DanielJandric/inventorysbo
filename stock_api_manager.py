@@ -521,7 +521,9 @@ class StockAPIManager:
             ("commodities", "Natural Gas", "NG=F"),
             ("crypto", "Ethereum", "ETH-USD"),
             ("forex", "DXY", "DX=F"),
-            ("bonds", "US 10Y", "^TNX"),
+            ("bonds", "US2Y", "^UST2Y"),
+            ("bonds", "US5Y", "^FVX"),
+            ("bonds", "US10Y", "^TNX"),
         ]
 
         # Utiliser exclusivement yfinance
@@ -530,10 +532,12 @@ class StockAPIManager:
             time.sleep(10)
             data = self.yfinance.get_stock_price(symbol)
             if data and data.get('price') is not None:
-                if category == 'bonds' and display_name == 'US 10Y':
-                    # Yahoo ^TNX: 1 unit = 0.1% yield
-                    yield_pct = float(data.get('price')) / 10.0
-                    change_bps = float(data.get('change')) * 10.0 if data.get('change') is not None else None
+                if category == 'bonds' and display_name in ('US10Y','US5Y','US2Y'):
+                    raw = float(data.get('price'))
+                    ch = data.get('change')
+                    # ^TNX/^FVX sont x10. Heuristique: si raw > 20, diviser par 10
+                    yield_pct = raw / 10.0 if raw > 20 else raw
+                    change_bps = (float(ch) * 10.0) if (ch is not None and raw > 20) else (float(ch) if ch is not None else None)
                     snapshot[category][display_name] = {
                         "yield": round(yield_pct, 3),
                         "change_bps": round(change_bps, 1) if change_bps is not None else None,
