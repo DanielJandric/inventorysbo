@@ -112,7 +112,7 @@ class MarketAnalysisWorker:
             scraper_task_id = await self.scraper.create_scraping_task(prompt, MAX_SCRAPING_PAGES)
             
             logger.info(f"🚀 Exécution de la tâche ScrapingBee {scraper_task_id}...")
-            result = await self.scraper.execute_scraping_task(scraper_task_id)
+                result = await self.scraper.execute_scraping_task(scraper_task_id)
 
 
             # 3. Traiter le résultat
