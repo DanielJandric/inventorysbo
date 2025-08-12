@@ -12,7 +12,7 @@ from datetime import datetime, timezone, timedelta
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import smtplib
-from typing import Dict, List
+from typing import Dict, List, Optional
 from dotenv import load_dotenv
 
 # Optional Redis cache
@@ -112,7 +112,7 @@ class MarketAnalysisWorker:
             scraper_task_id = await self.scraper.create_scraping_task(prompt, MAX_SCRAPING_PAGES)
             
             logger.info(f"🚀 Exécution de la tâche ScrapingBee {scraper_task_id}...")
-                result = await self.scraper.execute_scraping_task(scraper_task_id)
+            result = await self.scraper.execute_scraping_task(scraper_task_id)
 
 
             # 3. Traiter le résultat
