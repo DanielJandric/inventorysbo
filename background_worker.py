@@ -91,24 +91,28 @@ class MarketAnalysisWorker:
 
     async def process_task(self, task: MarketAnalysis):
         """Traite une seule tâche d'analyse."""
+        MAX_SCRAPING_PAGES = 3
+        DEFAULT_PROMPT = "Analyse générale des marchés financiers avec focus sur l'IA."
+        
         start_time = time.time()
         task_id = task.id
         logger.info(f"📊 Prise en charge de la tâche #{task_id}...")
         logger.info(f"   - Type: {task.analysis_type}")
-        logger.info(f"   - Prompt: {task.prompt[:100]}...")
+        logger.info(f"   - Prompt: {task.prompt[:100] if task.prompt else 'Aucun prompt'}...")
 
         try:
             # 1. Mettre à jour le statut à "processing"
             logger.info(f"🔄 Mise à jour du statut de la tâche #{task_id} à 'processing'...")
             self.db.update_analysis_status(task_id, 'processing')
 
-            # 2. Exécuter l'analyse (ScrapingBee uniquement)
-                prompt = task.prompt or "Analyse générale des marchés financiers avec focus sur l'IA."
+            # 2. Préparer et exécuter l'analyse ScrapingBee
+            prompt = task.prompt or DEFAULT_PROMPT
             logger.info(f"🕷️ Création de la tâche ScrapingBee avec prompt: {prompt[:100]}...")
-                scraper_task_id = await self.scraper.create_scraping_task(prompt, 3)
+            
+            scraper_task_id = await self.scraper.create_scraping_task(prompt, MAX_SCRAPING_PAGES)
             
             logger.info(f"🚀 Exécution de la tâche ScrapingBee {scraper_task_id}...")
-                result = await self.scraper.execute_scraping_task(scraper_task_id)
+            result = await self.scraper.execute_scraping_task(scraper_task_id)
 
 
             # 3. Traiter le résultat
