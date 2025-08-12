@@ -721,10 +721,26 @@ class StockAPIManager:
             logger.info("🔄 Récupération Crypto Fear & Greed Index...")
             url = 'https://api.alternative.me/fng/?limit=1&format=json'
             
-            # Timeout court et retry intelligent
-            for attempt in range(2):
+            # Gestion intelligente des erreurs avec délais progressifs
+            for attempt in range(3):
                 try:
-                    resp = requests.get(url, timeout=8)  # Timeout réduit
+                    # Délai progressif pour éviter le rate limiting
+                    if attempt > 0:
+                        delay = 3 * attempt  # 3s, 6s, 9s
+                        logger.info(f"⏳ Attente {delay}s avant tentative {attempt+1}...")
+                        time.sleep(delay)
+                    
+                    resp = requests.get(url, timeout=10)
+                    
+                    # Gestion spécifique de l'erreur 429 (Too Many Requests)
+                    if resp.status_code == 429:
+                        if attempt < 2:
+                            logger.warning(f"⚠️ Rate limit atteint (429), tentative {attempt+1} dans {3 * (attempt+1)}s...")
+                            continue
+                        else:
+                            logger.warning("⚠️ Crypto FNG indisponible: Rate limit persistant après 3 tentatives")
+                            return None
+                    
                     resp.raise_for_status()
                     data = resp.json()
                     val = int(data['data'][0]['value'])
@@ -736,10 +752,16 @@ class StockAPIManager:
                         logger.warning(f"⚠️ Valeur FNG invalide: {val}")
                         return None
                         
+                except requests.exceptions.HTTPError as e:
+                    if attempt < 2:
+                        logger.warning(f"⚠️ Tentative {attempt+1} FNG échouée (HTTP {e.response.status_code}), retry...")
+                        continue
+                    else:
+                        logger.warning(f"⚠️ Crypto FNG indisponible: {e}")
+                        return None
                 except Exception as e:
-                    if attempt < 1:
+                    if attempt < 2:
                         logger.warning(f"⚠️ Tentative {attempt+1} FNG échouée, retry...")
-                        time.sleep(1)  # Délai court
                         continue
                     else:
                         logger.warning(f"⚠️ Crypto FNG indisponible: {e}")
@@ -755,10 +777,26 @@ class StockAPIManager:
             logger.info("🔄 Récupération BTC dominance...")
             url = 'https://api.coingecko.com/api/v3/global'
             
-            # Timeout court et retry intelligent
-            for attempt in range(2):
+            # Gestion intelligente du rate limiting avec délais progressifs
+            for attempt in range(3):
                 try:
-                    resp = requests.get(url, timeout=8)  # Timeout réduit
+                    # Délai progressif pour éviter le rate limiting
+                    if attempt > 0:
+                        delay = 5 * attempt  # 5s, 10s, 15s
+                        logger.info(f"⏳ Attente {delay}s avant tentative {attempt+1}...")
+                        time.sleep(delay)
+                    
+                    resp = requests.get(url, timeout=10)
+                    
+                    # Gestion spécifique de l'erreur 429 (Too Many Requests)
+                    if resp.status_code == 429:
+                        if attempt < 2:
+                            logger.warning(f"⚠️ Rate limit atteint (429), tentative {attempt+1} dans {5 * (attempt+1)}s...")
+                            continue
+                        else:
+                            logger.warning("⚠️ BTC dominance indisponible: Rate limit persistant après 3 tentatives")
+                            return None
+                    
                     resp.raise_for_status()
                     data = resp.json()
                     pct = float(data['data']['market_cap_percentage']['btc'])
@@ -771,10 +809,16 @@ class StockAPIManager:
                         logger.warning(f"⚠️ Valeur BTC dominance invalide: {pct}%")
                         return None
                         
+                except requests.exceptions.HTTPError as e:
+                    if attempt < 2:
+                        logger.warning(f"⚠️ Tentative {attempt+1} BTC dominance échouée (HTTP {e.response.status_code}), retry...")
+                        continue
+                    else:
+                        logger.warning(f"⚠️ BTC dominance indisponible: {e}")
+                        return None
                 except Exception as e:
-                    if attempt < 1:
+                    if attempt < 2:
                         logger.warning(f"⚠️ Tentative {attempt+1} BTC dominance échouée, retry...")
-                        time.sleep(1)  # Délai court
                         continue
                     else:
                         logger.warning(f"⚠️ BTC dominance indisponible: {e}")
