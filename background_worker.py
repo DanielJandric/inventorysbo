@@ -91,7 +91,7 @@ class MarketAnalysisWorker:
 
     async def process_task(self, task: MarketAnalysis):
         """Traite une seule tâche d'analyse."""
-        MAX_SCRAPING_PAGES = 3
+        MAX_SCRAPING_PAGES = 5
         DEFAULT_PROMPT = "Analyse générale des marchés financiers avec focus sur l'IA."
         
         start_time = time.time()
