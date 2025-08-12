@@ -528,7 +528,14 @@ class StockAPIManager:
         ]
 
         # Utiliser exclusivement yfinance
+        start_time = time.time()
+        max_execution_time = 120  # 2 minutes max
+        
         for category, display_name, symbol in ordered_symbols:
+            # Vérifier le timeout global
+            if time.time() - start_time > max_execution_time:
+                logger.warning(f"⚠️ Timeout global atteint ({max_execution_time}s), arrêt de la récupération")
+                break
             # Obligations: utiliser FRED en priorité
             if category == 'bonds' and display_name in ('US10Y','US5Y','US2Y'):
                 series_map = {'US2Y': 'DGS2', 'US5Y': 'DGS5', 'US10Y': 'DGS10'}
@@ -547,25 +554,27 @@ class StockAPIManager:
                 continue  # Ne pas essayer yfinance pour les bonds
             
             # Pour tous les autres actifs, utiliser yfinance
-            logger.info(f"⏳ Attente 10s avant la requête yfinance pour {symbol} ({display_name})...")
-            time.sleep(10)
-            data = self.yfinance.get_stock_price(symbol)
-            if data and data.get('price') is not None:
-                if category == 'forex' and display_name == 'DXY':
-                    snapshot[category][display_name] = {
-                        "value": data.get('price'),
-                        "change": data.get('change'),
-                        "change_percent": data.get('change_percent'),
-                        "source": data.get('source')
-                    }
-                else:
-                    logger.info(f"⏳ Attente 10s avant la requête yfinance pour {symbol} ({display_name})...")
-                    time.sleep(10)
-                    data = self.yfinance.get_stock_price(symbol)
-                    if data and data.get('price') is not None:
-                        snapshot[category][display_name] = {"price": data.get('price'), "change": data.get('change'), "change_percent": data.get('change_percent'), "source": data.get('source')}
+            try:
+                logger.info(f"⏳ Attente 11s avant la requête yfinance pour {symbol} ({display_name})...")
+                time.sleep(11)
+                logger.info(f"🔄 Récupération yfinance pour {symbol} ({display_name})...")
+                data = self.yfinance.get_stock_price(symbol)
+                if data and data.get('price') is not None:
+                    if category == 'forex' and display_name == 'DXY':
+                        snapshot[category][display_name] = {
+                            "value": data.get('price'),
+                            "change": data.get('change'),
+                            "change_percent": data.get('change_percent'),
+                            "source": data.get('source')
+                        }
                     else:
-                        snapshot[category][display_name] = {"error": "Data not available"}
+                        snapshot[category][display_name] = {"price": data.get('price'), "change": data.get('change'), "change_percent": data.get('change_percent'), "source": data.get('source')}
+                else:
+                    snapshot[category][display_name] = {"error": "Data not available"}
+            except Exception as e:
+                logger.warning(f"⚠️ Erreur pour {symbol} ({display_name}): {e}")
+                snapshot[category][display_name] = {"error": f"Error: {str(e)}"}
+                continue  # Continuer avec le prochain symbole
 
         # Calculs dérivés (analytics)
         analytics: Dict[str, Any] = {}
@@ -575,15 +584,25 @@ class StockAPIManager:
             gold = snapshot.get('commodities', {}).get('Or (Gold)', {}).get('price')
             # Ajouter Silver si absent
             if 'Silver' not in snapshot.get('commodities', {}):
-                logger.info("⏳ Attente 10s avant la requête yfinance pour SI=F (Silver)...")
-                time.sleep(10)
-                silver_data = self.yfinance.get_stock_price('SI=F')
-                snapshot['commodities']['Silver'] = {
-                    'price': silver_data.get('price') if silver_data else None,
-                    'change': silver_data.get('change') if silver_data else None,
-                    'change_percent': silver_data.get('change_percent') if silver_data else None,
-                    'source': (silver_data or {}).get('source') if silver_data else None
-                }
+                try:
+                    logger.info("⏳ Attente 11s avant la requête yfinance pour SI=F (Silver)...")
+                    time.sleep(11)
+                    logger.info("🔄 Récupération Silver (SI=F) via yfinance...")
+                    silver_data = self.yfinance.get_stock_price('SI=F')
+                    snapshot['commodities']['Silver'] = {
+                        'price': silver_data.get('price') if silver_data else None,
+                        'change': silver_data.get('change') if silver_data else None,
+                        'change_percent': silver_data.get('change_percent') if silver_data else None,
+                        'source': (silver_data or {}).get('source') if silver_data else None
+                    }
+                except Exception as e:
+                    logger.warning(f"⚠️ Erreur récupération Silver: {e}")
+                    snapshot['commodities']['Silver'] = {
+                        'price': None,
+                        'change': None,
+                        'change_percent': None,
+                        'source': 'Error'
+                    }
             silver = snapshot.get('commodities', {}).get('Silver', {}).get('price')
             if gold and silver and silver != 0:
                 analytics['gold_silver_ratio'] = round(float(gold) / float(silver), 2)
@@ -646,30 +665,52 @@ class StockAPIManager:
             pass
 
         snapshot['analytics'] = analytics
-
-        logger.info("✅ Aperçu du marché (strict) récupéré.")
+        
+        execution_time = time.time() - start_time
+        logger.info(f"✅ Aperçu du marché (strict) récupéré en {execution_time:.1f}s")
         return snapshot
 
     def _get_yfinance_rsi(self, symbol: str, period: int = 14) -> Optional[float]:
         """Calcule le RSI(period) via yfinance (données journalières)."""
         try:
-            logger.info(f"⏳ Attente 10s avant la requête yfinance historique pour {symbol} (RSI)...")
-            time.sleep(10)
+            logger.info(f"🔄 Calcul RSI pour {symbol} (period={period})...")
             import yfinance as yf  # type: ignore
-            hist = yf.download(symbol, period='6mo', interval='1d', progress=False, auto_adjust=True)
             import pandas as pd  # type: ignore
-            if hist is None or hist.empty or 'Close' not in hist:
-                return None
-            close = hist['Close']
-            delta = close.diff()
-            gain = delta.clip(lower=0)
-            loss = -delta.clip(upper=0)
-            avg_gain = gain.rolling(window=period, min_periods=period).mean()
-            avg_loss = loss.rolling(window=period, min_periods=period).mean()
-            rs = (avg_gain / avg_loss).replace([float('inf'), -float('inf')], 0)
-            rsi = 100 - (100 / (1 + rs))
-            val = float(rsi.iloc[-1]) if not rsi.empty else None
-            return val
+            
+            # Timeout plus court et retry intelligent
+            for attempt in range(2):
+                try:
+                    hist = yf.download(symbol, period='6mo', interval='1d', progress=False, auto_adjust=True, timeout=15)
+                    if hist is None or hist.empty or 'Close' not in hist:
+                        logger.warning(f"⚠️ Données yfinance vides pour {symbol}")
+                        return None
+                    
+                    close = hist['Close']
+                    delta = close.diff()
+                    gain = delta.clip(lower=0)
+                    loss = -delta.clip(upper=0)
+                    avg_gain = gain.rolling(window=period, min_periods=period).mean()
+                    avg_loss = loss.rolling(window=period, min_periods=period).mean()
+                    rs = (avg_gain / avg_loss).replace([float('inf'), -float('inf')], 0)
+                    rsi = 100 - (100 / (1 + rs))
+                    val = float(rsi.iloc[-1]) if not rsi.empty else None
+                    
+                    if val is not None:
+                        logger.info(f"✅ RSI calculé pour {symbol}: {val:.1f}")
+                        return val
+                    else:
+                        logger.warning(f"⚠️ RSI non calculable pour {symbol}")
+                        return None
+                        
+                except Exception as e:
+                    if attempt < 1:
+                        logger.warning(f"⚠️ Tentative {attempt+1} échouée pour {symbol}, retry...")
+                        time.sleep(2)  # Délai court pour retry
+                        continue
+                    else:
+                        logger.warning(f"⚠️ RSI indisponible pour {symbol}: {e}")
+                        return None
+                        
         except Exception as e:
             logger.warning(f"⚠️ RSI indisponible pour {symbol}: {e}")
             return None
@@ -677,27 +718,70 @@ class StockAPIManager:
     def _get_crypto_fng(self) -> Optional[int]:
         """Crypto Fear & Greed Index (Alternative.me) value 0-100."""
         try:
+            logger.info("🔄 Récupération Crypto Fear & Greed Index...")
             url = 'https://api.alternative.me/fng/?limit=1&format=json'
-            resp = requests.get(url, timeout=10)
-            resp.raise_for_status()
-            data = resp.json()
-            val = int(data['data'][0]['value'])
-            return val
+            
+            # Timeout court et retry intelligent
+            for attempt in range(2):
+                try:
+                    resp = requests.get(url, timeout=8)  # Timeout réduit
+                    resp.raise_for_status()
+                    data = resp.json()
+                    val = int(data['data'][0]['value'])
+                    
+                    if 0 <= val <= 100:
+                        logger.info(f"✅ Crypto FNG récupéré: {val}")
+                        return val
+                    else:
+                        logger.warning(f"⚠️ Valeur FNG invalide: {val}")
+                        return None
+                        
+                except Exception as e:
+                    if attempt < 1:
+                        logger.warning(f"⚠️ Tentative {attempt+1} FNG échouée, retry...")
+                        time.sleep(1)  # Délai court
+                        continue
+                    else:
+                        logger.warning(f"⚠️ Crypto FNG indisponible: {e}")
+                        return None
+                        
         except Exception as e:
-            logger.warning(f"⚠️ Crypto FNG API error: {e}")
+            logger.warning(f"⚠️ Crypto FNG indisponible: {e}")
             return None
 
     def _get_btc_dominance_pct(self) -> Optional[float]:
         """BTC dominance percentage via CoinGecko global endpoint."""
         try:
+            logger.info("🔄 Récupération BTC dominance...")
             url = 'https://api.coingecko.com/api/v3/global'
-            resp = requests.get(url, timeout=10)
-            resp.raise_for_status()
-            data = resp.json()
-            pct = float(data['data']['market_cap_percentage']['btc'])
-            return round(pct, 2)
+            
+            # Timeout court et retry intelligent
+            for attempt in range(2):
+                try:
+                    resp = requests.get(url, timeout=8)  # Timeout réduit
+                    resp.raise_for_status()
+                    data = resp.json()
+                    pct = float(data['data']['market_cap_percentage']['btc'])
+                    
+                    if 0 <= pct <= 100:
+                        rounded_pct = round(pct, 2)
+                        logger.info(f"✅ BTC dominance récupéré: {rounded_pct}%")
+                        return rounded_pct
+                    else:
+                        logger.warning(f"⚠️ Valeur BTC dominance invalide: {pct}%")
+                        return None
+                        
+                except Exception as e:
+                    if attempt < 1:
+                        logger.warning(f"⚠️ Tentative {attempt+1} BTC dominance échouée, retry...")
+                        time.sleep(1)  # Délai court
+                        continue
+                    else:
+                        logger.warning(f"⚠️ BTC dominance indisponible: {e}")
+                        return None
+                        
         except Exception as e:
-            logger.warning(f"⚠️ CoinGecko API error: {e}")
+            logger.warning(f"⚠️ BTC dominance indisponible: {e}")
             return None
 
 class FredAPI:
