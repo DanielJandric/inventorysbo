@@ -8227,6 +8227,84 @@ def markets_chat():
         logger.error(f"Erreur markets_chat: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
+
+@app.route("/api/markets/chat/export-pdf", methods=["POST"])
+def markets_chat_export_pdf():
+    """Export serveur de la discussion chat au format PDF (Puppeteer, fallback WeasyPrint)."""
+    try:
+        data = request.get_json(silent=True) or {}
+        # messages: [{ role: 'user'|'assistant', text: '...' }]
+        messages = data.get('messages') or []
+        if not isinstance(messages, list) or not messages:
+            return jsonify({"success": False, "error": "Pas de contenu"}), 400
+
+        # Construire HTML print-friendly
+        def esc(s: str) -> str:
+            return (s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
+        items_html = []
+        for m in messages:
+            role = m.get('role', 'assistant')
+            txt = esc(m.get('text', ''))
+            # Markdown gras minimal + emojis conservés
+            txt = txt.replace('**', '<strong>').replace('<strong><strong>', '**')
+            color = '#0ea5e9' if role == 'user' else '#a3e3f0'
+            who = 'Vous' if role == 'user' else 'Assistant'
+            items_html.append(f"""
+              <div class='msg'><span class='who'>{who}:</span> <span class='txt'>{txt}</span></div>
+            """)
+        html_content = f"""
+        <!doctype html>
+        <html><head><meta charset='utf-8'>
+        <style>
+          @page {{ size: A4; margin: 16mm; }}
+          body {{ font: 12pt 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial; color: #0f172a; }}
+          h1 {{ font-size: 16pt; margin: 0 0 12pt; }}
+          .meta {{ color:#64748b; font-size:10pt; margin-bottom:12pt; }}
+          .msg {{ margin: 8pt 0; line-height: 1.5; word-break: break-word; }}
+          .who {{ font-weight: 700; color:#0ea5e9; }}
+          .txt strong {{ font-weight: 700; }}
+        </style>
+        </head>
+        <body>
+          <h1>Discussion Chatbot Marchés</h1>
+          <div class='meta'>{datetime.now().strftime('%d/%m/%Y %H:%M')}</div>
+          {''.join(items_html)}
+        </body></html>
+        """
+
+        # Générer via Puppeteer si possible
+        try:
+            import tempfile, subprocess
+            html_fd, html_path = tempfile.mkstemp(suffix='.html')
+            with os.fdopen(html_fd, 'w', encoding='utf-8') as f:
+                f.write(html_content)
+            pdf_fd, pdf_path = tempfile.mkstemp(suffix='.pdf')
+            os.close(pdf_fd)
+            node_cmd = os.getenv('NODE_BIN', 'node')
+            script_path = os.path.join(os.getcwd(), 'tools', 'puppeteer_print.js')
+            cmd = [node_cmd, script_path, '--file', html_path, '--out', pdf_path, '--landscape', 'false', '--format', 'A4', '--margin', '16mm', '--wait-until', 'networkidle0']
+            completed = subprocess.run(cmd, capture_output=True)
+            if completed.returncode != 0:
+                raise RuntimeError(completed.stderr.decode('utf-8', errors='ignore'))
+            with open(pdf_path, 'rb') as fpdf:
+                pdf_bytes = fpdf.read()
+            os.remove(html_path); os.remove(pdf_path)
+            return Response(pdf_bytes, mimetype='application/pdf', headers={'Content-Disposition': 'attachment; filename="chat_update_marches.pdf"'})
+        except Exception as e:
+            logger.error(f"Export PDF puppeteer échec: {e}")
+            # Fallback WeasyPrint
+            try:
+                from weasyprint import HTML
+                pdf_bytes = HTML(string=html_content).write_pdf()
+                return Response(pdf_bytes, mimetype='application/pdf', headers={'Content-Disposition': 'attachment; filename="chat_update_marches.pdf"'})
+            except Exception as e2:
+                logger.error(f"Export PDF weasyprint échec: {e2}")
+                return jsonify({"success": False, "error": "Export PDF échoué"}), 500
+    except Exception as e:
+        logger.error(f"Erreur markets_chat_export_pdf: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
 @app.route("/api/market-analyses/<int:analysis_id>", methods=["DELETE"])
 def delete_market_analysis(analysis_id: int):
     """Supprime un rapport d'analyse par ID."""

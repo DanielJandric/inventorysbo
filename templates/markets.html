@@ -122,9 +122,7 @@
                     </div>
                     <textarea id="chat-context" class="mt-2 w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs" rows="3" placeholder="Optionnel: Collez ici un extrait de rapport ou un contexte métier pour guider l'analyse (utilisé en plus des 10-15 derniers rapports)."></textarea>
                     <div class="flex justify-end">
-                        <button id="chat-export" class="mt-2 px-3 py-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 text-xs">
-                            <i class="fas fa-file-pdf mr-1"></i> Exporter en PDF
-                        </button>
+                        <button id="chat-export" class="mt-2 px-3 py-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 text-xs"><i class="fas fa-file-pdf mr-1"></i> Exporter en PDF</button>
                     </div>
                 </div>
             </section>
@@ -427,54 +425,20 @@
             // Export PDF de la dernière discussion
             exportBtn.addEventListener('click', async () => {
                 try {
-                    // Charger jsPDF de manière robuste
-                    let jsPDFCtor = undefined;
-                    if (window.jspdf && window.jspdf.jsPDF) {
-                        jsPDFCtor = window.jspdf.jsPDF;
-                    } else if (window.jsPDF) {
-                        jsPDFCtor = window.jsPDF;
-                    } else {
-                        await new Promise((resolve, reject) => {
-                            const s = document.createElement('script');
-                            s.src = 'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js';
-                            s.onload = resolve;
-                            s.onerror = reject;
-                            document.head.appendChild(s);
-                        });
-                        if (window.jspdf && window.jspdf.jsPDF) jsPDFCtor = window.jspdf.jsPDF;
-                        else if (window.jsPDF) jsPDFCtor = window.jsPDF;
-                    }
-                    if (!jsPDFCtor) throw new Error('jsPDF non chargé');
-
-                    const doc = new jsPDFCtor({ unit: 'pt', format: 'a4' });
-                    const margin = 40;
-                    let y = margin;
-                    doc.setFont('helvetica', '');
-                    doc.setFontSize(12);
-                    // En-tête
-                    doc.setFontSize(14);
-                    doc.text('Discussion Chatbot Marchés', margin, y);
-                    y += 20;
-                    doc.setFontSize(10);
-                    doc.text(new Date().toLocaleString('fr-FR'), margin, y);
-                    y += 20;
-                    doc.setFontSize(12);
-                    // Contenu
-                    const lines = Array.from(messagesDiv.querySelectorAll('div')).map(el => el.textContent || '');
-                    const pageWidth = doc.internal.pageSize.getWidth() - margin * 2;
-                    lines.forEach((line) => {
-                        const split = doc.splitTextToSize(line, pageWidth);
-                        split.forEach((l) => {
-                            if (y > doc.internal.pageSize.getHeight() - margin) {
-                                doc.addPage();
-                                y = margin;
-                            }
-                            doc.text(l, margin, y);
-                            y += 16;
-                        });
-                        y += 6;
+                    const nodes = Array.from(messagesDiv.querySelectorAll('div'));
+                    const payload = nodes.map((el) => {
+                        const t = el.textContent || '';
+                        const role = t.startsWith('Vous:') ? 'user' : 'assistant';
+                        return { role, text: t.replace(/^Vous:\s*/, '').replace(/^Assistant:\s*/, '') };
                     });
-                    doc.save('chat_update_marches.pdf');
+                    const r = await fetch('/api/markets/chat/export-pdf', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: payload }) });
+                    if (!r.ok) throw new Error('Export serveur échoué');
+                    const blob = await r.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url; a.download = 'chat_update_marches.pdf';
+                    document.body.appendChild(a); a.click();
+                    setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
                 } catch (e) {
                     alert('Erreur export PDF: ' + e.message);
                 }
