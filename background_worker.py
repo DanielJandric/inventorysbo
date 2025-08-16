@@ -597,11 +597,15 @@ class MarketAnalysisWorker:
             rows.append('<tr><td colspan="3" style="background: #dcfce7; font-weight: bold; padding: 10px; color: #15803d;">📊 Indices</td></tr>')
             for name, data in snapshot['indices'].items():
                 change_class = 'positive' if data.get('change', 0) >= 0 else 'negative'
+                price = data.get('price', 'N/A')
+                change_pct = data.get('change_percent', 0)
+                price_str = f"${price:,.2f}" if isinstance(price, (int, float)) else str(price)
+                change_str = f"{change_pct:+.2f}%" if isinstance(change_pct, (int, float)) else str(change_pct)
                 rows.append(f'''
                     <tr>
                         <td><strong>{name}</strong></td>
-                        <td>${data.get('price', 'N/A'):,.2f}</td>
-                        <td class="{change_class}">{data.get('change_percent', 0):+.2f}%</td>
+                        <td>{price_str}</td>
+                        <td class="{change_class}">{change_str}</td>
                     </tr>
                 ''')
         
@@ -609,11 +613,15 @@ class MarketAnalysisWorker:
             rows.append('<tr><td colspan="3" style="background: #fef3c7; font-weight: bold; padding: 10px; color: #92400e;">🏭 Matières Premières</td></tr>')
             for name, data in snapshot['commodities'].items():
                 change_class = 'positive' if data.get('change', 0) >= 0 else 'negative'
+                price = data.get('price', 'N/A')
+                change_pct = data.get('change_percent', 0)
+                price_str = f"${price:,.2f}" if isinstance(price, (int, float)) else str(price)
+                change_str = f"{change_pct:+.2f}%" if isinstance(change_pct, (int, float)) else str(change_pct)
                 rows.append(f'''
                     <tr>
                         <td><strong>{name}</strong></td>
-                        <td>${data.get('price', 'N/A'):,.2f}</td>
-                        <td class="{change_class}">{data.get('change_percent', 0):+.2f}%</td>
+                        <td>{price_str}</td>
+                        <td class="{change_class}">{change_str}</td>
                     </tr>
                 ''')
         
@@ -621,11 +629,15 @@ class MarketAnalysisWorker:
             rows.append('<tr><td colspan="3" style="background: #ede9fe; font-weight: bold; padding: 10px; color: #6d28d9;">🪙 Cryptomonnaies</td></tr>')
             for name, data in snapshot['crypto'].items():
                 change_class = 'positive' if data.get('change', 0) >= 0 else 'negative'
+                price = data.get('price', 'N/A')
+                change_pct = data.get('change_percent', 0)
+                price_str = f"${price:,.2f}" if isinstance(price, (int, float)) else str(price)
+                change_str = f"{change_pct:+.2f}%" if isinstance(change_pct, (int, float)) else str(change_pct)
                 rows.append(f'''
                     <tr>
                         <td><strong>{name}</strong></td>
-                        <td>${data.get('price', 'N/A'):,.2f}</td>
-                        <td class="{change_class}">{data.get('change_percent', 0):+.2f}%</td>
+                        <td>{price_str}</td>
+                        <td class="{change_class}">{change_str}</td>
                     </tr>
                 ''')
         
