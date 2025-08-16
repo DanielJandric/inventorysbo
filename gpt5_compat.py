@@ -58,17 +58,7 @@ def from_chat_completions_compat(
             req["tools"] = tools
         effort = os.getenv("AI_REASONING_EFFORT", "medium")
         req["reasoning"] = {"effort": effort}
-        # Map response_format to Responses API when provided
-        if response_format:
-            try:
-                fmt_type = response_format.get("type") if isinstance(response_format, dict) else None
-                if fmt_type == "json_object":
-                    req["response_format"] = {"type": "json_object"}
-                elif fmt_type == "json_schema":
-                    json_schema = response_format.get("json_schema") or {}
-                    req["response_format"] = {"type": "json_schema", "json_schema": json_schema}
-            except Exception:
-                pass
+        # Do not pass response_format for GPT-5 Responses API in this SDK version
         if max_tokens is not None:
             req["max_output_tokens"] = max_tokens
         # Do not send temperature for GPT-5 to keep determinism and avoid 400

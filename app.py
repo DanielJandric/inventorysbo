@@ -2201,7 +2201,6 @@ class SemanticSearchRAG:
         except Exception as e:
             logger.error(f"Erreur génération embedding item: {e}")
             return None
-
 # Moteur d'IA OpenAI Pure avec RAG
 class PureOpenAIEngineWithRAG:
     """Moteur d'IA utilisant OpenAI GPT-4 avec recherche sémantique RAG"""
@@ -2986,7 +2985,6 @@ def get_real_estate_listings():
     db = get_real_estate_db()
     listings = db.get_all_listings()
     return jsonify([listing.to_dict() for listing in listings])
-
 @app.route("/api/real-estate/scrape", methods=["POST"])
 def scrape_real_estate():
     """Déclenche le scraping des annonces immobilières en arrière-plan."""
@@ -3705,8 +3703,6 @@ def update_all_stock_prices():
             "error": str(e),
             "source": "API Manus"
         }), 500
-
-
 def schedule_auto_stock_updates():
     """
     Planifie les mises à jour automatiques des prix des actions avec optimisation des 10 requêtes quotidiennes
@@ -3999,7 +3995,6 @@ client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"
                 {"role": "system", "content": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."},
                 {"role": "user", "content": prompt}
             ],
-            response_format={"type": "json_object"},
             max_tokens=800
         )
         
@@ -4116,7 +4111,6 @@ client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"
                     {"role": "system", "content": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."},
                     {"role": "user", "content": prompt}
                 ],
-                response_format={"type": "json_object"},
                 max_tokens=800,
                 timeout=20
             )
@@ -4257,7 +4251,6 @@ client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"
                         {"role": "system", "content": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."},
                         {"role": "user", "content": prompt}
                     ],
-                    response_format={"type": "json_object"},
                     max_tokens=800,
                     timeout=15  # Timeout réduit
                 )
@@ -4447,7 +4440,6 @@ def fix_vehicle_categories():
     except Exception as e:
         logger.error(f"Erreur fix_vehicle_categories: {e}")
         return jsonify({"error": "Erreur lors de la correction des catégories"}), 500
-
 @app.route("/api/chatbot", methods=["POST"])
 def chatbot():
     """Chatbot utilisant OpenAI GPT-4 avec recherche sémantique RAG et mémoire conversationnelle"""
@@ -5245,7 +5237,6 @@ def chatbot():
             "reply": "❌ Moteur IA Indisponible",
             "error": str(e)
         }), 500
-
 @app.route("/api/chatbot/metrics", methods=["GET"])
 def get_chatbot_metrics():
     try:
@@ -5991,7 +5982,6 @@ def generate_asset_class_report(asset_class_name):
         return jsonify({
             "error": str(e)
         }), 500
-
 @app.route("/api/reports/all-asset-classes", methods=["GET"])
 def generate_all_asset_classes_report():
     """Génère un rapport PDF pour toutes les classes d'actifs"""
@@ -6768,7 +6758,6 @@ def get_scheduler_status():
     except Exception as e:
         logger.error(f"Erreur statut scheduler: {e}")
         return jsonify({"error": str(e)}), 500
-
 def generate_market_briefing():
     """Génère un briefing de marché avec fallback vers web search OpenAI"""
     try:
@@ -7546,7 +7535,6 @@ def google_cse_stock_price(symbol):
     except Exception as e:
         logger.error(f"Erreur prix action Google CSE: {e}")
         return jsonify({"error": str(e)}), 500
-
 @app.route("/api/google-cse/market-news", methods=["POST"])
 def google_cse_market_news():
     """Recherche des nouvelles du marché avec Google CSE"""
@@ -8282,8 +8270,6 @@ def markets_chat():
     except Exception as e:
         logger.error(f"Erreur markets_chat: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
-
-
 @app.route("/api/markets/chat/export-pdf", methods=["POST"])
 def markets_chat_export_pdf():
     """Export serveur de la discussion chat au format PDF (Puppeteer, fallback WeasyPrint)."""
