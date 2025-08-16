@@ -517,14 +517,29 @@ PRÉSENTATION ET FORMATAGE (SANS HTML):
                             "text": f"Demande: {prompt}\n\nDONNÉES FACTUELLES (snapshot):\n{json.dumps(market_snapshot, indent=2)}\n\nDONNÉES COLLECTÉES (articles):\n{context}"
                         }]}
                     ]
-                    response = client.responses.create(
-                        model=os.getenv("AI_MODEL", "gpt-5"),
-                        input=input_messages,
-                        reasoning={"effort": os.getenv("AI_REASONING_EFFORT", "medium")},
-                        verbosity="low",
-                        temperature=0.3,
-                        max_output_tokens=15000
-                    )
+                    # Préparer l'appel Responses API avec fallbacks robustes
+                    # Force GPT‑5 unless overridden explicitly via AI_MODEL
+                    chosen_model = os.getenv("AI_MODEL", "gpt-5")
+                    req_kwargs = {
+                        "model": chosen_model,
+                        "input": input_messages,
+                        "temperature": 0.3,
+                        "max_output_tokens": 15000,
+                    }
+                    effort = os.getenv("AI_REASONING_EFFORT", "medium")
+                    if effort:
+                        req_kwargs["reasoning"] = {"effort": effort}
+
+                    try:
+                        response = client.responses.create(**req_kwargs)
+                    except Exception as e:
+                        err_msg = str(e)
+                        # Retry without 'reasoning' if not supported, but KEEP model gpt-5
+                        if "reasoning" in req_kwargs and ("unexpected keyword argument 'reasoning'" in err_msg or "is not supported" in err_msg or "Invalid schema" in err_msg):
+                            req_kwargs.pop("reasoning", None)
+                            response = client.responses.create(**req_kwargs)
+                        else:
+                            raise
                     # Extraire le texte et parser JSON
                     content_text = getattr(response, "output_text", None)
                     if not content_text:
