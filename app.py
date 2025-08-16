@@ -2330,10 +2330,8 @@ class PureOpenAIEngineWithRAG:
                 messages=loop_messages,
                 tools=tools,
                 model=os.getenv("AI_MODEL","gpt-5"),
-                temperature=0.2,
                 max_output_tokens=900,
                 reasoning_effort="high",
-                verbosity="low",
                 client=self.client
             )
 
@@ -2362,7 +2360,6 @@ class PureOpenAIEngineWithRAG:
                                 "name": name,
                                 "content":[{"type":"output_text","text": json.dumps(tool_result, ensure_ascii=False)}]
                             }],
-                            verbosity="low"
                         )
                         made_call = True
                         break
@@ -2482,9 +2479,7 @@ Si la question fait référence à des éléments mentionnés précédemment, ut
 client=self.client, model=os.getenv("AI_MODEL", "gpt-5"
 ),
                 messages=messages,
-                temperature=0.2,
-                max_tokens=1000,
-                timeout=30
+                max_tokens=1000
             )
             
             ai_response = response.choices[0].message.content.strip()
@@ -2551,9 +2546,7 @@ Réponds de manière concise et directe."""
 client=self.client, model=os.getenv("AI_MODEL", "gpt-5"
 ),
                     messages=messages,
-                    temperature=0.2,
-                    max_tokens=800,
-                    timeout=45
+                    max_tokens=800
                 )
                 ai_response = response.choices[0].message.content.strip()
             
@@ -2637,9 +2630,7 @@ Réponds de manière concise et directe."""
 client=self.client, model=os.getenv("AI_MODEL", "gpt-5"
 ),
                 messages=messages,
-                temperature=0.3,
-                max_tokens=600,
-                timeout=30
+                max_tokens=600
             )
             
             ai_response = response.choices[0].message.content.strip()
@@ -4016,8 +4007,7 @@ client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"
                 {"role": "user", "content": prompt}
             ],
             response_format={"type": "json_object"},
-            max_tokens=800,
-            timeout=20
+            max_tokens=800
         )
         
         result = json.loads(response.choices[0].message.content)
@@ -6889,8 +6879,7 @@ client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"
                 {"role": "system", "content": "Tu es un expert en marchés financiers. Utilise la recherche web pour des données actuelles."},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=2000,
-            temperature=0.7
+            max_tokens=2000
         )
 
         if response.choices and response.choices[0].message.content:
@@ -8273,7 +8262,6 @@ def markets_chat():
             model=os.getenv("AI_MODEL", "gpt-5"),
             input=input_messages,
             reasoning={"effort": reasoning_effort},
-            temperature=0.3,
             max_output_tokens=15000,
         )
         reply = getattr(resp, "output_text", "") or ""
