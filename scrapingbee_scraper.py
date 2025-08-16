@@ -509,7 +509,7 @@ PRÉSENTATION ET FORMATAGE (SANS HTML):
             # Essayer jusqu'à 3 fois en cas d'erreur
             for attempt in range(3):
                 try:
-                    response = client.chat.completions.create(
+                    response = from_chat_completions_compat(client=client, 
                         model=model_name,
                         messages=[
                             {"role": "system", "content": system_prompt},

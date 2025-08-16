@@ -2318,66 +2318,62 @@ class PureOpenAIEngineWithRAG:
         return {"error": "Outil inconnu"}
 
     def _run_with_tools(self, messages: List[Dict[str, Any]], items: List[CollectionItem], analytics: Dict[str, Any]) -> Optional[str]:
-        """Run the model with tool-calling and return final assistant text."""
+
+        """Run the model with tool-calling (Responses API) and return final assistant text."""
         try:
             self._tool_runtime_context = {"items": items, "analytics": analytics}
             tools = self._get_tools_schema()
             loop_messages = list(messages)
-            for _ in range(3):  # up to 3 tool iterations
-                resp = self.client.chat.completions.create(
-                    model=os.getenv("AI_MODEL", "gpt-4.1"),
-                    messages=loop_messages,
-                    temperature=0.2,
-                    max_tokens=900,
-                    tools=tools,
-                    tool_choice="auto",
-                    timeout=45,
-                )
-                msg = resp.choices[0].message
-                # If tool calls present
-                tool_calls = getattr(msg, 'tool_calls', None)
-                if not tool_calls and isinstance(msg, dict):
-                    tool_calls = msg.get('tool_calls')
-                if tool_calls:
-                    # Append assistant message containing tool calls
-                    loop_messages.append({
-                        "role": "assistant",
-                        "content": msg.content or "",
-                        "tool_calls": [
-                            {
-                                "id": tc.id,
-                                "type": tc.type,
-                                "function": {"name": tc.function.name, "arguments": tc.function.arguments}
-                            } for tc in tool_calls
-                        ]
-                    })
-                    for tc in tool_calls:
-                        try:
-                            fn_name = tc.function.name
-                            args_json = tc.function.arguments or "{}"
-                            args = json.loads(args_json) if isinstance(args_json, str) else args_json
-                        except Exception:
-                            fn_name, args = "", {}
-                        result = self._execute_tool(fn_name, args or {})
-                        loop_messages.append({
-                            "role": "tool",
-                            "tool_call_id": tc.id,
-                            "content": json.dumps(result, ensure_ascii=False)
-                        })
-                    # continue loop → another model call
-                    continue
-                # No tool calls: final message
-                content = getattr(msg, 'content', None) if not isinstance(msg, dict) else msg.get('content')
-                if content:
-                    return content.strip()
-                break
+
+            # First turn
+            res = chat_tools_messages(
+                messages=loop_messages,
+                tools=tools,
+                model=os.getenv("AI_MODEL","gpt-5"),
+                temperature=0.2,
+                max_output_tokens=900,
+                reasoning_effort="high",
+                verbosity="low",
+                client=self.client
+            )
+
+            for _ in range(2):  # up to 3 turns total
+                made_call = False
+                for item in getattr(res, "output", []) or []:
+                    if getattr(item, "type", None) == "tool_call":
+                        name = getattr(item, "tool_name", None)
+                        args = getattr(item, "arguments", {})
+                        if isinstance(args, str):
+                            import json as _json
+                            try:
+                                args = _json.loads(args)
+                            except Exception:
+                                args = {"input": args}
+
+                        # Dispatch locally
+                        tool_result = self._run_tool_by_name(name, args)
+
+                        # Send tool output back using previous_response_id
+                        res = self.client.responses.create(
+                            model=os.getenv("AI_MODEL","gpt-5"),
+                            previous_response_id=res.id,
+                            input=[{
+                                "role":"tool",
+                                "name": name,
+                                "content":[{"type":"output_text","text": json.dumps(tool_result, ensure_ascii=False)}]
+                            }],
+                            verbosity="low"
+                        )
+                        made_call = True
+                        break
+                if not made_call:
+                    break
+
+            return getattr(res, "output_text", None)
         except Exception as e:
-            logger.error(f"Erreur tool-calling: {e}")
+            logger.error(f"_run_with_tools (Responses) error: {e}")
             return None
-        finally:
-            self._tool_runtime_context = {}
-        return None
-    
+
     def detect_query_intent(self, query: str) -> QueryIntent:
         """Détecte l'intention de la requête"""
         query_lower = query.lower()
@@ -2482,8 +2478,9 @@ Si la question fait référence à des éléments mentionnés précédemment, ut
 
             messages.append({"role": "user", "content": user_prompt})
 
-            response = self.client.chat.completions.create(
-                model=os.getenv("AI_MODEL", "gpt-4.1"),
+            response = from_chat_completions_compat(
+client=self.client, model=os.getenv("AI_MODEL", "gpt-5"
+),
                 messages=messages,
                 temperature=0.2,
                 max_tokens=1000,
@@ -2550,8 +2547,9 @@ Réponds de manière concise et directe."""
             ai_response = self._run_with_tools(messages, items, analytics)
             if not ai_response:
                 # Fallback to plain completion
-                response = self.client.chat.completions.create(
-                    model=os.getenv("AI_MODEL", "gpt-4.1"),
+                response = from_chat_completions_compat(
+client=self.client, model=os.getenv("AI_MODEL", "gpt-5"
+),
                     messages=messages,
                     temperature=0.2,
                     max_tokens=800,
@@ -2635,8 +2633,9 @@ Réponds de manière concise et directe."""
 
             messages.append({"role": "user", "content": user_prompt})
 
-            response = self.client.chat.completions.create(
-                model=os.getenv("AI_MODEL", "gpt-4.1"),
+            response = from_chat_completions_compat(
+client=self.client, model=os.getenv("AI_MODEL", "gpt-5"
+),
                 messages=messages,
                 temperature=0.3,
                 max_tokens=600,
@@ -4009,8 +4008,9 @@ Réponds en JSON avec:
 - market_trend (hausse/stable/baisse)
 - price_range (objet avec min et max basés sur le marché)"""
 
-        response = openai_client.chat.completions.create(
-            model=os.getenv("AI_MODEL", "gpt-4.1"),
+        response = from_chat_completions_compat(
+client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"
+),
             messages=[
                 {"role": "system", "content": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."},
                 {"role": "user", "content": prompt}
@@ -4121,8 +4121,9 @@ Réponds en JSON avec:
 - confidence_score (0.1-0.9)
 - market_trend (hausse/stable/baisse)"""
 
-            response = openai_client.chat.completions.create(
-                model=os.getenv("AI_MODEL", "gpt-4.1"),
+            response = from_chat_completions_compat(
+client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"
+),
                 messages=[
                     {"role": "system", "content": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."},
                     {"role": "user", "content": prompt}
@@ -4256,8 +4257,9 @@ Réponds en JSON avec:
 - confidence_score (0.1-0.9)
 - market_trend (hausse/stable/baisse)"""
 
-                response = openai_client.chat.completions.create(
-                    model=os.getenv("AI_MODEL", "gpt-4.1"),
+                response = from_chat_completions_compat(
+client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"
+),
                     messages=[
                         {"role": "system", "content": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."},
                         {"role": "user", "content": prompt}
@@ -6880,8 +6882,9 @@ Recherche les données de marché actuelles pour :
 
 Si une classe d'actif n'a pas bougé, dis-le clairement sans meubler. Génère un briefing pour aujourd'hui basé sur les données de marché réelles trouvées."""
 
-        response = openai_client.chat.completions.create(
-            model=os.getenv("AI_MODEL", "gpt-4.1"),
+        response = from_chat_completions_compat(
+client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"
+),
             messages=[
                 {"role": "system", "content": "Tu es un expert en marchés financiers. Utilise la recherche web pour des données actuelles."},
                 {"role": "user", "content": prompt}
@@ -8263,12 +8266,12 @@ def markets_chat():
         messages.append({"role": "user", "content": user_payload})
 
         model_name = os.getenv("AI_MODEL", "gpt-4.1")
-        resp = client.chat.completions.create(
-            model=model_name,
+        resp = from_chat_completions_compat(
+client=client, model=model_name,
             messages=messages,
             temperature=0.3,
             max_tokens=15000,
-        )
+)
         reply = resp.choices[0].message.content
 
         # Persister dans la mémoire
