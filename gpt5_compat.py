@@ -17,9 +17,20 @@ def _to_responses_input(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         role = m.get("role", "user")
         content = m.get("content", "")
         if isinstance(content, list):
-            typed.append({"role": role, "content": content})
+            # Convert assistant input_text parts to output_text
+            if role == "assistant":
+                fixed = []
+                for part in content:
+                    if isinstance(part, dict) and part.get("type") == "input_text":
+                        fixed.append({"type": "output_text", "text": part.get("text", "")})
+                    else:
+                        fixed.append(part)
+                typed.append({"role": role, "content": fixed})
+            else:
+                typed.append({"role": role, "content": content})
         else:
-            typed.append({"role": role, "content": [{"type": "input_text", "text": str(content)}]})
+            part_type = "output_text" if role == "assistant" else "input_text"
+            typed.append({"role": role, "content": [{"type": part_type, "text": str(content)}]})
     return typed
 
 

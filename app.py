@@ -8249,7 +8249,9 @@ def markets_chat():
             for m in (history_persisted or [])[-8:]:
                 r, c = (m or {}).get('role'), (m or {}).get('content')
                 if r in {"user", "assistant"} and c:
-                    input_messages.append({"role": r, "content": [{"type": "input_text", "text": str(c)}]})
+                    # user stays input_text; assistant must be output_text in Responses API history
+                    typed_type = "output_text" if r == "assistant" else "input_text"
+                    input_messages.append({"role": r, "content": [{"type": typed_type, "text": str(c)}]})
         except Exception:
             pass
 
