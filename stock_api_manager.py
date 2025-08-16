@@ -505,23 +505,48 @@ class StockAPIManager:
         }
 
         # Liste ordonnée des requêtes à effectuer (avec affichage)
+        # Inclut USA, Europe (y compris Suisse), Asie (y compris Japon) et quelques sociétés phares européennes
         ordered_symbols = [
+            # Actions USA (repères tech)
             ("stocks", "NVDA", "NVDA"),
             ("stocks", "MSFT", "MSFT"),
             ("stocks", "AMD", "AMD"),
             ("stocks", "AAPL", "AAPL"),
-            ("commodities", "Or (Gold)", "GC=F"),
-            ("crypto", "Bitcoin", "BTC-USD"),
+            # Actions Europe/Suisse (sociétés phares)
+            ("stocks", "Nestlé (CH)", "NESN.SW"),
+            ("stocks", "Novartis (CH)", "NOVN.SW"),
+            ("stocks", "Roche (CH)", "ROG.SW"),
+            ("stocks", "IREN (CH)", "IREN.SW"),
+            ("stocks", "LVMH (FR)", "MC.PA"),
+            ("stocks", "ASML (NL)", "ASML.AS"),
+            # Indices USA
             ("indices", "S&P 500", "^GSPC"),
             ("indices", "NASDAQ", "^IXIC"),
             ("indices", "Dow Jones", "^DJI"),
             ("indices", "Russell 2000", "^RUT"),
+            # Indices Europe
+            ("indices", "Euro Stoxx 50", "^STOXX50E"),
+            ("indices", "DAX", "^GDAXI"),
+            ("indices", "CAC 40", "^FCHI"),
+            ("indices", "FTSE 100", "^FTSE"),
+            ("indices", "SMI", "^SSMI"),
+            # Indices Asie
+            ("indices", "Nikkei 225", "^N225"),
+            ("indices", "Hang Seng", "^HSI"),
+            ("indices", "Shanghai Composite", "^SSEC"),
+            # Volatilité
             ("volatility", "VIX", "^VIX"),
+            # Matières premières
             ("commodities", "WTI", "CL=F"),
             ("commodities", "Brent", "BZ=F"),
             ("commodities", "Natural Gas", "NG=F"),
+            ("commodities", "Or (Gold)", "GC=F"),
+            # Crypto
+            ("crypto", "Bitcoin", "BTC-USD"),
             ("crypto", "Ethereum", "ETH-USD"),
+            # Devises / Indice dollar
             ("forex", "DXY", "DX=F"),
+            # Obligations US
             ("bonds", "US2Y", "^UST2Y"),
             ("bonds", "US5Y", "^FVX"),
             ("bonds", "US10Y", "^TNX"),

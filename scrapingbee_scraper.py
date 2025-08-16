@@ -444,9 +444,19 @@ STRUCTURE OBLIGATOIRE DE LA RÉPONSE JSON (ADAPTÉE À NOTRE SYSTÈME):
     "dashboard": {
         "market_mood": "",
         "vix_regime": "",
+        "regional_overview": {
+            "USA": "Résumé concis (indices/secteurs clés, drivers, risque/opportunité)",
+            "Europe": "Résumé concis (indices/secteurs clés, drivers, risque/opportunité)",
+            "Suisse": "Résumé concis (SMI/blue chips ex: NESN/ROG/NOVN/IREN, drivers, risque/opportunité)",
+            "Asie": "Résumé concis (Japon/Chine, indices comme Nikkei/HSI/SSEC, drivers)",
+            "Japon": "Résumé concis (Nikkei, FX/BoJ si pertinent)"
+        },
         "key_metrics": [
             "• S&P 500: [valeur/N/A] ([var%/N/A]) | RSI: [val/N/A] | Support: [N/A] | Résistance: [N/A]",
             "• Nasdaq: [valeur/N/A] ([var%/N/A]) | P/E: [N/A] | Volume vs 20D: [N/A]",
+            "• Euro Stoxx 50 / DAX / CAC: [val/N/A] ([var%/N/A])",
+            "• SMI (Suisse): [val/N/A] ([var%/N/A]) | NESN/ROG/NOVN/IREN: [N/A]",
+            "• Nikkei / HSI / SSEC: [val/N/A] ([var%/N/A])",
             "• VIX: [val/N/A] ([var%/N/A]) | Regime: [val/N/A]",
             "• Or: [val/N/A] ([var%/N/A]) | Ratio Or/Argent: [val/N/A]",
             "• Bitcoin: [val/N/A] ([var%/N/A]) | Dominance: [val/N/A] | Fear&Greed: [val/N/A]",
