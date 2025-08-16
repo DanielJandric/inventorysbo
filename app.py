@@ -8251,28 +8251,32 @@ def markets_chat():
             "Structure la réponse en 3–5 points maximum, puis une phrase de conclusion claire."
         )
 
-        # Construire les messages avec historique (user/assistant uniquement)
-        messages = [{"role": "system", "content": system_prompt}]
+        # Construire l'entrée Responses API (typed content) avec historique (user/assistant uniquement)
+        input_messages = [{"role": "system", "content": [{"type": "input_text", "text": system_prompt}]}]
         try:
-            for m in reversed(history_persisted or []):
+            for m in (history_persisted or [])[-8:]:
                 r, c = (m or {}).get('role'), (m or {}).get('content')
                 if r in {"user", "assistant"} and c:
-                    messages.append({"role": r, "content": str(c)})
+                    input_messages.append({"role": r, "content": [{"type": "input_text", "text": str(c)}]})
         except Exception:
             pass
 
         # Message utilisateur courant avec RAG compact
-        user_payload = f"Contexte (rapports):\n{context_text}\n\nQuestion: {user_message}"
-        messages.append({"role": "user", "content": user_payload})
+        input_messages.append({
+            "role": "user",
+            "content": [{"type": "input_text", "text": f"Contexte (rapports):\n{context_text}\n\nQuestion: {user_message}"}]
+        })
 
-        model_name = os.getenv("AI_MODEL", "gpt-4.1")
-        resp = from_chat_completions_compat(
-client=client, model=model_name,
-            messages=messages,
+        # Appel Responses API (GPT-5) avec effort de raisonnement configurable
+        reasoning_effort = os.getenv("AI_REASONING_EFFORT", "medium")
+        resp = client.responses.create(
+            model=os.getenv("AI_MODEL", "gpt-5"),
+            input=input_messages,
+            reasoning={"effort": reasoning_effort},
             temperature=0.3,
-            max_tokens=15000,
-)
-        reply = resp.choices[0].message.content
+            max_output_tokens=15000,
+        )
+        reply = getattr(resp, "output_text", "") or ""
 
         # Persister dans la mémoire
         try:

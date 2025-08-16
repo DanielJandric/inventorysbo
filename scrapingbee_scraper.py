@@ -523,9 +523,11 @@ PRÉSENTATION ET FORMATAGE (SANS HTML):
                     req_kwargs = {
                         "model": chosen_model,
                         "input": input_messages,
-                        "temperature": 0.3,
                         "max_output_tokens": 15000,
                     }
+                    # For gpt-5 strict JSON/reporting, omit temperature for determinism
+                    if not str(chosen_model).startswith("gpt-5"):
+                        req_kwargs["temperature"] = 0.3
                     effort = os.getenv("AI_REASONING_EFFORT", "medium")
                     if effort:
                         req_kwargs["reasoning"] = {"effort": effort}
