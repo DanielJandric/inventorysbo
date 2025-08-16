@@ -53,6 +53,8 @@ def _extract_output_text_from_response(res: Any) -> str:
                             t = getattr(c, "text", None) or (c.get("text") if isinstance(c, dict) else "")
                             if t:
                                 parts.append(str(t))
+            except Exception:
+                continue
         return "".join(parts)
     except Exception:
         return ""
