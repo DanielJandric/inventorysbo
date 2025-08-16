@@ -256,6 +256,13 @@ class MarketAnalysisWorker:
         except Exception:
             ts_str = datetime.utcnow().strftime('%d/%m/%Y à %H:%M UTC')
         
+        # Calculer un pourcentage de confiance sûr pour l'affichage
+        _score_raw = result.get('confidence_score', 0)
+        try:
+            _score_num = float(_score_raw) if _score_raw is not None else 0.0
+        except Exception:
+            _score_num = 0.0
+
         # Générer le HTML optimisé pour mobile
         html = f"""
         <!DOCTYPE html>
@@ -556,7 +563,7 @@ class MarketAnalysisWorker:
                 
                 <div class="footer">
                     <p>Rapport généré automatiquement par le système BONVIN Collection</p>
-                    <p>Confiance: {result.get('confidence_score', 0) * 100:.1f}%</p>
+                    <p>Confiance: {_score_num * 100:.1f}%</p>
                 </div>
             </div>
         </body>
