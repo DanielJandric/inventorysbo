@@ -4003,7 +4003,12 @@ client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"
             max_tokens=800
         )
         
-        result = json.loads(response.choices[0].message.content)
+        raw = response.choices[0].message.content if hasattr(response, 'choices') else getattr(response, 'output_text', '')
+        try:
+            result = json.loads(raw)
+        except Exception:
+            logger.error(f"AI JSON parse failed, content starts with: {str(raw)[:120]}")
+            return jsonify({"error": "Réponse IA invalide"}), 502
         
         # Enrichir avec les données de marché réelles
         result['market_analysis'] = {
@@ -4116,7 +4121,12 @@ client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"
                 timeout=20
             )
             
-            market_data = json.loads(response.choices[0].message.content)
+            raw = response.choices[0].message.content if hasattr(response, 'choices') else getattr(response, 'output_text', '')
+            try:
+                market_data = json.loads(raw)
+            except Exception:
+                logger.error(f"AI JSON parse failed (market_price), content starts with: {str(raw)[:120]}")
+                return jsonify({"error": "Réponse IA invalide"}), 502
             estimated_price = market_data.get('estimated_price')
             
         except Exception as ai_error:
