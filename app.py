@@ -4116,6 +4116,19 @@ client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"
             )
             
             raw = response.choices[0].message.content if hasattr(response, 'choices') else getattr(response, 'output_text', '')
+            if not raw:
+                # Best-effort extract from Responses payload
+                try:
+                    out = getattr(response, 'output', None) or []
+                    parts = []
+                    for item in out:
+                        if getattr(item, 'type', None) == 'message':
+                            for c in getattr(item, 'content', []) or []:
+                                if getattr(c, 'type', None) == 'output_text':
+                                    parts.append(getattr(c, 'text', '') or '')
+                    raw = ''.join(parts)
+                except Exception:
+                    raw = ''
             try:
                 market_data = json.loads(raw)
             except Exception:

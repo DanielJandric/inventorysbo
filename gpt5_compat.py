@@ -34,6 +34,30 @@ def _to_responses_input(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return typed
 
 
+def _extract_output_text_from_response(res: Any) -> str:
+    """Best-effort extraction of text from a Responses API result."""
+    try:
+        text = getattr(res, "output_text", None)
+        if text:
+            return text
+        outputs = getattr(res, "output", None) or []
+        parts: List[str] = []
+        for item in outputs:
+            try:
+                item_type = getattr(item, "type", None) or (item.get("type") if isinstance(item, dict) else None)
+                if item_type == "message":
+                    content = getattr(item, "content", None) or (item.get("content") if isinstance(item, dict) else [])
+                    for c in content or []:
+                        c_type = getattr(c, "type", None) or (c.get("type") if isinstance(c, dict) else None)
+                        if c_type == "output_text":
+                            t = getattr(c, "text", None) or (c.get("text") if isinstance(c, dict) else "")
+                            if t:
+                                parts.append(str(t))
+        return "".join(parts)
+    except Exception:
+        return ""
+
+
 def from_chat_completions_compat(
     *,
     client: OpenAI,
@@ -65,7 +89,7 @@ def from_chat_completions_compat(
         if timeout is not None:
             req["timeout"] = timeout
         res = client.responses.create(**req)
-        text = getattr(res, "output_text", "") or ""
+        text = _extract_output_text_from_response(res)
 
         # Build a minimal Chat Completions-like response structure
         return SimpleNamespace(
