@@ -509,18 +509,39 @@ PRÉSENTATION ET FORMATAGE (SANS HTML):
             # Essayer jusqu'à 3 fois en cas d'erreur
             for attempt in range(3):
                 try:
-                    response = client.chat.completions.create(
-                        model=model_name,
-                        messages=[
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": f"Demande: {prompt}\n\nDONNÉES FACTUELLES (snapshot):\n{json.dumps(market_snapshot, indent=2)}\n\nDONNÉES COLLECTÉES (articles):\n{context}"}
-                        ],
-                        response_format={"type": "json_object"},
+                    # Responses API (reasoning ready)
+                    input_messages = [
+                        {"role": "system", "content": [{"type": "input_text", "text": system_prompt}]},
+                        {"role": "user", "content": [{
+                            "type": "input_text",
+                            "text": f"Demande: {prompt}\n\nDONNÉES FACTUELLES (snapshot):\n{json.dumps(market_snapshot, indent=2)}\n\nDONNÉES COLLECTÉES (articles):\n{context}"
+                        }]}
+                    ]
+                    response = client.responses.create(
+                        model=os.getenv("AI_MODEL", "gpt-5"),
+                        input=input_messages,
+                        reasoning={"effort": os.getenv("AI_REASONING_EFFORT", "medium")},
+                        verbosity="low",
                         temperature=0.3,
-                        max_tokens=15000
+                        max_output_tokens=15000
                     )
-                    
-                    result = json.loads(response.choices[0].message.content)
+                    # Extraire le texte et parser JSON
+                    content_text = getattr(response, "output_text", None)
+                    if not content_text:
+                        try:
+                            # Fallback pour certaines versions SDK
+                            chunks = getattr(response, "output", []) or []
+                            parts = []
+                            for ch in chunks:
+                                for c in (ch.get("content") or []):
+                                    if c.get("type") == "output_text" and c.get("text"):
+                                        parts.append(c.get("text"))
+                            content_text = "".join(parts) if parts else None
+                        except Exception:
+                            content_text = None
+                    if not content_text:
+                        raise ValueError("Aucune sortie texte de l'API Responses")
+                    result = json.loads(content_text)
                     logger.info(f"✅ OpenAI a retourné une réponse complète")
                     return result
                     
