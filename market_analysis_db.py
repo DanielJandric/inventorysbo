@@ -15,6 +15,21 @@ from supabase import create_client, Client
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
+def _coerce_float(value: Any) -> Optional[float]:
+    """Convertit en float ou retourne None si impossible (gère 'N/A', '', None)."""
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    try:
+        s = str(value).strip()
+        if s.lower() in {"n/a", "na", "nan", "", "none"}:
+            return None
+        return float(s)
+    except Exception:
+        return None
+
 @dataclass
 class MarketAnalysis:
     """Modèle de données pour une analyse de marché"""
@@ -62,6 +77,19 @@ class MarketAnalysis:
         if self.economic_indicators:
             data['economic_indicators'] = json.dumps(self.economic_indicators)
         
+        # Assainir les champs numériques susceptibles d'être 'N/A'
+        if 'confidence_score' in data:
+            coerced = _coerce_float(data.get('confidence_score'))
+            if coerced is None:
+                data.pop('confidence_score', None)
+            else:
+                data['confidence_score'] = coerced
+        if 'processing_time_seconds' in data and data.get('processing_time_seconds') is not None:
+            try:
+                data['processing_time_seconds'] = int(data['processing_time_seconds'])
+            except Exception:
+                data.pop('processing_time_seconds', None)
+
         # Supprimer les champs None
         return {k: v for k, v in data.items() if v is not None}
 
@@ -273,6 +301,19 @@ class MarketAnalysisDB:
             
             # Assurer la mise à jour de 'updated_at'
             data['updated_at'] = datetime.now(timezone.utc).isoformat()
+
+            # Assainir les champs numériques (éviter 22P02 sur 'N/A')
+            if 'confidence_score' in data:
+                coerced = _coerce_float(data.get('confidence_score'))
+                if coerced is None:
+                    data.pop('confidence_score', None)
+                else:
+                    data['confidence_score'] = coerced
+            if 'processing_time_seconds' in data:
+                try:
+                    data['processing_time_seconds'] = int(data['processing_time_seconds'])
+                except Exception:
+                    data.pop('processing_time_seconds', None)
             
             result = self.supabase.table('market_analyses')\
                 .update(data)\
