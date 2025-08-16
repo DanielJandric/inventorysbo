@@ -336,15 +336,16 @@ class IntelligentScraper:
             """
             
             from os import getenv
-            model_name = getenv("AI_MODEL", "gpt-4.1")
-            response = self.openai_client.chat.completions.create(
+            model_name = getenv("AI_MODEL", "gpt-5")
+            from gpt5_compat import from_chat_completions_compat
+            response = from_chat_completions_compat(
+                client=self.openai_client,
                 model=model_name,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"Demande: {prompt}\n\nDonnées collectées:\n{context}"}
                 ],
                 response_format={"type": "json_object"},
-                temperature=0.3,
                 max_tokens=2000
             )
             

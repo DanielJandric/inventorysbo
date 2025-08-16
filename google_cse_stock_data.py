@@ -215,13 +215,14 @@ class GoogleCSEStockDataManager:
         """
         
         try:
-            response = self.openai_client.chat.completions.create(
-                model=os.getenv("AI_MODEL", "gpt-4.1"),
+            from gpt5_compat import from_chat_completions_compat
+            response = from_chat_completions_compat(
+                client=self.openai_client,
+                model=os.getenv("AI_MODEL", "gpt-5"),
                 messages=[
                     {"role": "system", "content": "Tu es un analyste financier expert spécialisé dans les rapports de marché."},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.7
             )
             
             ai_response = response.choices[0].message.content

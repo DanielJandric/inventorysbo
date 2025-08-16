@@ -169,8 +169,10 @@ HTML:
         prompt = prompt_template.format(html_data=html_content[:15000])
         
         try:
-            response = client.chat.completions.create(
-                model=os.getenv("AI_MODEL", "gpt-4.1"),
+            from gpt5_compat import from_chat_completions_compat
+            response = from_chat_completions_compat(
+                client=client,
+                model=os.getenv("AI_MODEL", "gpt-5"),
                 messages=[{"role": "user", "content": prompt}],
                 response_format={"type": "json_object"}
             )

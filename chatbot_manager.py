@@ -1,6 +1,7 @@
 import os
 import json
 from datetime import datetime
+from gpt5_compat import from_chat_completions_compat
 from types import SimpleNamespace
 
 import requests
@@ -113,11 +114,11 @@ class ChatbotManager:
             if not self.ai_engine or not getattr(self.ai_engine, 'openai_client', None):
                 raise ValueError("AI engine not configured.")
 
-            response = self.ai_engine.openai_client.chat.completions.create(
-                model=os.getenv("AI_MODEL", "gpt-4.1"),
+            response = from_chat_completions_compat(
+                client=self.ai_engine.openai_client,
+                model=os.getenv("AI_MODEL", "gpt-5"),
                 messages=[{"role": "user", "content": prompt}],
                 response_format={"type": "json_object"},
-                temperature=0.2,
             )
             extracted_json = response.choices[0].message.content
             if extracted_json:
@@ -164,11 +165,11 @@ class ChatbotManager:
             if not self.ai_engine or not getattr(self.ai_engine, 'openai_client', None):
                 raise ValueError("AI engine not configured.")
 
-            response = self.ai_engine.openai_client.chat.completions.create(
-                model=os.getenv("AI_MODEL", "gpt-4.1"),
+            response = from_chat_completions_compat(
+                client=self.ai_engine.openai_client,
+                model=os.getenv("AI_MODEL", "gpt-5"),
                 messages=[{"role": "user", "content": prompt}],
                 response_format={"type": "json_object"},
-                temperature=0.2,
             )
             extracted_json = response.choices[0].message.content
             if extracted_json:

@@ -63,6 +63,7 @@ from unified_market_manager import (
 from google_cse_stock_data import GoogleCSEStockDataManager
 from enhanced_google_cse_ai_report import EnhancedGoogleCSEAIReport
 from intelligent_scraper import IntelligentScraper, get_scraper
+from gpt5_compat import from_chat_completions_compat, chat_tools_messages
 from scrapingbee_scraper import ScrapingBeeScraper, get_scrapingbee_scraper
 # Remplacé par l'API Manus unifiée
 # Remplacé par l'API Manus unifiée
@@ -2423,8 +2424,8 @@ class PureOpenAIEngineWithRAG:
         if not self.client:
             return "Moteur IA Indisponible"
         
-        # TOUJOURS utiliser l'approche FULL CONTEXT - faire confiance à GPT-4
-        logger.info(f"Utilisation de l'approche FULL CONTEXT - Faire confiance à l'intelligence de GPT-4")
+        # TOUJOURS utiliser l'approche FULL CONTEXT - faire confiance à GPT-5 (Responses API)
+        logger.info(f"Utilisation de l'approche FULL CONTEXT - Faire confiance à l'intelligence de GPT-5")
         return self._generate_full_context_response_with_history(query, items, analytics, conversation_history, True)
         
         # Cache avec historique
