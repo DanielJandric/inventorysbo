@@ -2215,49 +2215,41 @@ class PureOpenAIEngineWithRAG:
         return [
             {
                 "type": "function",
-                "function": {
-                    "name": "get_stock_price",
-                    "description": "Obtenir le prix actuel d'une action et ses métriques (devise, variation, volume).",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "symbol": {"type": "string", "description": "Symbole boursier, ex: IREN.SW, AAPL, BTC-USD"},
-                            "force_refresh": {"type": "boolean", "description": "Ignorer le cache et rafraîchir", "default": False}
-                        },
-                        "required": ["symbol"]
-                    }
+                "name": "get_stock_price",
+                "description": "Obtenir le prix actuel d'une action et ses métriques (devise, variation, volume).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "symbol": {"type": "string", "description": "Symbole boursier, ex: IREN.SW, AAPL, BTC-USD"},
+                        "force_refresh": {"type": "boolean", "description": "Ignorer le cache et rafraîchir", "default": False}
+                    },
+                    "required": ["symbol"]
                 }
             },
             {
                 "type": "function",
-                "function": {
-                    "name": "get_market_snapshot",
-                    "description": "Obtenir un aperçu du marché (indices, matières premières, crypto).",
-                    "parameters": {"type": "object", "properties": {}}
-                }
+                "name": "get_market_snapshot",
+                "description": "Obtenir un aperçu du marché (indices, matières premières, crypto).",
+                "parameters": {"type": "object", "properties": {}}
             },
             {
                 "type": "function",
-                "function": {
-                    "name": "get_analytics_summary",
-                    "description": "Résumé analytique (métriques de base, financières, pipeline).",
-                    "parameters": {"type": "object", "properties": {}}
-                }
+                "name": "get_analytics_summary",
+                "description": "Résumé analytique (métriques de base, financières, pipeline).",
+                "parameters": {"type": "object", "properties": {}}
             },
             {
                 "type": "function",
-                "function": {
-                    "name": "list_items_by_category",
-                    "description": "Lister les objets par catégorie et statut, triés par valeur décroissante.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "category": {"type": "string"},
-                            "status": {"type": "string", "enum": ["available", "sold", "all"], "default": "available"},
-                            "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 10}
-                        },
-                        "required": ["category"]
-                    }
+                "name": "list_items_by_category",
+                "description": "Lister les objets par catégorie et statut, triés par valeur décroissante.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "category": {"type": "string"},
+                        "status": {"type": "string", "enum": ["available", "sold", "all"], "default": "available"},
+                        "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 10}
+                    },
+                    "required": ["category"]
                 }
             }
         ]
