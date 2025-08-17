@@ -500,100 +500,50 @@ Output ONLY the JSON object. Do not include any accompanying text. No code fence
                     if effort:
                         req_kwargs["reasoning"] = {"effort": effort}
 
-                    # Utiliser exclusivement Responses API (JSON garanti)
-                    from gpt5_compat import from_responses_simple, extract_output_text
-                    # max_output_tokens configurable
+                    # Structured outputs: JSON Schema strict (fallback to JSON Mode)
+                    schema = {
+                        "type": "object",
+                        "properties": {
+                            "executive_summary": {"type": "array", "items": {"type": "string"}, "minItems": 10},
+                            "summary": {"type": "string", "minLength": 2500},
+                            "key_points": {"type": "array", "items": {"type": "string"}, "minItems": 12},
+                            "structured_data": {"type": "object"},
+                            "insights": {"type": "array", "items": {"type": "string"}},
+                            "risks": {"type": "array", "items": {"type": "string"}},
+                            "opportunities": {"type": "array", "items": {"type": "string"}},
+                            "sources": {"type": "array", "items": {"type": "object", "properties": {"title": {"type": "string"}, "url": {"type": "string", "format": "uri"}}, "required": ["title","url"], "additionalProperties": False}},
+                            "confidence_score": {"type": "number", "minimum": 0.0, "maximum": 1.0}
+                        },
+                        "required": ["executive_summary","summary","key_points","structured_data","sources","confidence_score"],
+                        "additionalProperties": True
+                    }
+
                     try:
-                        max_out_tokens = int(os.getenv('SCRAPER_MAX_OUTPUT_TOKENS', '15000'))
+                        resp = client.responses.create(
+                            model=os.getenv("AI_MODEL", "gpt-5"),
+                            input=input_messages,
+                            response_format={
+                                "type": "json_schema",
+                                "json_schema": {"name": "research_report", "schema": schema, "strict": True}
+                            },
+                            temperature=0,
+                            max_output_tokens=max_out_tokens,
+                            reasoning={"effort": "high"}
+                        )
                     except Exception:
-                        max_out_tokens = 15000
-                    resp = from_responses_simple(
-                        client=client,
-                        model=os.getenv("AI_MODEL", "gpt-5"),
-                        messages=[
-                            {"role": "system", "content": [{"type": "input_text", "text": system_prompt}]},
-                            {"role": "user", "content": [{"type": "input_text", "text": f"Demande: {prompt}\n\nDONNÉES FACTUELLES (snapshot):\n{json.dumps(market_snapshot, indent=2)}\n\nDONNÉES COLLECTÉES (articles):\n{context}"}]}
-                        ],
-                        max_output_tokens=max_out_tokens,
-                        reasoning_effort="high"
-                    )
-                    raw = extract_output_text(resp) or ""
-                    # Parsing robuste du JSON (enlève les fences, normalise, extrait le 1er objet équilibré)
-                    def _safe_parse_json(text: str):
-                        s = (text or "")
-                        try:
-                            s = s.strip().lstrip('\ufeff')
-                            import re as _re
-                            # Retirer fences et BOM
-                            s = _re.sub(r"```\s*json\s*", "", s, flags=_re.IGNORECASE)
-                            s = s.replace('```', '').strip()
-                            # Supprimer commentaires type // et /* */
-                            s = _re.sub(r"//.*?$", "", s, flags=_re.MULTILINE)
-                            s = _re.sub(r"/\*[^*]*\*+(?:[^/*][^*]*\*+)*/", "", s, flags=_re.DOTALL)
-                            # Normaliser quotes/tirets
-                            trans = {ord('\u201c'): '"', ord('\u201d'): '"', ord('\u2019'): "'", ord('\u2013'): '-', ord('\u2014'): '-'}
-                            s = s.translate(trans)
-                            # Retirer virgules trainantes
-                            s = _re.sub(r",\s*(?=[}\]])", "", s)
-                            # Convertir clés/valeurs en doubles quotes
-                            s = _re.sub(r"([\{,]\s*)'([^'\n\r]+?)'\s*:\s*", r'\1"\2": ', s)
-                            s = _re.sub(r":\s*'([^'\n\r]*?)'\s*(?=[,}\]])", r': "\1"', s)
-                            try:
-                                return json.loads(s)
-                            except Exception:
-                                # Extraction du premier objet équilibré
-                                depth = 0
-                                start_idx = None
-                                for i, ch in enumerate(s):
-                                    if ch == '{':
-                                        if depth == 0:
-                                            start_idx = i
-                                        depth += 1
-                                    elif ch == '}' and depth > 0:
-                                        depth -= 1
-                                        if depth == 0 and start_idx is not None:
-                                            candidate = s[start_idx:i+1]
-                                            cand = _re.sub(r",\s*(?=[}\]])", "", candidate)
-                                            cand = _re.sub(r"([\{,]\s*)'([^'\n\r]+?)'\s*:\s*", r'\1"\2": ', cand)
-                                            cand = _re.sub(r":\s*'([^'\n\r]*?)'\s*(?=[,}\]])", r': "\1"', cand)
-                                            try:
-                                                return json.loads(cand)
-                                            except Exception:
-                                                start_idx = None
-                                                continue
-                            # Dernier recours
-                            try:
-                                import ast as _ast
-                                data = _ast.literal_eval(s)
-                                json.dumps(data)
-                                return data
-                            except Exception:
-                                return None
-                        except Exception:
-                            return None
-                        return None
-                    result = _safe_parse_json(raw)
-                    if result is None:
-                        # Second tour: rappel strict JSON uniquement
-                        try:
-                            resp2 = from_responses_simple(
-                                client=client,
-                                model=os.getenv("AI_MODEL", "gpt-5"),
-                                messages=[
-                                    {"role": "system", "content": [{"type": "input_text", "text": system_prompt}]},
-                                    {"role": "assistant", "content": [{"type": "output_text", "text": raw[:8000]}]},
-                                    {"role": "user", "content": [{"type": "input_text", "text": "Convertis STRICTEMENT ce contenu en UN SEUL objet JSON valide selon le schéma demandé, sans texte additionnel ni code fences."}]}
-                                ],
-                                max_output_tokens=min(max_out_tokens, 6000),
-                                reasoning_effort="high"
-                            )
-                            raw2 = extract_output_text(resp2) or ""
-                            result = _safe_parse_json(raw2)
-                        except Exception:
-                            result = None
-                    if result is None:
-                        raise ValueError("LLM returned non-JSON content")
-                    logger.info(f"✅ OpenAI a retourné une réponse complète")
+                        # Fallback: JSON Mode
+                        resp = client.responses.create(
+                            model=os.getenv("AI_MODEL", "gpt-5"),
+                            input=input_messages,
+                            response_format={"type": "json_object"},
+                            temperature=0,
+                            max_output_tokens=max_out_tokens,
+                            reasoning={"effort": "high"}
+                        )
+
+                    raw = getattr(resp, "output_text", None) or extract_output_text(resp) or ""
+                    result = json.loads(raw)
+                    logger.info(f"✅ OpenAI a retourné une réponse JSON valide")
                     return result
                     
                 except Exception as e:
