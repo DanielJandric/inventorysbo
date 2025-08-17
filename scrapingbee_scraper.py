@@ -409,9 +409,9 @@ class ScrapingBeeScraper:
             context = self._prepare_context(scraped_data)
             # Troncature protectrice pour respecter budgets token
             try:
-                max_ctx_chars = int(os.getenv('SCRAPER_MAX_CONTEXT_CHARS', '70000'))
+                max_ctx_chars = int(os.getenv('SCRAPER_MAX_CONTEXT_CHARS', '40000'))
             except Exception:
-                max_ctx_chars = 70000
+                max_ctx_chars = 40000
             if len(context) > max_ctx_chars:
                 context = context[:max_ctx_chars]
                 logger.info(f"🧠 Contexte tronqué à {max_ctx_chars} caractères pour limiter les tokens.")
@@ -536,16 +536,44 @@ Output ONLY the JSON object. Do not include any accompanying text. No code fence
                             max_output_tokens=max_out_tokens,
                             reasoning={"effort": "high"}
                         )
-                    except Exception:
-                        # Fallback: JSON Mode
-                        resp = client.responses.create(
-                            model=os.getenv("AI_MODEL", "gpt-5"),
-                            input=input_messages,
-                            response_format={"type": "json_object"},
-                            temperature=0,
-                            max_output_tokens=max_out_tokens,
-                            reasoning={"effort": "high"}
-                        )
+                    except Exception as e1:
+                        try:
+                            # Fallback: JSON Mode
+                            resp = client.responses.create(
+                                model=os.getenv("AI_MODEL", "gpt-5"),
+                                input=input_messages,
+                                response_format={"type": "json_object"},
+                                temperature=0,
+                                max_output_tokens=max_out_tokens,
+                                reasoning={"effort": "high"}
+                            )
+                        except Exception as e2:
+                            try:
+                                # Fallback: Responses sans response_format (certaines régions SDK)
+                                resp = client.responses.create(
+                                    model=os.getenv("AI_MODEL", "gpt-5"),
+                                    input=input_messages,
+                                    temperature=0,
+                                    max_output_tokens=max_out_tokens,
+                                    reasoning={"effort": "high"}
+                                )
+                            except Exception:
+                                # Dernier recours: Chat Completions avec JSON mode
+                                from gpt5_compat import from_chat_completions_compat
+                                cc = from_chat_completions_compat(
+                                    client=client,
+                                    model=os.getenv("AI_MODEL", "gpt-5"),
+                                    messages=[
+                                        {"role": "system", "content": system_prompt},
+                                        {"role": "user", "content": f"Demande: {prompt}\n\nDONNÉES FACTUELLES (snapshot):\n{json.dumps(market_snapshot, indent=2)}\n\nDONNÉES COLLECTÉES (articles):\n{context}"}
+                                    ],
+                                    response_format={"type": "json_object"},
+                                    max_tokens=max_out_tokens
+                                )
+                                raw = cc.choices[0].message.content or ""
+                                result = json.loads(raw)
+                                logger.info("✅ Chat Completions JSON valide")
+                                return result
 
                     raw = getattr(resp, "output_text", None) or extract_output_text(resp) or ""
                     result = json.loads(raw)
