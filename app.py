@@ -4111,27 +4111,28 @@ client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"
                     {"role": "system", "content": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."},
                     {"role": "user", "content": prompt}
                 ],
+                response_format={"type": "json_object"},
                 max_tokens=800,
                 timeout=20
             )
             
             raw = response.choices[0].message.content if hasattr(response, 'choices') else getattr(response, 'output_text', '')
-            if not raw:
-                # Best-effort extract from Responses payload
+            # Parsing robuste: retirer éventuels code fences et extraire l'objet
+            def _safe_parse_json(text: str):
                 try:
-                    out = getattr(response, 'output', None) or []
-                    parts = []
-                    for item in out:
-                        if getattr(item, 'type', None) == 'message':
-                            for c in getattr(item, 'content', []) or []:
-                                if getattr(c, 'type', None) == 'output_text':
-                                    parts.append(getattr(c, 'text', '') or '')
-                    raw = ''.join(parts)
+                    return json.loads(text)
                 except Exception:
-                    raw = ''
-            try:
-                market_data = json.loads(raw)
-            except Exception:
+                    try:
+                        s = (text or '').strip()
+                        s = s.replace('```json', '').replace('```', '').strip()
+                        start = s.find('{'); end = s.rfind('}')
+                        if start != -1 and end != -1 and end > start:
+                            return json.loads(s[start:end+1])
+                    except Exception:
+                        return None
+                return None
+            market_data = _safe_parse_json(raw)
+            if market_data is None:
                 logger.error(f"AI JSON parse failed (market_price), content starts with: {str(raw)[:120]}")
                 return jsonify({"error": "Réponse IA invalide"}), 502
             estimated_price = market_data.get('estimated_price')
