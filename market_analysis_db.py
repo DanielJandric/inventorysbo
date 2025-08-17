@@ -320,23 +320,15 @@ class MarketAnalysisDB:
                 except Exception:
                     data.pop('processing_time_seconds', None)
             
-            # Demander la représentation pour s'assurer d'avoir des données en retour
-            result = self.supabase.table('market_analyses')\
-                .update(data)\
-                .eq('id', analysis_id)\
-                .select('id')\
+            # Effectuer la mise à jour; le SDK Python ne supporte pas .select() après update
+            self.supabase.table('market_analyses') \
+                .update(data) \
+                .eq('id', analysis_id) \
                 .execute()
 
-            # Selon Supabase, .data est une liste (peut être vide). Succès si au moins 1 ligne.
-            if isinstance(result.data, list) and len(result.data) > 0:
-                logger.info(f"✅ Analyse ID {analysis_id} mise à jour.")
-                return True
-            # Si le SDK ne renvoie pas de data mais pas d'exception: considérer comme succès best‑effort
-            if getattr(result, 'data', None) is None:
-                logger.info(f"✅ Mise à jour ID {analysis_id} acceptée (aucune représentation renvoyée).")
-                return True
-            logger.error(f"❌ Échec de la mise à jour de l'analyse ID {analysis_id} (0 ligne affectée)")
-            return False
+            # Si aucune exception n'a été levée, considérer la mise à jour comme réussie
+            logger.info(f"✅ Analyse ID {analysis_id} mise à jour.")
+            return True
         except Exception as e:
             logger.error(f"❌ Erreur update_analysis: {e}")
             return False
