@@ -498,11 +498,11 @@ Contraintes générales:
 
                     # Utiliser exclusivement Responses API (JSON garanti)
                     from gpt5_compat import from_responses_simple, extract_output_text
-                    # max_output_tokens configurable pour réduire la pression TPM
+                    # max_output_tokens configurable
                     try:
-                        max_out_tokens = int(os.getenv('SCRAPER_MAX_OUTPUT_TOKENS', '5000'))
+                        max_out_tokens = int(os.getenv('SCRAPER_MAX_OUTPUT_TOKENS', '15000'))
                     except Exception:
-                        max_out_tokens = 5000
+                        max_out_tokens = 15000
                     resp = from_responses_simple(
                         client=client,
                         model=os.getenv("AI_MODEL", "gpt-5"),
@@ -511,7 +511,7 @@ Contraintes générales:
                             {"role": "user", "content": [{"type": "input_text", "text": f"Demande: {prompt}\n\nDONNÉES FACTUELLES (snapshot):\n{json.dumps(market_snapshot, indent=2)}\n\nDONNÉES COLLECTÉES (articles):\n{context}"}]}
                         ],
                         max_output_tokens=max_out_tokens,
-                        reasoning_effort=os.getenv("AI_REASONING_EFFORT", "medium")
+                        reasoning_effort="high"
                     )
                     raw = extract_output_text(resp) or ""
                     # Parsing robuste du JSON (enlève les fences, normalise, extrait le 1er objet équilibré)
@@ -526,20 +526,18 @@ Contraintes générales:
                             # Supprimer commentaires type // et /* */
                             s = _re.sub(r"//.*?$", "", s, flags=_re.MULTILINE)
                             s = _re.sub(r"/\*[^*]*\*+(?:[^/*][^*]*\*+)*/", "", s, flags=_re.DOTALL)
-                            # Normaliser guillemets typographiques et tirets
+                            # Normaliser quotes/tirets
                             trans = {ord('\u201c'): '"', ord('\u201d'): '"', ord('\u2019'): "'", ord('\u2013'): '-', ord('\u2014'): '-'}
                             s = s.translate(trans)
-                            # Retirer virgules trainantes avant ] ou }
+                            # Retirer virgules trainantes
                             s = _re.sub(r",\s*(?=[}\]])", "", s)
-                            # Convertir clés entre quotes simples en doubles
+                            # Convertir clés/valeurs en doubles quotes
                             s = _re.sub(r"([\{,]\s*)'([^'\n\r]+?)'\s*:\s*", r'\1"\2": ', s)
-                            # Convertir valeurs string entre quotes simples en doubles (simple heuristique)
                             s = _re.sub(r":\s*'([^'\n\r]*?)'\s*(?=[,}\]])", r': "\1"', s)
-                            # Première tentative directe
                             try:
                                 return json.loads(s)
                             except Exception:
-                                # Extraction du premier objet JSON équilibré
+                                # Extraction du premier objet équilibré
                                 depth = 0
                                 start_idx = None
                                 for i, ch in enumerate(s):
@@ -551,7 +549,6 @@ Contraintes générales:
                                         depth -= 1
                                         if depth == 0 and start_idx is not None:
                                             candidate = s[start_idx:i+1]
-                                            # Appliquer les mêmes nettoyages sur le candidat
                                             cand = _re.sub(r",\s*(?=[}\]])", "", candidate)
                                             cand = _re.sub(r"([\{,]\s*)'([^'\n\r]+?)'\s*:\s*", r'\1"\2": ', cand)
                                             cand = _re.sub(r":\s*'([^'\n\r]*?)'\s*(?=[,}\]])", r': "\1"', cand)
@@ -560,19 +557,36 @@ Contraintes générales:
                                             except Exception:
                                                 start_idx = None
                                                 continue
-                                # Dernier recours: ast.literal_eval si JSON-like Python
-                                try:
-                                    import ast as _ast
-                                    data = _ast.literal_eval(s)
-                                    # S'assurer que c'est dict/list sérialisable JSON
-                                    json.dumps(data)
-                                    return data
-                                except Exception:
-                                    return None
+                            # Dernier recours
+                            try:
+                                import ast as _ast
+                                data = _ast.literal_eval(s)
+                                json.dumps(data)
+                                return data
+                            except Exception:
+                                return None
                         except Exception:
                             return None
                         return None
                     result = _safe_parse_json(raw)
+                    if result is None:
+                        # Second tour: rappel strict JSON uniquement
+                        try:
+                            resp2 = from_responses_simple(
+                                client=client,
+                                model=os.getenv("AI_MODEL", "gpt-5"),
+                                messages=[
+                                    {"role": "system", "content": [{"type": "input_text", "text": system_prompt}]},
+                                    {"role": "assistant", "content": [{"type": "output_text", "text": raw[:8000]}]},
+                                    {"role": "user", "content": [{"type": "input_text", "text": "Convertis STRICTEMENT ce contenu en UN SEUL objet JSON valide selon le schéma demandé, sans texte additionnel ni code fences."}]}
+                                ],
+                                max_output_tokens=min(max_out_tokens, 6000),
+                                reasoning_effort="high"
+                            )
+                            raw2 = extract_output_text(resp2) or ""
+                            result = _safe_parse_json(raw2)
+                        except Exception:
+                            result = None
                     if result is None:
                         raise ValueError("LLM returned non-JSON content")
                     logger.info(f"✅ OpenAI a retourné une réponse complète")
