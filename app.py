@@ -3001,7 +3001,6 @@ def index():
 def analytics():
     """Page analytics avec diagrammes et statistiques"""
     return render_template('analytics.html')
-
 @app.route("/reports")
 def reports():
     """Page des rapports bancaires par classe d'actif"""
@@ -8592,6 +8591,9 @@ def delete_market_analysis(analysis_id: int):
         logger.error(f"Erreur delete_market_analysis: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
+@app.route("/api/background-worker/status", methods=["GET"])
+def background_worker_status():
+    return get_background_worker_status()
 
 if __name__ == "__main__":
     app.run(debug=True)
