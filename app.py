@@ -8489,6 +8489,36 @@ def markets_chat():
                 pass
 
         if not reply:
+            # Dernier essai Responses SANS outils (pour forcer un texte final)
+            try:
+                msgs_no_tools: List[Dict[str, Any]] = []
+                msgs_no_tools.append({"role": "system", "content": [{"type": "input_text", "text": system_prompt}]})
+                try:
+                    for m in (history_persisted or [])[-6:]:
+                        r, c = (m or {}).get('role'), (m or {}).get('content')
+                        if r in {"user", "assistant"} and c:
+                            t = "input_text" if r == "user" else "output_text"
+                            msgs_no_tools.append({"role": r, "content": [{"type": t, "text": str(c)}]})
+                except Exception:
+                    pass
+                msgs_no_tools.append({
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": f"Contexte (rapports):\n{context_text}\n\nQuestion: {user_message}. Réponds MAINTENANT sans appeler d'outil, avec les sections: Checklist / Analyse (3–5) / Conclusion / Validation / Sources (3–6)."}]
+                })
+                res3 = from_responses_simple(
+                    client=client,
+                    model=os.getenv("AI_MODEL","gpt-5"),
+                    messages=msgs_no_tools,
+                    max_output_tokens=900,
+                    reasoning_effort="high"
+                )
+                reply3 = (extract_output_text(res3) or "").strip()
+                if reply3:
+                    reply = reply3
+            except Exception:
+                pass
+
+        if not reply:
             # Télémetrie Responses pour diagnostic
             try:
                 outputs_dbg = []
