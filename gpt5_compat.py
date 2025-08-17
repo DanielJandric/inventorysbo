@@ -49,7 +49,7 @@ def _extract_output_text_from_response(res: Any) -> str:
                     content = getattr(item, "content", None) or (item.get("content") if isinstance(item, dict) else [])
                     for c in content or []:
                         c_type = getattr(c, "type", None) or (c.get("type") if isinstance(c, dict) else None)
-                        if c_type == "output_text":
+                        if c_type in ("output_text", "text"):
                             t = getattr(c, "text", None) or (c.get("text") if isinstance(c, dict) else "")
                             if t:
                                 parts.append(str(t))
@@ -165,8 +165,7 @@ def from_responses_simple(
     }
     if max_output_tokens is not None:
         req["max_output_tokens"] = max_output_tokens
-    if timeout is not None:
-        req["timeout"] = timeout
+    # Note: some SDKs require timeout via client.with_options; ignore here for compatibility
     # Note: some server SDK versions do not accept response_format for Responses API.
     # We intentionally ignore it here and enforce JSON via prompting and robust parsing upstream.
     return client.responses.create(**req)
