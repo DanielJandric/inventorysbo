@@ -165,10 +165,14 @@ def from_responses_simple(
     }
     if max_output_tokens is not None:
         req["max_output_tokens"] = max_output_tokens
-    # Note: some SDKs require timeout via client.with_options; ignore here for compatibility
-    # Note: some server SDK versions do not accept response_format for Responses API.
+    # Support per-call timeout via client.with_options when provided
+    try:
+        _client = client.with_options(timeout=timeout) if timeout else client
+    except Exception:
+        _client = client
+    # Some server SDK versions do not accept response_format for Responses API.
     # We intentionally ignore it here and enforce JSON via prompting and robust parsing upstream.
-    return client.responses.create(**req)
+    return _client.responses.create(**req)
 
 
 def extract_output_text(res: Any) -> str:

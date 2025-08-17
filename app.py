@@ -8298,7 +8298,7 @@ def get_recent_market_analyses():
 
 @app.route("/api/markets/chat", methods=["POST"])
 def markets_chat():
-    """Chatbot marchés: RAG compact (1 rapport) + web search + mémoire de session persistante.
+    """Chatbot marchés: chemin rapide par défaut, RAG/web-search optionnels.
     Entrée JSON: { message: str, context?: str, session_id?: str }
     Sortie JSON: { success: bool, reply?: str, error?: str, metadata?: { session_id } }
     """
@@ -8310,12 +8310,15 @@ def markets_chat():
         user_message = (data.get("message") or "").strip()
         if not user_message:
             return jsonify({"success": False, "error": "Message vide"}), 400
-        # Limite stricte à 1 rapport (réduction du contexte pour éviter les timeouts)
+        # Options runtime
+        use_rag = bool(data.get("use_rag", False))
+        use_web = bool(data.get("use_web", False))
+        # Limite stricte à 1 rapport si RAG activé
         try:
-            requested_limit = int(data.get("limit", 1))
+            requested_limit = int(data.get("limit", 1)) if use_rag else 0
         except Exception:
-            requested_limit = 1
-        limit = 1 if requested_limit != 1 else 1
+            requested_limit = 0
+        limit = 1 if requested_limit == 1 else 0
         extra_context = (data.get("context") or "").strip()
         session_id = (data.get("session_id") or "").strip() or str(uuid.uuid4())
 
@@ -8325,12 +8328,12 @@ def markets_chat():
         except Exception:
             history_persisted = []
 
-        # Charger les analyses récentes (limité à 1) et construire un contexte tolérant aux erreurs
+        # Contexte: rapide par défaut; ajouter RAG seulement si demandé
         context_text = ""
         try:
             from market_analysis_db import get_market_analysis_db
             db = get_market_analysis_db()
-            recent_items = db.get_recent_analyses(limit=6)  # pool initial (petit)
+            recent_items = db.get_recent_analyses(limit=4) if use_rag else []
 
             # Scoring naïf par recouvrement de mots-clés question/contexte vs contenu des rapports
             def _tokenize(txt: str) -> set:
@@ -8351,9 +8354,6 @@ def markets_chat():
                     continue
             scored.sort(key=lambda x: x[0], reverse=True)
             top_items = [a for _, a in (scored[:limit] if scored else [])]
-            if not top_items:
-                # Fallback: prendre simplement le plus récent
-                top_items = (recent_items or [])[:limit]
 
             # Construire le contexte compact
             context_parts = []
@@ -8410,25 +8410,36 @@ def markets_chat():
             pass
         messages.append({"role": "user", "content": f"Contexte (rapports):\n{context_text}\n\nQuestion: {user_message}"})
 
-        # Un seul appel Responses avec outil web_search_preview (contexte léger)
+        # Chemin rapide: pas d'outil si use_web = False; sinon web_search_preview
         try:
-            tools_cfg = [{"type": "web_search_preview", "search_context_size": "low"}]
-            res = chat_tools_messages(
-                messages=messages,
-                tools=tools_cfg,
-                model=os.getenv("AI_MODEL", "gpt-5"),
-                client=client,
-                max_output_tokens=500,
-                reasoning_effort=os.getenv("AI_REASONING_EFFORT", "high"),
-            )
-            reply = (extract_output_text(res) or "").strip()
+            if use_web:
+                tools_cfg = [{"type": "web_search_preview", "search_context_size": "low"}]
+                res = chat_tools_messages(
+                    messages=messages,
+                    tools=tools_cfg,
+                    model=os.getenv("AI_MODEL", "gpt-5"),
+                    client=client,
+                    max_output_tokens=400,
+                    reasoning_effort=os.getenv("AI_REASONING_EFFORT", "high"),
+                )
+                reply = (extract_output_text(res) or "").strip()
+            else:
+                resp = from_responses_simple(
+                    client=client,
+                    model=os.getenv("AI_MODEL", "gpt-5"),
+                    messages=messages,
+                    max_output_tokens=400,
+                    timeout=15,
+                    reasoning_effort=os.getenv("AI_REASONING_EFFORT", "high"),
+                )
+                reply = (extract_output_text(resp) or "").strip()
         except Exception:
-            # Fallback sans outils
             resp = from_responses_simple(
                 client=client,
                 model=os.getenv("AI_MODEL", "gpt-5"),
                 messages=messages,
-                max_output_tokens=500,
+                max_output_tokens=350,
+                timeout=12,
                 reasoning_effort=os.getenv("AI_REASONING_EFFORT", "high"),
             )
             reply = (extract_output_text(resp) or "").strip()
