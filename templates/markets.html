@@ -307,3 +307,12 @@
                 } catch (e) {
                     const container = document.getElementById(recentContainerId);
                     if (container) container.innerHTML = `<p class='text-red-400'>${e.message}</p>`
+                }
+            }
+
+            // Charger les rapports au démarrage
+            loadRecentAnalyses();
+        });
+    </script>
+</body>
+</html>
