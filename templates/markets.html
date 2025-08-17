@@ -310,6 +310,57 @@
                 }
             }
 
+            // --- Chat Marchés ---
+            const chatInput = document.getElementById('chat-input');
+            const chatSend = document.getElementById('chat-send');
+            const chatMessages = document.getElementById('chat-messages');
+            const chatContext = document.getElementById('chat-context');
+
+            function addMsg(role, text) {
+                if (!chatMessages) return;
+                const wrapper = document.createElement('div');
+                wrapper.className = role === 'user' ? 'text-right' : 'text-left';
+                const bubble = document.createElement('div');
+                bubble.className = role === 'user'
+                    ? 'inline-block mb-2 px-3 py-2 rounded-lg bg-cyan-500/20 border border-cyan-400/30'
+                    : 'inline-block mb-2 px-3 py-2 rounded-lg bg-white/5 border border-white/10';
+                bubble.textContent = text;
+                wrapper.appendChild(bubble);
+                chatMessages.appendChild(wrapper);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+
+            async function sendChat() {
+                const msg = (chatInput?.value || '').trim();
+                if (!msg) return;
+                addMsg('user', msg);
+                chatInput.value = '';
+                try {
+                    const extra = (chatContext?.value || '').trim();
+                    let sid = localStorage.getItem('markets_chat_session_id');
+                    if (!sid) {
+                        sid = (crypto && crypto.randomUUID) ? crypto.randomUUID() : (Date.now() + '-' + Math.random().toString(36).slice(2));
+                        localStorage.setItem('markets_chat_session_id', sid);
+                    }
+                    const r = await fetch('/api/markets/chat', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ message: msg, limit: 3, context: extra, session_id: sid, allow_web: true })
+                    });
+                    const d = await r.json();
+                    if (!d.success) throw new Error(d.error || 'Erreur API');
+                    addMsg('assistant', d.reply || '');
+                    if (d.metadata && d.metadata.session_id) {
+                        localStorage.setItem('markets_chat_session_id', d.metadata.session_id);
+                    }
+                } catch (e) {
+                    addMsg('assistant', `❌ ${e.message || e}`);
+                }
+            }
+
+            if (chatSend) chatSend.addEventListener('click', sendChat);
+            if (chatInput) chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendChat(); });
+
             // Charger les rapports au démarrage
             loadRecentAnalyses();
         });
