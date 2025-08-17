@@ -4005,7 +4005,6 @@ client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"),
                 {"role": "system", "content": [{"type": "input_text", "text": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."}]},
                 {"role": "user", "content": [{"type": "input_text", "text": prompt}]}
             ],
-            response_format={"type": "json_object"},
             max_output_tokens=800,
             timeout=20,
             reasoning_effort="medium"
@@ -4177,7 +4176,6 @@ client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"),
                     {"role": "system", "content": [{"type": "input_text", "text": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."}]},
                     {"role": "user", "content": [{"type": "input_text", "text": prompt}]}
                 ],
-                response_format={"type": "json_object"},
                 max_output_tokens=800,
                 timeout=20,
                 reasoning_effort="medium"

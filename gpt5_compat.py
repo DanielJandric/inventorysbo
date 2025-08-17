@@ -167,8 +167,8 @@ def from_responses_simple(
         req["max_output_tokens"] = max_output_tokens
     if timeout is not None:
         req["timeout"] = timeout
-    if response_format is not None:
-        req["response_format"] = response_format
+    # Note: some server SDK versions do not accept response_format for Responses API.
+    # We intentionally ignore it here and enforce JSON via prompting and robust parsing upstream.
     return client.responses.create(**req)
 
 

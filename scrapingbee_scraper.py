@@ -476,7 +476,6 @@ Contraintes générales:
                             {"role": "system", "content": [{"type": "input_text", "text": system_prompt}]},
                             {"role": "user", "content": [{"type": "input_text", "text": f"Demande: {prompt}\n\nDONNÉES FACTUELLES (snapshot):\n{json.dumps(market_snapshot, indent=2)}\n\nDONNÉES COLLECTÉES (articles):\n{context}"}]}
                         ],
-                        response_format={"type": "json_object"},
                         max_output_tokens=15000,
                         reasoning_effort=os.getenv("AI_REASONING_EFFORT", "medium")
                     )
