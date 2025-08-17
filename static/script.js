@@ -1979,17 +1979,35 @@ async function getMarketPrice(button, id) {
     button.disabled = true;
     
     try {
-        const response = await fetch(`/api/market-price/${id}`);
-        const data = await response.json();
-        
-        if (response.ok) {
+        const response = await fetch(`/api/market-price/${id}`, { headers: { 'Accept': 'application/json' } });
+        let data = null;
+        try {
+            data = await response.json();
+        } catch (_) {
+            data = null;
+        }
+
+        if (response.ok && data) {
             showEstimationModal(data, id);
         } else {
-            showError(data.error || 'Erreur lors de l\'estimation');
+            const fallbackReason = data && (data.reasoning || data.error || data.message);
+            showEstimationModal({
+                estimated_price: null,
+                reasoning: fallbackReason || "L'IA n'a pas renvoyé un JSON valide.",
+                comparable_items: [],
+                confidence_score: null,
+                market_analysis: (data && data.market_analysis) ? data.market_analysis : {}
+            }, id);
         }
     } catch (error) {
         console.error('Erreur:', error);
-        showError('Erreur de connexion pour l\'estimation.');
+        showEstimationModal({
+            estimated_price: null,
+            reasoning: `Erreur réseau: ${error && error.message ? error.message : 'inconnue'}`,
+            comparable_items: [],
+            confidence_score: null,
+            market_analysis: {}
+        }, id);
     } finally {
         button.innerHTML = originalHTML;
         button.disabled = false;
@@ -2067,7 +2085,10 @@ function showEstimationModal(data, itemId) {
         }
     }
     
-    const confidenceColor = confidence_score > 0.7 ? 'text-green-400' : confidence_score > 0.4 ? 'text-yellow-400' : 'text-orange-400';
+    const est = (typeof estimated_price === 'number' && isFinite(estimated_price)) ? estimated_price : null;
+    const priceDisplay = est !== null ? formatPrice(est) : 'N/D';
+    const confVal = (typeof confidence_score === 'number' && isFinite(confidence_score)) ? confidence_score : 0;
+    const confidenceColor = confVal > 0.7 ? 'text-green-400' : confVal > 0.4 ? 'text-yellow-400' : 'text-orange-400';
     
     const contentBody = document.getElementById('estimation-content-body');
     if (contentBody) {
@@ -2075,19 +2096,19 @@ function showEstimationModal(data, itemId) {
             <div class="space-y-6">
                 <div class="text-center p-8 glass-subtle rounded-2xl">
                     <h3 class="text-2xl font-bold mb-4">${item.name}</h3>
-                    <div class="text-3xl font-bold text-cyan-400 mb-2">${formatPrice(estimated_price)}</div>
-                    <div class="${confidenceColor} text-sm">Confiance: ${Math.round(confidence_score * 100)}%</div>
+                    <div class="text-3xl font-bold text-cyan-400 mb-2">${priceDisplay}</div>
+                    <div class="${confidenceColor} text-sm">Confiance: ${Math.round(confVal * 100)}%</div>
                 </div>
                 <div class="glass-subtle p-6 rounded-2xl">
                     <h3 class="text-lg font-semibold mb-4">Analyse de l'IA</h3>
-                    <p class="text-slate-400 whitespace-pre-wrap">${reasoning}</p>
+                    <p class="text-slate-400 whitespace-pre-wrap">${reasoning || 'N/D'}</p>
                 </div>
                 ${comparablesHTML}
                 <div class="text-center p-6 glass-subtle rounded-2xl">
                     <h3 class="text-lg font-semibold mb-4">Mise à jour du prix</h3>
                     <p class="text-slate-400 mb-4">Voulez-vous mettre à jour le prix actuel de cet objet avec l'estimation de l'IA ?</p>
                     <div class="flex justify-center gap-4">
-                        <button onclick="updatePriceWithAI(${itemId}, ${estimated_price})" class="glass glowing-element px-6 py-3 rounded-xl font-medium transition-all duration-300 hover:scale-105 border border-green-500/30 text-green-400 hover:text-green-300 hover:border-green-400/50">
+                        ${est !== null ? `<button onclick="updatePriceWithAI(${itemId}, ${est})" class="glass glowing-element px-6 py-3 rounded-xl font-medium transition-all duration-300 hover:scale-105 border border-green-500/30 text-green-400 hover:text-green-300 hover:border-green-400/50">` : `<button disabled class=\"glass px-6 py-3 rounded-xl font-medium border border-slate-500/30 text-slate-400 cursor-not-allowed\">`}
                             <span class="flex items-center gap-2">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>

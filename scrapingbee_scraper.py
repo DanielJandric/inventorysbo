@@ -424,7 +424,8 @@ Schéma attendu (extrait):
 
 Contraintes:
 - Utiliser exclusivement les chiffres du market_snapshot pour les valeurs (ou marquer "N/D").
-- Style trading floor: direct, technique; emojis sobres; gras Markdown pour points critiques; pas de HTML.
+- Style trading floor: direct, technique; gras Markdown pour points critiques; pas de HTML.
+- Emojis sobres et professionnels pour signaler tendances/risques/insights: 📈/📉 (tendances), 🟢/🟡/🔴 (régime/alerte), ⚠️ (risque), 💡 (insight), 🏦 (banques centrales), 🌍 (macro/géo), ⏱️ (temporalité), 📊 (métriques). Fréquence: 1–2 par section max; jamais dans les nombres ou clés JSON.
 - Répondre en UN SEUL objet JSON valide.
 """
             

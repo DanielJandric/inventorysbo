@@ -2442,6 +2442,7 @@ RÈGLES:
 4. Maximum 800 mots
 5. Pas de formules de politesse génériques
 6. Utilise ton intelligence pour comprendre et contextualiser les données
+7. Emojis sobres et professionnels autorisés (📈/📉, 🟢/🟡/🔴, ⚠️, 💡) pour signaler tendances/alertes/insights — 1–2 max; pas dans les nombres ou clés
 7. Réfère-toi à l'historique de conversation quand c'est pertinent
 8. Évite de répéter des informations déjà données sauf si demandé"""
 
@@ -2510,7 +2511,8 @@ RÈGLES:
 2. Comprends naturellement l'intention de la question
 3. Donne le nombre exact d'objets trouvés
 4. Utilise l'historique de conversation si pertinent
-5. Réponses courtes et précises"""
+5. Réponses courtes et précises
+6. Emojis sobres (📈/📉, 🟢/🟡/🔴, ⚠️, 💡) pour souligner tendances/risques/insights — 1–2 max; jamais dans les chiffres"""
 
             # Construire les messages avec historique
             messages = [{"role": "system", "content": system_prompt}]
@@ -2596,7 +2598,8 @@ RÈGLES:
 3. Donne le nombre exact trouvé
 4. Pour les prix/valeurs, calcule les totaux
 5. Utilise l'historique pour contextualiser
-6. Réponses courtes et précises"""
+6. Réponses courtes et précises
+7. Emojis sobres (📈/📉, 🟢/🟡/🔴, ⚠️, 💡) pour signaler tendances/risques — 1–2 max; jamais dans les chiffres"""
 
             # Construire les messages avec historique
             messages = [{"role": "system", "content": system_prompt}]
