@@ -407,6 +407,14 @@ class ScrapingBeeScraper:
             
             # Préparer le contexte
             context = self._prepare_context(scraped_data)
+            # Troncature protectrice pour respecter budgets token
+            try:
+                max_ctx_chars = int(os.getenv('SCRAPER_MAX_CONTEXT_CHARS', '70000'))
+            except Exception:
+                max_ctx_chars = 70000
+            if len(context) > max_ctx_chars:
+                context = context[:max_ctx_chars]
+                logger.info(f"🧠 Contexte tronqué à {max_ctx_chars} caractères pour limiter les tokens.")
             logger.info(f"🧠 Contexte préparé pour OpenAI ({len(context)} caractères).")
             logger.info(f"📊 Nombre de sources: {len(scraped_data)}")
             logger.info(f"📈 Market snapshot disponible: {'Oui' if market_snapshot else 'Non'}")
@@ -465,7 +473,7 @@ Contraintes générales:
             logger.info(f"🤖 Appel à l'API OpenAI ({chosen_model}) en cours pour une analyse exhaustive (prompt renforcé)...")
             
             # Essayer jusqu'à 3 fois en cas d'erreur
-            for attempt in range(3):
+            for attempt in range(5):
                 try:
                     # Responses API (reasoning ready)
                     input_messages = [
@@ -490,6 +498,11 @@ Contraintes générales:
 
                     # Utiliser exclusivement Responses API (JSON garanti)
                     from gpt5_compat import from_responses_simple, extract_output_text
+                    # max_output_tokens configurable pour réduire la pression TPM
+                    try:
+                        max_out_tokens = int(os.getenv('SCRAPER_MAX_OUTPUT_TOKENS', '5000'))
+                    except Exception:
+                        max_out_tokens = 5000
                     resp = from_responses_simple(
                         client=client,
                         model=os.getenv("AI_MODEL", "gpt-5"),
@@ -497,7 +510,7 @@ Contraintes générales:
                             {"role": "system", "content": [{"type": "input_text", "text": system_prompt}]},
                             {"role": "user", "content": [{"type": "input_text", "text": f"Demande: {prompt}\n\nDONNÉES FACTUELLES (snapshot):\n{json.dumps(market_snapshot, indent=2)}\n\nDONNÉES COLLECTÉES (articles):\n{context}"}]}
                         ],
-                        max_output_tokens=15000,
+                        max_output_tokens=max_out_tokens,
                         reasoning_effort=os.getenv("AI_REASONING_EFFORT", "medium")
                     )
                     raw = extract_output_text(resp) or ""
@@ -566,11 +579,29 @@ Contraintes générales:
                     return result
                     
                 except Exception as e:
-                    logger.warning(f"⚠️ Tentative {attempt + 1}/3 échouée: {e}")
-                    if attempt < 2:
-                        await asyncio.sleep(2)  # Attendre 2 secondes avant de réessayer
-                    else:
-                        raise
+                    import random, re as _re
+                    msg = str(e)
+                    logger.warning(f"⚠️ Tentative {attempt + 1}/5 échouée: {msg}")
+                    # Exponential backoff + respect de 'try again in Xs'
+                    base_wait = 2 * (2 ** attempt)
+                    m = _re.search(r"try again in ([0-9.]+)s", msg)
+                    if m:
+                        try:
+                            hinted = float(m.group(1))
+                            base_wait = max(base_wait, hinted + random.uniform(0.5, 1.5))
+                        except Exception:
+                            pass
+                    if attempt < 4:
+                        await asyncio.sleep(min(base_wait, 20))
+                        # réduire la sortie demandée pour soulager le TPM
+                        try:
+                            new_limit = max(2000, int(max_out_tokens * 0.7))
+                            os.environ['SCRAPER_MAX_OUTPUT_TOKENS'] = str(new_limit)
+                            logger.info(f"🔧 SCRAPER_MAX_OUTPUT_TOKENS réduit à {new_limit}")
+                        except Exception:
+                            pass
+                        continue
+                    raise
             
         except Exception as e:
             logger.error(f"❌ Erreur traitement LLM: {e}")
