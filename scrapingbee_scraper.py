@@ -467,19 +467,20 @@ Contraintes générales:
                     if effort:
                         req_kwargs["reasoning"] = {"effort": effort}
 
-                    # Basculer sur Chat Completions (JSON garanti)
-                    from gpt5_compat import from_chat_completions_compat
-                    resp_cc = from_chat_completions_compat(
+                    # Utiliser exclusivement Responses API (JSON garanti)
+                    from gpt5_compat import from_responses_simple, extract_output_text
+                    resp = from_responses_simple(
                         client=client,
                         model=os.getenv("AI_MODEL", "gpt-5"),
                         messages=[
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": f"Demande: {prompt}\n\nDONNÉES FACTUELLES (snapshot):\n{json.dumps(market_snapshot, indent=2)}\n\nDONNÉES COLLECTÉES (articles):\n{context}"}
+                            {"role": "system", "content": [{"type": "input_text", "text": system_prompt}]},
+                            {"role": "user", "content": [{"type": "input_text", "text": f"Demande: {prompt}\n\nDONNÉES FACTUELLES (snapshot):\n{json.dumps(market_snapshot, indent=2)}\n\nDONNÉES COLLECTÉES (articles):\n{context}"}]}
                         ],
                         response_format={"type": "json_object"},
-                        max_tokens=15000
+                        max_output_tokens=15000,
+                        reasoning_effort=os.getenv("AI_REASONING_EFFORT", "medium")
                     )
-                    result = json.loads(resp_cc.choices[0].message.content)
+                    result = json.loads(extract_output_text(resp))
                     logger.info(f"✅ OpenAI a retourné une réponse complète")
                     return result
                     

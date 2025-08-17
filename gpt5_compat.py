@@ -142,3 +142,38 @@ def chat_tools_messages(
     return client.responses.create(**req)
 
 
+# --- New: Responses-only helpers ---
+def from_responses_simple(
+    *,
+    client: OpenAI,
+    model: str,
+    messages: List[Dict[str, Any]],
+    max_output_tokens: Optional[int] = None,
+    timeout: Optional[int] = None,
+    reasoning_effort: str = "medium",
+    response_format: Optional[Dict[str, Any]] = None,
+):
+    """Send messages via Responses API (no tools) and return raw response.
+
+    - Uses typed inputs compatible with Responses API
+    - Optionally sets max_output_tokens/timeout/reasoning/response_format
+    """
+    req: Dict[str, Any] = {
+        "model": model,
+        "input": _to_responses_input(messages),
+        "reasoning": {"effort": reasoning_effort},
+    }
+    if max_output_tokens is not None:
+        req["max_output_tokens"] = max_output_tokens
+    if timeout is not None:
+        req["timeout"] = timeout
+    if response_format is not None:
+        req["response_format"] = response_format
+    return client.responses.create(**req)
+
+
+def extract_output_text(res: Any) -> str:
+    """Public helper to extract output text from a Responses API result."""
+    return _extract_output_text_from_response(res)
+
+

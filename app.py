@@ -63,7 +63,7 @@ from unified_market_manager import (
 from google_cse_stock_data import GoogleCSEStockDataManager
 from enhanced_google_cse_ai_report import EnhancedGoogleCSEAIReport
 from intelligent_scraper import IntelligentScraper, get_scraper
-from gpt5_compat import from_chat_completions_compat, chat_tools_messages
+from gpt5_compat import from_chat_completions_compat, chat_tools_messages, from_responses_simple, extract_output_text
 from scrapingbee_scraper import ScrapingBeeScraper, get_scrapingbee_scraper
 # Remplacé par l'API Manus unifiée
 # Remplacé par l'API Manus unifiée
@@ -3991,19 +3991,19 @@ Réponds en JSON avec:
 - market_trend (hausse/stable/baisse)
 - price_range (objet avec min et max basés sur le marché)"""
 
-        response = from_chat_completions_compat(
-client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"
-),
+        response = from_responses_simple(
+client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"),
             messages=[
-                {"role": "system", "content": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."},
-                {"role": "user", "content": prompt}
+                {"role": "system", "content": [{"type": "input_text", "text": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."}]},
+                {"role": "user", "content": [{"type": "input_text", "text": prompt}]}
             ],
             response_format={"type": "json_object"},
-            max_tokens=800,
-            timeout=20
+            max_output_tokens=800,
+            timeout=20,
+            reasoning_effort="medium"
         )
         
-        raw = response.choices[0].message.content if hasattr(response, 'choices') else getattr(response, 'output_text', '')
+        raw = extract_output_text(response) or ''
         def _safe_parse_json(text: str):
             s = (text or '')
             try:
@@ -4015,7 +4015,7 @@ client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"
                 s = s.translate(trans)
                 try:
                     return json.loads(s)
-                except Exception:
+        except Exception:
                     depth = 0
                     start_idx = None
                     for i, ch in enumerate(s):
@@ -4163,19 +4163,19 @@ Réponds en JSON avec:
 - confidence_score (0.1-0.9)
 - market_trend (hausse/stable/baisse)"""
 
-            response = from_chat_completions_compat(
-client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"
-),
+            response = from_responses_simple(
+client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"),
                 messages=[
-                    {"role": "system", "content": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."},
-                    {"role": "user", "content": prompt}
+                    {"role": "system", "content": [{"type": "input_text", "text": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."}]},
+                    {"role": "user", "content": [{"type": "input_text", "text": prompt}]}
                 ],
                 response_format={"type": "json_object"},
-                max_tokens=800,
-                timeout=20
+                max_output_tokens=800,
+                timeout=20,
+                reasoning_effort="medium"
             )
             
-            raw = response.choices[0].message.content if hasattr(response, 'choices') else getattr(response, 'output_text', '')
+            raw = extract_output_text(response) or ''
             # Parsing robuste: retirer les code fences et extraire le premier objet JSON équilibré
             def _safe_parse_json(text: str):
                 s = (text or '')
