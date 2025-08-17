@@ -8425,7 +8425,7 @@ def markets_chat():
             user_parts.append(f"Question: {user_message}")
             user_prompt_final = "".join(user_parts)
 
-            _client = client.with_options(timeout=15)
+            _client = client.with_options(timeout=60)
             res = _client.responses.create(
                 model=os.getenv("AI_MODEL", "gpt-5"),
                 input=[
@@ -8433,7 +8433,7 @@ def markets_chat():
                     {"role": "user", "content": user_prompt_final},
                 ],
                 reasoning={"effort": eff},
-                max_output_tokens=400,
+                max_output_tokens=1500,
             )
             reply = (extract_output_text(res) or "").strip()
         except Exception:
@@ -8470,8 +8470,8 @@ def markets_chat():
                     client=client,
                     model=os.getenv("AI_COMPLETIONS_MODEL", "gpt-5-chat-latest"),
                     messages=cc_messages,
-                    max_tokens=350,
-                    timeout=12,
+                    max_tokens=1200,
+                    timeout=60,
                 )
                 reply = (getattr(cc, 'choices', [{}])[0].get('message', {}).get('content') or '').strip()
             except Exception:
