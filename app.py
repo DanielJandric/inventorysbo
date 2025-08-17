@@ -8480,15 +8480,44 @@ Réponds de manière concise et directe."""
 
         messages_resp.append({"role": "user", "content": user_prompt})
 
-        # Completions-only (désactive Responses/tool-calls pour le chat)
-        cc = from_chat_completions_compat(
-            client=client,
-            model=os.getenv("AI_MODEL", "gpt-5"),
-            messages=messages_resp,
-            max_tokens=800
-        )
-        reply = (cc.choices[0].message.content or "").strip()
-        
+        # Appel Responses avec tools (web_search) et reasoning high; fallback preview si erreur
+        try:
+            res = chat_tools_messages(
+                messages=messages_resp,
+                tools=[{"type": "web_search"}],
+                model=os.getenv("AI_MODEL","gpt-5"),
+                max_output_tokens=1500,
+                reasoning_effort="high",
+                client=client
+            )
+        except Exception:
+            res = chat_tools_messages(
+                messages=messages_resp,
+                tools=[{"type": "web_search_preview"}],
+                model=os.getenv("AI_MODEL","gpt-5"),
+                max_output_tokens=1500,
+                reasoning_effort="high",
+                client=client
+            )
+        reply = extract_output_text(res) or ""
+        reply = reply.strip()
+
+        # Second tour si nécessaire pour forcer la sortie texte
+        if not reply:
+            try:
+                res2 = client.responses.create(
+                    model=os.getenv("AI_MODEL","gpt-5"),
+                    previous_response_id=getattr(res, 'id', None),
+                    input=[{"role":"user","content":[{"type":"input_text","text":"Fournis maintenant la réponse finale en 3–5 points concis, puis une conclusion. Pas d'appel d'outil."}]}],
+                    reasoning={"effort":"high"},
+                    max_output_tokens=700
+                )
+                reply2 = (extract_output_text(res2) or "").strip()
+                if reply2:
+                    reply = reply2
+            except Exception:
+                pass
+
         # Persister dans la mémoire
         try:
             conversation_memory.add_message(session_id, 'user', user_message)
