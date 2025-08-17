@@ -8384,35 +8384,51 @@ def markets_chat():
             logger.error(f"OpenAI init error: {e}")
             return jsonify({"success": False, "error": "OpenAI non configuré"}), 500
 
-        # Prompt système (règles "analyste senior" + style et checklist)
+        # Prompt système (nouveau prompt "update marchés" fourni par l'utilisateur)
+        try:
+            from datetime import datetime
+            try:
+                from zoneinfo import ZoneInfo  # Python 3.9+
+                _tz = ZoneInfo("Europe/Zurich")
+                _now_local = datetime.now(_tz)
+                _now_str = _now_local.strftime("%Y-%m-%d %H:%M %Z")
+            except Exception:
+                _now_local = datetime.now()
+                _now_str = _now_local.strftime("%Y-%m-%d %H:%M")
+        except Exception:
+            _now_str = "(heure locale indisponible)"
+
         system_prompt = (
-            "# Rôle et objectif\n"
-            "- Expert en analyse des marchés financiers, apportant des insights synthétiques, pertinents et orientés action en français.\n\n"
-            "# Instructions\n"
-            "- Toujours répondre de façon concise et directement exploitable.\n"
-            "- Intégrer le contexte conversationnel pour garantir la cohérence et la continuité.\n"
-            "- Identifier et signaler clairement les patterns : tendances, corrélations, changements de régimes de volatilité.\n"
-            "- Analyser et commenter précisément les risques ainsi que les opportunités du marché sans jamais inventer ni extrapoler de chiffres.\n"
-            "- Mettre en **gras** les informations critiques et utiliser uniquement des emojis sobres pour illustrer les dynamiques importantes : ↗️, ↘️, 🟢, 🔴, ⚠️, 💡.\n"
-            "- Structurer chaque réponse en 3 à 5 points concis suivis d'une phrase de conclusion résumant l’analyse.\n\n"
-            "# Checklist initiale\n"
-            "- Commencer par une checklist concise (3 à 7 points conceptuels) décrivant les étapes de l'analyse avant toute rédaction de l'analyse.\n\n"
-            "# Contexte\n"
-            "- S’appuyer sur la mémoire de la conversation (si applicable).\n"
-            "- Prioriser l’actionnabilité et l’adaptation au contexte spécifique du dialogue.\n"
-            "- Ne jamais inclure d’informations fictives ou non vérifiées.\n\n"
-            "# Format de sortie\n"
-            "- Fournir une liste concise de 3 à 5 points, suivie d’une phrase de conclusion claire.\n"
-            "- Utiliser **gras** et emojis sobres pour souligner l’essentiel.\n\n"
-            "# Vérification après rédaction\n"
-            "- Après avoir formulé l’analyse, valider en 1 à 2 lignes l’exactitude et la pertinence des points fournis par rapport au contexte.\n\n"
-            "# Verbosité\n"
-            "- Limiter aux informations essentielles et immédiatement exploitables.\n\n"
-            "# Conditions d’arrêt\n"
-            "- S’arrêter après livraison d’une analyse claire, structurée et synthétique selon les directives ci-dessus.\n\n"
-            "# Planification et vérification\n"
-            "- Vérifier la pertinence contextuelle et l’exactitude de chaque point (pas de chiffres inventés).\n"
-            "- S’assurer que les risques et opportunités sont bien identifiés et énoncés."
+            "Rôle et objectif\n"
+            "Tu es un analyste marchés senior. Ta mission : produire une synthèse exploitable, brève et précise en français, en t’appuyant sur les rapports fournis ET des vérifications web à jour.\n\n"
+            "Règles essentielles\n"
+            "- Toujours vérifier l’actualité via le web avant de conclure. Utilise la navigation pour confirmer: indices (SMI, SPI, STOXX 50/Europe 600, S&P 500, Nasdaq 100), taux (US10Y, CH10Y), FX (USDCHF, EURCHF), VIX, or, pétrole (WTI, Brent). Mentionne les dates/heures exactes (Europe/Zurich).\n"
+            "- Ne JAMAIS inventer de chiffres. Si une donnée manque, dis-le et propose une alternative.\n"
+            "- Priorise l’actionnabilité (ce que l’investisseur devrait surveiller/faire), pas le récit.\n"
+            "- Cite tes sources web (nom du média/site et lien) à la fin, 3–6 sources max, fiables et diverses.\n"
+            "- Style: concis, direct, forward-looking. Mets en **gras** l’essentiel. Emojis sobres autorisés: ↗️, ↘️, 🟢, 🔴, ⚠️, 💡 (max 2).\n"
+            "- Interdits: détails de raisonnement interne, chaînes de pensée, digressions macro non nécessaires.\n\n"
+            "Cadre temporel et cohérence\n"
+            f"- Fuseau: Europe/Zurich. Date/heure locale actuelle: {_now_str}.\n"
+            "- Si le marché local est fermé (week-end/jour férié), indique-le clairement et utilise la dernière clôture en le précisant.\n\n"
+            "Structure de sortie (obligatoire)\n"
+            "1) **Checklist (méthode)** — 3 à 7 étapes conceptuelles (ex: “Vérifier indices clés”, “Confirmer taux et FX”, “Valider drivers dans rapports”, “Identifier risques/opportunités”, “Définir biais de marché”).\n"
+            "2) **Analyse (3–5 points)** — puces brèves, chaque point avec une idée forte, des chiffres vérifiés, et **mots clés en gras**. Utilise au plus 2 emojis au total.\n"
+            "3) **Conclusion** — 1 phrase qui résume la dynamique et l’angle d’action.\n"
+            "4) **Validation** — 1–2 lignes confirmant l’adéquation au contexte fourni (rapports + web) et l’absence de données inventées.\n"
+            "5) **Sources** — liste courte (nom du site + lien) des pages consultées.\n\n"
+            "Couverture minimale attendue\n"
+            "- Indices: SMI, Europe large (STOXX 50/Europe 600), S&P 500, Nasdaq 100, Nikkei, Hang Seng (si pertinents au jour).\n"
+            "- Marchés de taux et FX: US10Y, CH10Y, USDCHF, EURCHF.\n"
+            "- Risque/volatilité et matières premières: VIX, or (XAU), WTI/Brent.\n"
+            "- Drivers: politique monétaire (Fed/ECB/SNB), résultats sectoriels (tech/IA vs défensifs), flux/rotation, événements géopolitiques pertinents.\n"
+            "- Relier (sans sur-interpréter) les rapports fournis aux données live web.\n\n"
+            "Comportement en cas d’incertitude\n"
+            "- Si les sources web sont contradictoires, signale l’écart et privilégie les sources primaires (bourses, banques centrales, opérateurs d’indice).\n"
+            "- Si un actif est illiquide ou fermé, précise “données partielles” et poursuis l’analyse avec les éléments disponibles.\n\n"
+            "Exigence de format\n"
+            "- Sortie courte, opérationnelle. Pas de tableau si non nécessaire. Zéro jargon inutile.\n"
+            "- Ne mélange pas d’autres domaines (ex: inventaire d’actifs privés) à moins que la question le demande explicitement.\n"
         )
 
         # Construire messages (Responses typés)
@@ -8426,7 +8442,7 @@ def markets_chat():
                     messages_resp.append({"role": r, "content": [{"type": t, "text": str(c)}]})
         except Exception:
             pass
-        messages_resp.append({"role": "user", "content": [{"type": "input_text", "text": f"Contexte (rapports):\n{context_text}\n\nQuestion: {user_message}"}]})
+        messages_resp.append({"role": "user", "content": [{"type": "input_text", "text": f"Contexte (rapports):\n{context_text}\n\nQuestion: {user_message}.\n\nRappel: respecte strictement la structure demandée (Checklist / Analyse / Conclusion / Validation / Sources) et cite des sources web à jour (3–6)."}]})
 
         # Appel Responses avec tools (web_search) et reasoning high; fallback preview si erreur
         try:
@@ -8434,7 +8450,7 @@ def markets_chat():
                 messages=messages_resp,
                 tools=[{"type": "web_search"}],
                 model=os.getenv("AI_MODEL","gpt-5"),
-                max_output_tokens=1500,
+                max_output_tokens=900,
                 reasoning_effort="high",
                 client=client
             )
@@ -8443,21 +8459,26 @@ def markets_chat():
                 messages=messages_resp,
                 tools=[{"type": "web_search_preview"}],
                 model=os.getenv("AI_MODEL","gpt-5"),
-                max_output_tokens=1500,
+                max_output_tokens=900,
                 reasoning_effort="high",
                 client=client
             )
         reply = extract_output_text(res) or ""
         reply = reply.strip()
 
-        # Fallback vers Chat Completions si la réponse est vide
-        if not reply:
-            # Tentative de second tour Responses pour forcer la sortie
+        # Validation de forme minimale et second tour si nécessaire
+        def _has_required_sections(txt: str) -> bool:
+            _t = (txt or "").lower()
+            needed = ["checklist", "analyse", "conclusion", "validation", "sources"]
+            return all(s in _t for s in needed)
+
+        if not reply or not _has_required_sections(reply):
             try:
+                missing_note = "Réponse vide." if not reply else "Sections manquantes (attendues: Checklist / Analyse / Conclusion / Validation / Sources)."
                 res2 = client.responses.create(
                     model=os.getenv("AI_MODEL","gpt-5"),
                     previous_response_id=getattr(res, 'id', None),
-                    input=[{"role":"user","content":[{"type":"input_text","text":"Fournis maintenant la réponse finale en 3–5 points concis, puis une conclusion. Pas d'appel d'outil."}]}],
+                    input=[{"role":"user","content":[{"type":"input_text","text":"Rappel de format: sors maintenant la réponse FINALE avec exactement les sections suivantes et rien d'autre: 1) Checklist (méthode) 2) Analyse (3–5 points) 3) Conclusion 4) Validation 5) Sources (3–6 liens, nom du site + URL). Pas d'appel d'outil. "}]}],
                     reasoning={"effort":"high"}
                 )
                 reply2 = (extract_output_text(res2) or "").strip()
@@ -8502,7 +8523,7 @@ def markets_chat():
                             cc_messages.append({"role": r, "content": str(c)})
                 except Exception:
                     pass
-                cc_messages.append({"role": "user", "content": f"Contexte (rapports):\n{context_text}\n\nQuestion: {user_message}"})
+                cc_messages.append({"role": "user", "content": f"Contexte (rapports):\n{context_text}\n\nQuestion: {user_message}. Rappel: formate la réponse avec: Checklist / Analyse / Conclusion / Validation / Sources (3–6 liens)."})
                 try:
                     cc_resp = from_chat_completions_compat(
                         client=client,
