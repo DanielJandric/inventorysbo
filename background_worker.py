@@ -256,12 +256,66 @@ class MarketAnalysisWorker:
         except Exception:
             ts_str = datetime.utcnow().strftime('%d/%m/%Y à %H:%M UTC')
         
+        # Normaliser la structure de résultat (peut être une chaîne JSON ou du texte)
+        try:
+            if not isinstance(result, dict):
+                try:
+                    result = json.loads(result)  # tenter de parser JSON
+                except Exception:
+                    result = {
+                        "summary": str(result) if result is not None else "",
+                        "key_points": [],
+                        "structured_data": {},
+                        "sources": [],
+                        "confidence_score": 0.0,
+                    }
+        except Exception:
+            result = {"summary": "", "key_points": [], "structured_data": {}, "sources": [], "confidence_score": 0.0}
+
+        # Préparer et normaliser les sous-sections
+        exec_summary = result.get('executive_summary', [])
+        if isinstance(exec_summary, str):
+            exec_summary = [exec_summary]
+        econ_indicators = result.get('economic_indicators', {})
+        if not isinstance(econ_indicators, dict):
+            econ_indicators = {}
+        geo_analysis = result.get('geopolitical_analysis', {})
+        if not isinstance(geo_analysis, dict):
+            geo_analysis = geo_analysis if isinstance(geo_analysis, str) else {}
+        analytics_data = market_snapshot.get('analytics', {}) if isinstance(market_snapshot, dict) else {}
+
+        # Sources: accepter dicts, URLs ou simples textes
+        raw_sources = result.get('sources', [])
+        if isinstance(raw_sources, str):
+            raw_sources = [raw_sources]
+        sources_items: list[str] = []
+        for src in (raw_sources or []):
+            if isinstance(src, dict):
+                url = src.get('url') or '#'
+                title = src.get('title') or src.get('name') or url
+                sources_items.append(f'<li style="margin-bottom: 8px;">📎 <a href="{url}" target="_blank" style="color: #3b82f6; text-decoration: none;">{title}</a></li>')
+            else:
+                txt = str(src)
+                if txt.startswith('http'):
+                    url = txt
+                    title = txt if len(txt) <= 80 else txt[:77] + '...'
+                    sources_items.append(f'<li style="margin-bottom: 8px;">📎 <a href="{url}" target="_blank" style="color: #3b82f6; text-decoration: none;">{title}</a></li>')
+                elif txt:
+                    sources_items.append(f'<li style="margin-bottom: 8px;">{txt}</li>')
+        sources_html = "\n".join(sources_items)
+
         # Calculer un pourcentage de confiance sûr pour l'affichage
         _score_raw = result.get('confidence_score', 0)
         try:
             _score_num = float(_score_raw) if _score_raw is not None else 0.0
         except Exception:
             _score_num = 0.0
+
+        # Pré-générer les sections HTML robustes
+        exec_summary_html = self._render_validated_executive_summary(exec_summary, market_snapshot)
+        econ_html = self._generate_economic_indicators(econ_indicators)
+        geo_html = self._generate_geopolitical_analysis(geo_analysis if isinstance(geo_analysis, dict) else {})
+        analytics_html = self._generate_analytics_section(analytics_data if isinstance(analytics_data, dict) else {})
 
         # Générer le HTML optimisé pour mobile
         html = f"""
@@ -468,7 +522,7 @@ class MarketAnalysisWorker:
                 <div class="executive-summary">
                     <h2>🎯 EXECUTIVE SUMMARY</h2>
                     <ul>
-                        {self._render_validated_executive_summary(result.get('executive_summary', []), market_snapshot)}
+                        {exec_summary_html}
                     </ul>
                 </div>
                 
@@ -476,16 +530,14 @@ class MarketAnalysisWorker:
                 <div class="section">
                     <h3>📊 Indicateurs Économiques</h3>
                     <div class="economic-grid">
-                        {self._generate_economic_indicators(result.get('economic_indicators', {}))}
+                        {econ_html}
                     </div>
                 </div>
                 
                 <!-- Analyse Géopolitique -->
                 <div class="section">
                     <h3>🌍 Analyse Géopolitique</h3>
-                    <div class="geopolitical card">
-                        {self._generate_geopolitical_analysis(result.get('geopolitical_analysis', {}))}
-                    </div>
+                    <div class="geopolitical card">{geo_html}</div>
                 </div>
                 
                 <!-- Aperçu du marché -->
@@ -505,7 +557,7 @@ class MarketAnalysisWorker:
                 <div class="section">
                     <h3>🔍 Analytics Avancés</h3>
                     <div class="economic-grid">
-                        {self._generate_analytics_section(market_snapshot.get('analytics', {}))}
+                        {analytics_html}
                     </div>
                 </div>
                 
@@ -556,9 +608,7 @@ class MarketAnalysisWorker:
                 <!-- Sources -->
                 <div class="section">
                     <h3>📚 Sources d'Information</h3>
-                    <ul style="list-style: none; padding: 0;">
-                        {chr(10).join([f'<li style="margin-bottom: 8px;">📎 <a href="{source.get("url", "#")}" target="_blank" style="color: #3b82f6; text-decoration: none;">{source.get("title", "Source")}</a></li>' for source in (result.get('sources', []) or [])])}
-                    </ul>
+                    <ul style="list-style: none; padding: 0;">{sources_html}</ul>
                 </div>
                 
                 <div class="footer">
