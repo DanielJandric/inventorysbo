@@ -8485,25 +8485,25 @@ def markets_chat():
         if allow_web:
             # avec tools (web_search) et reasoning high; fallback preview si erreur
             try:
-                with timeout_context(180):  # 3 min max
+                with timeout_context(120):  # 2 min max
                     res = chat_tools_messages(
                         messages=messages_resp,
                         tools=[{"type": "web_search"}],
                         model=os.getenv("AI_MODEL","gpt-5"),
                         max_output_tokens=5000,
-                        reasoning_effort="high",
+                        reasoning_effort="medium",
                         client=client
                     )
             except (Exception, TimeoutError) as e:
                 logger.warning(f"Web search timeout/error: {e}")
                 try:
-                    with timeout_context(120):  # 2 min fallback
+                    with timeout_context(90):  # 1.5 min fallback
                         res = chat_tools_messages(
                             messages=messages_resp,
                             tools=[{"type": "web_search_preview"}],
                             model=os.getenv("AI_MODEL","gpt-5"),
                             max_output_tokens=5000,
-                            reasoning_effort="high",
+                            reasoning_effort="medium",
                             client=client
                         )
                 except (Exception, TimeoutError):
@@ -8512,13 +8512,13 @@ def markets_chat():
         else:
             # sans outils (offline)
             try:
-                with timeout_context(120):
+                with timeout_context(90):
                     res = from_responses_simple(
                         client=client,
                         model=os.getenv("AI_MODEL","gpt-5"),
                         messages=messages_resp,
                         max_output_tokens=5000,
-                        reasoning_effort="high"
+                        reasoning_effort="medium"
                     )
             except (Exception, TimeoutError):
                 # Force fallback Chat Completions immédiat
@@ -8557,7 +8557,7 @@ def markets_chat():
                         + ("Sources (3–6 liens, nom du site + URL)." if allow_web else "Sources (rapports internes).")
                         + (" Pas d'appel d'outil." if allow_web else " Pas de navigation web.")
                     )}]}],
-                    reasoning={"effort":"high"},
+                    reasoning={"effort":"medium"},
                     max_output_tokens=700
                 )
                 reply2 = (extract_output_text(res2) or "").strip()
