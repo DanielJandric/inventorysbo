@@ -2325,7 +2325,7 @@ class PureOpenAIEngineWithRAG:
                     messages=loop_messages,
                     tools=tools,
                     model=os.getenv("AI_MODEL","gpt-5"),
-                    max_output_tokens=900,
+                    max_output_tokens=5000,
                     reasoning_effort="high",
                     client=self.client
                 )
@@ -2341,7 +2341,7 @@ class PureOpenAIEngineWithRAG:
                     messages=loop_messages,
                     tools=tools_alt,
                     model=os.getenv("AI_MODEL","gpt-5"),
-                    max_output_tokens=900,
+                    max_output_tokens=5000,
                     reasoning_effort="high",
                     client=self.client
                 )
@@ -8490,7 +8490,7 @@ def markets_chat():
                         messages=messages_resp,
                         tools=[{"type": "web_search"}],
                         model=os.getenv("AI_MODEL","gpt-5"),
-                        max_output_tokens=900,
+                        max_output_tokens=5000,
                         reasoning_effort="high",
                         client=client
                     )
@@ -8502,7 +8502,7 @@ def markets_chat():
                             messages=messages_resp,
                             tools=[{"type": "web_search_preview"}],
                             model=os.getenv("AI_MODEL","gpt-5"),
-                            max_output_tokens=900,
+                            max_output_tokens=5000,
                             reasoning_effort="high",
                             client=client
                         )
@@ -8517,7 +8517,7 @@ def markets_chat():
                         client=client,
                         model=os.getenv("AI_MODEL","gpt-5"),
                         messages=messages_resp,
-                        max_output_tokens=900,
+                        max_output_tokens=5000,
                         reasoning_effort="high"
                     )
             except (Exception, TimeoutError):
@@ -8587,7 +8587,7 @@ def markets_chat():
                     client=client,
                     model=os.getenv("AI_MODEL","gpt-5"),
                     messages=msgs_no_tools,
-                    max_output_tokens=900,
+                    max_output_tokens=5000,
                     reasoning_effort="high"
                 )
                 reply3 = (extract_output_text(res3) or "").strip()
