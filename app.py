@@ -3998,15 +3998,71 @@ client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"
                 {"role": "system", "content": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=800
+            response_format={"type": "json_object"},
+            max_tokens=800,
+            timeout=20
         )
         
         raw = response.choices[0].message.content if hasattr(response, 'choices') else getattr(response, 'output_text', '')
-        try:
-            result = json.loads(raw)
-        except Exception:
-            logger.error(f"AI JSON parse failed, content starts with: {str(raw)[:120]}")
+        def _safe_parse_json(text: str):
+            s = (text or '')
+            try:
+                s = s.strip()
+                import re as _re
+                s = _re.sub(r"```\s*json\s*", "", s, flags=_re.IGNORECASE)
+                s = s.replace('```', '').strip()
+                trans = {ord('\u201c'): '"', ord('\u201d'): '"', ord('\u2019'): "'", ord('\u2013'): '-', ord('\u2014'): '-'}
+                s = s.translate(trans)
+                try:
+                    return json.loads(s)
+                except Exception:
+                    depth = 0
+                    start_idx = None
+                    for i, ch in enumerate(s):
+                        if ch == '{':
+                            if depth == 0:
+                                start_idx = i
+                            depth += 1
+                        elif ch == '}' and depth > 0:
+                            depth -= 1
+                            if depth == 0 and start_idx is not None:
+                                candidate = s[start_idx:i+1]
+                                try:
+                                    return json.loads(candidate)
+                                except Exception:
+                                    start_idx = None
+                                    continue
+            except Exception:
+                return None
+            return None
+        result = _safe_parse_json(raw)
+        if result is None:
+            logger.error(f"AI JSON parse failed (market_price), content starts with: {str(raw)[:120]}")
             return jsonify({"error": "Réponse IA invalide"}), 502
+
+        # Normaliser les champs numériques attendus
+        try:
+            import re as _re
+            ep = result.get('estimated_price')
+            if isinstance(ep, str):
+                cleaned = _re.sub(r"[^0-9.,-]", "", ep)
+                if cleaned.count('.') > 1 and ',' not in cleaned:
+                    parts = cleaned.split('.')
+                    cleaned = ''.join(parts[:-1]) + '.' + parts[-1]
+                cleaned = cleaned.replace("'", "").replace(" ", "").replace(',', '.')
+                try:
+                    result['estimated_price'] = float(cleaned)
+                except Exception:
+                    pass
+            cs = result.get('confidence_score')
+            if isinstance(cs, str):
+                csc = _re.sub(r"[^0-9.,-]", "", cs).replace(',', '.')
+                try:
+                    result['confidence_score'] = float(csc)
+                except Exception:
+                    pass
+        except Exception:
+            pass
         
         # Enrichir avec les données de marché réelles
         result['market_analysis'] = {
@@ -4162,6 +4218,29 @@ client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"
             if market_data is None:
                 logger.error(f"AI JSON parse failed (market_price), content starts with: {str(raw)[:120]}")
                 return jsonify({"error": "Réponse IA invalide"}), 502
+            # Normaliser les champs numériques attendus
+            try:
+                import re as _re
+                ep = market_data.get('estimated_price')
+                if isinstance(ep, str):
+                    cleaned = _re.sub(r"[^0-9.,-]", "", ep)
+                    if cleaned.count('.') > 1 and ',' not in cleaned:
+                        parts = cleaned.split('.')
+                        cleaned = ''.join(parts[:-1]) + '.' + parts[-1]
+                    cleaned = cleaned.replace("'", "").replace(" ", "").replace(',', '.')
+                    try:
+                        market_data['estimated_price'] = float(cleaned)
+                    except Exception:
+                        pass
+                cs = market_data.get('confidence_score')
+                if isinstance(cs, str):
+                    csc = _re.sub(r"[^0-9.,-]", "", cs).replace(',', '.')
+                    try:
+                        market_data['confidence_score'] = float(csc)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
             estimated_price = market_data.get('estimated_price')
             
         except Exception as ai_error:

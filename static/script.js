@@ -2048,12 +2048,15 @@ async function updatePriceWithAI(itemId, estimatedPrice) {
 }
 
 function showEstimationModal(data, itemId) {
-    const item = allItems.find(i => i.id === itemId);
-    if (!item) return;
+    const item = allItems.find(i => String(i.id) === String(itemId));
+    const itemName = item && item.name ? item.name : `Objet #${itemId}`;
     
     const { estimated_price, reasoning, comparable_items, confidence_score, market_analysis } = data;
+    const marketTrend = data && data.market_trend ? data.market_trend : null;
+    const priceRange = data && data.price_range ? data.price_range : null;
     
     let comparablesHTML = '';
+    let collectionComparablesHTML = '';
     
     // Vérifier si on a des objets comparables valides
     if (comparable_items && comparable_items.length > 0) {
@@ -2062,7 +2065,7 @@ function showEstimationModal(data, itemId) {
         if (validComparables.length > 0) {
             comparablesHTML = `
                 <div class="glass-subtle p-6 rounded-2xl">
-                    <h3 class="text-lg font-semibold mb-4">Objets comparables</h3>
+                    <h3 class="text-lg font-semibold mb-4">Objets comparables (marché)</h3>
                     <div class="space-y-3">
                         ${validComparables.map(comp => {
                             const price = comp.reference_price || comp.price || comp.prix || 0;
@@ -2084,25 +2087,90 @@ function showEstimationModal(data, itemId) {
                 </div>`;
         }
     }
+
+    // Similaires dans la collection (enrichissement serveur)
+    if (market_analysis && Array.isArray(market_analysis.top_3_similar_actual) && market_analysis.top_3_similar_actual.length > 0) {
+        const sims = market_analysis.top_3_similar_actual.filter(x => x && x.name);
+        if (sims.length > 0) {
+            collectionComparablesHTML = `
+                <div class="glass-subtle p-6 rounded-2xl">
+                    <h3 class="text-lg font-semibold mb-4">Objets similaires (dans votre collection)</h3>
+                    <div class="space-y-3">
+                        ${sims.map(sim => {
+                            const price = sim.price || 0;
+                            const name = sim.name || 'Objet';
+                            const year = sim.year || '';
+                            const status = sim.status === 'sold' ? 'Vendu' : 'Valeur actuelle';
+                            return `
+                                <div class="flex justify-between items-center p-3 bg-slate-800/50 rounded-xl">
+                                    <div>
+                                        <div class="font-medium">${name}${year ? ` (${year})` : ''}</div>
+                                        <div class="text-sm text-slate-500">${status}</div>
+                                    </div>
+                                    <div class="font-bold text-cyan-400">${formatPrice(price)}</div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>`;
+        }
+    }
     
     const est = (typeof estimated_price === 'number' && isFinite(estimated_price)) ? estimated_price : null;
     const priceDisplay = est !== null ? formatPrice(est) : 'N/D';
     const confVal = (typeof confidence_score === 'number' && isFinite(confidence_score)) ? confidence_score : 0;
     const confidenceColor = confVal > 0.7 ? 'text-green-400' : confVal > 0.4 ? 'text-yellow-400' : 'text-orange-400';
     
+    // Résumé de marché additionnel
+    let marketSummaryHTML = '';
+    const avgCat = market_analysis && typeof market_analysis.average_category_price === 'number' ? market_analysis.average_category_price : null;
+    const priceRangeMarket = market_analysis && Array.isArray(market_analysis.price_range_market) ? market_analysis.price_range_market : null;
+    const hasAnySummary = marketTrend || priceRange || avgCat || priceRangeMarket;
+    if (hasAnySummary) {
+        const trendLabel = marketTrend ? (String(marketTrend).charAt(0).toUpperCase() + String(marketTrend).slice(1)) : 'N/D';
+        const aiRange = priceRange && (typeof priceRange.min === 'number' || typeof priceRange.max === 'number')
+            ? `${typeof priceRange.min === 'number' ? formatPrice(priceRange.min) : 'N/D'} – ${typeof priceRange.max === 'number' ? formatPrice(priceRange.max) : 'N/D'}`
+            : null;
+        const catAvg = avgCat !== null ? formatPrice(avgCat) : null;
+        const marketRange = (priceRangeMarket && priceRangeMarket.length === 2)
+            ? `${formatPrice(priceRangeMarket[0])} – ${formatPrice(priceRangeMarket[1])}`
+            : null;
+        marketSummaryHTML = `
+            <div class="glass-subtle p-6 rounded-2xl">
+                <h3 class="text-lg font-semibold mb-4">Résumé de marché</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="p-3 bg-slate-800/50 rounded-xl">
+                        <div class="text-sm text-slate-500">Tendance</div>
+                        <div class="font-medium">${trendLabel}</div>
+                    </div>
+                    <div class="p-3 bg-slate-800/50 rounded-xl">
+                        <div class="text-sm text-slate-500">Fourchette (IA)</div>
+                        <div class="font-medium">${aiRange || 'N/D'}</div>
+                    </div>
+                    <div class="p-3 bg-slate-800/50 rounded-xl">
+                        <div class="text-sm text-slate-500">Prix moyen catégorie</div>
+                        <div class="font-medium">${catAvg || 'N/D'}</div>
+                    </div>
+                </div>
+                ${marketRange ? `<div class="mt-3 text-sm text-slate-500">Fourchette catégorie: <span class="text-slate-300">${marketRange}</span></div>` : ''}
+            </div>`;
+    }
+    
     const contentBody = document.getElementById('estimation-content-body');
     if (contentBody) {
         contentBody.innerHTML = `
             <div class="space-y-6">
                 <div class="text-center p-8 glass-subtle rounded-2xl">
-                    <h3 class="text-2xl font-bold mb-4">${item.name}</h3>
+                    <h3 class="text-2xl font-bold mb-4">${itemName}</h3>
                     <div class="text-3xl font-bold text-cyan-400 mb-2">${priceDisplay}</div>
                     <div class="${confidenceColor} text-sm">Confiance: ${Math.round(confVal * 100)}%</div>
                 </div>
+                ${marketSummaryHTML}
                 <div class="glass-subtle p-6 rounded-2xl">
                     <h3 class="text-lg font-semibold mb-4">Analyse de l'IA</h3>
                     <p class="text-slate-400 whitespace-pre-wrap">${reasoning || 'N/D'}</p>
                 </div>
+                ${collectionComparablesHTML}
                 ${comparablesHTML}
                 <div class="text-center p-6 glass-subtle rounded-2xl">
                     <h3 class="text-lg font-semibold mb-4">Mise à jour du prix</h3>
@@ -2135,6 +2203,76 @@ function showEstimationModal(data, itemId) {
         modal.classList.add('flex');
     }
 }
+
+// --- Outils de prévisualisation depuis les logs OpenAI ---
+function parseAiJsonSafe(text) {
+    try {
+        if (!text) return null;
+        let s = String(text).trim();
+        // Retirer les fences ```json ... ``` et ```
+        s = s.replace(/```\s*json\s*/gi, '').replace(/```/g, '').trim();
+        // Essai direct
+        try { return JSON.parse(s); } catch (_) {}
+        // Extraction du premier objet JSON équilibré
+        let depth = 0; let startIdx = null;
+        for (let i = 0; i < s.length; i++) {
+            const ch = s[i];
+            if (ch === '{') { if (depth === 0) startIdx = i; depth++; }
+            else if (ch === '}' && depth > 0) { depth--; if (depth === 0 && startIdx !== null) {
+                const candidate = s.slice(startIdx, i + 1);
+                try { return JSON.parse(candidate); } catch (_) { startIdx = null; }
+            } }
+        }
+    } catch (_) { return null; }
+    return null;
+}
+
+function normalizeEstimationNumbers(obj) {
+    if (!obj || typeof obj !== 'object') return obj;
+    const cleanNum = (val) => {
+        if (typeof val === 'number' && isFinite(val)) return val;
+        if (typeof val !== 'string') return val;
+        const only = val.replace(/[^0-9.,\-]/g, '').replace(/\s+/g, '').replace(/'/g, '').replace(/,/g, '.');
+        if (!only) return val;
+        // Si plusieurs points, garder le dernier comme décimal
+        const parts = only.split('.');
+        const fixed = parts.length > 2 ? (parts.slice(0, -1).join('') + '.' + parts[parts.length - 1]) : only;
+        const n = Number(fixed);
+        return isNaN(n) ? val : n;
+    };
+    if ('estimated_price' in obj) obj.estimated_price = cleanNum(obj.estimated_price);
+    if ('confidence_score' in obj) obj.confidence_score = cleanNum(obj.confidence_score);
+    if (Array.isArray(obj.comparable_items)) {
+        obj.comparable_items = obj.comparable_items.map((c) => {
+            if (c && typeof c === 'object') {
+                if ('price' in c) c.price = cleanNum(c.price);
+                if ('reference_price' in c) c.reference_price = cleanNum(c.reference_price);
+            }
+            return c;
+        });
+    }
+    return obj;
+}
+
+// Utilisation: openEstimationPreviewFromLogs(```json { ... } ``` , 123)
+function openEstimationPreviewFromLogs(rawText, itemId) {
+    const data = parseAiJsonSafe(rawText);
+    if (!data) {
+        showEstimationModal({
+            estimated_price: null,
+            reasoning: "Réponse IA non parsable depuis les logs.",
+            comparable_items: [],
+            confidence_score: null,
+            market_analysis: {}
+        }, itemId || 'Preview');
+        return;
+    }
+    const normalized = normalizeEstimationNumbers(data);
+    showEstimationModal(normalized, itemId || 'Preview');
+}
+
+// Exposer pour debug console
+window.openEstimationPreviewFromLogs = openEstimationPreviewFromLogs;
 
 // ==========================================
 // CHATBOT INTELLIGENT AVEC STREAMING AMÉLIORÉ
