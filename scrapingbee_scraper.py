@@ -500,6 +500,12 @@ Output ONLY the JSON object. Do not include any accompanying text. No code fence
                     if effort:
                         req_kwargs["reasoning"] = {"effort": effort}
 
+                    # Token budget for output
+                    try:
+                        max_out_tokens = int(os.getenv('SCRAPER_MAX_OUTPUT_TOKENS', '25000'))
+                    except Exception:
+                        max_out_tokens = 25000
+
                     # Structured outputs: JSON Schema strict (fallback to JSON Mode)
                     schema = {
                         "type": "object",
