@@ -467,6 +467,9 @@ Contraintes générales:
 - Style trading floor: direct, technique; gras Markdown pour points critiques; pas de HTML.
 - Emojis sobres et professionnels pour signaler tendances/risques/insights: 📈/📉 (tendances), 🟢/🟡/🔴 (régime/alerte), ⚠️ (risque), 💡 (insight), 🏦 (banques centrales), 🌍 (macro/géo), ⏱️ (temporalité), 📊 (métriques). Fréquence: 1–2 par section max; jamais dans les nombres ou clés JSON.
 - Répondre en UN SEUL objet JSON valide.
+
+MODE JSON STRICT: activé.
+Output ONLY the JSON object. Do not include any accompanying text. No code fences, no commentary, no markdown.
 """
             
             chosen_model = os.getenv("AI_MODEL", "gpt-5")
