@@ -8244,33 +8244,25 @@ def markets_chat():
             "Structure la réponse en 3–5 points maximum, puis une phrase de conclusion claire."
         )
 
-        # Construire l'entrée Responses API (typed content) avec historique (user/assistant uniquement)
-        input_messages = [{"role": "system", "content": [{"type": "input_text", "text": system_prompt}]}]
+        # Construire messages (Chat Completions)
+        messages = [{"role": "system", "content": system_prompt}]
         try:
             for m in (history_persisted or [])[-8:]:
                 r, c = (m or {}).get('role'), (m or {}).get('content')
                 if r in {"user", "assistant"} and c:
-                    # user stays input_text; assistant must be output_text in Responses API history
-                    typed_type = "output_text" if r == "assistant" else "input_text"
-                    input_messages.append({"role": r, "content": [{"type": typed_type, "text": str(c)}]})
+                    messages.append({"role": r, "content": str(c)})
         except Exception:
             pass
+        messages.append({"role": "user", "content": f"Contexte (rapports):\n{context_text}\n\nQuestion: {user_message}"})
 
-        # Message utilisateur courant avec RAG compact
-        input_messages.append({
-            "role": "user",
-            "content": [{"type": "input_text", "text": f"Contexte (rapports):\n{context_text}\n\nQuestion: {user_message}"}]
-        })
-
-        # Appel Responses API (GPT-5) avec effort de raisonnement configurable
-        reasoning_effort = os.getenv("AI_REASONING_EFFORT", "medium")
-        resp = client.responses.create(
+        # Appel Chat Completions (gpt-5-chat-latest) via wrapper pour robustesse JSON/texte
+        reply_resp = from_chat_completions_compat(
+            client=client,
             model=os.getenv("AI_MODEL", "gpt-5"),
-            input=input_messages,
-            reasoning={"effort": reasoning_effort},
-            max_output_tokens=15000,
+            messages=messages,
+            max_tokens=15000
         )
-        reply = getattr(resp, "output_text", "") or ""
+        reply = reply_resp.choices[0].message.content.strip()
 
         # Persister dans la mémoire
         try:

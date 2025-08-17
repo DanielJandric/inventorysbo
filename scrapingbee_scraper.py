@@ -455,33 +455,19 @@ Contraintes:
                     if effort:
                         req_kwargs["reasoning"] = {"effort": effort}
 
-                    try:
-                        response = client.responses.create(**req_kwargs)
-                    except Exception as e:
-                        err_msg = str(e)
-                        # Retry without 'reasoning' if not supported, but KEEP model gpt-5
-                        if "reasoning" in req_kwargs and ("unexpected keyword argument 'reasoning'" in err_msg or "is not supported" in err_msg or "Invalid schema" in err_msg):
-                            req_kwargs.pop("reasoning", None)
-                            response = client.responses.create(**req_kwargs)
-                        else:
-                            raise
-                    # Extraire le texte et parser JSON
-                    content_text = getattr(response, "output_text", None)
-                    if not content_text:
-                        try:
-                            # Fallback pour certaines versions SDK
-                            chunks = getattr(response, "output", []) or []
-                            parts = []
-                            for ch in chunks:
-                                for c in (ch.get("content") or []):
-                                    if c.get("type") == "output_text" and c.get("text"):
-                                        parts.append(c.get("text"))
-                            content_text = "".join(parts) if parts else None
-                        except Exception:
-                            content_text = None
-                    if not content_text:
-                        raise ValueError("Aucune sortie texte de l'API Responses")
-                    result = json.loads(content_text)
+                    # Basculer sur Chat Completions (JSON garanti)
+                    from gpt5_compat import from_chat_completions_compat
+                    resp_cc = from_chat_completions_compat(
+                        client=client,
+                        model=os.getenv("AI_MODEL", "gpt-5"),
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": f"Demande: {prompt}\n\nDONNÉES FACTUELLES (snapshot):\n{json.dumps(market_snapshot, indent=2)}\n\nDONNÉES COLLECTÉES (articles):\n{context}"}
+                        ],
+                        response_format={"type": "json_object"},
+                        max_tokens=15000
+                    )
+                    result = json.loads(resp_cc.choices[0].message.content)
                     logger.info(f"✅ OpenAI a retourné une réponse complète")
                     return result
                     

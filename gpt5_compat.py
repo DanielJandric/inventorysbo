@@ -60,6 +60,27 @@ def _extract_output_text_from_response(res: Any) -> str:
         return ""
 
 
+def _to_chat_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+    chat_msgs: List[Dict[str, str]] = []
+    for m in messages or []:
+        role = m.get("role", "user")
+        content = m.get("content", "")
+        if isinstance(content, list):
+            # Aggregate typed content parts into one string
+            parts: List[str] = []
+            for part in content:
+                try:
+                    text = part.get("text") if isinstance(part, dict) else None
+                    if text:
+                        parts.append(str(text))
+                except Exception:
+                    continue
+            chat_msgs.append({"role": role, "content": "\n".join(parts)})
+        else:
+            chat_msgs.append({"role": role, "content": str(content)})
+    return chat_msgs
+
+
 def from_chat_completions_compat(
     *,
     client: OpenAI,
@@ -71,38 +92,19 @@ def from_chat_completions_compat(
     temperature: Optional[float] = None,  # ignored for GPT-5
     tools: Optional[List[Dict[str, Any]]] = None,
 ):
-    """Compatibility wrapper. For GPT‑5, use Responses API; for GPT‑4.*, defer to Chat Completions.
+    """Compatibility wrapper. Force Chat Completions for JSON reliability.
 
-    Returns an object with `.choices[0].message.content` to mimic Chat Completions.
+    Returns an object with `.choices[0].message.content` like Chat Completions.
     """
+    # Choose a completions-capable model for GPT‑5
+    model_cc = model
     if str(model).startswith("gpt-5"):
-        req: Dict[str, Any] = {
-            "model": model,
-            "input": _to_responses_input(messages),
-        }
-        if tools:
-            req["tools"] = tools
-        effort = os.getenv("AI_REASONING_EFFORT", "medium")
-        req["reasoning"] = {"effort": effort}
-        # Do not pass response_format for GPT-5 Responses API in this SDK version
-        if max_tokens is not None:
-            req["max_output_tokens"] = max_tokens
-        # Do not send temperature for GPT-5 to keep determinism and avoid 400
-        if timeout is not None:
-            req["timeout"] = timeout
-        res = client.responses.create(**req)
-        text = _extract_output_text_from_response(res)
+        model_cc = os.getenv("AI_COMPLETIONS_MODEL", "gpt-5-chat-latest")
 
-        # Build a minimal Chat Completions-like response structure
-        return SimpleNamespace(
-            choices=[SimpleNamespace(message=SimpleNamespace(content=text))],
-            _raw=res,
-        )
-
-    # Legacy path: chat.completions (no temperature to honor global policy)
+    # Chat Completions request (no temperature by policy)
     req_cc: Dict[str, Any] = {
-        "model": model,
-        "messages": messages,
+        "model": model_cc,
+        "messages": _to_chat_messages(messages),
     }
     if response_format is not None:
         req_cc["response_format"] = response_format
