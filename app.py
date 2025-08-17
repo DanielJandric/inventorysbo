@@ -2468,14 +2468,17 @@ Si la question fait référence à des éléments mentionnés précédemment, ut
 
             messages.append({"role": "user", "content": user_prompt})
 
-            response = from_chat_completions_compat(
-client=self.client, model=os.getenv("AI_MODEL", "gpt-5"
-),
-                messages=messages,
-                max_tokens=1000
+            # Responses API only
+            resp = from_responses_simple(
+client=self.client, model=os.getenv("AI_MODEL", "gpt-5"),
+                messages=[
+                    {"role": m["role"], "content": [{"type": "input_text", "text": m["content"]}]} if isinstance(m.get("content"), str) else m
+                    for m in messages
+                ],
+                max_output_tokens=1000,
+                reasoning_effort="medium"
             )
-            
-            ai_response = response.choices[0].message.content.strip()
+            ai_response = (extract_output_text(resp) or "").strip()
             
             # Cache la réponse
             smart_cache.set('ai_responses', ai_response, cache_key)
@@ -2535,14 +2538,17 @@ Réponds de manière concise et directe."""
             # Try tool-calling path first
             ai_response = self._run_with_tools(messages, items, analytics)
             if not ai_response:
-                # Fallback to plain completion
-                response = from_chat_completions_compat(
-client=self.client, model=os.getenv("AI_MODEL", "gpt-5"
-),
-                    messages=messages,
-                    max_tokens=800
+                # Fallback to Responses API (no Completions)
+                resp = from_responses_simple(
+client=self.client, model=os.getenv("AI_MODEL", "gpt-5"),
+                    messages=[
+                        {"role": m["role"], "content": [{"type": "input_text", "text": m["content"]}]} if isinstance(m.get("content"), str) else m
+                        for m in messages
+                    ],
+                    max_output_tokens=800,
+                    reasoning_effort="medium"
                 )
-                ai_response = response.choices[0].message.content.strip()
+                ai_response = (extract_output_text(resp) or "").strip()
             
             # Cache la réponse
             smart_cache.set('ai_responses', ai_response, cache_key)
@@ -2621,14 +2627,16 @@ Réponds de manière concise et directe."""
 
             messages.append({"role": "user", "content": user_prompt})
 
-            response = from_chat_completions_compat(
-client=self.client, model=os.getenv("AI_MODEL", "gpt-5"
-),
-                messages=messages,
-                max_tokens=600
+            resp = from_responses_simple(
+client=self.client, model=os.getenv("AI_MODEL", "gpt-5"),
+                messages=[
+                    {"role": m["role"], "content": [{"type": "input_text", "text": m["content"]}]} if isinstance(m.get("content"), str) else m
+                    for m in messages
+                ],
+                max_output_tokens=600,
+                reasoning_effort="medium"
             )
-            
-            ai_response = response.choices[0].message.content.strip()
+            ai_response = (extract_output_text(resp) or "").strip()
             
             # Pas d'indicateur de mémoire - réponses directes
             
@@ -4015,7 +4023,7 @@ client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"),
                 s = s.translate(trans)
                 try:
                     return json.loads(s)
-        except Exception:
+                except Exception:
                     depth = 0
                     start_idx = None
                     for i, ch in enumerate(s):
