@@ -6,9 +6,9 @@ echo "🎯 Démarrage de l'application BONVIN..."
 # Démarrer avec Gunicorn
 exec gunicorn --bind 0.0.0.0:$PORT \
   --workers 1 \
-  --timeout 120 \
-  --graceful-timeout 120 \
-  --keep-alive 75 \
+  --timeout 240 \
+  --graceful-timeout 240 \
+  --keep-alive 120 \
   --preload \
   --max-requests 1000 \
   --max-requests-jitter 50 \

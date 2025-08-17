@@ -8479,7 +8479,8 @@ def markets_chat():
                     model=os.getenv("AI_MODEL","gpt-5"),
                     previous_response_id=getattr(res, 'id', None),
                     input=[{"role":"user","content":[{"type":"input_text","text":"Rappel de format: sors maintenant la réponse FINALE avec exactement les sections suivantes et rien d'autre: 1) Checklist (méthode) 2) Analyse (3–5 points) 3) Conclusion 4) Validation 5) Sources (3–6 liens, nom du site + URL). Pas d'appel d'outil. "}]}],
-                    reasoning={"effort":"high"}
+                    reasoning={"effort":"high"},
+                    max_output_tokens=700
                 )
                 reply2 = (extract_output_text(res2) or "").strip()
                 if reply2:
