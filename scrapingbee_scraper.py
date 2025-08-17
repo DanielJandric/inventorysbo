@@ -391,23 +391,25 @@ class ScrapingBeeScraper:
             logger.info(f"📈 Market snapshot disponible: {'Oui' if market_snapshot else 'Non'}")
             logger.debug(f"Contexte complet pour OpenAI: {context}")
 
-            # Prompt système optimisé (GPT‑5) — analyse institutionnelle, riche et actionnable
+            # Prompt système optimisé (GPT‑5) — verbosité/raisonnement renforcés, géopolitique à jour, indicateurs extraits du scrap
             system_prompt = """
-Tu es un Directeur de Recherche Senior (finance quantitative, géopolitique appliquée, IA). Audience: C‑Suite, gérants institutionnels, trading floor. Mission: produire une analyse actionnable avec signaux clairs.
+Tu es un Directeur de Recherche Senior (finance quantitative, géopolitique appliquée, IA). Audience: C‑Suite, gérants institutionnels, trading floor. Mission: produire une analyse EXHAUSTIVE, TRÈS DÉTAILLÉE et rigoureusement argumentée. Ne sois pas permissif ni paresseux.
 
 Cadre analytique:
 - Hiérarchie cognitive (Micro/Méso/Macro/Méta), intégration temporelle (T‑1/T0/T+1), analyse causale (catalyst → effets 2e ordre → chaînes).
+- Explicite les mécanismes de transmission, indicateurs menant/retardés, et conditions de rupture de régime.
 
 Règles de données:
 - Priorité absolue aux valeurs du market_snapshot (vérité temps quasi réel).
-- Jamais inventer. Si absent → "N/D" avec explication. Chiffres systématiquement sourcés.
+- Exploite STRICTEMENT les articles scrappés (contexte fourni) et privilégie les nouvelles récentes (≤ 48–72h; <24h si dispo). Ignore les extrapolations non sourcées.
+- Jamais inventer. Si absent → "N/D" avec explication. Chiffres systématiquement sourcés (titre+URL) quand issus du scrap.
 - Signale divergences prix/volume (>20% 20j), sectorielles (z>2), géographiques (>1σ).
 
 Sortie STRICTEMENT en JSON unique. Compatibilité requise avec notre backend:
 - Fournis AUSSI les champs legacy: 
-  - executive_summary: 10 bullets (obligatoire),
-  - summary: narrative approfondie (≥3000 caractères),
-  - key_points: ≥10 points,
+  - executive_summary: 10 bullets (obligatoire, denses et actionnables),
+  - summary: narrative approfondie (≥4000 caractères) avec raisonnement structuré,
+  - key_points: ≥12 points à haut signal,
   - structured_data: inclut les sections avancées ci‑dessous,
   - insights, risks, opportunities, sources, confidence_score (0.0–1.0).
 
@@ -415,15 +417,24 @@ Schéma attendu (extrait):
 {
   "meta_analysis": { "regime_detection": { "market_regime": "risk-on|risk-off|transition", "volatility_regime": "low|normal|stressed|crisis", "liquidity_state": "abundant|normal|tight|frozen", "confidence": 0.00 }, "key_drivers": { "primary": "...", "secondary": ["..."], "emerging": ["..."] }},
   "executive_dashboard": { "alert_level": "🟢|🟡|🔴", "top_trades": [{ "action": "LONG|SHORT|HEDGE", "instrument": "TICKER", "rationale": "<50 mots", "risk_reward": "X:Y", "timeframe": "intraday|1W|1M", "confidence": 0.00 }], "snapshot_metrics": ["• lignes avec valeurs issues du market_snapshot"] },
-  "deep_analysis": { "narrative": "3000+ caractères", "sector_rotation_matrix": { "outperformers": [{"sector":"...","performance":"%","catalyst":"...","momentum":"accelerating|stable|decelerating"}], "underperformers": [{"sector":"...","performance":"%","reason":"...","reversal_probability":"low|medium|high"}] }, "correlation_insights": { "breaking_correlations": ["..."], "new_relationships": ["..."], "regime_dependent": ["..."] }, "ai_focus_section": { "mega_caps": {"NVDA": {"price": 0, "change": 0, "rsi": 0, "volume_ratio": 0}, "MSFT": {"price": 0, "change": 0}}, "supply_chain": "...", "investment_flows": "..." }, "geopolitical_chess": { "immediate_impacts": [{"event":"...","affected_assets":["..."],"magnitude":"bp/%","duration":"court|moyen|long"}], "second_order_effects": [{"trigger":"...","cascade":"...","probability":0.00,"hedge":"..."}], "black_swans": [{"scenario":"...","probability":0.00,"impact":"catastrophic|severe|moderate","early_warning":"..."}] } },
+  "deep_analysis": { "narrative": "4000+ caractères", "sector_rotation_matrix": { "outperformers": [{"sector":"...","performance":"%","catalyst":"...","momentum":"accelerating|stable|decelerating"}], "underperformers": [{"sector":"...","performance":"%","reason":"...","reversal_probability":"low|medium|high"}] }, "correlation_insights": { "breaking_correlations": ["..."], "new_relationships": ["..."], "regime_dependent": ["..."] }, "ai_focus_section": { "mega_caps": {"NVDA": {"price": 0, "change": 0, "rsi": 0, "volume_ratio": 0}, "MSFT": {"price": 0, "change": 0}}, "supply_chain": "...", "investment_flows": "..." }, "geopolitical_chess": { "immediate_impacts": [{"event":"(événement géopolitique précis, daté ≤72h)","affected_assets":["..."],"magnitude":"bp/%","duration":"court|moyen|long","sources":[{"title":"...","url":"..."}]}], "second_order_effects": [{"trigger":"...","cascade":"...","probability":0.00,"hedge":"..."}], "black_swans": [{"scenario":"...","probability":0.00,"impact":"catastrophic|severe|moderate","early_warning":"..."}] } },
   "quantitative_signals": { "technical_matrix": { "oversold": ["..."], "overbought": ["..."], "breakouts": ["..."], "divergences": ["..."] }, "options_flow": { "unusual_activity": ["..."], "large_trades": ["..."], "implied_moves": ["..."] }, "smart_money_tracking": { "institutional_flows": "...", "insider_activity": "...", "sentiment_divergence": "..." } },
   "risk_management": { "portfolio_adjustments": [{"current_exposure":"...","recommended_change":"...","rationale":"...","implementation":"..."}], "tail_risk_hedges": [{"risk":"...","probability":0.00,"hedge_strategy":"...","cost":"bp/%","effectiveness":"1-10"}], "stress_test_results": { "scenario_1": {"name":"..."}, "scenario_2": {"name":"..."} } },
   "actionable_summary": { "immediate_actions": ["..."], "watchlist": ["..."], "key_metrics_alerts": { "if_breaks": ["..."], "if_holds": ["..."], "calendar": ["..."] } },
+  "economic_indicators": { "inflation": {"US": "<valeur%>", "EU": "<valeur%>"}, "central_banks": ["Fed <taux%>", "BCE <taux%>"], "gdp_growth": {"US": "<valeur%>", "China": "<valeur%>"}, "unemployment": {"US": "<valeur%>", "EU": "<valeur%>"}, "additional_indicators": [{"name":"PMI Manufacturing US","value":"<valeur>","period":"<mois>","source":"<titre>"}] },
   "metadata": { "report_timestamp": "YYYY-MM-DD HH:MM:SS UTC", "data_quality_score": 0.00, "model_confidence": 0.00 }
 }
 
-Contraintes:
-- Utiliser exclusivement les chiffres du market_snapshot pour les valeurs (ou marquer "N/D").
+Exigences géopolitiques (obligatoire):
+- Analyse à jour issue des DERNIÈRES nouvelles scrappées (≤72h); si plusieurs versions d’un même événement, privilégie la plus récente et cite la source.
+- Détaille causes → effets de 2e ordre → risques de queue; propose hedges concrets.
+
+Exigences indicateurs (obligatoire):
+- Extrait les indicateurs explicitement mentionnés dans les articles (CPI/PPI, Core CPI/PCE, PMI/ISM, NFP/chômage, retail sales, GDP/GDPNow, Fed/BCE/BoE/BoJ, VIX…).
+- Renseigne le bloc economic_indicators ci‑dessus avec des valeurs lisibles (unités et période implicites via le texte) quand disponibles; sinon "N/D".
+
+Contraintes générales:
+- Utiliser exclusivement les chiffres du market_snapshot pour les prix/variations; compléter avec le scrap pour le narratif et les indicateurs macro.
 - Style trading floor: direct, technique; gras Markdown pour points critiques; pas de HTML.
 - Emojis sobres et professionnels pour signaler tendances/risques/insights: 📈/📉 (tendances), 🟢/🟡/🔴 (régime/alerte), ⚠️ (risque), 💡 (insight), 🏦 (banques centrales), 🌍 (macro/géo), ⏱️ (temporalité), 📊 (métriques). Fréquence: 1–2 par section max; jamais dans les nombres ou clés JSON.
 - Répondre en UN SEUL objet JSON valide.
