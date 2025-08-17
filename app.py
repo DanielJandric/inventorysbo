@@ -8386,6 +8386,12 @@ def markets_chat():
                 context_text = f"Contexte additionnel (utilisateur):\n{extra_context}\n---\n" + context_text
             if web_search_snippet:
                 context_text = web_search_snippet + context_text
+            # Clip du contexte pour éviter timeouts/mémoire
+            try:
+                if len(context_text) > 4000:
+                    context_text = context_text[:4000]
+            except Exception:
+                pass
         except Exception as _e:
             # Si la BDD ou la désérialisation pose souci, continuer sans contexte
             context_text = (f"Contexte additionnel (utilisateur):\n{extra_context}\n---\n" if extra_context else "")
@@ -8425,7 +8431,7 @@ def markets_chat():
             client=client,
             model=os.getenv("AI_MODEL", "gpt-5"),
             messages=messages,
-            max_output_tokens=15000,
+            max_output_tokens=900,
             reasoning_effort=os.getenv("AI_REASONING_EFFORT", "high"),
         )
         reply = (extract_output_text(resp) or "").strip()
@@ -8437,7 +8443,12 @@ def markets_chat():
         except Exception:
             pass
 
-        return jsonify({"success": True, "reply": reply, "metadata": {"session_id": session_id}})
+        # Réponse rapide même en cas de réponses très longues
+        try:
+            clipped = reply[:3000] if isinstance(reply, str) and len(reply) > 3000 else reply
+        except Exception:
+            clipped = reply
+        return jsonify({"success": True, "reply": clipped, "metadata": {"session_id": session_id}})
     except Exception as e:
         logger.error(f"Erreur markets_chat: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
