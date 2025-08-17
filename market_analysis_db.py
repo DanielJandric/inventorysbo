@@ -119,25 +119,30 @@ class MarketAnalysis:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'MarketAnalysis':
         """Crée une instance depuis un dictionnaire de Supabase"""
-        # Convertir les JSONB en listes/dictionnaires
-        if isinstance(data.get('executive_summary'), str):
-            data['executive_summary'] = json.loads(data['executive_summary'])
-        if isinstance(data.get('key_points'), str):
-            data['key_points'] = json.loads(data['key_points'])
-        if isinstance(data.get('insights'), str):
-            data['insights'] = json.loads(data['insights'])
-        if isinstance(data.get('risks'), str):
-            data['risks'] = json.loads(data['risks'])
-        if isinstance(data.get('opportunities'), str):
-            data['opportunities'] = json.loads(data['opportunities'])
-        if isinstance(data.get('sources'), str):
-            data['sources'] = json.loads(data['sources'])
-        if isinstance(data.get('structured_data'), str):
-            data['structured_data'] = json.loads(data['structured_data'])
-        if isinstance(data.get('geopolitical_analysis'), str):
-            data['geopolitical_analysis'] = json.loads(data['geopolitical_analysis'])
-        if isinstance(data.get('economic_indicators'), str):
-            data['economic_indicators'] = json.loads(data['economic_indicators'])
+        # Convertir les JSONB en listes/dictionnaires de manière robuste
+        def _safe_json_load(value: Any, default: Any):
+            if isinstance(value, (list, dict)):
+                return value
+            if isinstance(value, str):
+                s = value.strip()
+                if not s:
+                    return default
+                try:
+                    return json.loads(s)
+                except Exception:
+                    logger.warning("JSON invalide détecté, utilisation d'une valeur par défaut")
+                    return default
+            return default
+
+        data['executive_summary'] = _safe_json_load(data.get('executive_summary'), [])
+        data['key_points'] = _safe_json_load(data.get('key_points'), [])
+        data['insights'] = _safe_json_load(data.get('insights'), [])
+        data['risks'] = _safe_json_load(data.get('risks'), [])
+        data['opportunities'] = _safe_json_load(data.get('opportunities'), [])
+        data['sources'] = _safe_json_load(data.get('sources'), [])
+        data['structured_data'] = _safe_json_load(data.get('structured_data'), {})
+        data['geopolitical_analysis'] = _safe_json_load(data.get('geopolitical_analysis'), {})
+        data['economic_indicators'] = _safe_json_load(data.get('economic_indicators'), {})
         
         return cls(**data)
 
