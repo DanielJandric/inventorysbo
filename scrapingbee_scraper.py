@@ -471,6 +471,7 @@ Contraintes générales:
 MODE JSON STRICT: activé.
 Output ONLY the JSON object. Do not include any accompanying text. No code fences, no commentary, no markdown.
 """
+            system_prompt = system_prompt.strip() + "\n\nMODE JSON STRICT: activé.\nOutput ONLY the JSON object. Do not include any accompanying text. No code fences, no commentary, no markdown."
             
             chosen_model = os.getenv("AI_MODEL", "gpt-5")
             logger.info(f"🤖 Appel à l'API OpenAI ({chosen_model}) en cours pour une analyse exhaustive (prompt renforcé)...")
