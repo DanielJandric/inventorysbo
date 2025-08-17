@@ -4043,6 +4043,23 @@ client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"),
                 return None
             return None
         result = _safe_parse_json(raw)
+        # Fallback Chat Completions si Responses ne renvoie rien de parsable
+        if result is None:
+            try:
+                cc = from_chat_completions_compat(
+client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"),
+                    messages=[
+                        {"role": "system", "content": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    response_format={"type": "json_object"},
+                    max_tokens=800,
+                    timeout=20
+                )
+                raw_cc = cc.choices[0].message.content if hasattr(cc, 'choices') else ''
+                result = _safe_parse_json(raw_cc)
+            except Exception:
+                result = None
         if result is None:
             logger.error(f"AI JSON parse failed (market_price), content starts with: {str(raw)[:120]}")
             return jsonify({"error": "Réponse IA invalide"}), 502
