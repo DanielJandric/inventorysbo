@@ -2997,7 +2997,6 @@ ai_engine = PureOpenAIEngineWithRAG(openai_client) if openai_client else None
 def index():
     """Page principale de l'application"""
     return render_template('index.html')
-
 @app.route("/analytics")
 def analytics():
     """Page analytics avec diagrammes et statistiques"""
@@ -7469,7 +7468,6 @@ def unified_get_stock_price(symbol):
     except Exception as e:
         logger.error(f"Erreur récupération prix unifié {symbol}: {e}")
         return jsonify({"error": str(e)}), 500
-@app.route("/api/unified/market-briefing", methods=["POST"])
 def unified_get_market_briefing():
     """Récupère un briefing de marché via le gestionnaire unifié"""
     try:
@@ -8266,7 +8264,6 @@ def trigger_background_worker():
     except Exception as e:
         logger.error(f"Erreur déclenchement Background Worker: {e}")
         return jsonify({"error": str(e)}), 500
-@app.route("/api/background-worker/status", methods=["GET"])
 def get_background_worker_status():
     """Récupère le statut de la dernière analyse."""
     try:
@@ -8442,7 +8439,7 @@ def markets_chat():
             + f"- Fuseau: Europe/Zurich. Date/heure locale actuelle: {_now_str}.\n"
             + "- Si le marché local est fermé (week-end/jour férié), indique-le clairement et utilise la dernière clôture en le précisant.\n\n"
             + "Structure de sortie (obligatoire)\n"
-            + "1) **Checklist (méthode)** — 3 à 7 étapes conceptuelles (ex: "Vérifier indices clés", "Confirmer taux et FX", "Valider drivers dans rapports", "Identifier risques/opportunités", "Définir biais de marché").\n"
+            + "1) **Checklist (méthode)** — 3 à 7 étapes conceptuelles (ex: \"Vérifier indices clés\", \"Confirmer taux et FX\", \"Valider drivers dans rapports\", \"Identifier risques/opportunités\", \"Définir biais de marché\").\n"
             + "2) **Analyse (3–5 points)** — puces brèves, chaque point avec une idée forte, des chiffres vérifiés, et **mots clés en gras**. Utilise au plus 2 emojis au total.\n"
             + "3) **Conclusion** — 1 phrase qui résume la dynamique et l'angle d'action.\n"
             + "4) **Validation** — 1–2 lignes confirmant l'adéquation au contexte fourni (rapports" + (" + web)" if allow_web else ")") + " et l'absence de données inventées.\n"
@@ -8455,7 +8452,7 @@ def markets_chat():
             + ("- Relier (sans sur-interpréter) les rapports fournis aux données live web.\n\n" if allow_web else "- Relier les rapports fournis à l'état de marché, en signalant les données manquantes.\n\n")
             + "Comportement en cas d'incertitude\n"
             + ("- Si les sources web sont contradictoires, signale l'écart et privilégie les sources primaires (bourses, banques centrales, opérateurs d'indice).\n" if allow_web else "- Si des informations sont insuffisantes dans les rapports, indique 'données partielles' et poursuis l'analyse.\n")
-            + "- Si un actif est illiquide ou fermé, précise "données partielles" et poursuis l'analyse avec les éléments disponibles.\n\n"
+            + "- Si un actif est illiquide ou fermé, précise \"données partielles\" et poursuis l'analyse avec les éléments disponibles.\n\n"
             + "Exigence de format\n"
             + "- Sortie courte, opérationnelle. Pas de tableau si non nécessaire. Zéro jargon inutile.\n"
             + "- Ne mélange pas d'autres domaines (ex: inventaire d'actifs privés) à moins que la question le demande explicitement.\n"
