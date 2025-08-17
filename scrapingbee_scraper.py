@@ -479,7 +479,59 @@ Contraintes générales:
                         max_output_tokens=15000,
                         reasoning_effort=os.getenv("AI_REASONING_EFFORT", "medium")
                     )
-                    result = json.loads(extract_output_text(resp))
+                    raw = extract_output_text(resp) or ""
+
+                    # Parsing JSON robuste (tolère ```json fences, guillemets typographiques, texte avant/après)
+                    def _safe_parse_json(text: str):
+                        try:
+                            s = (text or "").strip()
+                            # retirer les fences ```json ... ``` si présents
+                            s = re.sub(r"```\s*json\s*", "", s, flags=re.IGNORECASE)
+                            s = s.replace('```', '').strip()
+                            # normaliser guillemets typographiques
+                            trans = {ord('\u201c'): '"', ord('\u201d'): '"', ord('\u2019'): "'", ord('\u2013'): '-', ord('\u2014'): '-'}
+                            s = s.translate(trans)
+                            # tentative directe
+                            try:
+                                return json.loads(s)
+                            except Exception:
+                                pass
+                            # extraire un objet JSON équilibré naïvement
+                            depth = 0
+                            start_idx = None
+                            for i, ch in enumerate(s):
+                                if ch == '{':
+                                    if depth == 0:
+                                        start_idx = i
+                                    depth += 1
+                                elif ch == '}' and depth > 0:
+                                    depth -= 1
+                                    if depth == 0 and start_idx is not None:
+                                        candidate = s[start_idx:i+1]
+                                        try:
+                                            return json.loads(candidate)
+                                        except Exception:
+                                            start_idx = None
+                                            continue
+                            return None
+                        except Exception:
+                            return None
+
+                    parsed = _safe_parse_json(raw)
+                    if parsed is None:
+                        # fallback structuré au lieu d'échouer (évite retry inutile)
+                        parsed = {
+                            "summary": raw[:10000],
+                            "key_points": [],
+                            "structured_data": {},
+                            "insights": [],
+                            "risks": [],
+                            "opportunities": [],
+                            "sources": [],
+                            "confidence_score": 0.0,
+                        }
+
+                    result = parsed
                     logger.info(f"✅ OpenAI a retourné une réponse complète")
                     return result
                     
