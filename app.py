@@ -2434,9 +2434,36 @@ class PureOpenAIEngineWithRAG:
         if not self.client:
             return "Moteur IA Indisponible"
         
-        # TOUJOURS utiliser l'approche FULL CONTEXT - faire confiance à GPT-5 (Responses API)
-        logger.info(f"Utilisation de l'approche FULL CONTEXT - Faire confiance à l'intelligence de GPT-5")
-        return self._generate_full_context_response_with_history(query, items, analytics, conversation_history, True)
+        # Completions-only pour les chats (pas de Responses)
+        try:
+            # Construire un contexte compact pour limiter les tokens
+            complete_context = self._build_complete_dataset_context(items, analytics)
+            system_prompt = (
+                "Tu es l'assistant IA expert de la collection BONVIN. Réponds de manière concise, factuelle et utile.\n"
+                "- Utilise les données exactes de la collection\n"
+                "- Tient compte de l'historique si pertinent (sans le répéter)\n"
+                "- Donne des chiffres précis quand disponible\n"
+                "- 800 mots max\n"
+            )
+
+            messages = [{"role": "system", "content": system_prompt}]
+            for msg in (conversation_history or [])[-8:]:
+                if msg.get('role') in ['user', 'assistant'] and msg.get('content'):
+                    messages.append({"role": msg['role'], "content": msg['content']})
+
+            user_prompt = f"QUESTION: {query}\n\nDONNÉES: {complete_context}"
+            messages.append({"role": "user", "content": user_prompt})
+
+            cc = from_chat_completions_compat(
+                client=self.client,
+                model=os.getenv("AI_MODEL", "gpt-5"),
+                messages=messages,
+                max_tokens=1000
+            )
+            return (cc.choices[0].message.content or "").strip()
+        except Exception as e:
+            logger.error(f"Erreur OpenAI (Completions): {e}")
+            return "Moteur IA Indisponible"
         
         # Cache avec historique
         history_hash = hashlib.md5(json.dumps(conversation_history, sort_keys=True).encode()).hexdigest()[:8]
@@ -2554,20 +2581,14 @@ Réponds de manière concise et directe."""
 
             messages.append({"role": "user", "content": user_prompt})
 
-            # Try tool-calling path first
-            ai_response = self._run_with_tools(messages, items, analytics)
-            if not ai_response:
-                # Fallback to Responses API (no Completions)
-                resp = from_responses_simple(
-client=self.client, model=os.getenv("AI_MODEL", "gpt-5"),
-                    messages=[
-                        {"role": m["role"], "content": [{"type": "input_text", "text": m["content"]}]} if isinstance(m.get("content"), str) else m
-                        for m in messages
-                    ],
-                    max_output_tokens=800,
-                    reasoning_effort="medium"
-                )
-                ai_response = (extract_output_text(resp) or "").strip()
+            # Completions-only (désactive Responses/tool-calls pour le chat)
+            cc = from_chat_completions_compat(
+                client=self.client,
+                model=os.getenv("AI_MODEL", "gpt-5"),
+                messages=messages,
+                max_tokens=800
+            )
+            ai_response = (cc.choices[0].message.content or "").strip()
             
             # Cache la réponse
             smart_cache.set('ai_responses', ai_response, cache_key)
@@ -2971,7 +2992,6 @@ client=self.client, model=os.getenv("AI_MODEL", "gpt-5"),
 
 # Instance du moteur IA avec RAG
 ai_engine = PureOpenAIEngineWithRAG(openai_client) if openai_client else None
-
 # Routes
 @app.route("/")
 def index():
@@ -4236,7 +4256,7 @@ client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"),
                     try:
                         return json.loads(s)
                     except Exception:
-                        # Extraction par équilibrage d’accolades
+                        # Extraction par équilibrage d'accolades
                         depth = 0
                         start_idx = None
                         for i, ch in enumerate(s):
@@ -4407,8 +4427,7 @@ Réponds en JSON avec:
 - market_trend (hausse/stable/baisse)"""
 
                 response = from_chat_completions_compat(
-client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"
-),
+client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"),
                     messages=[
                         {"role": "system", "content": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."},
                         {"role": "user", "content": prompt}
@@ -4487,7 +4506,6 @@ client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"
     except Exception as e:
         logger.error(f"Erreur ai_update_all_vehicles: {e}")
         return jsonify({"error": "Erreur lors de la mise à jour en masse"}), 500
-
 @app.route("/api/fix-vehicle-categories", methods=["POST"])
 def fix_vehicle_categories():
     """Corriger automatiquement les catégories 'Véhicules' en 'Voitures'"""
@@ -5197,7 +5215,6 @@ def chatbot():
                 })
         except Exception:
             pass
-
         # Chatbot-assisted item creation (natural language → new asset)
         try:
             query_lower = query.lower()
@@ -5878,7 +5895,6 @@ def generate_portfolio_pdf():
         return jsonify({
             "error": str(e)
         }), 500
-
 @app.route("/api/reports/asset-class/<asset_class_name>", methods=["GET"])
 def generate_asset_class_report(asset_class_name):
     """Génère un rapport PDF pour une classe d'actif spécifique"""
@@ -6654,7 +6670,6 @@ def clean_date_format(date_str: str) -> Optional[str]:
     # Si c'est un format non reconnu, l'ignorer
     logger.warning(f"Format de date non reconnu ignoré: {date_str}")
     return None
-
 def clean_update_data(data: Dict[str, Any]) -> Dict[str, Any]:
     """Nettoie les données de mise à jour - CORRIGÉ POUR INCLURE LES ACTIONS"""
     cleaned = {}
@@ -7454,7 +7469,6 @@ def unified_get_stock_price(symbol):
     except Exception as e:
         logger.error(f"Erreur récupération prix unifié {symbol}: {e}")
         return jsonify({"error": str(e)}), 500
-
 @app.route("/api/unified/market-briefing", methods=["POST"])
 def unified_get_market_briefing():
     """Récupère un briefing de marché via le gestionnaire unifié"""
@@ -8252,9 +8266,6 @@ def trigger_background_worker():
     except Exception as e:
         logger.error(f"Erreur déclenchement Background Worker: {e}")
         return jsonify({"error": str(e)}), 500
-
-
-
 @app.route("/api/background-worker/status", methods=["GET"])
 def get_background_worker_status():
     """Récupère le statut de la dernière analyse."""
@@ -8401,18 +8412,18 @@ def markets_chat():
 
         rules_web = (
             "Règles essentielles\n"
-            "- Toujours vérifier l’actualité via le web avant de conclure. Utilise la navigation pour confirmer: indices (SMI, SPI, STOXX 50/Europe 600, S&P 500, Nasdaq 100), taux (US10Y, CH10Y), FX (USDCHF, EURCHF), VIX, or, pétrole (WTI, Brent). Mentionne les dates/heures exactes (Europe/Zurich).\n"
+            "- Toujours vérifier l'actualité via le web avant de conclure. Utilise la navigation pour confirmer: indices (SMI, SPI, STOXX 50/Europe 600, S&P 500, Nasdaq 100), taux (US10Y, CH10Y), FX (USDCHF, EURCHF), VIX, or, pétrole (WTI, Brent). Mentionne les dates/heures exactes (Europe/Zurich).\n"
             "- Ne JAMAIS inventer de chiffres. Si une donnée manque, dis-le et propose une alternative.\n"
-            "- Priorise l’actionnabilité (ce que l’investisseur devrait surveiller/faire), pas le récit.\n"
+            "- Priorise l'actionnabilité (ce que l'investisseur devrait surveiller/faire), pas le récit.\n"
             "- Cite tes sources web (nom du média/site et lien) à la fin, 3–6 sources max, fiables et diverses.\n"
-            "- Style: concis, direct, forward-looking. Mets en **gras** l’essentiel. Emojis sobres autorisés: ↗️, ↘️, 🟢, 🔴, ⚠️, 💡 (max 2).\n"
+            "- Style: concis, direct, forward-looking. Mets en **gras** l'essentiel. Emojis sobres autorisés: ↗️, ↘️, 🟢, 🔴, ⚠️, 💡 (max 2).\n"
             "- Interdits: détails de raisonnement interne, chaînes de pensée, digressions macro non nécessaires.\n\n"
         )
         rules_offline = (
             "Règles essentielles\n"
             "- Ne PAS utiliser la navigation web. Base-toi exclusivement sur les rapports fournis. Si une donnée manque, dis-le et propose une alternative.\n"
-            "- Priorise l’actionnabilité (ce que l’investisseur devrait surveiller/faire), pas le récit.\n"
-            "- Style: concis, direct, forward-looking. Mets en **gras** l’essentiel. Emojis sobres autorisés: ↗️, ↘️, 🟢, 🔴, ⚠️, 💡 (max 2).\n"
+            "- Priorise l'actionnabilité (ce que l'investisseur devrait surveiller/faire), pas le récit.\n"
+            "- Style: concis, direct, forward-looking. Mets en **gras** l'essentiel. Emojis sobres autorisés: ↗️, ↘️, 🟢, 🔴, ⚠️, 💡 (max 2).\n"
             "- Interdits: détails de raisonnement interne, chaînes de pensée, digressions macro non nécessaires.\n\n"
         )
 
@@ -8424,30 +8435,30 @@ def markets_chat():
 
         system_prompt = (
             "Rôle et objectif\n"
-            "Tu es un analyste marchés senior. Ta mission : produire une synthèse exploitable, brève et précise en français, en t’appuyant sur les rapports fournis"
+            "Tu es un analyste marchés senior. Ta mission : produire une synthèse exploitable, brève et précise en français, en t'appuyant sur les rapports fournis"
             + (" ET des vérifications web à jour.\n\n" if allow_web else ". Pas de navigation web.\n\n")
             + (rules_web if allow_web else rules_offline)
             + "Cadre temporel et cohérence\n"
             + f"- Fuseau: Europe/Zurich. Date/heure locale actuelle: {_now_str}.\n"
             + "- Si le marché local est fermé (week-end/jour férié), indique-le clairement et utilise la dernière clôture en le précisant.\n\n"
             + "Structure de sortie (obligatoire)\n"
-            + "1) **Checklist (méthode)** — 3 à 7 étapes conceptuelles (ex: “Vérifier indices clés”, “Confirmer taux et FX”, “Valider drivers dans rapports”, “Identifier risques/opportunités”, “Définir biais de marché”).\n"
+            + "1) **Checklist (méthode)** — 3 à 7 étapes conceptuelles (ex: "Vérifier indices clés", "Confirmer taux et FX", "Valider drivers dans rapports", "Identifier risques/opportunités", "Définir biais de marché").\n"
             + "2) **Analyse (3–5 points)** — puces brèves, chaque point avec une idée forte, des chiffres vérifiés, et **mots clés en gras**. Utilise au plus 2 emojis au total.\n"
-            + "3) **Conclusion** — 1 phrase qui résume la dynamique et l’angle d’action.\n"
-            + "4) **Validation** — 1–2 lignes confirmant l’adéquation au contexte fourni (rapports" + (" + web)" if allow_web else ")") + " et l’absence de données inventées.\n"
+            + "3) **Conclusion** — 1 phrase qui résume la dynamique et l'angle d'action.\n"
+            + "4) **Validation** — 1–2 lignes confirmant l'adéquation au contexte fourni (rapports" + (" + web)" if allow_web else ")") + " et l'absence de données inventées.\n"
             + sources_line
             + "Couverture minimale attendue\n"
             + "- Indices: SMI, Europe large (STOXX 50/Europe 600), S&P 500, Nasdaq 100, Nikkei, Hang Seng (si pertinents au jour).\n"
             + "- Marchés de taux et FX: US10Y, CH10Y, USDCHF, EURCHF.\n"
             + "- Risque/volatilité et matières premières: VIX, or (XAU), WTI/Brent.\n"
             + "- Drivers: politique monétaire (Fed/ECB/SNB), résultats sectoriels (tech/IA vs défensifs), flux/rotation, événements géopolitiques pertinents.\n"
-            + ("- Relier (sans sur-interpréter) les rapports fournis aux données live web.\n\n" if allow_web else "- Relier les rapports fournis à l’état de marché, en signalant les données manquantes.\n\n")
-            + "Comportement en cas d’incertitude\n"
-            + ("- Si les sources web sont contradictoires, signale l’écart et privilégie les sources primaires (bourses, banques centrales, opérateurs d’indice).\n" if allow_web else "- Si des informations sont insuffisantes dans les rapports, indique ‘données partielles’ et poursuis l’analyse.\n")
-            + "- Si un actif est illiquide ou fermé, précise “données partielles” et poursuis l’analyse avec les éléments disponibles.\n\n"
+            + ("- Relier (sans sur-interpréter) les rapports fournis aux données live web.\n\n" if allow_web else "- Relier les rapports fournis à l'état de marché, en signalant les données manquantes.\n\n")
+            + "Comportement en cas d'incertitude\n"
+            + ("- Si les sources web sont contradictoires, signale l'écart et privilégie les sources primaires (bourses, banques centrales, opérateurs d'indice).\n" if allow_web else "- Si des informations sont insuffisantes dans les rapports, indique 'données partielles' et poursuis l'analyse.\n")
+            + "- Si un actif est illiquide ou fermé, précise "données partielles" et poursuis l'analyse avec les éléments disponibles.\n\n"
             + "Exigence de format\n"
             + "- Sortie courte, opérationnelle. Pas de tableau si non nécessaire. Zéro jargon inutile.\n"
-            + "- Ne mélange pas d’autres domaines (ex: inventaire d’actifs privés) à moins que la question le demande explicitement.\n"
+            + "- Ne mélange pas d'autres domaines (ex: inventaire d'actifs privés) à moins que la question le demande explicitement.\n"
         )
 
         # Construire messages (Responses typés)
@@ -8466,222 +8477,22 @@ def markets_chat():
         else:
             messages_resp.append({"role": "user", "content": [{"type": "input_text", "text": f"Contexte (rapports):\n{context_text}\n\nQuestion: {user_message}.\n\nRappel: respecte strictement la structure demandée (Checklist / Analyse / Conclusion / Validation / Sources (rapports internes)). Pas de navigation web."}]})
 
-        # FORCE Chat Completions pour économiser tokens - Responses uniquement pour update marchés automatique
-        force_chat_completions = True  # Override temporaire
+        # Prompt utilisateur simplifié
+        user_prompt = f"""QUESTION: {user_message}
+DONNÉES: {context_text}
+Réponds de manière concise et directe."""
+
+        messages_resp.append({"role": "user", "content": user_prompt})
+
+        # Completions-only (désactive Responses/tool-calls pour le chat)
+        cc = from_chat_completions_compat(
+            client=client,
+            model=os.getenv("AI_MODEL", "gpt-5"),
+            messages=messages_resp,
+            max_tokens=800
+        )
+        reply = (cc.choices[0].message.content or "").strip()
         
-        if force_chat_completions:
-            # Utiliser Chat Completions directement (plus stable, moins de tokens)
-            cc_messages: List[Dict[str, Any]] = [{"role": "system", "content": system_prompt}]
-            try:
-                for m in (history_persisted or [])[-6:]:
-                    r, c = (m or {}).get('role'), (m or {}).get('content')
-                    if r in {"user", "assistant"} and c:
-                        cc_messages.append({"role": r, "content": str(c)})
-            except Exception:
-                pass
-            if allow_web:
-                cc_messages.append({"role": "user", "content": f"Contexte (rapports):\n{context_text}\n\nQuestion: {user_message}. Rappel: formate la réponse avec: Checklist / Analyse / Conclusion / Validation / Sources (simule 2-3 sources web récentes)."})
-            else:
-                cc_messages.append({"role": "user", "content": f"Contexte (rapports):\n{context_text}\n\nQuestion: {user_message}. Rappel: formate la réponse avec: Checklist / Analyse / Conclusion / Validation / Sources (rapports internes)."})
-            
-            try:
-                cc_resp = from_chat_completions_compat(
-                    client=client,
-                    model=os.getenv("AI_MODEL", "gpt-5"),
-                    messages=cc_messages,
-                    max_tokens=2000  # Réduit vs 5000
-                )
-                reply = (cc_resp.choices[0].message.content or "").strip()
-            except Exception as e:
-                logger.error(f"Chat Completions fallback error: {e}")
-                reply = ""
-        else:
-            # Code Responses original (gardé pour référence)
-            pass
-        
-        # Appel Responses avec timeout pour éviter SIGKILL (DÉSACTIVÉ temporairement)
-        import signal
-        from contextlib import contextmanager
-
-        @contextmanager
-        def timeout_context(seconds):
-            def timeout_handler(signum, frame):
-                raise TimeoutError(f"Timeout après {seconds}s")
-            old_handler = signal.signal(signal.SIGALRM, timeout_handler)
-            signal.alarm(seconds)
-            try:
-                yield
-            finally:
-                signal.alarm(0)
-                signal.signal(signal.SIGALRM, old_handler)
-
-        if allow_web:
-            # avec tools (web_search) et reasoning high; fallback preview si erreur
-            try:
-                with timeout_context(120):  # 2 min max
-                    res = chat_tools_messages(
-                        messages=messages_resp,
-                        tools=[{"type": "web_search"}],
-                        model=os.getenv("AI_MODEL","gpt-5"),
-                        max_output_tokens=5000,
-                        reasoning_effort="medium",
-                        client=client
-                    )
-            except (Exception, TimeoutError) as e:
-                logger.warning(f"Web search timeout/error: {e}")
-                try:
-                    with timeout_context(90):  # 1.5 min fallback
-                        res = chat_tools_messages(
-                            messages=messages_resp,
-                            tools=[{"type": "web_search_preview"}],
-                            model=os.getenv("AI_MODEL","gpt-5"),
-                            max_output_tokens=5000,
-                            reasoning_effort="medium",
-                            client=client
-                        )
-                except (Exception, TimeoutError):
-                    # Force fallback Chat Completions immédiat
-                    raise Exception("Responses API timeout, forcing Chat Completions fallback")
-        else:
-            # sans outils (offline)
-            try:
-                with timeout_context(90):
-                    res = from_responses_simple(
-                        client=client,
-                        model=os.getenv("AI_MODEL","gpt-5"),
-                        messages=messages_resp,
-                        max_output_tokens=5000,
-                        reasoning_effort="medium"
-                    )
-            except (Exception, TimeoutError):
-                # Force fallback Chat Completions immédiat
-                raise Exception("Responses API timeout, forcing Chat Completions fallback")
-        reply = extract_output_text(res) or ""
-        reply = reply.strip()
-
-        # Détection "reasoning only" = échec Responses
-        if not reply:
-            try:
-                outputs_dbg = []
-                for item in getattr(res, 'output', []) or []:
-                    itype = getattr(item, 'type', None) or (item.get('type') if isinstance(item, dict) else None)
-                    outputs_dbg.append({"type": itype})
-                if outputs_dbg == [{"type": "reasoning"}]:
-                    logger.warning("Responses returned reasoning-only, forcing Chat Completions")
-                    raise Exception("Reasoning-only response, forcing Chat Completions fallback")
-            except Exception:
-                pass
-
-        # Skip validation et fallbacks si Chat Completions utilisé
-        if not force_chat_completions:
-            # Validation de forme minimale et second tour si nécessaire
-            def _has_required_sections(txt: str) -> bool:
-                _t = (txt or "").lower()
-                needed = ["checklist", "analyse", "conclusion", "validation", "sources"]
-                return all(s in _t for s in needed)
-
-        if not reply and not force_chat_completions:
-            try:
-                missing_note = "Réponse vide." if not reply else "Sections manquantes (attendues: Checklist / Analyse / Conclusion / Validation / Sources)."
-                res2 = client.responses.create(
-                    model=os.getenv("AI_MODEL","gpt-5"),
-                    previous_response_id=getattr(res, 'id', None),
-                    input=[{"role":"user","content":[{"type":"input_text","text":(
-                        "Rappel de format: sors maintenant la réponse FINALE avec exactement les sections suivantes et rien d'autre: "
-                        "1) Checklist (méthode) 2) Analyse (3–5 points) 3) Conclusion 4) Validation 5) "
-                        + ("Sources (3–6 liens, nom du site + URL)." if allow_web else "Sources (rapports internes).")
-                        + (" Pas d'appel d'outil." if allow_web else " Pas de navigation web.")
-                    )}]}],
-                    reasoning={"effort":"medium"},
-                    max_output_tokens=700
-                )
-                reply2 = (extract_output_text(res2) or "").strip()
-                if reply2:
-                    reply = reply2
-            except Exception:
-                pass
-
-        if not reply:
-            # Dernier essai Responses SANS outils (pour forcer un texte final)
-            try:
-                msgs_no_tools: List[Dict[str, Any]] = []
-                msgs_no_tools.append({"role": "system", "content": [{"type": "input_text", "text": system_prompt}]})
-                try:
-                    for m in (history_persisted or [])[-6:]:
-                        r, c = (m or {}).get('role'), (m or {}).get('content')
-                        if r in {"user", "assistant"} and c:
-                            t = "input_text" if r == "user" else "output_text"
-                            msgs_no_tools.append({"role": r, "content": [{"type": t, "text": str(c)}]})
-                except Exception:
-                    pass
-                msgs_no_tools.append({
-                    "role": "user",
-                    "content": [{"type": "input_text", "text": f"Contexte (rapports):\n{context_text}\n\nQuestion: {user_message}. Réponds MAINTENANT sans appeler d'outil, avec les sections: Checklist / Analyse (3–5) / Conclusion / Validation / Sources (3–6)."}]
-                })
-                res3 = from_responses_simple(
-                    client=client,
-                    model=os.getenv("AI_MODEL","gpt-5"),
-                    messages=msgs_no_tools,
-                    max_output_tokens=5000,
-                    reasoning_effort="high"
-                )
-                reply3 = (extract_output_text(res3) or "").strip()
-                if reply3:
-                    reply = reply3
-            except Exception:
-                pass
-
-        if not reply:
-            # Télémetrie Responses pour diagnostic
-            try:
-                outputs_dbg = []
-                for item in getattr(res, 'output', []) or []:
-                    itype = getattr(item, 'type', None) or (item.get('type') if isinstance(item, dict) else None)
-                    info: Dict[str, Any] = {"type": itype}
-                    if itype == 'message':
-                        content = getattr(item, 'content', None) or (item.get('content') if isinstance(item, dict) else [])
-                        c_types: List[str] = []
-                        sample = None
-                        for c in content or []:
-                            ctype = getattr(c, 'type', None) or (c.get('type') if isinstance(c, dict) else None)
-                            c_types.append(str(ctype))
-                            txt = getattr(c, 'text', None) or (c.get('text') if isinstance(c, dict) else None)
-                            if not sample and txt:
-                                sample = str(txt)[:160]
-                        info["content_types"] = c_types
-                        if sample:
-                            info["sample"] = sample
-                    outputs_dbg.append(info)
-                logger.warning(f"Responses empty reply; debug outputs: {outputs_dbg}")
-            except Exception as _e_dbg:
-                logger.warning(f"Responses debug error: {_e_dbg}")
-
-            # Respecter un flag pour forcer Responses-only
-            responses_only = str(os.getenv("AI_RESPONSES_ONLY", "")).lower() in {"1","true","yes","on"}
-            if not responses_only:
-                cc_messages: List[Dict[str, Any]] = [{"role": "system", "content": system_prompt}]
-                try:
-                    for m in (history_persisted or [])[-8:]:
-                        r, c = (m or {}).get('role'), (m or {}).get('content')
-                        if r in {"user", "assistant"} and c:
-                            cc_messages.append({"role": r, "content": str(c)})
-                except Exception:
-                    pass
-                if allow_web:
-                    cc_messages.append({"role": "user", "content": f"Contexte (rapports):\n{context_text}\n\nQuestion: {user_message}. Rappel: formate la réponse avec: Checklist / Analyse / Conclusion / Validation / Sources (3–6 liens)."})
-                else:
-                    cc_messages.append({"role": "user", "content": f"Contexte (rapports):\n{context_text}\n\nQuestion: {user_message}. Rappel: formate la réponse avec: Checklist / Analyse / Conclusion / Validation / Sources (rapports internes)."})
-                try:
-                    cc_resp = from_chat_completions_compat(
-                        client=client,
-                        model=os.getenv("AI_MODEL", "gpt-5"),
-                        messages=cc_messages,
-                        max_tokens=1200
-                    )
-                    reply = (cc_resp.choices[0].message.content or "").strip()
-                except Exception:
-                    reply = ""
-
         # Persister dans la mémoire
         try:
             conversation_memory.add_message(session_id, 'user', user_message)
