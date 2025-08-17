@@ -63,7 +63,7 @@ from unified_market_manager import (
 from google_cse_stock_data import GoogleCSEStockDataManager
 from enhanced_google_cse_ai_report import EnhancedGoogleCSEAIReport
 from intelligent_scraper import IntelligentScraper, get_scraper
-from gpt5_compat import from_chat_completions_compat, chat_tools_messages, from_responses_simple, extract_output_text
+from gpt5_compat import chat_tools_messages, from_responses_simple, extract_output_text
 from scrapingbee_scraper import ScrapingBeeScraper, get_scrapingbee_scraper
 # Remplacé par l'API Manus unifiée
 # Remplacé par l'API Manus unifiée
@@ -4036,75 +4036,22 @@ Réponds en JSON avec:
 - market_trend (hausse/stable/baisse)
 - price_range (objet avec min et max basés sur le marché)"""
 
-        response = from_responses_simple(
-client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"),
-            messages=[
+        response = openai_client.responses.create(
+            model=os.getenv("AI_MODEL", "gpt-5"),
+            input=[
                 {"role": "system", "content": [{"type": "input_text", "text": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."}]},
                 {"role": "user", "content": [{"type": "input_text", "text": prompt}]}
             ],
-            max_output_tokens=800,
-            timeout=20,
-            reasoning_effort="medium"
+            response_format={"type": "json_object"},
+            temperature=0,
+            max_output_tokens=800
         )
+        market_data = json.loads(getattr(response, "output_text", "") or "{}")
         
-        raw = extract_output_text(response) or ''
-        def _safe_parse_json(text: str):
-            s = (text or '')
-            try:
-                s = s.strip()
-                import re as _re
-                s = _re.sub(r"```\s*json\s*", "", s, flags=_re.IGNORECASE)
-                s = s.replace('```', '').strip()
-                trans = {ord('\u201c'): '"', ord('\u201d'): '"', ord('\u2019'): "'", ord('\u2013'): '-', ord('\u2014'): '-'}
-                s = s.translate(trans)
-                try:
-                    return json.loads(s)
-                except Exception:
-                    depth = 0
-                    start_idx = None
-                    for i, ch in enumerate(s):
-                        if ch == '{':
-                            if depth == 0:
-                                start_idx = i
-                            depth += 1
-                        elif ch == '}' and depth > 0:
-                            depth -= 1
-                            if depth == 0 and start_idx is not None:
-                                candidate = s[start_idx:i+1]
-                                try:
-                                    return json.loads(candidate)
-                                except Exception:
-                                    start_idx = None
-                                    continue
-            except Exception:
-                return None
-            return None
-        result = _safe_parse_json(raw)
-        # Fallback Chat Completions si Responses ne renvoie rien de parsable (désactivable par AI_RESPONSES_ONLY)
-        if result is None and str(os.getenv("AI_RESPONSES_ONLY", "")).lower() not in {"1","true","yes","on"}:
-            try:
-                cc = from_chat_completions_compat(
-client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"),
-                    messages=[
-                        {"role": "system", "content": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    response_format={"type": "json_object"},
-                    max_tokens=800,
-                    timeout=20
-                )
-                raw_cc = cc.choices[0].message.content if hasattr(cc, 'choices') else ''
-                result = _safe_parse_json(raw_cc)
-            except Exception:
-                result = None
-        if result is None:
-            logger.error(f"AI JSON parse failed (market_price), content starts with: {str(raw)[:120]}")
-            return jsonify({"error": "Réponse IA invalide"}), 502
-
         # Normaliser les champs numériques attendus
         try:
             import re as _re
-            ep = result.get('estimated_price')
+            ep = market_data.get('estimated_price')
             if isinstance(ep, str):
                 cleaned = _re.sub(r"[^0-9.,-]", "", ep)
                 if cleaned.count('.') > 1 and ',' not in cleaned:
@@ -4112,21 +4059,21 @@ client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"),
                     cleaned = ''.join(parts[:-1]) + '.' + parts[-1]
                 cleaned = cleaned.replace("'", "").replace(" ", "").replace(',', '.')
                 try:
-                    result['estimated_price'] = float(cleaned)
+                    market_data['estimated_price'] = float(cleaned)
                 except Exception:
                     pass
-            cs = result.get('confidence_score')
+            cs = market_data.get('confidence_score')
             if isinstance(cs, str):
                 csc = _re.sub(r"[^0-9.,-]", "", cs).replace(',', '.')
                 try:
-                    result['confidence_score'] = float(csc)
+                    market_data['confidence_score'] = float(csc)
                 except Exception:
                     pass
         except Exception:
             pass
         
         # Enrichir avec les données de marché réelles
-        result['market_analysis'] = {
+        market_data['market_analysis'] = {
             'comparable_items_count': len(similar_items),
             'average_category_price': sum(comparable_prices) / len(comparable_prices) if comparable_prices else 0,
             'price_range_market': [min(comparable_prices), max(comparable_prices)] if comparable_prices else [0, 0],
@@ -4141,7 +4088,7 @@ client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"),
             ]
         }
         
-        return jsonify(result)
+        return jsonify(market_data)
         
     except Exception as e:
         logger.error(f"Erreur market_price: {e}")
@@ -4224,83 +4171,17 @@ Réponds en JSON avec:
 - confidence_score (0.1-0.9)
 - market_trend (hausse/stable/baisse)"""
 
-            response = from_responses_simple(
-client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"),
-                messages=[
+            response = openai_client.responses.create(
+                model=os.getenv("AI_MODEL", "gpt-5"),
+                input=[
                     {"role": "system", "content": [{"type": "input_text", "text": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."}]},
                     {"role": "user", "content": [{"type": "input_text", "text": prompt}]}
                 ],
-                max_output_tokens=800,
-                timeout=20,
-                reasoning_effort="medium"
+                response_format={"type": "json_object"},
+                temperature=0,
+                max_output_tokens=800
             )
-            
-            raw = extract_output_text(response) or ''
-            # Parsing robuste: retirer les code fences et extraire le premier objet JSON équilibré
-            def _safe_parse_json(text: str):
-                s = (text or '')
-                try:
-                    # Nettoyage de base
-                    s = s.strip()
-                    import re as _re
-                    s = _re.sub(r"```\s*json\s*", "", s, flags=_re.IGNORECASE)
-                    s = s.replace('```', '').strip()
-                    # Normaliser quelques caractères spéciaux susceptibles de casser le JSON
-                    trans = {
-                        ord('\u201c'): '"', ord('\u201d'): '"', ord('\u2019'): "'",
-                        ord('\u2013'): '-', ord('\u2014'): '-'
-                    }
-                    s = s.translate(trans)
-                    try:
-                        return json.loads(s)
-                    except Exception:
-                        # Extraction par équilibrage d'accolades
-                        depth = 0
-                        start_idx = None
-                        for i, ch in enumerate(s):
-                            if ch == '{':
-                                if depth == 0:
-                                    start_idx = i
-                                depth += 1
-                            elif ch == '}' and depth > 0:
-                                depth -= 1
-                                if depth == 0 and start_idx is not None:
-                                    candidate = s[start_idx:i+1]
-                                    try:
-                                        return json.loads(candidate)
-                                    except Exception:
-                                        start_idx = None
-                                        continue
-                except Exception:
-                    return None
-                return None
-            market_data = _safe_parse_json(raw)
-            if market_data is None:
-                logger.error(f"AI JSON parse failed (market_price), content starts with: {str(raw)[:120]}")
-                return jsonify({"error": "Réponse IA invalide"}), 502
-            # Normaliser les champs numériques attendus
-            try:
-                import re as _re
-                ep = market_data.get('estimated_price')
-                if isinstance(ep, str):
-                    cleaned = _re.sub(r"[^0-9.,-]", "", ep)
-                    if cleaned.count('.') > 1 and ',' not in cleaned:
-                        parts = cleaned.split('.')
-                        cleaned = ''.join(parts[:-1]) + '.' + parts[-1]
-                    cleaned = cleaned.replace("'", "").replace(" ", "").replace(',', '.')
-                    try:
-                        market_data['estimated_price'] = float(cleaned)
-                    except Exception:
-                        pass
-                cs = market_data.get('confidence_score')
-                if isinstance(cs, str):
-                    csc = _re.sub(r"[^0-9.,-]", "", cs).replace(',', '.')
-                    try:
-                        market_data['confidence_score'] = float(csc)
-                    except Exception:
-                        pass
-            except Exception:
-                pass
+            market_data = json.loads(getattr(response, "output_text", "") or "{}")
             estimated_price = market_data.get('estimated_price')
             
         except Exception as ai_error:
@@ -4424,17 +4305,17 @@ Réponds en JSON avec:
 - confidence_score (0.1-0.9)
 - market_trend (hausse/stable/baisse)"""
 
-                response = from_chat_completions_compat(
-client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"),
-                    messages=[
-                        {"role": "system", "content": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."},
-                        {"role": "user", "content": prompt}
+                response = openai_client.responses.create(
+                    model=os.getenv("AI_MODEL", "gpt-5"),
+                    input=[
+                        {"role": "system", "content": [{"type": "input_text", "text": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."}]},
+                        {"role": "user", "content": [{"type": "input_text", "text": prompt}]}
                     ],
-                    max_tokens=800,
-                    timeout=15  # Timeout réduit
+                    response_format={"type": "json_object"},
+                    temperature=0,
+                    max_output_tokens=800
                 )
-                
-                market_data = json.loads(response.choices[0].message.content)
+                market_data = json.loads(getattr(response, "output_text", "") or "{}")
                 estimated_price = market_data.get('estimated_price')
                 
                 if not estimated_price or estimated_price <= 0:
@@ -7039,20 +6920,21 @@ Recherche les données de marché actuelles pour :
 
 Si une classe d'actif n'a pas bougé, dis-le clairement sans meubler. Génère un briefing pour aujourd'hui basé sur les données de marché réelles trouvées."""
 
-        response = from_chat_completions_compat(
-client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"
-),
-            messages=[
-                {"role": "system", "content": "Tu es un expert en marchés financiers. Utilise la recherche web pour des données actuelles."},
-                {"role": "user", "content": prompt}
+        response = openai_client.responses.create(
+            model=os.getenv("AI_MODEL", "gpt-5"),
+            input=[
+                {"role": "system", "content": [{"type": "input_text", "text": "Tu es un expert en marchés financiers. Utilise la recherche web pour des données actuelles."}]},
+                {"role": "user", "content": [{"type": "input_text", "text": prompt}]}
             ],
-            max_tokens=2000
+            response_format={"type": "json_object"},
+            temperature=0,
+            max_output_tokens=800
         )
+        market_data = json.loads(getattr(response, "output_text", "") or "{}")
 
-        if response.choices and response.choices[0].message.content:
-            content = response.choices[0].message.content
+        if market_data:
             logger.info("✅ Briefing généré avec OpenAI GPT-4o + Web Search")
-            return content
+            return market_data
         else:
             logger.error("Réponse OpenAI invalide")
             return None
@@ -8121,7 +8003,7 @@ def scrapingbee_market_update():
         return jsonify({
             "success": True,
             "task_id": task_id,
-            "message": "Tâche de scraping créée. Utilisez /api/scrapingbee/execute/{task_id} pour l'exécuter.",
+            "message": "Tâche de scraping créée. Utilise /api/scrapingbee/execute/{task_id} pour l'exécuter.",
             "status": "created"
         })
         
