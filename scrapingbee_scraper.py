@@ -505,6 +505,12 @@ Output ONLY the JSON object. Do not include any accompanying text. No code fence
                         max_out_tokens = int(os.getenv('SCRAPER_MAX_OUTPUT_TOKENS', '25000'))
                     except Exception:
                         max_out_tokens = 25000
+                    try:
+                        model_limit = int(os.getenv('MODEL_MAX_COMPLETION_TOKENS', '16384'))
+                    except Exception:
+                        model_limit = 16384
+                    if max_out_tokens > model_limit:
+                        max_out_tokens = model_limit
 
                     # Structured outputs: JSON Schema strict (fallback to JSON Mode)
                     schema = {
@@ -598,6 +604,12 @@ Output ONLY the JSON object. Do not include any accompanying text. No code fence
                         # réduire la sortie demandée pour soulager le TPM
                         try:
                             new_limit = max(2000, int(max_out_tokens * 0.7))
+                            # Clamp to model max completion tokens
+                            try:
+                                model_limit = int(os.getenv('MODEL_MAX_COMPLETION_TOKENS', '16384'))
+                            except Exception:
+                                model_limit = 16384
+                            new_limit = min(new_limit, model_limit)
                             os.environ['SCRAPER_MAX_OUTPUT_TOKENS'] = str(new_limit)
                             logger.info(f"🔧 SCRAPER_MAX_OUTPUT_TOKENS réduit à {new_limit}")
                         except Exception:
