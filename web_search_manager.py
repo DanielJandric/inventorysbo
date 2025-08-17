@@ -83,26 +83,25 @@ class OpenAIWebSearchManager:
             # Construire la requête selon le type de recherche
             query = self._build_search_query(search_type)
             
-            # Configuration de l'outil de recherche web
-            tools_config = [{
-                "type": "web_search_preview",
-                "search_context_size": search_context_size
-            }]
-            
-            # Ajouter la localisation si fournie
-            if user_location:
-                tools_config[0]["user_location"] = {
-                    "type": "approximate",
-                    **user_location
-                }
-            
-            # Effectuer la recherche via OpenAI
-            response = self.openai_client.responses.create(
-                model=os.getenv("AI_MODEL", "gpt-5"),
-                tools=tools_config,
-                input=query,
-                reasoning={"effort": "high"}
-            )
+            tool_candidates = [{"type": "web_search"}, {"type": "web_search_preview"}]
+            response = None
+            last_err = None
+            for t in tool_candidates:
+                try:
+                    if user_location:
+                        t = {**t, "user_location": {"type": "approximate", **user_location}}
+                    response = self.openai_client.responses.create(
+                        model=os.getenv("AI_MODEL", "gpt-5"),
+                        tools=[t],
+                        input=[{"role":"user","content":[{"type":"input_text","text": query}]}],
+                        reasoning={"effort": "high"}
+                    )
+                    break
+                except Exception as e:
+                    last_err = e
+                    continue
+            if response is None:
+                raise last_err or RuntimeError("web_search tool unavailable")
             
             # Traiter la réponse
             return self._process_web_search_response(response, search_type, query)
@@ -266,26 +265,26 @@ Recherche les données de marché actuelles pour :
 
 Si une classe d'actif n'a pas bougé, dis-le clairement sans meubler. Génère un briefing pour aujourd'hui basé sur les données de marché réelles trouvées."""
 
-            # Configuration de l'outil de recherche web
-            tools_config = [{
-                "type": "web_search_preview",
-                "search_context_size": "high"  # Contexte élevé pour un briefing complet
-            }]
-            
-            # Ajouter la localisation si fournie
-            if user_location:
-                tools_config[0]["user_location"] = {
-                    "type": "approximate",
-                    **user_location
-                }
-            
-            # Effectuer la recherche via OpenAI
-            response = self.openai_client.responses.create(
-                model=os.getenv("AI_MODEL", "gpt-5"),
-                tools=tools_config,
-                input=prompt,
-                reasoning={"effort": "high"}
-            )
+            # Effectuer la recherche via OpenAI avec fallback de tool
+            tool_candidates = [{"type": "web_search"}, {"type": "web_search_preview"}]
+            response = None
+            last_err = None
+            for t in tool_candidates:
+                try:
+                    if user_location:
+                        t = {**t, "user_location": {"type": "approximate", **user_location}}
+                    response = self.openai_client.responses.create(
+                        model=os.getenv("AI_MODEL", "gpt-5"),
+                        tools=[t],
+                        input=[{"role":"user","content":[{"type":"input_text","text": prompt}]}],
+                        reasoning={"effort": "high"}
+                    )
+                    break
+                except Exception as e:
+                    last_err = e
+                    continue
+            if response is None:
+                raise last_err or RuntimeError("web_search tool unavailable")
             
             # Extraire le contenu
             for output_item in response.output:
