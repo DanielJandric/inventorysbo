@@ -4117,19 +4117,43 @@ client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"
             )
             
             raw = response.choices[0].message.content if hasattr(response, 'choices') else getattr(response, 'output_text', '')
-            # Parsing robuste: retirer éventuels code fences et extraire l'objet
+            # Parsing robuste: retirer les code fences et extraire le premier objet JSON équilibré
             def _safe_parse_json(text: str):
+                s = (text or '')
                 try:
-                    return json.loads(text)
-                except Exception:
+                    # Nettoyage de base
+                    s = s.strip()
+                    import re as _re
+                    s = _re.sub(r"```\s*json\s*", "", s, flags=_re.IGNORECASE)
+                    s = s.replace('```', '').strip()
+                    # Normaliser quelques caractères spéciaux susceptibles de casser le JSON
+                    trans = {
+                        ord('\u201c'): '"', ord('\u201d'): '"', ord('\u2019'): "'",
+                        ord('\u2013'): '-', ord('\u2014'): '-'
+                    }
+                    s = s.translate(trans)
                     try:
-                        s = (text or '').strip()
-                        s = s.replace('```json', '').replace('```', '').strip()
-                        start = s.find('{'); end = s.rfind('}')
-                        if start != -1 and end != -1 and end > start:
-                            return json.loads(s[start:end+1])
+                        return json.loads(s)
                     except Exception:
-                        return None
+                        # Extraction par équilibrage d’accolades
+                        depth = 0
+                        start_idx = None
+                        for i, ch in enumerate(s):
+                            if ch == '{':
+                                if depth == 0:
+                                    start_idx = i
+                                depth += 1
+                            elif ch == '}' and depth > 0:
+                                depth -= 1
+                                if depth == 0 and start_idx is not None:
+                                    candidate = s[start_idx:i+1]
+                                    try:
+                                        return json.loads(candidate)
+                                    except Exception:
+                                        start_idx = None
+                                        continue
+                except Exception:
+                    return None
                 return None
             market_data = _safe_parse_json(raw)
             if market_data is None:
