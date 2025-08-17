@@ -8466,38 +8466,78 @@ def markets_chat():
         else:
             messages_resp.append({"role": "user", "content": [{"type": "input_text", "text": f"Contexte (rapports):\n{context_text}\n\nQuestion: {user_message}.\n\nRappel: respecte strictement la structure demandée (Checklist / Analyse / Conclusion / Validation / Sources (rapports internes)). Pas de navigation web."}]})
 
-        # Appel Responses
+        # Appel Responses avec timeout pour éviter SIGKILL
+        import signal
+        from contextlib import contextmanager
+
+        @contextmanager
+        def timeout_context(seconds):
+            def timeout_handler(signum, frame):
+                raise TimeoutError(f"Timeout après {seconds}s")
+            old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(seconds)
+            try:
+                yield
+            finally:
+                signal.alarm(0)
+                signal.signal(signal.SIGALRM, old_handler)
+
         if allow_web:
             # avec tools (web_search) et reasoning high; fallback preview si erreur
             try:
-                res = chat_tools_messages(
-                    messages=messages_resp,
-                    tools=[{"type": "web_search"}],
-                    model=os.getenv("AI_MODEL","gpt-5"),
-                    max_output_tokens=900,
-                    reasoning_effort="high",
-                    client=client
-                )
-            except Exception:
-                res = chat_tools_messages(
-                    messages=messages_resp,
-                    tools=[{"type": "web_search_preview"}],
-                    model=os.getenv("AI_MODEL","gpt-5"),
-                    max_output_tokens=900,
-                    reasoning_effort="high",
-                    client=client
-                )
+                with timeout_context(180):  # 3 min max
+                    res = chat_tools_messages(
+                        messages=messages_resp,
+                        tools=[{"type": "web_search"}],
+                        model=os.getenv("AI_MODEL","gpt-5"),
+                        max_output_tokens=900,
+                        reasoning_effort="high",
+                        client=client
+                    )
+            except (Exception, TimeoutError) as e:
+                logger.warning(f"Web search timeout/error: {e}")
+                try:
+                    with timeout_context(120):  # 2 min fallback
+                        res = chat_tools_messages(
+                            messages=messages_resp,
+                            tools=[{"type": "web_search_preview"}],
+                            model=os.getenv("AI_MODEL","gpt-5"),
+                            max_output_tokens=900,
+                            reasoning_effort="high",
+                            client=client
+                        )
+                except (Exception, TimeoutError):
+                    # Force fallback Chat Completions immédiat
+                    raise Exception("Responses API timeout, forcing Chat Completions fallback")
         else:
             # sans outils (offline)
-            res = from_responses_simple(
-                client=client,
-                model=os.getenv("AI_MODEL","gpt-5"),
-                messages=messages_resp,
-                max_output_tokens=900,
-                reasoning_effort="high"
-            )
+            try:
+                with timeout_context(120):
+                    res = from_responses_simple(
+                        client=client,
+                        model=os.getenv("AI_MODEL","gpt-5"),
+                        messages=messages_resp,
+                        max_output_tokens=900,
+                        reasoning_effort="high"
+                    )
+            except (Exception, TimeoutError):
+                # Force fallback Chat Completions immédiat
+                raise Exception("Responses API timeout, forcing Chat Completions fallback")
         reply = extract_output_text(res) or ""
         reply = reply.strip()
+
+        # Détection "reasoning only" = échec Responses
+        if not reply:
+            try:
+                outputs_dbg = []
+                for item in getattr(res, 'output', []) or []:
+                    itype = getattr(item, 'type', None) or (item.get('type') if isinstance(item, dict) else None)
+                    outputs_dbg.append({"type": itype})
+                if outputs_dbg == [{"type": "reasoning"}]:
+                    logger.warning("Responses returned reasoning-only, forcing Chat Completions")
+                    raise Exception("Reasoning-only response, forcing Chat Completions fallback")
+            except Exception:
+                pass
 
         # Validation de forme minimale et second tour si nécessaire
         def _has_required_sections(txt: str) -> bool:
