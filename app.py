@@ -4062,8 +4062,8 @@ client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"),
                 return None
             return None
         result = _safe_parse_json(raw)
-        # Fallback Chat Completions si Responses ne renvoie rien de parsable
-        if result is None:
+        # Fallback Chat Completions si Responses ne renvoie rien de parsable (désactivable par AI_RESPONSES_ONLY)
+        if result is None and str(os.getenv("AI_RESPONSES_ONLY", "")).lower() not in {"1","true","yes","on"}:
             try:
                 cc = from_chat_completions_compat(
 client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"),
@@ -8430,25 +8430,52 @@ def markets_chat():
 
         # Fallback vers Chat Completions si la réponse est vide
         if not reply:
-            cc_messages: List[Dict[str, Any]] = [{"role": "system", "content": system_prompt}]
+            # Télémetrie Responses pour diagnostic
             try:
-                for m in (history_persisted or [])[-8:]:
-                    r, c = (m or {}).get('role'), (m or {}).get('content')
-                    if r in {"user", "assistant"} and c:
-                        cc_messages.append({"role": r, "content": str(c)})
-            except Exception:
-                pass
-            cc_messages.append({"role": "user", "content": f"Contexte (rapports):\n{context_text}\n\nQuestion: {user_message}"})
-            try:
-                cc_resp = from_chat_completions_compat(
-                    client=client,
-                    model=os.getenv("AI_MODEL", "gpt-5"),
-                    messages=cc_messages,
-                    max_tokens=1200
-                )
-                reply = (cc_resp.choices[0].message.content or "").strip()
-            except Exception:
-                reply = ""
+                outputs_dbg = []
+                for item in getattr(res, 'output', []) or []:
+                    itype = getattr(item, 'type', None) or (item.get('type') if isinstance(item, dict) else None)
+                    info: Dict[str, Any] = {"type": itype}
+                    if itype == 'message':
+                        content = getattr(item, 'content', None) or (item.get('content') if isinstance(item, dict) else [])
+                        c_types: List[str] = []
+                        sample = None
+                        for c in content or []:
+                            ctype = getattr(c, 'type', None) or (c.get('type') if isinstance(c, dict) else None)
+                            c_types.append(str(ctype))
+                            txt = getattr(c, 'text', None) or (c.get('text') if isinstance(c, dict) else None)
+                            if not sample and txt:
+                                sample = str(txt)[:160]
+                        info["content_types"] = c_types
+                        if sample:
+                            info["sample"] = sample
+                    outputs_dbg.append(info)
+                logger.warning(f"Responses empty reply; debug outputs: {outputs_dbg}")
+            except Exception as _e_dbg:
+                logger.warning(f"Responses debug error: {_e_dbg}")
+
+            # Respecter un flag pour forcer Responses-only
+            responses_only = str(os.getenv("AI_RESPONSES_ONLY", "")).lower() in {"1","true","yes","on"}
+            if not responses_only:
+                cc_messages: List[Dict[str, Any]] = [{"role": "system", "content": system_prompt}]
+                try:
+                    for m in (history_persisted or [])[-8:]:
+                        r, c = (m or {}).get('role'), (m or {}).get('content')
+                        if r in {"user", "assistant"} and c:
+                            cc_messages.append({"role": r, "content": str(c)})
+                except Exception:
+                    pass
+                cc_messages.append({"role": "user", "content": f"Contexte (rapports):\n{context_text}\n\nQuestion: {user_message}"})
+                try:
+                    cc_resp = from_chat_completions_compat(
+                        client=client,
+                        model=os.getenv("AI_MODEL", "gpt-5"),
+                        messages=cc_messages,
+                        max_tokens=1200
+                    )
+                    reply = (cc_resp.choices[0].message.content or "").strip()
+                except Exception:
+                    reply = ""
 
         # Persister dans la mémoire
         try:
