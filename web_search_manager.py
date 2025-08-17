@@ -100,7 +100,8 @@ class OpenAIWebSearchManager:
             response = self.openai_client.responses.create(
                 model=os.getenv("AI_MODEL", "gpt-5"),
                 tools=tools_config,
-                input=query
+                input=query,
+                reasoning={"effort": "high"}
             )
             
             # Traiter la réponse
@@ -282,7 +283,8 @@ Si une classe d'actif n'a pas bougé, dis-le clairement sans meubler. Génère u
             response = self.openai_client.responses.create(
                 model=os.getenv("AI_MODEL", "gpt-5"),
                 tools=tools_config,
-                input=prompt
+                input=prompt,
+                reasoning={"effort": "high"}
             )
             
             # Extraire le contenu
