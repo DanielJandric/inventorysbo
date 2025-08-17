@@ -79,6 +79,16 @@ try:
     SUPABASE_URL = getattr(config, 'SUPABASE_URL', os.getenv("SUPABASE_URL"))
     SUPABASE_KEY = getattr(config, 'SUPABASE_KEY', os.getenv("SUPABASE_KEY"))
     OPENAI_API_KEY = getattr(config, 'OPENAI_API_KEY', os.getenv("OPENAI_API_KEY"))
+    # Propager dans l'environnement pour les modules qui lisent os.getenv directement
+    try:
+        if SUPABASE_URL and not os.getenv("SUPABASE_URL"):
+            os.environ["SUPABASE_URL"] = str(SUPABASE_URL)
+        if SUPABASE_KEY and not os.getenv("SUPABASE_KEY"):
+            os.environ["SUPABASE_KEY"] = str(SUPABASE_KEY)
+        if OPENAI_API_KEY and not os.getenv("OPENAI_API_KEY"):
+            os.environ["OPENAI_API_KEY"] = str(OPENAI_API_KEY)
+    except Exception:
+        pass
 except ImportError:
     print("⚠️ Fichier config.py non trouvé, utilisation des variables d'environnement")
     SUPABASE_URL = os.getenv("SUPABASE_URL")
