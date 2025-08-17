@@ -8327,18 +8327,6 @@ def markets_chat():
 
         # Charger les analyses récentes (limité à 1) et construire un contexte tolérant aux erreurs
         context_text = ""
-        web_search_snippet = ""
-        # Web search rapide (contexte léger) pour limiter les timeouts
-        try:
-            if web_search_manager:
-                ws_res = web_search_manager.search_financial_markets(
-                    search_type=WebSearchType.MARKET_DATA,
-                    search_context_size="low"
-                )
-                if ws_res and getattr(ws_res, 'content', None):
-                    web_search_snippet = f"Contexte (recherche web):\n{ws_res.content}\n---\n"
-        except Exception:
-            web_search_snippet = ""
         try:
             from market_analysis_db import get_market_analysis_db
             db = get_market_analysis_db()
@@ -8384,19 +8372,15 @@ def markets_chat():
             context_text = "\n".join(context_parts)
             if extra_context:
                 context_text = f"Contexte additionnel (utilisateur):\n{extra_context}\n---\n" + context_text
-            if web_search_snippet:
-                context_text = web_search_snippet + context_text
             # Clip du contexte pour éviter timeouts/mémoire
             try:
-                if len(context_text) > 4000:
-                    context_text = context_text[:4000]
+                if len(context_text) > 2000:
+                    context_text = context_text[:2000]
             except Exception:
                 pass
         except Exception as _e:
             # Si la BDD ou la désérialisation pose souci, continuer sans contexte
             context_text = (f"Contexte additionnel (utilisateur):\n{extra_context}\n---\n" if extra_context else "")
-            if web_search_snippet:
-                context_text = web_search_snippet + context_text
 
         # Client OpenAI
         try:
@@ -8426,15 +8410,28 @@ def markets_chat():
             pass
         messages.append({"role": "user", "content": f"Contexte (rapports):\n{context_text}\n\nQuestion: {user_message}"})
 
-        # Basculer sur Responses API avec raisonnement high
-        resp = from_responses_simple(
-            client=client,
-            model=os.getenv("AI_MODEL", "gpt-5"),
-            messages=messages,
-            max_output_tokens=900,
-            reasoning_effort=os.getenv("AI_REASONING_EFFORT", "high"),
-        )
-        reply = (extract_output_text(resp) or "").strip()
+        # Un seul appel Responses avec outil web_search_preview (contexte léger)
+        try:
+            tools_cfg = [{"type": "web_search_preview", "search_context_size": "low"}]
+            res = chat_tools_messages(
+                messages=messages,
+                tools=tools_cfg,
+                model=os.getenv("AI_MODEL", "gpt-5"),
+                client=client,
+                max_output_tokens=600,
+                reasoning_effort=os.getenv("AI_REASONING_EFFORT", "high"),
+            )
+            reply = (extract_output_text(res) or "").strip()
+        except Exception:
+            # Fallback sans outils
+            resp = from_responses_simple(
+                client=client,
+                model=os.getenv("AI_MODEL", "gpt-5"),
+                messages=messages,
+                max_output_tokens=600,
+                reasoning_effort=os.getenv("AI_REASONING_EFFORT", "high"),
+            )
+            reply = (extract_output_text(resp) or "").strip()
 
         # Persister dans la mémoire
         try:
