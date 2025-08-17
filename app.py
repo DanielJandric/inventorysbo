@@ -8323,6 +8323,7 @@ def markets_chat():
         limit = min(int(data.get("limit", 3)), 3)
         extra_context = (data.get("context") or "").strip()
         session_id = (data.get("session_id") or "").strip() or str(uuid.uuid4())
+        allow_web = bool(data.get("allow_web", True))
 
         # Récupérer mémoire de session (messages précédents)
         try:
@@ -8398,9 +8399,7 @@ def markets_chat():
         except Exception:
             _now_str = "(heure locale indisponible)"
 
-        system_prompt = (
-            "Rôle et objectif\n"
-            "Tu es un analyste marchés senior. Ta mission : produire une synthèse exploitable, brève et précise en français, en t’appuyant sur les rapports fournis ET des vérifications web à jour.\n\n"
+        rules_web = (
             "Règles essentielles\n"
             "- Toujours vérifier l’actualité via le web avant de conclure. Utilise la navigation pour confirmer: indices (SMI, SPI, STOXX 50/Europe 600, S&P 500, Nasdaq 100), taux (US10Y, CH10Y), FX (USDCHF, EURCHF), VIX, or, pétrole (WTI, Brent). Mentionne les dates/heures exactes (Europe/Zurich).\n"
             "- Ne JAMAIS inventer de chiffres. Si une donnée manque, dis-le et propose une alternative.\n"
@@ -8408,27 +8407,47 @@ def markets_chat():
             "- Cite tes sources web (nom du média/site et lien) à la fin, 3–6 sources max, fiables et diverses.\n"
             "- Style: concis, direct, forward-looking. Mets en **gras** l’essentiel. Emojis sobres autorisés: ↗️, ↘️, 🟢, 🔴, ⚠️, 💡 (max 2).\n"
             "- Interdits: détails de raisonnement interne, chaînes de pensée, digressions macro non nécessaires.\n\n"
-            "Cadre temporel et cohérence\n"
-            f"- Fuseau: Europe/Zurich. Date/heure locale actuelle: {_now_str}.\n"
-            "- Si le marché local est fermé (week-end/jour férié), indique-le clairement et utilise la dernière clôture en le précisant.\n\n"
-            "Structure de sortie (obligatoire)\n"
-            "1) **Checklist (méthode)** — 3 à 7 étapes conceptuelles (ex: “Vérifier indices clés”, “Confirmer taux et FX”, “Valider drivers dans rapports”, “Identifier risques/opportunités”, “Définir biais de marché”).\n"
-            "2) **Analyse (3–5 points)** — puces brèves, chaque point avec une idée forte, des chiffres vérifiés, et **mots clés en gras**. Utilise au plus 2 emojis au total.\n"
-            "3) **Conclusion** — 1 phrase qui résume la dynamique et l’angle d’action.\n"
-            "4) **Validation** — 1–2 lignes confirmant l’adéquation au contexte fourni (rapports + web) et l’absence de données inventées.\n"
+        )
+        rules_offline = (
+            "Règles essentielles\n"
+            "- Ne PAS utiliser la navigation web. Base-toi exclusivement sur les rapports fournis. Si une donnée manque, dis-le et propose une alternative.\n"
+            "- Priorise l’actionnabilité (ce que l’investisseur devrait surveiller/faire), pas le récit.\n"
+            "- Style: concis, direct, forward-looking. Mets en **gras** l’essentiel. Emojis sobres autorisés: ↗️, ↘️, 🟢, 🔴, ⚠️, 💡 (max 2).\n"
+            "- Interdits: détails de raisonnement interne, chaînes de pensée, digressions macro non nécessaires.\n\n"
+        )
+
+        sources_line = (
             "5) **Sources** — liste courte (nom du site + lien) des pages consultées.\n\n"
-            "Couverture minimale attendue\n"
-            "- Indices: SMI, Europe large (STOXX 50/Europe 600), S&P 500, Nasdaq 100, Nikkei, Hang Seng (si pertinents au jour).\n"
-            "- Marchés de taux et FX: US10Y, CH10Y, USDCHF, EURCHF.\n"
-            "- Risque/volatilité et matières premières: VIX, or (XAU), WTI/Brent.\n"
-            "- Drivers: politique monétaire (Fed/ECB/SNB), résultats sectoriels (tech/IA vs défensifs), flux/rotation, événements géopolitiques pertinents.\n"
-            "- Relier (sans sur-interpréter) les rapports fournis aux données live web.\n\n"
-            "Comportement en cas d’incertitude\n"
-            "- Si les sources web sont contradictoires, signale l’écart et privilégie les sources primaires (bourses, banques centrales, opérateurs d’indice).\n"
-            "- Si un actif est illiquide ou fermé, précise “données partielles” et poursuis l’analyse avec les éléments disponibles.\n\n"
-            "Exigence de format\n"
-            "- Sortie courte, opérationnelle. Pas de tableau si non nécessaire. Zéro jargon inutile.\n"
-            "- Ne mélange pas d’autres domaines (ex: inventaire d’actifs privés) à moins que la question le demande explicitement.\n"
+            if allow_web else
+            "5) **Sources (rapports internes)** — indique les IDs/titres des rapports utilisés.\n\n"
+        )
+
+        system_prompt = (
+            "Rôle et objectif\n"
+            "Tu es un analyste marchés senior. Ta mission : produire une synthèse exploitable, brève et précise en français, en t’appuyant sur les rapports fournis"
+            + (" ET des vérifications web à jour.\n\n" if allow_web else ". Pas de navigation web.\n\n")
+            + (rules_web if allow_web else rules_offline)
+            + "Cadre temporel et cohérence\n"
+            + f"- Fuseau: Europe/Zurich. Date/heure locale actuelle: {_now_str}.\n"
+            + "- Si le marché local est fermé (week-end/jour férié), indique-le clairement et utilise la dernière clôture en le précisant.\n\n"
+            + "Structure de sortie (obligatoire)\n"
+            + "1) **Checklist (méthode)** — 3 à 7 étapes conceptuelles (ex: “Vérifier indices clés”, “Confirmer taux et FX”, “Valider drivers dans rapports”, “Identifier risques/opportunités”, “Définir biais de marché”).\n"
+            + "2) **Analyse (3–5 points)** — puces brèves, chaque point avec une idée forte, des chiffres vérifiés, et **mots clés en gras**. Utilise au plus 2 emojis au total.\n"
+            + "3) **Conclusion** — 1 phrase qui résume la dynamique et l’angle d’action.\n"
+            + "4) **Validation** — 1–2 lignes confirmant l’adéquation au contexte fourni (rapports" + (" + web)" if allow_web else ")") + " et l’absence de données inventées.\n"
+            + sources_line
+            + "Couverture minimale attendue\n"
+            + "- Indices: SMI, Europe large (STOXX 50/Europe 600), S&P 500, Nasdaq 100, Nikkei, Hang Seng (si pertinents au jour).\n"
+            + "- Marchés de taux et FX: US10Y, CH10Y, USDCHF, EURCHF.\n"
+            + "- Risque/volatilité et matières premières: VIX, or (XAU), WTI/Brent.\n"
+            + "- Drivers: politique monétaire (Fed/ECB/SNB), résultats sectoriels (tech/IA vs défensifs), flux/rotation, événements géopolitiques pertinents.\n"
+            + ("- Relier (sans sur-interpréter) les rapports fournis aux données live web.\n\n" if allow_web else "- Relier les rapports fournis à l’état de marché, en signalant les données manquantes.\n\n")
+            + "Comportement en cas d’incertitude\n"
+            + ("- Si les sources web sont contradictoires, signale l’écart et privilégie les sources primaires (bourses, banques centrales, opérateurs d’indice).\n" if allow_web else "- Si des informations sont insuffisantes dans les rapports, indique ‘données partielles’ et poursuis l’analyse.\n")
+            + "- Si un actif est illiquide ou fermé, précise “données partielles” et poursuis l’analyse avec les éléments disponibles.\n\n"
+            + "Exigence de format\n"
+            + "- Sortie courte, opérationnelle. Pas de tableau si non nécessaire. Zéro jargon inutile.\n"
+            + "- Ne mélange pas d’autres domaines (ex: inventaire d’actifs privés) à moins que la question le demande explicitement.\n"
         )
 
         # Construire messages (Responses typés)
@@ -8442,26 +8461,40 @@ def markets_chat():
                     messages_resp.append({"role": r, "content": [{"type": t, "text": str(c)}]})
         except Exception:
             pass
-        messages_resp.append({"role": "user", "content": [{"type": "input_text", "text": f"Contexte (rapports):\n{context_text}\n\nQuestion: {user_message}.\n\nRappel: respecte strictement la structure demandée (Checklist / Analyse / Conclusion / Validation / Sources) et cite des sources web à jour (3–6)."}]})
+        if allow_web:
+            messages_resp.append({"role": "user", "content": [{"type": "input_text", "text": f"Contexte (rapports):\n{context_text}\n\nQuestion: {user_message}.\n\nRappel: respecte strictement la structure demandée (Checklist / Analyse / Conclusion / Validation / Sources) et cite des sources web à jour (3–6)."}]})
+        else:
+            messages_resp.append({"role": "user", "content": [{"type": "input_text", "text": f"Contexte (rapports):\n{context_text}\n\nQuestion: {user_message}.\n\nRappel: respecte strictement la structure demandée (Checklist / Analyse / Conclusion / Validation / Sources (rapports internes)). Pas de navigation web."}]})
 
-        # Appel Responses avec tools (web_search) et reasoning high; fallback preview si erreur
-        try:
-            res = chat_tools_messages(
-                messages=messages_resp,
-                tools=[{"type": "web_search"}],
+        # Appel Responses
+        if allow_web:
+            # avec tools (web_search) et reasoning high; fallback preview si erreur
+            try:
+                res = chat_tools_messages(
+                    messages=messages_resp,
+                    tools=[{"type": "web_search"}],
+                    model=os.getenv("AI_MODEL","gpt-5"),
+                    max_output_tokens=900,
+                    reasoning_effort="high",
+                    client=client
+                )
+            except Exception:
+                res = chat_tools_messages(
+                    messages=messages_resp,
+                    tools=[{"type": "web_search_preview"}],
+                    model=os.getenv("AI_MODEL","gpt-5"),
+                    max_output_tokens=900,
+                    reasoning_effort="high",
+                    client=client
+                )
+        else:
+            # sans outils (offline)
+            res = from_responses_simple(
+                client=client,
                 model=os.getenv("AI_MODEL","gpt-5"),
-                max_output_tokens=900,
-                reasoning_effort="high",
-                client=client
-            )
-        except Exception:
-            res = chat_tools_messages(
                 messages=messages_resp,
-                tools=[{"type": "web_search_preview"}],
-                model=os.getenv("AI_MODEL","gpt-5"),
                 max_output_tokens=900,
-                reasoning_effort="high",
-                client=client
+                reasoning_effort="high"
             )
         reply = extract_output_text(res) or ""
         reply = reply.strip()
@@ -8478,7 +8511,12 @@ def markets_chat():
                 res2 = client.responses.create(
                     model=os.getenv("AI_MODEL","gpt-5"),
                     previous_response_id=getattr(res, 'id', None),
-                    input=[{"role":"user","content":[{"type":"input_text","text":"Rappel de format: sors maintenant la réponse FINALE avec exactement les sections suivantes et rien d'autre: 1) Checklist (méthode) 2) Analyse (3–5 points) 3) Conclusion 4) Validation 5) Sources (3–6 liens, nom du site + URL). Pas d'appel d'outil. "}]}],
+                    input=[{"role":"user","content":[{"type":"input_text","text":(
+                        "Rappel de format: sors maintenant la réponse FINALE avec exactement les sections suivantes et rien d'autre: "
+                        "1) Checklist (méthode) 2) Analyse (3–5 points) 3) Conclusion 4) Validation 5) "
+                        + ("Sources (3–6 liens, nom du site + URL)." if allow_web else "Sources (rapports internes).")
+                        + (" Pas d'appel d'outil." if allow_web else " Pas de navigation web.")
+                    )}]}],
                     reasoning={"effort":"high"},
                     max_output_tokens=700
                 )
@@ -8554,7 +8592,10 @@ def markets_chat():
                             cc_messages.append({"role": r, "content": str(c)})
                 except Exception:
                     pass
-                cc_messages.append({"role": "user", "content": f"Contexte (rapports):\n{context_text}\n\nQuestion: {user_message}. Rappel: formate la réponse avec: Checklist / Analyse / Conclusion / Validation / Sources (3–6 liens)."})
+                if allow_web:
+                    cc_messages.append({"role": "user", "content": f"Contexte (rapports):\n{context_text}\n\nQuestion: {user_message}. Rappel: formate la réponse avec: Checklist / Analyse / Conclusion / Validation / Sources (3–6 liens)."})
+                else:
+                    cc_messages.append({"role": "user", "content": f"Contexte (rapports):\n{context_text}\n\nQuestion: {user_message}. Rappel: formate la réponse avec: Checklist / Analyse / Conclusion / Validation / Sources (rapports internes)."})
                 try:
                     cc_resp = from_chat_completions_compat(
                         client=client,
