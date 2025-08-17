@@ -8298,7 +8298,7 @@ def get_recent_market_analyses():
 
 @app.route("/api/markets/chat", methods=["POST"])
 def markets_chat():
-    """Chatbot marchés: RAG compact (3 rapports) + mémoire de session persistante.
+    """Chatbot marchés: RAG compact (1 rapport) + web search + mémoire de session persistante.
     Entrée JSON: { message: str, context?: str, session_id?: str }
     Sortie JSON: { success: bool, reply?: str, error?: str, metadata?: { session_id } }
     """
@@ -8310,8 +8310,12 @@ def markets_chat():
         user_message = (data.get("message") or "").strip()
         if not user_message:
             return jsonify({"success": False, "error": "Message vide"}), 400
-        # Limite stricte à 3 rapports (plus pertinent et plus rapide)
-        limit = min(int(data.get("limit", 3)), 3)
+        # Limite stricte à 1 rapport (réduction du contexte pour éviter les timeouts)
+        try:
+            requested_limit = int(data.get("limit", 1))
+        except Exception:
+            requested_limit = 1
+        limit = 1 if requested_limit != 1 else 1
         extra_context = (data.get("context") or "").strip()
         session_id = (data.get("session_id") or "").strip() or str(uuid.uuid4())
 
@@ -8321,12 +8325,24 @@ def markets_chat():
         except Exception:
             history_persisted = []
 
-        # Charger les analyses récentes et construire un contexte tolérant aux erreurs
+        # Charger les analyses récentes (limité à 1) et construire un contexte tolérant aux erreurs
         context_text = ""
+        web_search_snippet = ""
+        # Web search rapide (contexte léger) pour limiter les timeouts
+        try:
+            if web_search_manager:
+                ws_res = web_search_manager.search_financial_markets(
+                    search_type=WebSearchType.MARKET_DATA,
+                    search_context_size="low"
+                )
+                if ws_res and getattr(ws_res, 'content', None):
+                    web_search_snippet = f"Contexte (recherche web):\n{ws_res.content}\n---\n"
+        except Exception:
+            web_search_snippet = ""
         try:
             from market_analysis_db import get_market_analysis_db
             db = get_market_analysis_db()
-            recent_items = db.get_recent_analyses(limit=12)  # pool initial
+            recent_items = db.get_recent_analyses(limit=6)  # pool initial (petit)
 
             # Scoring naïf par recouvrement de mots-clés question/contexte vs contenu des rapports
             def _tokenize(txt: str) -> set:
@@ -8348,7 +8364,7 @@ def markets_chat():
             scored.sort(key=lambda x: x[0], reverse=True)
             top_items = [a for _, a in (scored[:limit] if scored else [])]
             if not top_items:
-                # Fallback: prendre simplement les 3 plus récents
+                # Fallback: prendre simplement le plus récent
                 top_items = (recent_items or [])[:limit]
 
             # Construire le contexte compact
@@ -8368,9 +8384,13 @@ def markets_chat():
             context_text = "\n".join(context_parts)
             if extra_context:
                 context_text = f"Contexte additionnel (utilisateur):\n{extra_context}\n---\n" + context_text
+            if web_search_snippet:
+                context_text = web_search_snippet + context_text
         except Exception as _e:
             # Si la BDD ou la désérialisation pose souci, continuer sans contexte
             context_text = (f"Contexte additionnel (utilisateur):\n{extra_context}\n---\n" if extra_context else "")
+            if web_search_snippet:
+                context_text = web_search_snippet + context_text
 
         # Client OpenAI
         try:
