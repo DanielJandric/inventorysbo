@@ -8321,7 +8321,7 @@ def markets_chat():
 
         # Récupérer mémoire de session (messages précédents)
         try:
-            history_persisted = conversation_memory.get_recent_messages(session_id, limit=8)
+            history_persisted = conversation_memory.get_recent_messages(session_id, limit=2)
         except Exception:
             history_persisted = []
 
@@ -8418,7 +8418,7 @@ def markets_chat():
                 tools=tools_cfg,
                 model=os.getenv("AI_MODEL", "gpt-5"),
                 client=client,
-                max_output_tokens=600,
+                max_output_tokens=500,
                 reasoning_effort=os.getenv("AI_REASONING_EFFORT", "high"),
             )
             reply = (extract_output_text(res) or "").strip()
@@ -8428,7 +8428,7 @@ def markets_chat():
                 client=client,
                 model=os.getenv("AI_MODEL", "gpt-5"),
                 messages=messages,
-                max_output_tokens=600,
+                max_output_tokens=500,
                 reasoning_effort=os.getenv("AI_REASONING_EFFORT", "high"),
             )
             reply = (extract_output_text(resp) or "").strip()
