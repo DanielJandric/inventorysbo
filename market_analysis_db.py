@@ -255,11 +255,19 @@ class MarketAnalysisDB:
                 logger.error("❌ Pas de connexion à Supabase")
                 return []
 
-            result = self.supabase.table('market_analyses') \
-                .select('*') \
-                .order('created_at', desc=True) \
-                .limit(limit) \
-                .execute()
+            # Préférer l'ordre par timestamp si présent; fallback created_at sinon
+            try:
+                result = self.supabase.table('market_analyses') \
+                    .select('*') \
+                    .order('timestamp', desc=True) \
+                    .limit(limit) \
+                    .execute()
+            except Exception:
+                result = self.supabase.table('market_analyses') \
+                    .select('*') \
+                    .order('created_at', desc=True) \
+                    .limit(limit) \
+                    .execute()
 
             analyses: List[MarketAnalysis] = []
             for data in result.data or []:

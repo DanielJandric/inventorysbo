@@ -211,6 +211,8 @@
                         statusIcon.innerHTML = '<i class="fas fa-check-circle"></i>';
                         statusText.textContent = `Analyse terminée le ${new Date(data.timestamp).toLocaleString('fr-FR')}.`;
                         renderAnalysis(data);
+                        // Rafraîchir la liste des 15 derniers rapports
+                        try { await loadRecentAnalyses(); } catch (e) {}
                         break;
                     case 'error':
                         startBtn.disabled = false;
