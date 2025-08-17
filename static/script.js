@@ -2089,32 +2089,8 @@ function showEstimationModal(data, itemId) {
     }
 
     // Similaires dans la collection (enrichissement serveur)
-    if (market_analysis && Array.isArray(market_analysis.top_3_similar_actual) && market_analysis.top_3_similar_actual.length > 0) {
-        const sims = market_analysis.top_3_similar_actual.filter(x => x && x.name);
-        if (sims.length > 0) {
-            collectionComparablesHTML = `
-                <div class="glass-subtle p-6 rounded-2xl">
-                    <h3 class="text-lg font-semibold mb-4">Objets similaires (dans votre collection)</h3>
-                    <div class="space-y-3">
-                        ${sims.map(sim => {
-                            const price = sim.price || 0;
-                            const name = sim.name || 'Objet';
-                            const year = sim.year || '';
-                            const status = sim.status === 'sold' ? 'Vendu' : 'Valeur actuelle';
-                            return `
-                                <div class="flex justify-between items-center p-3 bg-slate-800/50 rounded-xl">
-                                    <div>
-                                        <div class="font-medium">${name}${year ? ` (${year})` : ''}</div>
-                                        <div class="text-sm text-slate-500">${status}</div>
-                                    </div>
-                                    <div class="font-bold text-cyan-400">${formatPrice(price)}</div>
-                                </div>
-                            `;
-                        }).join('')}
-                    </div>
-                </div>`;
-        }
-    }
+    // SUPPRIMÉ: On n'affiche plus les objets similaires de la collection dans la carte Prix IA
+    collectionComparablesHTML = '';
     
     const est = (typeof estimated_price === 'number' && isFinite(estimated_price)) ? estimated_price : null;
     const priceDisplay = est !== null ? formatPrice(est) : 'N/D';
