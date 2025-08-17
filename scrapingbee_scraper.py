@@ -88,46 +88,47 @@ class ScrapingBeeScraper:
             logger.info(f"🔍 Recherche ScrapingBee: {query}")
             
             # Étape 1: Recherche Google avec ScrapingBee
-            search_results = await self._search_google(query, num_results)
+            search_results = await self._search_google(query, max(num_results, 12))
             
             if not search_results:
                 logger.warning("⚠️ Aucun résultat de recherche trouvé")
                 return results
             
             # Étape 2: Scraping des pages avec ScrapingBee
-            for i, result in enumerate(search_results[:num_results]):
+            for i, result in enumerate(search_results[:max(num_results, 12)]):
                 try:
-                    logger.info(f"📖 Scraping {i+1}/{len(search_results)}: {result['title']}")
+                    logger.info(f"📖 Scraping {i+1}/{min(len(search_results), max(num_results, 12))}: {result['title']}")
                     
-                    scraped_content = await self._scrape_page(result['url'])
+                    scraped = await self._scrape_page(result['url'])
                     
-                    if scraped_content:
+                    if scraped:
+                        content = scraped.get('content') if isinstance(scraped, dict) else str(scraped)
+                        published_at = scraped.get('published_at') if isinstance(scraped, dict) else None
                         results.append(ScrapedData(
                             url=result['url'],
                             title=result['title'],
-                            content=scraped_content,
-                            timestamp=datetime.now(),
+                            content=content,
+                            timestamp=published_at or datetime.now(),
                             metadata={
-                                'word_count': len(scraped_content.split()),
-                                'language': 'fr',
+                                'word_count': len(content.split()),
+                                'published_at': (published_at.isoformat() if published_at else None),
                                 'source': 'scrapingbee'
                             }
                         ))
                     
                 except Exception as e:
                     logger.error(f"❌ Erreur scraping {result['url']}: {e}")
-                    # Ajouter un résultat d'erreur
                     results.append(ScrapedData(
                         url=result['url'],
                         title=result['title'],
                         content=f"Erreur lors du scraping: {str(e)}",
                         timestamp=datetime.now(),
-                        metadata={
-                            'word_count': 10,
-                            'language': 'fr',
-                            'error': str(e)
-                        }
+                        metadata={'error': str(e), 'source': 'scrapingbee'}
                     ))
+            
+            # Prioriser les articles récents (quelque soit la source)
+            results.sort(key=lambda r: r.timestamp or datetime.min, reverse=True)
+            results = results[:max(num_results, 12)]
             
         except Exception as e:
             logger.error(f"❌ Erreur recherche/scraping: {e}")
@@ -137,63 +138,37 @@ class ScrapingBeeScraper:
     async def _search_google(self, query: str, num_results: int = 5) -> List[Dict]:
         """Recherche sur des sites financiers directs avec ScrapingBee"""
         try:
-            # Détecter si c'est une requête sur les marchés généraux ou une action spécifique
-            query_lower = query.lower()
+            q = query.lower()
+            # Listes de domaines FR/CH/UK
+            fr_sources = [
+                ("https://www.lesechos.fr/", "Les Echos"),
+                ("https://www.lefigaro.fr/finance/", "Le Figaro Finance"),
+                ("https://www.boursorama.com/", "Boursorama"),
+                ("https://www.zonebourse.com/", "Zonebourse"),
+            ]
+            ch_sources = [
+                ("https://www.letemps.ch/economie", "Le Temps - Economie"),
+                ("https://www.rts.ch/info/economie/", "RTS - Economie"),
+                ("https://www.swissinfo.ch/fre/economie", "SWI - Economie"),
+            ]
+            uk_us_sources = [
+                ("https://www.reuters.com/markets/", "Reuters - Markets"),
+                ("https://www.ft.com/markets", "FT - Markets"),
+                ("https://www.bloomberg.com/markets", "Bloomberg - Markets"),
+                ("https://www.cnbc.com/markets/", "CNBC - Markets"),
+                ("https://www.marketwatch.com/", "MarketWatch"),
+            ]
+
+            sources: List[Dict[str, str]] = []
+            # Prioriser FR/CH puis UK/US
+            for url, title in fr_sources + ch_sources + uk_us_sources:
+                sources.append({'url': url, 'title': title})
             
-            if any(word in query_lower for word in ['marché', 'marchés', 'financier', 'financiers', 'situation', 'aujourd\'hui', 'ia', 'ai', 'intelligence']):
-                # Sites d'actualités financières pour les requêtes générales
-                sites_financiers = [
-                    {
-                        'url': "https://www.reuters.com/markets/",
-                        'title': "Reuters - Marchés financiers"
-                    },
-                    {
-                        'url': "https://www.bloomberg.com/markets",
-                        'title': "Bloomberg - Marchés"
-                    },
-                    {
-                        'url': "https://www.ft.com/markets",
-                        'title': "Financial Times - Marchés"
-                    },
-                    {
-                        'url': "https://www.cnbc.com/markets/",
-                        'title': "CNBC - Marchés"
-                    },
-                    {
-                        'url': "https://www.marketwatch.com/",
-                        'title': "MarketWatch - Actualités"
-                    }
-                ]
-            else:
-                # Sites de stocks pour les requêtes spécifiques
-                stock_symbol = query.split()[0].upper()
-                sites_financiers = [
-                    {
-                        'url': f"https://finance.yahoo.com/quote/{stock_symbol}",
-                        'title': f"Yahoo Finance - {stock_symbol}"
-                    },
-                    {
-                        'url': f"https://www.marketwatch.com/investing/stock/{stock_symbol.lower()}",
-                        'title': f"MarketWatch - {stock_symbol}"
-                    },
-                    {
-                        'url': f"https://www.reuters.com/companies/{stock_symbol}.O",
-                        'title': f"Reuters - {stock_symbol}"
-                    },
-                    {
-                        'url': f"https://www.bloomberg.com/quote/{stock_symbol}:US",
-                        'title': f"Bloomberg - {stock_symbol}"
-                    }
-                ]
-            
-            logger.info(f"🔍 Recherche sur {min(len(sites_financiers), num_results)} sites financiers")
-            
-            # Retourner les sites financiers comme résultats de recherche
-            return sites_financiers[:num_results]
-                        
+            logger.info(f"🔍 Sélection de {min(len(sources), num_results)} sources FR/CH/UK prioritaires")
+            return sources[:num_results]
         except Exception as e:
             logger.error(f"❌ Erreur recherche sites financiers: {e}")
-            return []  # Pas de fallback
+            return []
     
     def _extract_links_from_html(self, html_content: str, query: str) -> List[Dict]:
         """Extrait les liens depuis le HTML de Google"""
@@ -287,34 +262,80 @@ class ScrapingBeeScraper:
     
 
     
-    async def _scrape_page(self, url: str) -> Optional[str]:
-        """Scrape une page avec ScrapingBee"""
+    def _extract_published_datetime(self, html_content: str, headers: Dict[str, str]) -> Optional[datetime]:
+        """Essaie d'extraire la date de publication depuis HTML/meta ou headers."""
         try:
-            # Paramètres ScrapingBee pour le scraping
+            # 1) Meta tags courants
+            patterns = [
+                r'property=["\']article:published_time["\']\s+content=["\']([^"\']+)["\']',
+                r'property=["\']og:updated_time["\']\s+content=["\']([^"\']+)["\']',
+                r'itemprop=["\']datePublished["\']\s+content=["\']([^"\']+)["\']',
+                r'name=["\']date["\']\s+content=["\']([^"\']+)["\']',
+                r'name=["\']pubdate["\']\s+content=["\']([^"\']+)["\']',
+            ]
+            for pat in patterns:
+                m = re.search(pat, html_content, flags=re.IGNORECASE)
+                if m:
+                    val = m.group(1)
+                    try:
+                        # ISO 8601 simple
+                        v = val.replace('Z', '+00:00')
+                        return datetime.fromisoformat(v)
+                    except Exception:
+                        # YYYY-MM-DD HH:MM(:SS)?
+                        m2 = re.search(r'(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2})?)', val)
+                        if m2:
+                            try:
+                                v2 = m2.group(1).replace(' ', 'T')
+                                return datetime.fromisoformat(v2)
+                            except Exception:
+                                pass
+            # 2) JSON-LD script
+            mld = re.search(r'<script[^>]*type=["\']application/ld\+json["\'][^>]*>(.*?)</script>', html_content, flags=re.IGNORECASE|re.DOTALL)
+            if mld:
+                try:
+                    import json as _json
+                    data = _json.loads(mld.group(1))
+                    if isinstance(data, dict):
+                        val = data.get('datePublished') or data.get('dateModified')
+                        if isinstance(val, str):
+                            v = val.replace('Z', '+00:00')
+                            return datetime.fromisoformat(v)
+                except Exception:
+                    pass
+            # 3) Header Last-Modified
+            if headers:
+                lm = headers.get('Last-Modified') or headers.get('last-modified')
+                if lm:
+                    try:
+                        from email.utils import parsedate_to_datetime
+                        return parsedate_to_datetime(lm)
+                    except Exception:
+                        pass
+        except Exception:
+            return None
+        return None
+
+    async def _scrape_page(self, url: str) -> Optional[Dict[str, object]]:
+        """Scrape une page avec ScrapingBee et retourne contenu + date publiée si trouvée."""
+        try:
             params = {
                 'api_key': self.api_key,
                 'url': url,
-                'render_js': 'true',  # Rendu JS pour les pages dynamiques
-                'premium_proxy': 'false',  # Proxy standard pour économiser les crédits
-                'country_code': 'us'
+                'render_js': 'true',
+                'premium_proxy': 'true',
+                'block_resources': 'false',
             }
-            
             async with aiohttp.ClientSession() as session:
                 async with session.get(self.base_url, params=params) as response:
                     if response.status == 200:
-                        # ScrapingBee retourne du HTML, pas du JSON
                         html_content = await response.text()
-                        
-                        # Extraire le contenu du body
                         cleaned_content = self._extract_text_from_html(html_content)
-                        logger.info(f"📄 Contenu extrait de {url}: {len(cleaned_content)} caractères.")
-                        logger.debug(f"Contenu brut (aperçu): {cleaned_content[:500]}...")
-
-                        return cleaned_content[:8000]  # Limite de caractères augmentée
+                        pub_dt = self._extract_published_datetime(html_content, dict(response.headers))
+                        return {"content": cleaned_content[:12000], "published_at": pub_dt}
                     else:
                         logger.error(f"❌ Erreur ScrapingBee scraping: {response.status}")
                         return None
-                        
         except Exception as e:
             logger.error(f"❌ Erreur scraping page {url}: {e}")
             return None
