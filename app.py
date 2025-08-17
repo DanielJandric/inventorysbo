@@ -8385,14 +8385,15 @@ def markets_chat():
             pass
         messages.append({"role": "user", "content": f"Contexte (rapports):\n{context_text}\n\nQuestion: {user_message}"})
 
-        # Appel Chat Completions (gpt-5-chat-latest) via wrapper pour robustesse JSON/texte
-        reply_resp = from_chat_completions_compat(
+        # Basculer sur Responses API avec raisonnement high
+        resp = from_responses_simple(
             client=client,
             model=os.getenv("AI_MODEL", "gpt-5"),
             messages=messages,
-            max_tokens=15000
+            max_output_tokens=15000,
+            reasoning_effort=os.getenv("AI_REASONING_EFFORT", "high"),
         )
-        reply = reply_resp.choices[0].message.content.strip()
+        reply = (extract_output_text(resp) or "").strip()
 
         # Persister dans la mémoire
         try:
