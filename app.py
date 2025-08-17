@@ -2211,7 +2211,8 @@ class PureOpenAIEngineWithRAG:
         self._tool_runtime_context: Dict[str, Any] = {}
 
     def _get_tools_schema(self) -> List[Dict[str, Any]]:
-        return [
+        tools: List[Dict[str, Any]] = [
+            {"type": "web_search"},
             {
                 "type": "function",
                 "name": "get_stock_price",
@@ -2252,6 +2253,7 @@ class PureOpenAIEngineWithRAG:
                 }
             }
         ]
+        return tools
 
     def _execute_tool(self, name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         try:
@@ -2317,15 +2319,32 @@ class PureOpenAIEngineWithRAG:
             tools = self._get_tools_schema()
             loop_messages = list(messages)
 
-            # First turn
-            res = chat_tools_messages(
-                messages=loop_messages,
-                tools=tools,
-                model=os.getenv("AI_MODEL","gpt-5"),
-                max_output_tokens=900,
-                reasoning_effort="high",
-                client=self.client
-            )
+            # First turn with web_search; fallback to preview on error
+            try:
+                res = chat_tools_messages(
+                    messages=loop_messages,
+                    tools=tools,
+                    model=os.getenv("AI_MODEL","gpt-5"),
+                    max_output_tokens=900,
+                    reasoning_effort="high",
+                    client=self.client
+                )
+            except Exception as _e:
+                # Fallback: replace web_search by web_search_preview
+                tools_alt: List[Dict[str, Any]] = []
+                for t in tools:
+                    if isinstance(t, dict) and t.get("type") == "web_search":
+                        tools_alt.append({"type": "web_search_preview"})
+                    else:
+                        tools_alt.append(t)
+                res = chat_tools_messages(
+                    messages=loop_messages,
+                    tools=tools_alt,
+                    model=os.getenv("AI_MODEL","gpt-5"),
+                    max_output_tokens=900,
+                    reasoning_effort="high",
+                    client=self.client
+                )
 
             for _ in range(2):  # up to 3 turns total
                 made_call = False
