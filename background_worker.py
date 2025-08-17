@@ -168,7 +168,7 @@ class MarketAnalysisWorker:
                 'insights': result.get('insights', []),
                 'risks': result.get('risks', []),
                 'opportunities': result.get('opportunities', []),
-                'sources': result.get('sources', []),
+                'sources': [],
                 'confidence_score': result.get('confidence_score', 0.0),
                 'worker_status': 'completed',
                 'processing_time_seconds': processing_time
@@ -606,10 +606,7 @@ class MarketAnalysisWorker:
                 </div>
                 
                 <!-- Sources -->
-                <div class="section">
-                    <h3>📚 Sources d'Information</h3>
-                    <ul style="list-style: none; padding: 0;">{sources_html}</ul>
-                </div>
+                
                 
                 <div class="footer">
                     <p>Rapport généré automatiquement par le système BONVIN Collection</p>

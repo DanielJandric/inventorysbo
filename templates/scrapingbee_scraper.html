@@ -448,20 +448,7 @@
                 `;
             }
 
-            if (results.sources && results.sources.length > 0) {
-                html += `
-                    <div class="result-item">
-                        <div class="result-title">🔗 Sources</div>
-                        <div class="result-content">
-                            <ul>
-                                ${results.sources.map(source => 
-                                    `<li><a href="${source.url}" target="_blank">${source.title}</a></li>`
-                                ).join('')}
-                            </ul>
-                        </div>
-                    </div>
-                `;
-            }
+            // Masquer les sources
 
             if (results.confidence_score) {
                 html += `

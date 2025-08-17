@@ -243,7 +243,7 @@
                         <div class="glass p-4 rounded-xl bg-amber-500/10 border border-amber-400/30"><h6 class="font-medium mb-2"><i class="fas fa-lightbulb mr-2"></i>Insights</h6><ul class="list-disc list-inside text-amber-100/90 text-sm">${(analysis.insights || []).map(p => `<li>${p}</li>`).join('')}</ul></div>
                         <div class="glass p-4 rounded-xl bg-rose-500/10 border border-rose-400/30"><h6 class="font-medium mb-2"><i class="fas fa-exclamation-triangle mr-2"></i>Risques</h6><ul class="list-disc list-inside text-rose-100/90 text-sm">${(analysis.risks || []).map(p => `<li>${p}</li>`).join('')}</ul></div>
                         <div class="glass p-4 rounded-xl lg:col-span-2 bg-emerald-500/10 border border-emerald-400/30"><h6 class="font-medium mb-2"><i class="fas fa-star mr-2"></i>Opportunités</h6><ul class="list-disc list-inside text-emerald-100/90 text-sm">${(analysis.opportunities || []).map(p => `<li>${p}</li>`).join('')}</ul></div>
-                        <div class="glass p-4 rounded-xl lg:col-span-2 bg-violet-500/10 border border-violet-400/30"><h6 class="font-medium mb-2"><i class="fas fa-link mr-2"></i>Sources</h6><ul class="list-disc list-inside text-violet-100/90 text-sm">${(analysis.sources || []).map(s => `<li><a class='text-violet-300 hover:underline' href="${s.url}" target="_blank">${s.title}</a></li>`).join('')}</ul></div>
+                        
                     </div>`;
             }
 
