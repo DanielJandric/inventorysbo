@@ -8428,6 +8428,28 @@ def markets_chat():
         reply = extract_output_text(res) or ""
         reply = reply.strip()
 
+        # Fallback vers Chat Completions si la réponse est vide
+        if not reply:
+            cc_messages: List[Dict[str, Any]] = [{"role": "system", "content": system_prompt}]
+            try:
+                for m in (history_persisted or [])[-8:]:
+                    r, c = (m or {}).get('role'), (m or {}).get('content')
+                    if r in {"user", "assistant"} and c:
+                        cc_messages.append({"role": r, "content": str(c)})
+            except Exception:
+                pass
+            cc_messages.append({"role": "user", "content": f"Contexte (rapports):\n{context_text}\n\nQuestion: {user_message}"})
+            try:
+                cc_resp = from_chat_completions_compat(
+                    client=client,
+                    model=os.getenv("AI_MODEL", "gpt-5"),
+                    messages=cc_messages,
+                    max_tokens=1200
+                )
+                reply = (cc_resp.choices[0].message.content or "").strip()
+            except Exception:
+                reply = ""
+
         # Persister dans la mémoire
         try:
             conversation_memory.add_message(session_id, 'user', user_message)
