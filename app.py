@@ -8399,50 +8399,83 @@ def markets_chat():
             "Structure la réponse en 3–5 points maximum, puis une phrase de conclusion claire."
         )
 
-        # Construire messages (Chat Completions)
-        messages = [{"role": "system", "content": system_prompt}]
+        # Appel Responses API (format role/content) avec web injecté en texte si demandé
         try:
-            for m in (history_persisted or [])[-8:]:
-                r, c = (m or {}).get('role'), (m or {}).get('content')
-                if r in {"user", "assistant"} and c:
-                    messages.append({"role": r, "content": str(c)})
-        except Exception:
-            pass
-        messages.append({"role": "user", "content": f"Contexte (rapports):\n{context_text}\n\nQuestion: {user_message}"})
+            ws_text = ""
+            if bool(data.get("use_web", False)) and web_search_manager:
+                try:
+                    ws_res = web_search_manager.search_financial_markets(
+                        search_type=WebSearchType.MARKET_DATA,
+                        search_context_size="low"
+                    )
+                    if ws_res and getattr(ws_res, 'content', None):
+                        ws_text = str(ws_res.content)[:1200]
+                except Exception:
+                    ws_text = ""
 
-        # Chemin rapide: pas d'outil si use_web = False; sinon web_search_preview
-        try:
-            if use_web:
-                tools_cfg = [{"type": "web_search_preview", "search_context_size": "low"}]
-                res = chat_tools_messages(
-                    messages=messages,
-                    tools=tools_cfg,
-                    model=os.getenv("AI_MODEL", "gpt-5"),
-                    client=client,
-                    max_output_tokens=400,
-                    reasoning_effort=os.getenv("AI_REASONING_EFFORT", "high"),
-                )
-                reply = (extract_output_text(res) or "").strip()
-            else:
-                resp = from_responses_simple(
-                    client=client,
-                    model=os.getenv("AI_MODEL", "gpt-5"),
-                    messages=messages,
-                    max_output_tokens=400,
-                    timeout=15,
-                    reasoning_effort=os.getenv("AI_REASONING_EFFORT", "high"),
-                )
-                reply = (extract_output_text(resp) or "").strip()
-        except Exception:
-            resp = from_responses_simple(
-                client=client,
+            eff = (os.getenv("AI_REASONING_EFFORT", "high") or "").strip().lower()
+            if eff not in ("low", "medium", "high"):
+                eff = "high"
+
+            user_parts = []
+            if ws_text:
+                user_parts.append(f"Contexte (recherche web):\n{ws_text}\n---\n")
+            if context_text:
+                user_parts.append(f"Contexte (rapports):\n{context_text}\n\n")
+            user_parts.append(f"Question: {user_message}")
+            user_prompt_final = "".join(user_parts)
+
+            _client = client.with_options(timeout=15)
+            res = _client.responses.create(
                 model=os.getenv("AI_MODEL", "gpt-5"),
-                messages=messages,
-                max_output_tokens=350,
-                timeout=12,
-                reasoning_effort=os.getenv("AI_REASONING_EFFORT", "high"),
+                input=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt_final},
+                ],
+                reasoning={"effort": eff},
+                max_output_tokens=400,
             )
-            reply = (extract_output_text(resp) or "").strip()
+            reply = (extract_output_text(res) or "").strip()
+        except Exception:
+            reply = ""
+
+        # Fallback final: Chat Completions si texte vide (en pré-injectant un court contexte + web si demandé)
+        if not reply:
+            try:
+                # Web search rapide si demandé
+                ws_text = ""
+                if use_web and web_search_manager:
+                    try:
+                        ws_res = web_search_manager.search_financial_markets(
+                            search_type=WebSearchType.MARKET_DATA,
+                            search_context_size="low"
+                        )
+                        if ws_res and getattr(ws_res, 'content', None):
+                            ws_text = str(ws_res.content)[:1200]
+                    except Exception:
+                        ws_text = ""
+
+                # Contexte court (RAG déjà compacté)
+                cc_messages = [
+                    {"role": "system", "content": system_prompt},
+                ]
+                if ws_text:
+                    cc_messages.append({"role": "user", "content": f"Contexte (recherche web):\n{ws_text}"})
+                if context_text:
+                    short_ctx = context_text[:1200]
+                    cc_messages.append({"role": "user", "content": f"Contexte (rapports):\n{short_ctx}"})
+                cc_messages.append({"role": "user", "content": f"Question: {user_message}"})
+
+                cc = from_chat_completions_compat(
+                    client=client,
+                    model=os.getenv("AI_COMPLETIONS_MODEL", "gpt-5-chat-latest"),
+                    messages=cc_messages,
+                    max_tokens=350,
+                    timeout=12,
+                )
+                reply = (getattr(cc, 'choices', [{}])[0].get('message', {}).get('content') or '').strip()
+            except Exception:
+                reply = ""
 
         # Persister dans la mémoire
         try:
