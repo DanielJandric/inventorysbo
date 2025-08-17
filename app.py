@@ -8384,13 +8384,35 @@ def markets_chat():
             logger.error(f"OpenAI init error: {e}")
             return jsonify({"success": False, "error": "OpenAI non configuré"}), 500
 
-        # Prompt système plus direct, avec mémoire et consignes
+        # Prompt système (règles "analyste senior" + style et checklist)
         system_prompt = (
-            "Tu es un analyste marchés. Réponds en français, de manière concise, actionnable et contextuelle. "
-            "Utilise la mémoire de conversation (si pertinente) pour assurer la continuité. "
-            "Reconnais patterns (tendance, corrélations, régimes de volatilité) et commente risques/opportunités. "
-            "N'invente jamais de chiffres. Utilise **gras** pour les points critiques, et des emojis sobres (↑, ↓, 🟢, 🔴, ⚠️, 💡). "
-            "Structure la réponse en 3–5 points maximum, puis une phrase de conclusion claire."
+            "# Rôle et objectif\n"
+            "- Expert en analyse des marchés financiers, apportant des insights synthétiques, pertinents et orientés action en français.\n\n"
+            "# Instructions\n"
+            "- Toujours répondre de façon concise et directement exploitable.\n"
+            "- Intégrer le contexte conversationnel pour garantir la cohérence et la continuité.\n"
+            "- Identifier et signaler clairement les patterns : tendances, corrélations, changements de régimes de volatilité.\n"
+            "- Analyser et commenter précisément les risques ainsi que les opportunités du marché sans jamais inventer ni extrapoler de chiffres.\n"
+            "- Mettre en **gras** les informations critiques et utiliser uniquement des emojis sobres pour illustrer les dynamiques importantes : ↗️, ↘️, 🟢, 🔴, ⚠️, 💡.\n"
+            "- Structurer chaque réponse en 3 à 5 points concis suivis d'une phrase de conclusion résumant l’analyse.\n\n"
+            "# Checklist initiale\n"
+            "- Commencer par une checklist concise (3 à 7 points conceptuels) décrivant les étapes de l'analyse avant toute rédaction de l'analyse.\n\n"
+            "# Contexte\n"
+            "- S’appuyer sur la mémoire de la conversation (si applicable).\n"
+            "- Prioriser l’actionnabilité et l’adaptation au contexte spécifique du dialogue.\n"
+            "- Ne jamais inclure d’informations fictives ou non vérifiées.\n\n"
+            "# Format de sortie\n"
+            "- Fournir une liste concise de 3 à 5 points, suivie d’une phrase de conclusion claire.\n"
+            "- Utiliser **gras** et emojis sobres pour souligner l’essentiel.\n\n"
+            "# Vérification après rédaction\n"
+            "- Après avoir formulé l’analyse, valider en 1 à 2 lignes l’exactitude et la pertinence des points fournis par rapport au contexte.\n\n"
+            "# Verbosité\n"
+            "- Limiter aux informations essentielles et immédiatement exploitables.\n\n"
+            "# Conditions d’arrêt\n"
+            "- S’arrêter après livraison d’une analyse claire, structurée et synthétique selon les directives ci-dessus.\n\n"
+            "# Planification et vérification\n"
+            "- Vérifier la pertinence contextuelle et l’exactitude de chaque point (pas de chiffres inventés).\n"
+            "- S’assurer que les risques et opportunités sont bien identifiés et énoncés."
         )
 
         # Construire messages (Responses typés)
@@ -8429,6 +8451,21 @@ def markets_chat():
         reply = reply.strip()
 
         # Fallback vers Chat Completions si la réponse est vide
+        if not reply:
+            # Tentative de second tour Responses pour forcer la sortie
+            try:
+                res2 = client.responses.create(
+                    model=os.getenv("AI_MODEL","gpt-5"),
+                    previous_response_id=getattr(res, 'id', None),
+                    input=[{"role":"user","content":[{"type":"input_text","text":"Fournis maintenant la réponse finale en 3–5 points concis, puis une conclusion. Pas d'appel d'outil."}]}],
+                    reasoning={"effort":"high"}
+                )
+                reply2 = (extract_output_text(res2) or "").strip()
+                if reply2:
+                    reply = reply2
+            except Exception:
+                pass
+
         if not reply:
             # Télémetrie Responses pour diagnostic
             try:
