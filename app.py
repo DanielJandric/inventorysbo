@@ -8311,51 +8311,56 @@ def markets_chat():
         except Exception:
             history_persisted = []
 
-        # Charger les analyses récentes et sélectionner les plus pertinentes (top-3)
-        from market_analysis_db import get_market_analysis_db
-        db = get_market_analysis_db()
-        recent_items = db.get_recent_analyses(limit=12)  # pool initial
+        # Charger les analyses récentes et construire un contexte tolérant aux erreurs
+        context_text = ""
+        try:
+            from market_analysis_db import get_market_analysis_db
+            db = get_market_analysis_db()
+            recent_items = db.get_recent_analyses(limit=12)  # pool initial
 
-        # Scoring naïf par recouvrement de mots-clés question/contexte vs contenu des rapports
-        def _tokenize(txt: str) -> set:
-            words = _re.findall(r"[\w\-]+", (txt or "").lower())
-            return {w for w in words if len(w) >= 3}
+            # Scoring naïf par recouvrement de mots-clés question/contexte vs contenu des rapports
+            def _tokenize(txt: str) -> set:
+                words = _re.findall(r"[\w\-]+", (txt or "").lower())
+                return {w for w in words if len(w) >= 3}
 
-        query_terms = _tokenize(user_message + " " + extra_context)
+            query_terms = _tokenize(user_message + " " + extra_context)
 
-        scored = []
-        for a in recent_items:
-            try:
-                exec_text = "\n".join(a.executive_summary or []) if a.executive_summary else ""
-                base = f"{exec_text}\n{(a.summary or '')[:1200]}"
-                report_terms = _tokenize(base)
-                score = len(query_terms & report_terms)
-                scored.append((score, a))
-            except Exception:
-                continue
-        scored.sort(key=lambda x: x[0], reverse=True)
-        top_items = [a for _, a in (scored[:limit] if scored else [])]
-        if not top_items:
-            # Fallback: prendre simplement les 3 plus récents
-            top_items = (recent_items or [])[:limit]
+            scored = []
+            for a in recent_items:
+                try:
+                    exec_text = "\n".join(a.executive_summary or []) if a.executive_summary else ""
+                    base = f"{exec_text}\n{(a.summary or '')[:1200]}"
+                    report_terms = _tokenize(base)
+                    score = len(query_terms & report_terms)
+                    scored.append((score, a))
+                except Exception:
+                    continue
+            scored.sort(key=lambda x: x[0], reverse=True)
+            top_items = [a for _, a in (scored[:limit] if scored else [])]
+            if not top_items:
+                # Fallback: prendre simplement les 3 plus récents
+                top_items = (recent_items or [])[:limit]
 
-        # Construire le contexte compact
-        context_parts = []
-        for a in top_items:
-            try:
-                exec_summary = "\n".join([f"- {p}" for p in (a.executive_summary or [])]) if a.executive_summary else ""
-                summary_compact = (a.summary or "")[:800]
-                ts = a.timestamp or a.created_at or ""
-                context_parts.append(
-                    f"[Rapport ID {a.id or '?'} | {a.analysis_type or 'auto'} | {ts}]\n"
-                    f"Executive Summary:\n{exec_summary}\n"
-                    f"Résumé:\n{summary_compact}\n---\n"
-                )
-            except Exception:
-                continue
-        context_text = "\n".join(context_parts)
-        if extra_context:
-            context_text = f"Contexte additionnel (utilisateur):\n{extra_context}\n---\n" + context_text
+            # Construire le contexte compact
+            context_parts = []
+            for a in top_items:
+                try:
+                    exec_summary = "\n".join([f"- {p}" for p in (a.executive_summary or [])]) if a.executive_summary else ""
+                    summary_compact = (a.summary or "")[:800]
+                    ts = a.timestamp or a.created_at or ""
+                    context_parts.append(
+                        f"[Rapport ID {a.id or '?'} | {a.analysis_type or 'auto'} | {ts}]\n"
+                        f"Executive Summary:\n{exec_summary}\n"
+                        f"Résumé:\n{summary_compact}\n---\n"
+                    )
+                except Exception:
+                    continue
+            context_text = "\n".join(context_parts)
+            if extra_context:
+                context_text = f"Contexte additionnel (utilisateur):\n{extra_context}\n---\n" + context_text
+        except Exception as _e:
+            # Si la BDD ou la désérialisation pose souci, continuer sans contexte
+            context_text = (f"Contexte additionnel (utilisateur):\n{extra_context}\n---\n" if extra_context else "")
 
         # Client OpenAI
         try:
