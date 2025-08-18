@@ -98,19 +98,21 @@ class ScrapingBeeScraper:
             for i, result in enumerate(search_results[:num_results]):
                 try:
                     logger.info(f"📖 Scraping {i+1}/{len(search_results)}: {result['title']}")
-                    
-                    scraped_content = await self._scrape_page(result['url'])
-                    
-                    if scraped_content:
+                    details = await self._scrape_page_with_metadata(result['url'])
+                    if details and details.get('text'):
+                        text = details['text']
+                        published_at = details.get('published_at') or datetime.now()
                         results.append(ScrapedData(
                             url=result['url'],
                             title=result['title'],
-                            content=scraped_content,
-                            timestamp=datetime.now(),
+                            content=text,
+                            timestamp=published_at,
                             metadata={
-                                'word_count': len(scraped_content.split()),
+                                'word_count': len(text.split()),
                                 'language': 'fr',
-                                'source': 'scrapingbee'
+                                'source': 'scrapingbee',
+                                'scraped_at': datetime.now().isoformat(),
+                                'published_at_raw': details.get('published_at_raw')
                             }
                         ))
                     
@@ -129,6 +131,12 @@ class ScrapingBeeScraper:
                         }
                     ))
             
+            # Trier les résultats par date de publication (récents d'abord)
+            try:
+                results.sort(key=lambda x: (x.timestamp or datetime.min), reverse=True)
+            except Exception:
+                pass
+
         except Exception as e:
             logger.error(f"❌ Erreur recherche/scraping: {e}")
         
@@ -318,6 +326,34 @@ class ScrapingBeeScraper:
         except Exception as e:
             logger.error(f"❌ Erreur scraping page {url}: {e}")
             return None
+
+    async def _scrape_page_with_metadata(self, url: str) -> Optional[Dict]:
+        """Scrape une page et renvoie le texte + date de publication si détectable."""
+        try:
+            params = {
+                'api_key': self.api_key,
+                'url': url,
+                'render_js': 'true',
+                'premium_proxy': 'false',
+                'country_code': 'us'
+            }
+            async with aiohttp.ClientSession() as session:
+                async with session.get(self.base_url, params=params) as response:
+                    if response.status != 200:
+                        logger.error(f"❌ Erreur ScrapingBee scraping: {response.status}")
+                        return None
+                    html_content = await response.text()
+                    cleaned_content = self._extract_text_from_html(html_content)
+                    # Extraire published_at depuis HTML ou headers
+                    published_at, raw = self._extract_published_time(html_content, dict(response.headers))
+                    return {
+                        'text': cleaned_content[:8000],
+                        'published_at': published_at,
+                        'published_at_raw': raw
+                    }
+        except Exception as e:
+            logger.error(f"❌ Erreur scraping page (with metadata) {url}: {e}")
+            return None
     
     def _extract_text_from_html(self, html_content: str) -> str:
         """Extrait le texte du HTML"""
@@ -336,6 +372,68 @@ class ScrapingBeeScraper:
         text = re.sub(r'[^\w\s\.\,\!\?\-\:\;\(\)\-\$\%]', '', text)
         
         return text.strip()[:15000]
+
+    def _parse_datetime_str(self, s: str) -> Optional[datetime]:
+        try:
+            st = s.strip()
+            if not st:
+                return None
+            # ISO 8601 simple
+            st = st.replace('Z', '+00:00')
+            try:
+                return datetime.fromisoformat(st)
+            except Exception:
+                pass
+            # RFC 2822 (headers)
+            try:
+                from email.utils import parsedate_to_datetime
+                return parsedate_to_datetime(st)
+            except Exception:
+                return None
+        except Exception:
+            return None
+
+    def _extract_published_time(self, html_content: str, headers: Optional[Dict] = None) -> (Optional[datetime], Optional[str]):
+        """Extrait la date de publication depuis le HTML ou les en-têtes HTTP."""
+        raw = None
+        try:
+            from bs4 import BeautifulSoup  # type: ignore
+            soup = BeautifulSoup(html_content or '', 'lxml')
+            # Meta tags courants
+            candidates = []
+            for selector, attr in [
+                (('meta', {'property': 'article:published_time'}), 'content'),
+                (('meta', {'name': 'article:published_time'}), 'content'),
+                (('meta', {'property': 'og:published_time'}), 'content'),
+                (('meta', {'property': 'og:updated_time'}), 'content'),
+                (('meta', {'itemprop': 'datePublished'}), 'content'),
+                (('meta', {'name': 'date'}), 'content'),
+                (('time', {'datetime': True}), 'datetime'),
+            ]:
+                try:
+                    tag = soup.find(*selector)
+                    if tag and tag.get(attr):
+                        candidates.append(tag.get(attr))
+                except Exception:
+                    continue
+            for c in candidates:
+                dt = self._parse_datetime_str(c)
+                if dt:
+                    return dt, c
+        except Exception:
+            pass
+        try:
+            # Headers HTTP
+            if headers:
+                for key in ['last-modified', 'date']:
+                    hv = headers.get(key) or headers.get(key.title())
+                    if hv:
+                        dt = self._parse_datetime_str(hv)
+                        if dt:
+                            return dt, hv
+        except Exception:
+            pass
+        return None, raw
     
     async def _scrape_with_params(self, url: str, params: Dict) -> Optional[str]:
         """Scrape une page avec des paramètres ScrapingBee spécifiques."""
