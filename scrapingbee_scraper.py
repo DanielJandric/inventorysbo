@@ -131,8 +131,17 @@ class ScrapingBeeScraper:
                         }
                     ))
             
-            # Trier les résultats par date de publication (récents d'abord)
+            # Filtrer: conserver uniquement les articles publiés dans les dernières 24h, puis trier (récents d'abord)
             try:
+                now_ts = datetime.now().timestamp()
+                def _is_recent(dt: Optional[datetime]) -> bool:
+                    try:
+                        if not dt:
+                            return False
+                        return (now_ts - dt.timestamp()) <= 24 * 3600
+                    except Exception:
+                        return False
+                results = [r for r in results if _is_recent(r.timestamp)]
                 results.sort(key=lambda x: (x.timestamp or datetime.min), reverse=True)
             except Exception:
                 pass
