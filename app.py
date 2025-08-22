@@ -11035,13 +11035,13 @@ def markets_chat():
                     user_parts.append(f"Contexte (rapports):\n{context_text}\n\n")
                 user_parts.append(f"Question: {user_message}")
                 
-                            # Consigne finale impérative pour forcer l'émission de texte
-            user_parts.append(f"\n\n===\nTÂCHE: {user_message}\n")
-            user_parts.append("Analyse en profondeur si nécessaire. ")
-            user_parts.append("Puis structure ta réponse en 3-5 points numérotés (1), 2), 3)...) + conclusion.\n")
-            user_parts.append("Commence OBLIGATOIREMENT par: OK –\n")
-            user_parts.append("Si information manquante: OK – Besoin de précisions : <liste courte>.\n")
-            user_parts.append("===\nRÉPONSE FINALE (texte brut uniquement) :")
+                # Consigne finale impérative pour forcer l'émission de texte
+                user_parts.append(f"\n\n===\nTÂCHE: {user_message}\n")
+                user_parts.append("Analyse en profondeur si nécessaire. ")
+                user_parts.append("Puis structure ta réponse en 3-5 points numérotés (1), 2), 3)...) + conclusion.\n")
+                user_parts.append("Commence OBLIGATOIREMENT par: OK –\n")
+                user_parts.append("Si information manquante: OK – Besoin de précisions : <liste courte>.\n")
+                user_parts.append("===\nRÉPONSE FINALE (texte brut uniquement) :")
                 
                 user_prompt_final = "".join(user_parts)
 
