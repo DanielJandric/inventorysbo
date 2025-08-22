@@ -1,21 +1,28 @@
-# render.yaml - Configuration Render pour BONVIN Collection
-
 services:
   - type: web
-    name: bonvin-collection
+    name: gpt5-responses-api
     env: python
-    plan: starter  # Changez en 'standard' si besoin de plus de ressources
-    buildCommand: "./build.sh"
-    startCommand: "./start.sh"
-    healthCheckPath: /health
+    region: oregon
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: python flask_gpt5_integration_final.py
     envVars:
       - key: PYTHON_VERSION
-        value: 3.11.4
+        value: 3.12.7
       - key: FLASK_ENV
         value: production
-      - key: SUPABASE_URL
-        sync: false  # À définir dans les variables d'environnement Render
-      - key: SUPABASE_KEY
-        sync: false  # À définir dans les variables d'environnement Render
-      - key: OPENAI_API_KEY
-        sync: false  # À définir dans les variables d'environnement Render
+      - key: FLASK_DEBUG
+        value: False
+      - key: AI_MODEL
+        value: gpt-5
+      - key: AI_COMPLETIONS_MODEL
+        value: gpt-5-chat-latest
+      - key: AI_MODEL_FALLBACK
+        value: gpt-4o
+      - key: MAX_OUTPUT_TOKENS
+        value: 800
+      - key: TIMEOUT_S
+        value: 60
+      - key: FALLBACK_CHAT
+        value: 1
+    healthCheckPath: /api/gpt5/health

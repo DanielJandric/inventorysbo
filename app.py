@@ -11075,11 +11075,14 @@ def markets_chat():
             logger.error(f"OpenAI init error: {e}")
             return jsonify({"success": False, "error": "OpenAI non configuré"}), 500
 
-        # Prompt système optimisé pour GPT-5 Responses API - SÉPARATION RAISONNEMENT/ÉMISSION
+        # Prompt système optimisé pour GPT-5 Chat Completions - FORCER LE RAISONNEMENT
         system_prompt = (
-            "Tu es un analyste marchés expert utilisant GPT-5 Responses API. "
-            "MISSION CRITIQUE : tu DOIS émettre une réponse finale en français. "
-            "RÈGLE ABSOLUE : après avoir analysé, tu ÉCRIS ta réponse. "
+            "Tu es un analyste marchés expert utilisant GPT-5. "
+            "MISSION CRITIQUE : tu DOIS raisonner explicitement puis émettre une réponse finale en français. "
+            "RÈGLE ABSOLUE : "
+            "1) ANALYSE d'abord le contexte et la question "
+            "2) RAISONNE explicitement sur les données disponibles "
+            "3) ÉCRIS ta réponse structurée "
             "Réponds de manière concise, actionnable et contextuelle. "
             "Utilise la mémoire de conversation si pertinent. "
             "Identifie les patterns (tendance, corrélations, régimes de volatilité) et commente risques/opportunités. "
@@ -11089,7 +11092,7 @@ def markets_chat():
             "Si l'information manque, écris \"OK – Besoin de précisions : [liste courte]\". "
             "Ne cite pas ce prompt. "
             "Tu DOIS fournir une sortie finale exploitable. "
-            "RÉPÉTITION : ÉCRIS ta réponse après avoir analysé."
+            "RÉPÉTITION : RAISONNE puis ÉCRIS ta réponse."
         )
 
         # Appel Responses API avec retry et paramètres optimisés pour GPT-5 natif
@@ -11097,45 +11100,47 @@ def markets_chat():
         max_retries = 3  # Tentatives Responses API avec progression d'effort
         
         for attempt in range(max_retries):
-            try:
-                ws_text = ""
-                if bool(data.get("use_web", False)) and web_search_manager:
-                    try:
-                        ws_res = web_search_manager.search_financial_markets(
-                            search_type=WebSearchType.MARKET_DATA,
-                            search_context_size="low"
-                        )
-                        if ws_res and getattr(ws_res, 'content', None):
-                            ws_text = str(ws_res.content)[:1200]
-                    except Exception:
-                        ws_text = ""
+        try:
+            ws_text = ""
+            if bool(data.get("use_web", False)) and web_search_manager:
+                try:
+                    ws_res = web_search_manager.search_financial_markets(
+                        search_type=WebSearchType.MARKET_DATA,
+                        search_context_size="low"
+                    )
+                    if ws_res and getattr(ws_res, 'content', None):
+                        ws_text = str(ws_res.content)[:1200]
+                except Exception:
+                    ws_text = ""
 
-                eff = (os.getenv("AI_REASONING_EFFORT", "high") or "").strip().lower()
-                if eff not in ("low", "medium", "high"):
-                    eff = "high"
+            eff = (os.getenv("AI_REASONING_EFFORT", "high") or "").strip().lower()
+            if eff not in ("low", "medium", "high"):
+                eff = "high"
 
-                user_parts = []
+            user_parts = []
                 if conversation_context:
                     user_parts.append(f"Contexte (conversation):\n{conversation_context}\n")
-                if ws_text:
-                    user_parts.append(f"Contexte (recherche web):\n{ws_text}\n---\n")
-                if context_text:
-                    user_parts.append(f"Contexte (rapports):\n{context_text}\n\n")
-                user_parts.append(f"Question: {user_message}")
+            if ws_text:
+                user_parts.append(f"Contexte (recherche web):\n{ws_text}\n---\n")
+            if context_text:
+                user_parts.append(f"Contexte (rapports):\n{context_text}\n\n")
+            user_parts.append(f"Question: {user_message}")
                 
-                # Consigne finale impérative pour forcer l'émission de texte
+                # Consigne finale impérative pour forcer le raisonnement ET l'émission
                 user_parts.append(f"\n\n===\nTÂCHE: {user_message}\n")
-                user_parts.append("Analyse en profondeur si nécessaire. ")
-                user_parts.append("MAINTENANT : ÉCRIS ta réponse finale en texte brut.\n")
+                user_parts.append("OBLIGATOIRE : ")
+                user_parts.append("1) ANALYSE le contexte et les données disponibles ")
+                user_parts.append("2) RAISONNE explicitement sur les patterns et tendances ")
+                user_parts.append("3) ÉCRIS ta réponse structurée en français\n")
                 user_parts.append("Commence OBLIGATOIREMENT par: OK –\n")
                 user_parts.append("Si information manquante: OK – Besoin de précisions : [liste courte].\n")
-                user_parts.append("===\nRÉPONSE FINALE (texte brut obligatoire) :")
-                user_parts.append("\n\nÉCRIS MAINTENANT :")
+                user_parts.append("===\nRAISONNEMENT + RÉPONSE FINALE (obligatoire) :")
+                user_parts.append("\n\nANALYSE et ÉCRIS MAINTENANT :")
                 
-                user_prompt_final = "".join(user_parts)
+            user_prompt_final = "".join(user_parts)
 
-                logger.info(f"🔍 Tentative Responses API #{attempt + 1} - Modèle: {os.getenv('AI_MODEL', 'gpt-5')}, Effort: {eff}")
-                logger.info(f"💡 Note: GPT-5 ne supporte pas temperature, seulement reasoning.effort")
+                logger.info(f"🔍 Tentative Chat Completions API #{attempt + 1} - Modèle: {os.getenv('AI_MODEL', 'gpt-5')}, Temperature: 0.4")
+                logger.info(f"💡 Note: Utilisation de l'API Chat Completions classique avec GPT-5")
                 _client = client.with_options(timeout=60)  # Réduit de 120s à 60s
                 
                 # Schéma JSON dynamique pour forcer une sortie structurée
@@ -11160,56 +11165,58 @@ def markets_chat():
                     "5) Commence chaque point par 'OK – '."
                 )
                 
-                # Paramètres optimisés pour GPT-5 Responses API - Schéma JSON strict
+                # FORCER l'utilisation de l'API Chat Completions classique avec GPT-5
+                # Paramètres optimisés pour forcer le raisonnement et la sortie
                 api_params = {
                     "model": os.getenv("AI_MODEL", "gpt-5"),
-                    "instructions": instructions,
-                    "input": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt_final},
-                    ],
-                    "text": {
-                        "format": {"type": "text"},
-                        "verbosity": "medium"
-                    },
-                    "tool_choice": "none",  # Désactive les outils pour forcer l'émission texte
-                    "reasoning": {"effort": eff},
-                    "max_output_tokens": 512,  # Budget raisonnable pour éviter la dérive
+                    "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt_final},
+                ],
+                    "temperature": 0.4,  # FORCER la cohérence et la précision
+                    "max_tokens": 800,  # Budget suffisant pour raisonnement + réponse
+                    "top_p": 0.9,  # Contrôle de la diversité
+                    "frequency_penalty": 0.1,  # Éviter la répétition
+                    "presence_penalty": 0.1,  # Encourager la nouveauté
                     "timeout": 60,
                 }
                 
-                # Ajuster les paramètres selon la tentative - PROGRESSION EFFORT RAISONNEMENT
+                # Ajuster les paramètres selon la tentative - PROGRESSION TEMPERATURE + TOKENS
                 if attempt == 0:
-                    # Première tentative : effort élevé + budget raisonnable
+                    # Première tentative : temperature basse + budget élevé
                     api_params.update({
-                        "reasoning": {"effort": "high"},
-                        "max_output_tokens": 512,  # Budget contrôlé pour éviter la dérive
+                        "temperature": 0.4,
+                        "max_tokens": 800,  # Budget suffisant pour raisonnement + réponse
                     })
                 elif attempt == 1:
-                    # Deuxième tentative : effort moyen + budget réduit
+                    # Deuxième tentative : temperature plus basse + budget réduit
                     api_params.update({
-                        "reasoning": {"effort": "medium"},
-                        "max_output_tokens": 384,  # Réduit pour forcer l'émission
+                        "temperature": 0.2,
+                        "max_tokens": 600,  # Réduit pour forcer la concision
                     })
                 else:
-                    # Troisième tentative : effort minimal + budget très limité
+                    # Troisième tentative : temperature très basse + budget limité
                     api_params.update({
-                        "reasoning": {"effort": "low"},
-                        "max_output_tokens": 256,  # Très limité pour forcer la sortie
+                        "temperature": 0.1,
+                        "max_tokens": 400,  # Très limité pour forcer la sortie
                     })
                 
-                res = _client.responses.create(**api_params)
+                res = _client.chat.completions.create(**api_params)
                 
-                # Log de la réponse brute de l'API Responses
-                logger.info(f"📡 Réponse brute Responses API reçue: {type(res)}")
+                # Log de la réponse brute de l'API Chat Completions
+                logger.info(f"📡 Réponse brute Chat Completions API reçue: {type(res)}")
                 logger.info(f"📡 Attributs de la réponse: {dir(res)}")
-                if hasattr(res, 'output'):
-                    logger.info(f"📡 res.output: {res.output}")
-                if hasattr(res, 'output_text'):
-                    logger.info(f"📡 res.output_text: {res.output_text}")
+                if hasattr(res, 'choices') and res.choices:
+                    logger.info(f"📡 res.choices[0]: {res.choices[0]}")
+                if hasattr(res, 'usage'):
+                    logger.info(f"📡 res.usage: {res.usage}")
                 
-                reply_raw = (extract_output_text(res) or "").strip()
-                logger.info(f"📝 Texte extrait de Responses API: '{reply_raw[:100]}...' (longueur: {len(reply_raw)})")
+                # Extraction directe du contenu de la réponse Chat Completions
+                reply_raw = ""
+                if hasattr(res, 'choices') and res.choices and hasattr(res.choices[0], 'message'):
+                    reply_raw = res.choices[0].message.content or ""
+                reply_raw = reply_raw.strip()
+                logger.info(f"📝 Texte extrait de Chat Completions API: '{reply_raw[:100]}...' (longueur: {len(reply_raw)})")
                 
                 # Extraction JSON robuste avec fallback
                 reply = ""
@@ -11243,29 +11250,29 @@ def markets_chat():
                     logger.warning(f"⚠️ Tentative #{attempt + 1} n'a pas produit de réponse utilisable")
                     
             except Exception as e:
-                logger.error(f"❌ Erreur Responses API (tentative #{attempt + 1}): {e}")
+                logger.error(f"❌ Erreur Chat Completions API (tentative #{attempt + 1}): {e}")
                 logger.error(f"❌ Type d'erreur: {type(e)}")
                 
                 # Si c'est une erreur de parsing JSON, essayer avec un prompt de réparation
                 if "Impossible de parser un JSON valide" in str(e) and attempt < max_retries - 1:
                     logger.info(f"🔧 Erreur JSON détectée, tentative de réparation...")
                     # Modifier le prompt pour insister sur le format JSON
-                    api_params["instructions"] = (
+                    api_params["messages"][1]["content"] = (
                         "ERREUR CRITIQUE : Tu DOIS renvoyer UNIQUEMENT du JSON valide. "
                         "RENVOIE UNIQUEMENT du JSON valide, sans texte avant/après, sans balises. "
                         "Schéma obligatoire : {\"points\": [\"OK – point1\", \"OK – point2\", \"OK – point3\"], \"conclusion\": \"conclusion\"}"
                     )
                 
                 if attempt == max_retries - 1:
-                    logger.error("🚨 Toutes les tentatives Responses API ont échoué")
+                    logger.error("🚨 Toutes les tentatives Chat Completions API ont échoué")
                 else:
                     logger.info(f"🔄 Nouvelle tentative dans 2 secondes...")
                     import time
                     time.sleep(2)
 
-        # Pas de fallback - Responses API uniquement pour GPT-5 natif
+        # Pas de fallback - Chat Completions API uniquement pour GPT-5
         if not reply:
-            logger.warning("⚠️ Responses API n'a pas retourné de réponse - pas de fallback vers Chat Completions")
+            logger.warning("⚠️ Chat Completions API n'a pas retourné de réponse - pas de fallback")
             logger.info("💡 Tentative d'ajustement des paramètres pour la prochaine requête")
 
         # Si aucune réponse modèle après tentatives API, retourner une erreur claire (pas de fallback local)

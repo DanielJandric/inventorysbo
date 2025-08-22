@@ -1,11 +1,12 @@
-# Environment variables
+# Sécurité - NE JAMAIS commiter ces fichiers
 .env
 .env.local
 .env.production
 
-# Configuration files with sensitive data
-config.py
-config_example.py
+# Clés API et secrets
+*.key
+*.pem
+secrets.json
 
 # Python
 __pycache__/
@@ -28,14 +29,13 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST
 
 # Virtual environments
 venv/
 env/
 ENV/
 
-# IDE
+# IDEs
 .vscode/
 .idea/
 *.swp
@@ -45,14 +45,11 @@ ENV/
 .DS_Store
 Thumbs.db
 
+# Tests
+.pytest_cache/
+.coverage
+htmlcov/
+
 # Logs
 *.log
-
-# Database
-*.db
-*.sqlite3
-
-# Temporary files
-*.tmp
-*.temp
-
+logs/
