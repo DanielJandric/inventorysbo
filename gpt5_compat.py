@@ -53,12 +53,12 @@ def _extract_output_text_from_response(res: Any) -> str:
                 
                 # Gérer les différents types de réponses
                 if item_type == "message":
-                    # Type message classique
+                    # Type message classique - structure: {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "..."}]}
                     content = getattr(item, "content", None) or (item.get("content") if isinstance(item, dict) else [])
                     for c in content or []:
-                        c_type = getattr(c, "type", None) or (c.get("type") if isinstance(item, dict) else None)
+                        c_type = getattr(c, "type", None) or (c.get("type") if isinstance(c, dict) else None)
                         if c_type in ("output_text", "text"):
-                            t = getattr(c, "text", None) or (c.get("text") if isinstance(item, dict) else "")
+                            t = getattr(c, "text", None) or (c.get("text") if isinstance(c, dict) else "")
                             if t:
                                 parts.append(str(t))
                 
@@ -123,9 +123,20 @@ def _extract_output_text_from_response(res: Any) -> str:
                         if text_content:
                             parts.append(str(text_content))
         
+        # Log pour debug si pas de réponse
+        if not parts:
+            logger = getattr(res, '_logger', None)
+            if logger:
+                logger.warning(f"⚠️ Aucun texte extrait de la réponse Responses API: {type(res)}")
+                logger.warning(f"📡 Structure de la réponse: {res}")
+        
         return " ".join(parts)
         
-    except Exception:
+    except Exception as e:
+        # Log de l'erreur pour debug
+        logger = getattr(res, '_logger', None)
+        if logger:
+            logger.error(f"❌ Erreur lors de l'extraction du texte: {e}")
         return ""
 
 
