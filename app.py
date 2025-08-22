@@ -8432,12 +8432,11 @@ def markets_chat():
             max_out = int(os.getenv("MAX_OUTPUT_TOKENS", "1500"))
             # Enable stateful Responses; reuse previous_response_id if available for this session
             prev_id = responses_prev_ids.get(session_id)
+            # Prefer top-level instructions + string input per Responses docs
             kwargs = {
                 "model": os.getenv("AI_MODEL", "gpt-5"),
-                "input": [
-                    {"role": "system", "content": [{"type": "input_text", "text": system_prompt}]},
-                    {"role": "user", "content": [{"type": "input_text", "text": user_prompt_final}]},
-                ],
+                "instructions": system_prompt,
+                "input": user_prompt_final,
                 "reasoning": {"effort": eff},
                 "max_output_tokens": min(1500, max_out),
                 "store": True,
