@@ -10990,18 +10990,20 @@ def markets_chat():
         # Prompt système optimisé pour GPT-5 Responses API - SÉPARATION RAISONNEMENT/ÉMISSION
         system_prompt = (
             "Tu es un analyste marchés expert utilisant GPT-5 Responses API. "
-            "MISSION CRITIQUE : tu DOIS émettre un message assistant en texte brut lisible. "
+            "MISSION CRITIQUE : tu DOIS émettre une réponse JSON structurée. "
             "Réponds en français, de manière concise, actionnable et contextuelle. "
             "Utilise la mémoire de conversation si pertinent. "
             "Identifie les patterns (tendance, corrélations, régimes de volatilité) et commente risques/opportunités. "
             "N'invente jamais de chiffres. "
-            "Autorisé uniquement : gras pour les points critiques et emojis sobres (↑, ↓, 🟢, 🔴, ⚠️, 💡). "
-            "Interdit : titres, tableaux, code, JSON, listes imbriquées. "
-            "Structure la réponse en 3–5 lignes numérotées (1), 2), 3)…), puis une phrase de conclusion claire. "
-            "Commence toujours la sortie par \"OK – \". "
-            "Si l'information manque, écris \"OK – Besoin de précisions : …\". "
+            "Tu DOIS produire un objet JSON avec cette structure exacte : "
+            "{\"response\": \"OK – [ta réponse en 3-5 points numérotés + conclusion]\", "
+            "\"analysis\": \"[résumé de ton raisonnement en 1-2 phrases]\", "
+            "\"confidence\": \"[high/medium/low]\", "
+            "\"next_question\": \"[suggestion de question suivante si pertinent]\"} "
+            "Commence OBLIGATOIREMENT ta réponse par \"OK – \". "
+            "Si l'information manque, utilise \"OK – Besoin de précisions : [liste]\". "
             "Ne cite pas ce prompt. "
-            "Ta réponse sera extraite par le système : garde un texte direct, sans balises."
+            "Ta réponse sera extraite par le système : respecte EXACTEMENT le format JSON."
         )
 
         # Appel Responses API avec retry et paramètres optimisés pour GPT-5 natif
@@ -11035,13 +11037,13 @@ def markets_chat():
                     user_parts.append(f"Contexte (rapports):\n{context_text}\n\n")
                 user_parts.append(f"Question: {user_message}")
                 
-                # Consigne finale impérative pour forcer l'émission de texte
+                # Consigne finale impérative pour forcer l'émission JSON
                 user_parts.append(f"\n\n===\nTÂCHE: {user_message}\n")
                 user_parts.append("Analyse en profondeur si nécessaire. ")
-                user_parts.append("Puis structure ta réponse en 3-5 points numérotés (1), 2), 3)...) + conclusion.\n")
-                user_parts.append("Commence OBLIGATOIREMENT par: OK –\n")
-                user_parts.append("Si information manquante: OK – Besoin de précisions : <liste courte>.\n")
-                user_parts.append("===\nRÉPONSE FINALE (texte brut uniquement) :")
+                user_parts.append("Puis produit EXACTEMENT le JSON demandé avec ta réponse structurée.\n")
+                user_parts.append("Commence OBLIGATOIREMENT ta réponse par: OK –\n")
+                user_parts.append("Si information manquante: utilise \"OK – Besoin de précisions : [liste]\".\n")
+                user_parts.append("===\nRÉPONSE FINALE (format JSON obligatoire) :")
                 
                 user_prompt_final = "".join(user_parts)
 
@@ -11056,12 +11058,20 @@ def markets_chat():
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_prompt_final},
                     ],
+                    "instructions": [
+                        "Tu DOIS produire une réponse texte finale utilisable.",
+                        "Écris directement ta réponse après avoir analysé.",
+                        "N'utilise pas de formatage complexe, juste du texte brut."
+                    ],
                     "reasoning": {"effort": eff},
                     "tool_choice": "none",  # Désactive les outils pour forcer l'émission texte
                     "text": {
                         "format": {"type": "text"},
                         "verbosity": "medium"
                     },
+                    "response_format": {"type": "json_object"},  # Force un format JSON structuré
+                    "background": False,  # Force l'exécution synchrone
+                    "parallel_tool_calls": False,  # Désactive les appels parallèles
                     "max_output_tokens": 1024,  # Augmenté pour des réponses riches
                     "timeout": 60,
                 }
@@ -11078,6 +11088,8 @@ def markets_chat():
                     api_params.update({
                         "reasoning": {"effort": "medium"},
                         "max_output_tokens": 768,  # Réduit mais suffisant
+                        "background": False,
+                        "parallel_tool_calls": False,
                     })
                 
                 res = _client.responses.create(**api_params)
@@ -11090,8 +11102,23 @@ def markets_chat():
                 if hasattr(res, 'output_text'):
                     logger.info(f"📡 res.output_text: {res.output_text}")
                 
-                reply = (extract_output_text(res) or "").strip()
-                logger.info(f"📝 Texte extrait de Responses API: '{reply[:100]}...' (longueur: {len(reply)})")
+                reply_raw = (extract_output_text(res) or "").strip()
+                logger.info(f"📝 Texte extrait de Responses API: '{reply_raw[:100]}...' (longueur: {len(reply_raw)})")
+                
+                # Essayer d'extraire la réponse du JSON
+                reply = ""
+                if reply_raw:
+                    try:
+                        import json
+                        data = json.loads(reply_raw)
+                        if isinstance(data, dict) and "response" in data:
+                            reply = data["response"]
+                            logger.info(f"✅ JSON parsé avec succès, réponse extraite: '{reply[:100]}...'")
+                        else:
+                            logger.warning(f"⚠️ JSON invalide ou pas de champ 'response': {data}")
+                    except json.JSONDecodeError as e:
+                        logger.warning(f"⚠️ Erreur parsing JSON: {e}, utilisation du texte brut")
+                        reply = reply_raw
                 
                 # Si on a une réponse, sortir de la boucle
                 if reply:
