@@ -8453,7 +8453,10 @@ def markets_chat():
                 pass
         except Exception as _e:
             logger.error(f"Responses API error: {_e}")
-            reply = ""
+            return jsonify({"success": False, "error": f"Responses API error: {_e}"}), 500
+
+        if not reply:
+            return jsonify({"success": False, "error": "Réponse vide du modèle"}), 502
 
         # Persister dans la mémoire
         try:
