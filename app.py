@@ -10987,17 +10987,15 @@ def markets_chat():
             logger.error(f"OpenAI init error: {e}")
             return jsonify({"success": False, "error": "OpenAI non configuré"}), 500
 
-        # Prompt système optimisé pour GPT-5 Responses API - FORCER réponse textuelle
+        # Prompt système optimisé pour GPT-5 Responses API - SÉPARATION RAISONNEMENT/ÉMISSION
         system_prompt = (
             "Tu es un analyste marchés expert utilisant GPT-5 Responses API. "
-            "MISSION CRITIQUE: Tu DOIS répondre avec du texte direct et lisible. "
-            "Réponds en français, de manière concise, actionnable et contextuelle. "
-            "Utilise la mémoire de conversation (si pertinente) pour assurer la continuité et référencer les discussions précédentes. "
+            "Tu raisonnes en profondeur mais tu DOIS produire une sortie texte finale, concise, exploitable. "
+            "Réponds en français, de manière actionnable et contextuelle. "
+            "Utilise la mémoire de conversation (si pertinente) pour assurer la continuité. "
             "Reconnais patterns (tendance, corrélations, régimes de volatilité) et commente risques/opportunités. "
             "N'invente jamais de chiffres. Utilise **gras** pour les points critiques, et des emojis sobres (↑, ↓, 🟢, 🔴, ⚠️, 💡). "
-            "Structure la réponse en 3–5 points maximum, puis une phrase de conclusion claire. "
-            "IMPORTANT: Tu DOIS générer du texte lisible et direct. Évite les structures complexes. "
-            "Ta réponse sera extraite par le système - assure-toi qu'elle soit directement accessible."
+            "IMPORTANT: Tu DOIS conclure par du texte lisible et direct. Évite les structures complexes."
         )
 
         # Appel Responses API avec retry et paramètres optimisés pour GPT-5 natif
@@ -11030,13 +11028,22 @@ def markets_chat():
                 if context_text:
                     user_parts.append(f"Contexte (rapports):\n{context_text}\n\n")
                 user_parts.append(f"Question: {user_message}")
+                
+                # Consigne finale impérative pour forcer l'émission de texte
+                user_parts.append(f"\n\n===\nTÂCHE: {user_message}\n")
+                user_parts.append("Analyse en interne si nécessaire. ")
+                user_parts.append("Puis écris la RÉPONSE FINALE en texte brut, 1–3 paragraphes max.\n")
+                user_parts.append("Commence par: OK –\n")
+                user_parts.append("Si information manquante: OK – Besoin de précisions : <liste courte>.\n")
+                user_parts.append("===\nRÉPONSE FINALE :")
+                
                 user_prompt_final = "".join(user_parts)
 
                 logger.info(f"🔍 Tentative Responses API #{attempt + 1} - Modèle: {os.getenv('AI_MODEL', 'gpt-5')}, Effort: {eff}")
                 logger.info(f"💡 Note: GPT-5 ne supporte pas temperature, seulement reasoning.effort")
                 _client = client.with_options(timeout=60)  # Réduit de 120s à 60s
                 
-                # Paramètres optimisés pour GPT-5 Responses API - forcer réponse textuelle
+                # Paramètres optimisés pour GPT-5 Responses API - SÉPARATION RAISONNEMENT/ÉMISSION
                 api_params = {
                     "model": os.getenv("AI_MODEL", "gpt-5"),
                     "input": [
@@ -11044,22 +11051,27 @@ def markets_chat():
                         {"role": "user", "content": user_prompt_final},
                     ],
                     "reasoning": {"effort": eff},
-                    "max_output_tokens": 1500,
-                    "timeout": 60,  # Réduit de 120s à 60s
+                    "tool_choice": "none",  # Désactive les outils pour forcer l'émission texte
+                    "text": {
+                        "format": {"type": "text"},
+                        "verbosity": "medium"
+                    },
+                    "max_output_tokens": 1024,  # Augmenté pour des réponses riches
+                    "timeout": 60,
                 }
                 
-                # Ajuster les paramètres selon la tentative - forcer réponse textuelle
+                # Ajuster les paramètres selon la tentative - SÉPARATION RAISONNEMENT/ÉMISSION
                 if attempt == 0:
-                    # Première tentative : effort élevé + max_tokens réduit
+                    # Première tentative : effort élevé + tokens riches
                     api_params.update({
                         "reasoning": {"effort": "high"},
-                        "max_output_tokens": 1000,  # Réduit pour forcer la génération
+                        "max_output_tokens": 1024,  # Budget généreux pour réponse riche
                     })
                 else:
-                    # Deuxième tentative : effort moyen + tokens encore plus réduits
+                    # Deuxième tentative : effort réduit si première échoue
                     api_params.update({
                         "reasoning": {"effort": "medium"},
-                        "max_output_tokens": 800,  # Très réduit pour forcer la génération
+                        "max_output_tokens": 768,  # Réduit mais suffisant
                     })
                 
                 res = _client.responses.create(**api_params)
