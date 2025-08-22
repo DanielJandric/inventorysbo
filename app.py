@@ -4246,66 +4246,8 @@ gmail_manager = GmailNotificationManager()
 # Conversation Memory (SQLite local store)
 # ──────────────────────────────────────────────────────────
 
-class ConversationMemoryStore:
-    """SQLite-backed memory store for conversation history per session_id."""
-
-    def __init__(self, db_filename: str = "chat_memory.db"):
-        try:
-            base_dir = os.path.dirname(os.path.abspath(__file__))
-        except Exception:
-            base_dir = os.getcwd()
-        self.db_path = os.path.join(base_dir, db_filename)
-        self._ensure_schema()
-
-    def _connect(self):
-        return sqlite3.connect(self.db_path, check_same_thread=False)
-
-    def _ensure_schema(self):
-        with self._connect() as conn:
-            cur = conn.cursor()
-            cur.execute(
-                """
-                CREATE TABLE IF NOT EXISTS messages (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    session_id TEXT NOT NULL,
-                    role TEXT NOT NULL,
-                    content TEXT NOT NULL,
-                    created_at TEXT NOT NULL
-                )
-                """
-            )
-            # Index for quick retrieval
-            cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, id)")
-            conn.commit()
-
-    def add_message(self, session_id: str, role: str, content: str):
-        try:
-            with self._connect() as conn:
-                cur = conn.cursor()
-                cur.execute(
-                    "INSERT INTO messages(session_id, role, content, created_at) VALUES (?,?,?,?)",
-                    (session_id, role, content, datetime.utcnow().isoformat()),
-                )
-                conn.commit()
-        except Exception:
-            # Memory is best-effort; avoid breaking the request
-            pass
-
-    def get_recent_messages(self, session_id: str, limit: int = 12):
-        try:
-            with self._connect() as conn:
-                cur = conn.cursor()
-                cur.execute(
-                    "SELECT role, content FROM messages WHERE session_id=? ORDER BY id DESC LIMIT ?",
-                    (session_id, max(1, int(limit))),
-                )
-                rows = cur.fetchall()
-                # Return in chronological order
-                return [{"role": r[0], "content": r[1]} for r in reversed(rows)]
-        except Exception:
-            return []
-
-conversation_memory = ConversationMemoryStore()
+# Cette classe a été déplacée plus haut dans le fichier - suppression de la duplication
+# conversation_memory = ConversationMemoryStore()
 
 # ──────────────────────────────────────────────────────────
 # Basic Chatbot Metrics
