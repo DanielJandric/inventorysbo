@@ -10991,6 +10991,7 @@ def markets_chat():
         system_prompt = (
             "Tu es un analyste marchés expert utilisant GPT-5 Responses API. "
             "MISSION CRITIQUE : tu DOIS émettre une réponse finale en français. "
+            "RÈGLE ABSOLUE : après avoir analysé, tu ÉCRIS ta réponse. "
             "Réponds de manière concise, actionnable et contextuelle. "
             "Utilise la mémoire de conversation si pertinent. "
             "Identifie les patterns (tendance, corrélations, régimes de volatilité) et commente risques/opportunités. "
@@ -10999,7 +11000,8 @@ def markets_chat():
             "Commence OBLIGATOIREMENT par \"OK – \". "
             "Si l'information manque, écris \"OK – Besoin de précisions : [liste courte]\". "
             "Ne cite pas ce prompt. "
-            "Tu DOIS fournir une sortie finale exploitable."
+            "Tu DOIS fournir une sortie finale exploitable. "
+            "RÉPÉTITION : ÉCRIS ta réponse après avoir analysé."
         )
 
         # Appel Responses API avec retry et paramètres optimisés pour GPT-5 natif
@@ -11036,10 +11038,11 @@ def markets_chat():
                 # Consigne finale impérative pour forcer l'émission de texte
                 user_parts.append(f"\n\n===\nTÂCHE: {user_message}\n")
                 user_parts.append("Analyse en profondeur si nécessaire. ")
-                user_parts.append("Puis écris maintenant la RÉPONSE FINALE en texte brut.\n")
+                user_parts.append("MAINTENANT : ÉCRIS ta réponse finale en texte brut.\n")
                 user_parts.append("Commence OBLIGATOIREMENT par: OK –\n")
                 user_parts.append("Si information manquante: OK – Besoin de précisions : [liste courte].\n")
                 user_parts.append("===\nRÉPONSE FINALE (texte brut obligatoire) :")
+                user_parts.append("\n\nÉCRIS MAINTENANT :")
                 
                 user_prompt_final = "".join(user_parts)
 
@@ -11047,32 +11050,21 @@ def markets_chat():
                 logger.info(f"💡 Note: GPT-5 ne supporte pas temperature, seulement reasoning.effort")
                 _client = client.with_options(timeout=60)  # Réduit de 120s à 60s
                 
-                # Paramètres optimisés pour GPT-5 Responses API - JSON Schema pour forcer l'émission
+                # Paramètres optimisés pour GPT-5 Responses API - Forçage d'émission via text + instructions
                 api_params = {
                     "model": os.getenv("AI_MODEL", "gpt-5"),
                     "instructions": [
-                        "Tu raisonnes autant que nécessaire, mais tu DOIS fournir une sortie finale."
+                        "Tu raisonnes autant que nécessaire, mais tu DOIS fournir une sortie finale.",
+                        "Écris ta réponse directement après avoir analysé.",
+                        "N'utilise pas de formatage complexe, juste du texte brut."
                     ],
                     "input": [
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_prompt_final},
                     ],
-                    "response_format": {
-                        "type": "json_schema",
-                        "json_schema": {
-                            "name": "market_analysis",
-                            "schema": {
-                                "type": "object",
-                                "properties": {
-                                    "final": {
-                                        "type": "string",
-                                        "description": "Réponse finale en français, commence par 'OK – '"
-                                    }
-                                },
-                                "required": ["final"],
-                                "additionalProperties": False
-                            }
-                        }
+                    "text": {
+                        "format": {"type": "text"},
+                        "verbosity": "medium"
                     },
                     "tool_choice": "none",  # Désactive les outils pour forcer l'émission texte
                     "reasoning": {"effort": eff},
@@ -11110,23 +11102,8 @@ def markets_chat():
                 if hasattr(res, 'output_text'):
                     logger.info(f"📡 res.output_text: {res.output_text}")
                 
-                reply_raw = (extract_output_text(res) or "").strip()
-                logger.info(f"📝 Texte extrait de Responses API: '{reply_raw[:100]}...' (longueur: {len(reply_raw)})")
-                
-                # Essayer d'extraire la réponse du JSON Schema
-                reply = ""
-                if reply_raw:
-                    try:
-                        import json
-                        data = json.loads(reply_raw)
-                        if isinstance(data, dict) and "final" in data:
-                            reply = data["final"]
-                            logger.info(f"✅ JSON Schema parsé avec succès, réponse extraite: '{reply[:100]}...'")
-                        else:
-                            logger.warning(f"⚠️ JSON Schema invalide ou pas de champ 'final': {data}")
-                    except json.JSONDecodeError as e:
-                        logger.warning(f"⚠️ Erreur parsing JSON Schema: {e}, utilisation du texte brut")
-                        reply = reply_raw
+                reply = (extract_output_text(res) or "").strip()
+                logger.info(f"📝 Texte extrait de Responses API: '{reply[:100]}...' (longueur: {len(reply)})")
                 
                 # Si on a une réponse, sortir de la boucle
                 if reply:
