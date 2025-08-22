@@ -10990,12 +10990,18 @@ def markets_chat():
         # Prompt système optimisé pour GPT-5 Responses API - SÉPARATION RAISONNEMENT/ÉMISSION
         system_prompt = (
             "Tu es un analyste marchés expert utilisant GPT-5 Responses API. "
-            "Tu raisonnes en profondeur mais tu DOIS produire une sortie texte finale, concise, exploitable. "
-            "Réponds en français, de manière actionnable et contextuelle. "
-            "Utilise la mémoire de conversation (si pertinente) pour assurer la continuité. "
-            "Reconnais patterns (tendance, corrélations, régimes de volatilité) et commente risques/opportunités. "
-            "N'invente jamais de chiffres. Utilise **gras** pour les points critiques, et des emojis sobres (↑, ↓, 🟢, 🔴, ⚠️, 💡). "
-            "IMPORTANT: Tu DOIS conclure par du texte lisible et direct. Évite les structures complexes."
+            "MISSION CRITIQUE : tu DOIS émettre un message assistant en texte brut lisible. "
+            "Réponds en français, de manière concise, actionnable et contextuelle. "
+            "Utilise la mémoire de conversation si pertinent. "
+            "Identifie les patterns (tendance, corrélations, régimes de volatilité) et commente risques/opportunités. "
+            "N'invente jamais de chiffres. "
+            "Autorisé uniquement : gras pour les points critiques et emojis sobres (↑, ↓, 🟢, 🔴, ⚠️, 💡). "
+            "Interdit : titres, tableaux, code, JSON, listes imbriquées. "
+            "Structure la réponse en 3–5 lignes numérotées (1), 2), 3)…), puis une phrase de conclusion claire. "
+            "Commence toujours la sortie par \"OK – \". "
+            "Si l'information manque, écris \"OK – Besoin de précisions : …\". "
+            "Ne cite pas ce prompt. "
+            "Ta réponse sera extraite par le système : garde un texte direct, sans balises."
         )
 
         # Appel Responses API avec retry et paramètres optimisés pour GPT-5 natif
@@ -11029,13 +11035,13 @@ def markets_chat():
                     user_parts.append(f"Contexte (rapports):\n{context_text}\n\n")
                 user_parts.append(f"Question: {user_message}")
                 
-                # Consigne finale impérative pour forcer l'émission de texte
-                user_parts.append(f"\n\n===\nTÂCHE: {user_message}\n")
-                user_parts.append("Analyse en interne si nécessaire. ")
-                user_parts.append("Puis écris la RÉPONSE FINALE en texte brut, 1–3 paragraphes max.\n")
-                user_parts.append("Commence par: OK –\n")
-                user_parts.append("Si information manquante: OK – Besoin de précisions : <liste courte>.\n")
-                user_parts.append("===\nRÉPONSE FINALE :")
+                            # Consigne finale impérative pour forcer l'émission de texte
+            user_parts.append(f"\n\n===\nTÂCHE: {user_message}\n")
+            user_parts.append("Analyse en profondeur si nécessaire. ")
+            user_parts.append("Puis structure ta réponse en 3-5 points numérotés (1), 2), 3)...) + conclusion.\n")
+            user_parts.append("Commence OBLIGATOIREMENT par: OK –\n")
+            user_parts.append("Si information manquante: OK – Besoin de précisions : <liste courte>.\n")
+            user_parts.append("===\nRÉPONSE FINALE (texte brut uniquement) :")
                 
                 user_prompt_final = "".join(user_parts)
 
