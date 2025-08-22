@@ -4016,7 +4016,7 @@ client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"),
                 {"role": "user", "content": [{"type": "input_text", "text": prompt}]}
             ],
             max_output_tokens=800,
-            timeout=60,
+            timeout=120,
             reasoning_effort="medium"
         )
         
@@ -4064,7 +4064,7 @@ client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"),
                     ],
                     response_format={"type": "json_object"},
                     max_tokens=800,
-                    timeout=60
+                    timeout=120
                 )
                 raw_cc = cc.choices[0].message.content if hasattr(cc, 'choices') else ''
                 result = _safe_parse_json(raw_cc)
@@ -4204,7 +4204,7 @@ client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"),
                     {"role": "user", "content": [{"type": "input_text", "text": prompt}]}
                 ],
                 max_output_tokens=800,
-                timeout=60,
+                timeout=120,
                 reasoning_effort="medium"
             )
             
@@ -4405,7 +4405,7 @@ client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"
                         {"role": "user", "content": prompt}
                     ],
                     max_tokens=800,
-                    timeout=60
+                    timeout=120
                 )
                 
                 market_data = json.loads(response.choices[0].message.content)
@@ -8426,7 +8426,7 @@ def markets_chat():
             user_parts.append(f"Question: {user_message}")
             user_prompt_final = "".join(user_parts)
 
-            _client = client.with_options(timeout=60)
+            _client = client.with_options(timeout=120)
             res = _client.responses.create(
                 model=os.getenv("AI_MODEL", "gpt-5"),
                 input=[
@@ -8435,7 +8435,7 @@ def markets_chat():
                 ],
                 reasoning={"effort": eff},
                 max_output_tokens=1500,
-                timeout=60,
+                timeout=120,
             )
             reply = (extract_output_text(res) or "").strip()
         except Exception:
@@ -8473,7 +8473,7 @@ def markets_chat():
                     model=os.getenv("AI_COMPLETIONS_MODEL", "gpt-5-chat-latest"),
                     messages=cc_messages,
                     max_tokens=1200,
-                    timeout=60,
+                    timeout=120,
                 )
                 reply = (getattr(cc, 'choices', [{}])[0].get('message', {}).get('content') or '').strip()
             except Exception:
