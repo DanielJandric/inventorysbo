@@ -8333,6 +8333,7 @@ def markets_chat():
         try:
             from market_analysis_db import get_market_analysis_db
             db = get_market_analysis_db()
+            # RAG si demandé (texte injecté dans le prompt)
             recent_items = db.get_recent_analyses(limit=4) if use_rag else []
 
             # Scoring naïf par recouvrement de mots-clés question/contexte vs contenu des rapports
@@ -8476,6 +8477,10 @@ def markets_chat():
                 reply = (getattr(cc, 'choices', [{}])[0].get('message', {}).get('content') or '').strip()
             except Exception:
                 reply = ""
+
+        # Si aucune réponse modèle après tentatives API, retourner une erreur claire (pas de fallback local)
+        if not reply:
+            return jsonify({"success": False, "error": "Le modèle n’a renvoyé aucune réponse (timeout ou contenu vide). Réessayez."}), 502
 
         # Persister dans la mémoire
         try:
