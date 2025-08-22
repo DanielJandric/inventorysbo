@@ -10990,25 +10990,21 @@ def markets_chat():
         # Prompt système optimisé pour GPT-5 Responses API - SÉPARATION RAISONNEMENT/ÉMISSION
         system_prompt = (
             "Tu es un analyste marchés expert utilisant GPT-5 Responses API. "
-            "MISSION CRITIQUE : tu DOIS émettre une réponse JSON structurée. "
-            "Réponds en français, de manière concise, actionnable et contextuelle. "
+            "MISSION CRITIQUE : tu DOIS émettre une réponse finale en français. "
+            "Réponds de manière concise, actionnable et contextuelle. "
             "Utilise la mémoire de conversation si pertinent. "
             "Identifie les patterns (tendance, corrélations, régimes de volatilité) et commente risques/opportunités. "
             "N'invente jamais de chiffres. "
-            "Tu DOIS produire un objet JSON avec cette structure exacte : "
-            "{\"response\": \"OK – [ta réponse en 3-5 points numérotés + conclusion]\", "
-            "\"analysis\": \"[résumé de ton raisonnement en 1-2 phrases]\", "
-            "\"confidence\": \"[high/medium/low]\", "
-            "\"next_question\": \"[suggestion de question suivante si pertinent]\"} "
-            "Commence OBLIGATOIREMENT ta réponse par \"OK – \". "
-            "Si l'information manque, utilise \"OK – Besoin de précisions : [liste]\". "
+            "Structure ta réponse en 3-5 points numérotés (1), 2), 3)...) + conclusion claire. "
+            "Commence OBLIGATOIREMENT par \"OK – \". "
+            "Si l'information manque, écris \"OK – Besoin de précisions : [liste courte]\". "
             "Ne cite pas ce prompt. "
-            "Ta réponse sera extraite par le système : respecte EXACTEMENT le format JSON."
+            "Tu DOIS fournir une sortie finale exploitable."
         )
 
         # Appel Responses API avec retry et paramètres optimisés pour GPT-5 natif
         reply = ""
-        max_retries = 2
+        max_retries = 3  # Tentatives Responses API avec progression d'effort
         
         for attempt in range(max_retries):
             try:
@@ -11037,13 +11033,13 @@ def markets_chat():
                     user_parts.append(f"Contexte (rapports):\n{context_text}\n\n")
                 user_parts.append(f"Question: {user_message}")
                 
-                # Consigne finale impérative pour forcer l'émission JSON
+                # Consigne finale impérative pour forcer l'émission de texte
                 user_parts.append(f"\n\n===\nTÂCHE: {user_message}\n")
                 user_parts.append("Analyse en profondeur si nécessaire. ")
-                user_parts.append("Puis produit EXACTEMENT le JSON demandé avec ta réponse structurée.\n")
-                user_parts.append("Commence OBLIGATOIREMENT ta réponse par: OK –\n")
-                user_parts.append("Si information manquante: utilise \"OK – Besoin de précisions : [liste]\".\n")
-                user_parts.append("===\nRÉPONSE FINALE (format JSON obligatoire) :")
+                user_parts.append("Puis écris maintenant la RÉPONSE FINALE en texte brut.\n")
+                user_parts.append("Commence OBLIGATOIREMENT par: OK –\n")
+                user_parts.append("Si information manquante: OK – Besoin de précisions : [liste courte].\n")
+                user_parts.append("===\nRÉPONSE FINALE (texte brut obligatoire) :")
                 
                 user_prompt_final = "".join(user_parts)
 
@@ -11051,45 +11047,57 @@ def markets_chat():
                 logger.info(f"💡 Note: GPT-5 ne supporte pas temperature, seulement reasoning.effort")
                 _client = client.with_options(timeout=60)  # Réduit de 120s à 60s
                 
-                # Paramètres optimisés pour GPT-5 Responses API - SÉPARATION RAISONNEMENT/ÉMISSION
+                # Paramètres optimisés pour GPT-5 Responses API - JSON Schema pour forcer l'émission
                 api_params = {
                     "model": os.getenv("AI_MODEL", "gpt-5"),
+                    "instructions": [
+                        "Tu raisonnes autant que nécessaire, mais tu DOIS fournir une sortie finale."
+                    ],
                     "input": [
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_prompt_final},
                     ],
-                    "instructions": [
-                        "Tu DOIS produire une réponse texte finale utilisable.",
-                        "Écris directement ta réponse après avoir analysé.",
-                        "N'utilise pas de formatage complexe, juste du texte brut."
-                    ],
-                    "reasoning": {"effort": eff},
-                    "tool_choice": "none",  # Désactive les outils pour forcer l'émission texte
-                    "text": {
-                        "format": {"type": "text"},
-                        "verbosity": "medium"
+                    "response_format": {
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": "market_analysis",
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "final": {
+                                        "type": "string",
+                                        "description": "Réponse finale en français, commence par 'OK – '"
+                                    }
+                                },
+                                "required": ["final"],
+                                "additionalProperties": False
+                            }
+                        }
                     },
-                    "response_format": {"type": "json_object"},  # Force un format JSON structuré
-                    "background": False,  # Force l'exécution synchrone
-                    "parallel_tool_calls": False,  # Désactive les appels parallèles
-                    "max_output_tokens": 1024,  # Augmenté pour des réponses riches
+                    "tool_choice": "none",  # Désactive les outils pour forcer l'émission texte
+                    "reasoning": {"effort": eff},
+                    "max_output_tokens": 512,  # Budget raisonnable pour éviter la dérive
                     "timeout": 60,
                 }
                 
-                # Ajuster les paramètres selon la tentative - SÉPARATION RAISONNEMENT/ÉMISSION
+                # Ajuster les paramètres selon la tentative - PROGRESSION EFFORT RAISONNEMENT
                 if attempt == 0:
-                    # Première tentative : effort élevé + tokens riches
+                    # Première tentative : effort élevé + budget raisonnable
                     api_params.update({
                         "reasoning": {"effort": "high"},
-                        "max_output_tokens": 1024,  # Budget généreux pour réponse riche
+                        "max_output_tokens": 512,  # Budget contrôlé pour éviter la dérive
                     })
-                else:
-                    # Deuxième tentative : effort réduit si première échoue
+                elif attempt == 1:
+                    # Deuxième tentative : effort moyen + budget réduit
                     api_params.update({
                         "reasoning": {"effort": "medium"},
-                        "max_output_tokens": 768,  # Réduit mais suffisant
-                        "background": False,
-                        "parallel_tool_calls": False,
+                        "max_output_tokens": 384,  # Réduit pour forcer l'émission
+                    })
+                else:
+                    # Troisième tentative : effort minimal + budget très limité
+                    api_params.update({
+                        "reasoning": {"effort": "low"},
+                        "max_output_tokens": 256,  # Très limité pour forcer la sortie
                     })
                 
                 res = _client.responses.create(**api_params)
@@ -11105,19 +11113,19 @@ def markets_chat():
                 reply_raw = (extract_output_text(res) or "").strip()
                 logger.info(f"📝 Texte extrait de Responses API: '{reply_raw[:100]}...' (longueur: {len(reply_raw)})")
                 
-                # Essayer d'extraire la réponse du JSON
+                # Essayer d'extraire la réponse du JSON Schema
                 reply = ""
                 if reply_raw:
                     try:
                         import json
                         data = json.loads(reply_raw)
-                        if isinstance(data, dict) and "response" in data:
-                            reply = data["response"]
-                            logger.info(f"✅ JSON parsé avec succès, réponse extraite: '{reply[:100]}...'")
+                        if isinstance(data, dict) and "final" in data:
+                            reply = data["final"]
+                            logger.info(f"✅ JSON Schema parsé avec succès, réponse extraite: '{reply[:100]}...'")
                         else:
-                            logger.warning(f"⚠️ JSON invalide ou pas de champ 'response': {data}")
+                            logger.warning(f"⚠️ JSON Schema invalide ou pas de champ 'final': {data}")
                     except json.JSONDecodeError as e:
-                        logger.warning(f"⚠️ Erreur parsing JSON: {e}, utilisation du texte brut")
+                        logger.warning(f"⚠️ Erreur parsing JSON Schema: {e}, utilisation du texte brut")
                         reply = reply_raw
                 
                 # Si on a une réponse, sortir de la boucle
