@@ -1656,6 +1656,9 @@ class ConversationMemoryStore:
 
 conversation_memory = ConversationMemoryStore()
 
+# Store previous Responses API IDs per session to enable stateful conversations
+responses_prev_ids: Dict[str, str] = {}
+
 # ──────────────────────────────────────────────────────────
 # Basic Chatbot Metrics
 # ──────────────────────────────────────────────────────────
@@ -8427,16 +8430,27 @@ def markets_chat():
             user_prompt_final = "".join(user_parts)
 
             max_out = int(os.getenv("MAX_OUTPUT_TOKENS", "1500"))
-            res = client.responses.create(
-                model=os.getenv("AI_MODEL", "gpt-5"),
-                input=[
+            # Enable stateful Responses; reuse previous_response_id if available for this session
+            prev_id = responses_prev_ids.get(session_id)
+            kwargs = {
+                "model": os.getenv("AI_MODEL", "gpt-5"),
+                "input": [
                     {"role": "system", "content": [{"type": "input_text", "text": system_prompt}]},
                     {"role": "user", "content": [{"type": "input_text", "text": user_prompt_final}]},
                 ],
-                reasoning={"effort": eff},
-                max_output_tokens=min(1500, max_out),
-            )
+                "reasoning": {"effort": eff},
+                "max_output_tokens": min(1500, max_out),
+                "store": True,
+            }
+            if prev_id:
+                kwargs["previous_response_id"] = prev_id
+            res = client.responses.create(**kwargs)
             reply = (extract_output_text(res) or "").strip()
+            try:
+                if getattr(res, 'id', None):
+                    responses_prev_ids[session_id] = res.id  # store for next turn
+            except Exception:
+                pass
         except Exception as _e:
             logger.error(f"Responses API error: {_e}")
             reply = ""
