@@ -65,6 +65,94 @@ from enhanced_google_cse_ai_report import EnhancedGoogleCSEAIReport
 from intelligent_scraper import IntelligentScraper, get_scraper
 from gpt5_compat import from_chat_completions_compat, chat_tools_messages, from_responses_simple, extract_output_text
 from scrapingbee_scraper import ScrapingBeeScraper, get_scrapingbee_scraper
+
+# Fonctions d'extraction JSON robuste
+def _strip_bom(s: str) -> str:
+    """Supprime le BOM UTF-8 et les espaces"""
+    return s.lstrip("\ufeff").strip() if s else s
+
+def _find_fenced_json(s: str) -> str | None:
+    """Trouve du JSON dans des fences ```json"""
+    m = re.search(r"```(?:json)?\s*(\{.*?\}|\[.*?\])\s*```", s, flags=re.S)
+    return m.group(1).strip() if m else None
+
+def _find_balanced_json(s: str) -> str | None:
+    """Cherche le premier objet/array JSON équilibré"""
+    start_idxs = [i for i,ch in enumerate(s) if ch in "{["]
+    for start in start_idxs:
+        stack = []
+        for i,ch in enumerate(s[start:], start):
+            if ch in "{[":
+                stack.append(ch)
+            elif ch in "}]":
+                if not stack: break
+                op = stack.pop()
+                if (op == "{" and ch != "}") or (op == "[" and ch != "]"):
+                    break
+                if not stack:
+                    return s[start:i+1]
+    return None
+
+def parse_json_output(text: str):
+    """Parse JSON avec fallbacks multiples"""
+    text = _strip_bom(text)
+    
+    # 1) JSON direct
+    try:
+        return json.loads(text)
+    except Exception:
+        pass
+    
+    # 2) JSON dans fences
+    cand = _find_fenced_json(text)
+    if cand:
+        try:
+            return json.loads(cand)
+        except Exception:
+            pass
+    
+    # 3) Premier bloc JSON équilibré
+    cand = _find_balanced_json(text)
+    if cand:
+        try:
+            return json.loads(cand)
+        except Exception:
+            pass
+    
+    raise ValueError("Impossible de parser un JSON valide dans la sortie modèle.")
+
+def validate_json_shape(obj: dict) -> bool:
+    """Valide la structure du JSON selon notre schéma"""
+    try:
+        if not isinstance(obj, dict):
+            return False
+        if "points" not in obj or "conclusion" not in obj:
+            return False
+        if not isinstance(obj["points"], list) or not all(isinstance(x, str) for x in obj["points"]):
+            return False
+        if not (3 <= len(obj["points"]) <= 5):
+            return False
+        if not isinstance(obj["conclusion"], str):
+            return False
+        return True
+    except Exception:
+        return False
+
+def extract_fallback_text(text: str) -> str:
+    """Extraction de fallback si le JSON échoue"""
+    # Essayer de trouver du texte qui commence par "OK -"
+    lines = text.split('\n')
+    for line in lines:
+        if line.strip().startswith('OK -') or line.strip().startswith('OK –'):
+            return line.strip()
+    
+    # Sinon, retourner les premières lignes non vides
+    non_empty = [line.strip() for line in lines if line.strip()]
+    if non_empty:
+        return non_empty[0]
+    
+    return text[:200] if text else ""
+
 # Remplacé par l'API Manus unifiée
 # Remplacé par l'API Manus unifiée
 
@@ -11050,24 +11138,36 @@ def markets_chat():
                 logger.info(f"💡 Note: GPT-5 ne supporte pas temperature, seulement reasoning.effort")
                 _client = client.with_options(timeout=60)  # Réduit de 120s à 60s
                 
-                # Paramètres optimisés pour GPT-5 Responses API - Forçage d'émission via schema + instructions
+                # Schéma JSON dynamique pour forcer une sortie structurée
+                import json
+                schema = {
+                    "type": "object",
+                    "properties": {
+                        "points": {"type": "array", "items": {"type": "string"}, "minItems": 3, "maxItems": 5},
+                        "conclusion": {"type": "string"}
+                    },
+                    "required": ["points", "conclusion"],
+                    "additionalProperties": False
+                }
+                
+                instructions = (
+                    "Tu es un analyste marchés. Tu raisonnes en interne si nécessaire mais tu DOIS renvoyer une sortie STRICTEMENT JSON, "
+                    "valide UTF-8, sans aucun texte en dehors du JSON, sans balises, sans code block, sans commentaires. "
+                    "Schéma à respecter (JSON Schema):\n"
+                    + json.dumps(schema, ensure_ascii=False) +
+                    "\nRègles: 1) RENVOIE UNIQUEMENT du JSON valide. 2) Pas de markdown, pas de prose. 3) Respecte les clés requises. "
+                    "4) Les 'points' doivent être 3 à 5 lignes concises, 'conclusion' une phrase claire. "
+                    "5) Commence chaque point par 'OK – '."
+                )
+                
+                # Paramètres optimisés pour GPT-5 Responses API - Schéma JSON strict
                 api_params = {
                     "model": os.getenv("AI_MODEL", "gpt-5"),
-                    "instructions": "Tu raisonnes autant que nécessaire, mais tu DOIS fournir une sortie finale. Tu DOIS respecter exactement ce format JSON : {\"final\": \"ta réponse commence par OK - \"}. Écris ta réponse directement après avoir analysé.",
+                    "instructions": instructions,
                     "input": [
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_prompt_final},
                     ],
-                    "schema": {
-                        "type": "object",
-                        "properties": {
-                            "final": {
-                                "type": "string",
-                                "description": "Réponse finale en français, commence par 'OK – '"
-                            }
-                        },
-                        "required": ["final"]
-                    },
                     "text": {
                         "format": {"type": "text"},
                         "verbosity": "medium"
@@ -11111,29 +11211,51 @@ def markets_chat():
                 reply_raw = (extract_output_text(res) or "").strip()
                 logger.info(f"📝 Texte extrait de Responses API: '{reply_raw[:100]}...' (longueur: {len(reply_raw)})")
                 
-                # Essayer d'extraire la réponse du JSON structuré
+                # Extraction JSON robuste avec fallback
                 reply = ""
                 if reply_raw:
                     try:
-                        import json
-                        data = json.loads(reply_raw)
-                        if isinstance(data, dict) and "final" in data:
-                            reply = data["final"]
-                            logger.info(f"✅ JSON structuré parsé avec succès, réponse extraite: '{reply[:100]}...'")
+                        # Log de la requête ID pour diagnostic
+                        if hasattr(res, '_request_id'):
+                            logger.info(f"🔍 Request ID: {res._request_id}")
+                        if hasattr(res, 'usage') and hasattr(res.usage, 'output_tokens_details'):
+                            logger.info(f"📊 Output tokens details: {res.usage.output_tokens_details}")
+                        
+                        # Extraction JSON robuste
+                        data = parse_json_output(reply_raw)
+                        if validate_json_shape(data):
+                            # Construction de la réponse formatée
+                            points_text = "\n".join([f"{i+1}) {point}" for i, point in enumerate(data["points"])])
+                            reply = f"OK – {points_text}\n\n{data['conclusion']}"
+                            logger.info(f"✅ JSON structuré parsé avec succès, réponse formatée: '{reply[:100]}...'")
                         else:
-                            logger.warning(f"⚠️ JSON invalide ou pas de champ 'final': {data}")
-                    except json.JSONDecodeError as e:
-                        logger.warning(f"⚠️ Erreur parsing JSON: {e}, utilisation du texte brut")
-                        reply = reply_raw
+                            logger.warning(f"⚠️ Validation JSON échouée pour: {data}")
+                    except Exception as e:
+                        logger.warning(f"⚠️ Erreur parsing JSON: {e}, tentative de fallback...")
+                        # Fallback : essayer d'extraire du texte brut
+                        reply = extract_fallback_text(reply_raw)
                 
                 # Si on a une réponse, sortir de la boucle
                 if reply:
                     logger.info(f"✅ Réponse obtenue à la tentative #{attempt + 1}")
                     break
+                else:
+                    logger.warning(f"⚠️ Tentative #{attempt + 1} n'a pas produit de réponse utilisable")
                     
             except Exception as e:
                 logger.error(f"❌ Erreur Responses API (tentative #{attempt + 1}): {e}")
                 logger.error(f"❌ Type d'erreur: {type(e)}")
+                
+                # Si c'est une erreur de parsing JSON, essayer avec un prompt de réparation
+                if "Impossible de parser un JSON valide" in str(e) and attempt < max_retries - 1:
+                    logger.info(f"🔧 Erreur JSON détectée, tentative de réparation...")
+                    # Modifier le prompt pour insister sur le format JSON
+                    api_params["instructions"] = (
+                        "ERREUR CRITIQUE : Tu DOIS renvoyer UNIQUEMENT du JSON valide. "
+                        "RENVOIE UNIQUEMENT du JSON valide, sans texte avant/après, sans balises. "
+                        "Schéma obligatoire : {\"points\": [\"OK – point1\", \"OK – point2\", \"OK – point3\"], \"conclusion\": \"conclusion\"}"
+                    )
+                
                 if attempt == max_retries - 1:
                     logger.error("🚨 Toutes les tentatives Responses API ont échoué")
                 else:
