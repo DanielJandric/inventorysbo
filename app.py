@@ -11053,11 +11053,7 @@ def markets_chat():
                 # Paramètres optimisés pour GPT-5 Responses API - Forçage d'émission via text + instructions
                 api_params = {
                     "model": os.getenv("AI_MODEL", "gpt-5"),
-                    "instructions": [
-                        "Tu raisonnes autant que nécessaire, mais tu DOIS fournir une sortie finale.",
-                        "Écris ta réponse directement après avoir analysé.",
-                        "N'utilise pas de formatage complexe, juste du texte brut."
-                    ],
+                    "instructions": "Tu raisonnes autant que nécessaire, mais tu DOIS fournir une sortie finale. Écris ta réponse directement après avoir analysé. N'utilise pas de formatage complexe, juste du texte brut.",
                     "input": [
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_prompt_final},
