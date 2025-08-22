@@ -37,25 +37,94 @@ def _to_responses_input(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 def _extract_output_text_from_response(res: Any) -> str:
     """Best-effort extraction of text from a Responses API result."""
     try:
+        # Vérifier d'abord output_text direct
         text = getattr(res, "output_text", None)
         if text:
-            return text
+            return str(text)
+        
+        # Vérifier les outputs
         outputs = getattr(res, "output", None) or []
         parts: List[str] = []
+        
         for item in outputs:
             try:
+                # Obtenir le type de l'item
                 item_type = getattr(item, "type", None) or (item.get("type") if isinstance(item, dict) else None)
+                
+                # Gérer les différents types de réponses
                 if item_type == "message":
+                    # Type message classique
                     content = getattr(item, "content", None) or (item.get("content") if isinstance(item, dict) else [])
                     for c in content or []:
-                        c_type = getattr(c, "type", None) or (c.get("type") if isinstance(c, dict) else None)
+                        c_type = getattr(c, "type", None) or (c.get("type") if isinstance(item, dict) else None)
                         if c_type in ("output_text", "text"):
-                            t = getattr(c, "text", None) or (c.get("text") if isinstance(c, dict) else "")
+                            t = getattr(c, "text", None) or (c.get("text") if isinstance(item, dict) else "")
                             if t:
                                 parts.append(str(t))
+                
+                elif item_type == "reasoning":
+                    # Type reasoning - chercher dans summary et content
+                    summary = getattr(item, "summary", None) or (item.get("summary") if isinstance(item, dict) else [])
+                    if summary:
+                        for s in summary:
+                            if isinstance(s, str):
+                                parts.append(s)
+                            elif isinstance(s, dict):
+                                text_content = s.get("text") or s.get("content")
+                                if text_content:
+                                    parts.append(str(text_content))
+                    
+                    # Chercher aussi dans content
+                    content = getattr(item, "content", None) or (item.get("content") if isinstance(item, dict) else None)
+                    if content:
+                        if isinstance(content, str):
+                            parts.append(content)
+                        elif isinstance(content, dict):
+                            text_content = content.get("text") or content.get("content")
+                            if text_content:
+                                parts.append(str(text_content))
+                
+                elif item_type == "output_text":
+                    # Type output_text direct
+                    text = getattr(item, "text", None) or (item.get("text") if isinstance(item, dict) else "")
+                    if text:
+                        parts.append(str(text))
+                
+                elif item_type == "text":
+                    # Type text direct
+                    text = getattr(item, "text", None) or (item.get("text") if isinstance(item, dict) else "")
+                    if text:
+                        parts.append(str(text))
+                
+                # Fallback: chercher dans tous les attributs de l'item
+                else:
+                    for attr_name in ["text", "content", "message", "output"]:
+                        attr_value = getattr(item, attr_name, None)
+                        if attr_value:
+                            if isinstance(attr_value, str):
+                                parts.append(attr_value)
+                            elif isinstance(attr_value, dict):
+                                text_content = attr_value.get("text") or attr_value.get("content")
+                                if text_content:
+                                    parts.append(str(text_content))
+                
             except Exception:
                 continue
-        return "".join(parts)
+        
+        # Si on n'a rien trouvé, essayer d'autres attributs de la réponse
+        if not parts:
+            for attr_name in ["text", "content", "message", "response"]:
+                attr_value = getattr(res, attr_name, None)
+                if attr_value:
+                    if isinstance(attr_value, str):
+                        parts.append(attr_value)
+                    elif isinstance(attr_value, dict):
+                        text_content = attr_value.get("text") or attr_value.get("content")
+                        if text_content:
+                            parts.append(str(text_content))
+        
+        return " ".join(parts)
+        
     except Exception:
         return ""
 

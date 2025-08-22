@@ -11090,7 +11090,15 @@ def markets_chat():
                             if hasattr(choice.message, 'content'):
                                 logger.info(f"📡 choice.message.content: {choice.message.content}")
                 
-                reply = (getattr(cc, 'choices', [{}])[0].get('message', {}).get('content') or '').strip()
+                # Extraction correcte pour Chat Completions
+                if cc.choices and len(cc.choices) > 0:
+                    choice = cc.choices[0]
+                    if hasattr(choice, 'message') and choice.message:
+                        reply = (choice.message.content or '').strip()
+                    else:
+                        reply = ''
+                else:
+                    reply = ''
                 logger.info(f"📝 Texte extrait de Chat Completions: '{reply[:100]}...' (longueur: {len(reply)})")
                 
             except Exception as e:
