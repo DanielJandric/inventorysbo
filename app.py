@@ -1653,7 +1653,7 @@ class ConversationMemoryStore:
                 return [{"role": r[0], "content": r[1]} for r in reversed(rows)]
         except Exception:
             return []
-    
+
     def get_conversation_summary(self, session_id: str, max_messages: int = 10):
         """Génère un résumé de la conversation pour éviter de surcharger le contexte."""
         try:
@@ -11005,32 +11005,32 @@ def markets_chat():
         max_retries = 2
         
         for attempt in range(max_retries):
-            try:
-                ws_text = ""
-                if bool(data.get("use_web", False)) and web_search_manager:
-                    try:
-                        ws_res = web_search_manager.search_financial_markets(
-                            search_type=WebSearchType.MARKET_DATA,
-                            search_context_size="low"
-                        )
-                        if ws_res and getattr(ws_res, 'content', None):
-                            ws_text = str(ws_res.content)[:1200]
-                    except Exception:
-                        ws_text = ""
+        try:
+            ws_text = ""
+            if bool(data.get("use_web", False)) and web_search_manager:
+                try:
+                    ws_res = web_search_manager.search_financial_markets(
+                        search_type=WebSearchType.MARKET_DATA,
+                        search_context_size="low"
+                    )
+                    if ws_res and getattr(ws_res, 'content', None):
+                        ws_text = str(ws_res.content)[:1200]
+                except Exception:
+                    ws_text = ""
 
-                eff = (os.getenv("AI_REASONING_EFFORT", "high") or "").strip().lower()
-                if eff not in ("low", "medium", "high"):
-                    eff = "high"
+            eff = (os.getenv("AI_REASONING_EFFORT", "high") or "").strip().lower()
+            if eff not in ("low", "medium", "high"):
+                eff = "high"
 
-                user_parts = []
+            user_parts = []
                 if conversation_context:
                     user_parts.append(f"Contexte (conversation):\n{conversation_context}\n")
-                if ws_text:
-                    user_parts.append(f"Contexte (recherche web):\n{ws_text}\n---\n")
-                if context_text:
-                    user_parts.append(f"Contexte (rapports):\n{context_text}\n\n")
-                user_parts.append(f"Question: {user_message}")
-                user_prompt_final = "".join(user_parts)
+            if ws_text:
+                user_parts.append(f"Contexte (recherche web):\n{ws_text}\n---\n")
+            if context_text:
+                user_parts.append(f"Contexte (rapports):\n{context_text}\n\n")
+            user_parts.append(f"Question: {user_message}")
+            user_prompt_final = "".join(user_parts)
 
                 logger.info(f"🔍 Tentative Responses API #{attempt + 1} - Modèle: {os.getenv('AI_MODEL', 'gpt-5')}, Effort: {eff}")
                 logger.info(f"💡 Note: GPT-5 ne supporte pas temperature, seulement reasoning.effort")
@@ -11040,9 +11040,9 @@ def markets_chat():
                 api_params = {
                     "model": os.getenv("AI_MODEL", "gpt-5"),
                     "input": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt_final},
-                    ],
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt_final},
+                ],
                     "reasoning": {"effort": eff},
                     "max_output_tokens": 1500,
                     "timeout": 60,  # Réduit de 120s à 60s
@@ -11072,7 +11072,7 @@ def markets_chat():
                 if hasattr(res, 'output_text'):
                     logger.info(f"📡 res.output_text: {res.output_text}")
                 
-                reply = (extract_output_text(res) or "").strip()
+            reply = (extract_output_text(res) or "").strip()
                 logger.info(f"📝 Texte extrait de Responses API: '{reply[:100]}...' (longueur: {len(reply)})")
                 
                 # Si on a une réponse, sortir de la boucle
