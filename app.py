@@ -8382,10 +8382,11 @@ def markets_chat():
             # Si la BDD ou la désérialisation pose souci, continuer sans contexte
             context_text = (f"Contexte additionnel (utilisateur):\n{extra_context}\n---\n" if extra_context else "")
 
-        # Client OpenAI
+        # Client OpenAI (GPT-5 pur) avec timeout global
         try:
             from openai import OpenAI
-            client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+            timeout_s = int(os.getenv('TIMEOUT_S', '60'))
+            client = OpenAI(timeout=timeout_s)
         except Exception as e:
             logger.error(f"OpenAI init error: {e}")
             return jsonify({"success": False, "error": "OpenAI non configuré"}), 500
@@ -8399,7 +8400,7 @@ def markets_chat():
             "Structure la réponse en 3–5 points maximum, puis une phrase de conclusion claire."
         )
 
-        # Appel Responses API (format role/content) avec web injecté en texte si demandé
+        # Appel Responses API (GPT-5 pur) avec web en texte si demandé
         try:
             ws_text = ""
             if bool(data.get("use_web", False)) and web_search_manager:
@@ -8425,57 +8426,20 @@ def markets_chat():
             user_parts.append(f"Question: {user_message}")
             user_prompt_final = "".join(user_parts)
 
-            _client = client.with_options(timeout=60)
-            res = _client.responses.create(
+            max_out = int(os.getenv("MAX_OUTPUT_TOKENS", "1500"))
+            res = client.responses.create(
                 model=os.getenv("AI_MODEL", "gpt-5"),
                 input=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt_final},
+                    {"role": "system", "content": [{"type": "input_text", "text": system_prompt}]},
+                    {"role": "user", "content": [{"type": "input_text", "text": user_prompt_final}]},
                 ],
                 reasoning={"effort": eff},
-                max_output_tokens=1500,
+                max_output_tokens=min(1500, max_out),
             )
             reply = (extract_output_text(res) or "").strip()
-        except Exception:
+        except Exception as _e:
+            logger.error(f"Responses API error: {_e}")
             reply = ""
-
-        # Fallback final: Chat Completions si texte vide (en pré-injectant un court contexte + web si demandé)
-        if not reply:
-            try:
-                # Web search rapide si demandé
-                ws_text = ""
-                if use_web and web_search_manager:
-                    try:
-                        ws_res = web_search_manager.search_financial_markets(
-                            search_type=WebSearchType.MARKET_DATA,
-                            search_context_size="low"
-                        )
-                        if ws_res and getattr(ws_res, 'content', None):
-                            ws_text = str(ws_res.content)[:1200]
-                    except Exception:
-                        ws_text = ""
-
-                # Contexte court (RAG déjà compacté)
-                cc_messages = [
-                    {"role": "system", "content": system_prompt},
-                ]
-                if ws_text:
-                    cc_messages.append({"role": "user", "content": f"Contexte (recherche web):\n{ws_text}"})
-                if context_text:
-                    short_ctx = context_text[:1200]
-                    cc_messages.append({"role": "user", "content": f"Contexte (rapports):\n{short_ctx}"})
-                cc_messages.append({"role": "user", "content": f"Question: {user_message}"})
-
-                cc = from_chat_completions_compat(
-                    client=client,
-                    model=os.getenv("AI_COMPLETIONS_MODEL", "gpt-5-chat-latest"),
-                    messages=cc_messages,
-                    max_tokens=1200,
-                    timeout=60,
-                )
-                reply = (getattr(cc, 'choices', [{}])[0].get('message', {}).get('content') or '').strip()
-            except Exception:
-                reply = ""
 
         # Persister dans la mémoire
         try:
