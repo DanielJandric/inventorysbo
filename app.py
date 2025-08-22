@@ -11018,9 +11018,10 @@ def markets_chat():
                 user_prompt_final = "".join(user_parts)
 
                 logger.info(f"🔍 Tentative Responses API #{attempt + 1} - Modèle: {os.getenv('AI_MODEL', 'gpt-5')}, Effort: {eff}")
+                logger.info(f"💡 Note: GPT-5 ne supporte pas temperature, seulement reasoning.effort et response_format")
                 _client = client.with_options(timeout=120)
                 
-                # Paramètres optimisés pour GPT-5 natif
+                # Paramètres optimisés pour GPT-5 natif (sans temperature - non supporté)
                 api_params = {
                     "model": os.getenv("AI_MODEL", "gpt-5"),
                     "input": [
@@ -11037,12 +11038,10 @@ def markets_chat():
                     # Première tentative : format texte strict
                     api_params.update({
                         "response_format": {"type": "text"},
-                        "temperature": 0.1,
                     })
                 else:
-                    # Deuxième tentative : format plus flexible
+                    # Deuxième tentative : effort réduit pour plus de stabilité
                     api_params.update({
-                        "temperature": 0.0,  # Plus déterministe
                         "reasoning": {"effort": "medium"},  # Effort réduit
                     })
                 
