@@ -2550,6 +2550,2591 @@ Réponds de manière concise et directe."""
             if not ai_response:
                 # Fallback to Responses API (no Completions)
                 resp = from_responses_simple(
+                    client=self.client, 
+                    model=os.getenv("AI_MODEL", "gpt-5"),
+                    messages=[
+                        {"role": m["role"], "content": [{"type": "input_text", "text": m["content"]}]} if isinstance(m.get("content"), str) else m
+                        for m in messages
+                    ],
+                    max_output_tokens=800,
+                    reasoning_effort="medium"
+                )
+                ai_response = (extract_output_text(resp) or "").strip()
+            
+            # Cache la réponse
+            smart_cache.set('ai_responses', ai_response, cache_key)
+            
+            # Pas d'indicateur de mémoire - réponses directes
+            
+            return ai_response
+            
+        except Exception as e:
+            logger.error(f"Erreur analyse complète: {e}")
+            return "❌ Erreur lors de l'analyse. Veuillez reformuler votre question."
+    
+    def _generate_semantic_response(self, query: str, items: List[CollectionItem], analytics: Dict[str, Any]) -> str:
+        """Génère une réponse via recherche sémantique (sans historique)"""
+        return self._generate_semantic_response_with_history(query, items, analytics, [])
+    
+    def _generate_semantic_response_with_history(self, query: str, items: List[CollectionItem], analytics: Dict[str, Any], conversation_history: List[Dict[str, str]]) -> str:
+        """Génère une réponse en utilisant la recherche sémantique RAG"""
+        try:
+            # Vérifier d'abord si nous avons des embeddings
+            items_with_embeddings = sum(1 for item in items if item.embedding)
+            logger.info(f"Recherche sémantique - Items avec embeddings: {items_with_embeddings}/{len(items)}")
+            
+            if items_with_embeddings == 0:
+                logger.warning("Aucun embedding disponible, utilisation de l'analyse complète")
+                return self._generate_full_context_response_with_history(query, items, analytics, conversation_history, True)
+            
+            # Recherche sémantique
+            semantic_results = self.semantic_search.semantic_search(query, items, top_k=15)
+            
+            if not semantic_results:
+                logger.warning("Pas de résultats sémantiques, utilisation de l'analyse complète")
+                return self._generate_full_context_response_with_history(query, items, analytics, conversation_history, True)
+            
+            # Filtrer les résultats pertinents (score > 0.3 au lieu de 0.5 pour être plus inclusif)
+            relevant_results = [(item, score) for item, score in semantic_results if score > 0.3]
+            
+            if not relevant_results:
+                # Si pas de résultats très pertinents, prendre les 15 meilleurs
+                relevant_results = semantic_results[:15]
+            
+            logger.info(f"Résultats sémantiques trouvés: {len(relevant_results)} items pertinents")
+            
+            # Construire le contexte RAG
+            rag_context = self._build_rag_context(relevant_results, query)
+            
+            # Prompt pour GPT avec contexte RAG et mémoire conversationnelle
+            system_prompt = """Tu es l'assistant IA expert de la collection BONVIN. Réponds de manière concise et directe.
+
+RÈGLES:
+1. Base-toi sur les résultats de recherche sémantique
+2. Sois intelligent dans l'interprétation (marques, catégories, prix, etc.)
+3. Donne le nombre exact trouvé
+4. Pour les prix/valeurs, calcule les totaux
+5. Utilise l'historique pour contextualiser
+6. Réponses courtes et précises
+7. Emojis sobres (📈/📉, 🟢/🟡/🔴, ⚠️, 💡) pour signaler tendances/risques — 1–2 max; jamais dans les chiffres"""
+
+            # Construire les messages avec historique
+            messages = [{"role": "system", "content": system_prompt}]
+            
+            # Ajouter l'historique de conversation (limité à 6 messages pour éviter les tokens excessifs)
+            for msg in conversation_history[-6:]:
+                if msg.get('role') in ['user', 'assistant'] and msg.get('content'):
+                    messages.append({
+                        "role": msg['role'],
+                        "content": msg['content']
+                    })
+
+            user_prompt = f"""RECHERCHE: {query}
+
+RÉSULTATS ({len(relevant_results)} objets):
+{rag_context}
+
+Réponds de manière concise et directe."""
+
+            messages.append({"role": "user", "content": user_prompt})
+
+            resp = from_responses_simple(
+                client=self.client, 
+                model=os.getenv("AI_MODEL", "gpt-5"),
+                messages=messages,
+                max_output_tokens=800,
+                reasoning_effort="medium"
+            )
+            ai_response = (extract_output_text(resp) or "").strip()
+            
+            # Cache la réponse
+            smart_cache.set('ai_responses', ai_response, cache_key)
+            
+            return ai_response
+            
+        except Exception as e:
+            logger.error(f"Erreur recherche sémantique: {e}")
+            return "❌ Erreur lors de la recherche. Veuillez reformuler votre question."
+
+# Import configuration locale
+try:
+    import config
+    print("✅ Configuration locale chargée")
+    # Utiliser les variables du fichier config.py
+    SUPABASE_URL = getattr(config, 'SUPABASE_URL', os.getenv("SUPABASE_URL"))
+    SUPABASE_KEY = getattr(config, 'SUPABASE_KEY', os.getenv("SUPABASE_KEY"))
+    OPENAI_API_KEY = getattr(config, 'OPENAI_API_KEY', os.getenv("OPENAI_API_KEY"))
+    # Propager dans l'environnement pour les modules qui lisent os.getenv directement
+    try:
+        if SUPABASE_URL and not os.getenv("SUPABASE_URL"):
+            os.environ["SUPABASE_URL"] = str(SUPABASE_URL)
+        if SUPABASE_KEY and not os.getenv("SUPABASE_KEY"):
+            os.environ["SUPABASE_KEY"] = str(SUPABASE_KEY)
+        if OPENAI_API_KEY and not os.getenv("OPENAI_API_KEY"):
+            os.environ["OPENAI_API_KEY"] = str(OPENAI_API_KEY)
+    except Exception:
+        pass
+except ImportError:
+    print("⚠️ Fichier config.py non trouvé, utilisation des variables d'environnement")
+    SUPABASE_URL = os.getenv("SUPABASE_URL")
+    SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+# Configuration logging sophistiquée
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# APIs Manus unifiées - Remplace toutes les autres APIs
+# stock_price_manager = StockPriceManager()  # Remplacé par Manus
+
+# Google CSE comme source principale pour les données boursières
+google_cse_stock_manager = GoogleCSEStockDataManager()
+
+# Instance globale du scraper pour éviter les problèmes de gestion des tâches
+_global_scraper = None
+
+def get_global_scraper():
+    """Retourne l'instance globale du scraper"""
+    global _global_scraper
+    if _global_scraper is None:
+        from scrapingbee_scraper import get_scrapingbee_scraper
+        _global_scraper = get_scrapingbee_scraper()
+    return _global_scraper
+
+
+
+# Cache pour les taux de change avec expiration
+forex_cache = {}
+FOREX_CACHE_DURATION = 3600  # 1 heure
+
+# Classes de données sophistiquées
+@dataclass
+class CollectionItem:
+    """Modèle de données enrichi pour un objet de collection"""
+    name: str
+    category: str
+    status: str
+    id: Optional[int] = None
+    construction_year: Optional[int] = None
+    condition: Optional[str] = None
+    description: Optional[str] = None
+    current_value: Optional[float] = None
+    sold_price: Optional[float] = None
+    acquisition_price: Optional[float] = None
+    for_sale: bool = False
+    sale_status: Optional[str] = None
+    sale_progress: Optional[str] = None
+    buyer_contact: Optional[str] = None
+    intermediary: Optional[str] = None
+    current_offer: Optional[float] = None
+    commission_rate: Optional[float] = None
+    last_action_date: Optional[str] = None
+    surface_m2: Optional[float] = None
+    rental_income_chf: Optional[float] = None
+    location: Optional[str] = None
+    # Champs spécifiques aux actions
+    stock_symbol: Optional[str] = None
+    stock_quantity: Optional[int] = None
+    stock_purchase_price: Optional[float] = None
+    stock_exchange: Optional[str] = None
+    stock_currency: Optional[str] = None
+    current_price: Optional[float] = None
+    last_price_update: Optional[str] = None
+    # Métriques boursières supplémentaires
+    stock_volume: Optional[int] = None
+    stock_pe_ratio: Optional[float] = None
+    stock_52_week_high: Optional[float] = None
+    stock_52_week_low: Optional[float] = None
+    stock_change: Optional[float] = None
+    stock_change_percent: Optional[float] = None
+    stock_average_volume: Optional[int] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    embedding: Optional[List[float]] = None
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convertit en dictionnaire"""
+        return {k: v for k, v in asdict(self).items() if v is not None}
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'CollectionItem':
+        """Crée une instance depuis un dictionnaire"""
+        # Filtrer seulement les champs valides
+        valid_fields = {k: v for k, v in data.items() if k in cls.__annotations__}
+        return cls(**valid_fields)
+
+class QueryIntent(Enum):
+    """Types d'intentions sophistiquées"""
+    VEHICLE_ANALYSIS = "vehicle_analysis"
+    FINANCIAL_ANALYSIS = "financial_analysis"
+    SALE_PROGRESS_TRACKING = "sale_progress_tracking"
+    MARKET_INTELLIGENCE = "market_intelligence"
+    CATEGORY_ANALYTICS = "category_analytics"
+    PERFORMANCE_METRICS = "performance_metrics"
+    PORTFOLIO_OPTIMIZATION = "portfolio_optimization"
+    TECHNICAL_SPECS = "technical_specs"
+    SEMANTIC_SEARCH = "semantic_search"
+    UNKNOWN = "unknown"
+
+# Variables d'environnement avec validation (déjà définies ci-dessus)
+APP_URL = os.getenv("APP_URL", "https://inventorysbo.onrender.com")
+
+# Variables d'environnement pour Gmail
+EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+EMAIL_USER = os.getenv("EMAIL_USER")
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
+EMAIL_RECIPIENTS = os.getenv("EMAIL_RECIPIENTS", "").split(",")
+
+FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY")
+
+# Configuration Manus API pour données boursières
+# API boursière principale pour les prix d'actions
+
+# Configuration mise à jour automatique des prix (6x/jour)
+AUTO_UPDATE_TIMES = [
+    "09:00",  # Ouverture bourse suisse
+    "11:00",  # Milieu matinée
+    "13:00",  # Début après-midi
+    "15:00",  # Milieu après-midi
+    "17:00",  # Fermeture bourse suisse
+    "21:30"   # Soirée (après les marchés US)
+]
+
+# Configuration Market Updates
+MARKET_UPDATE_TIME = "21:30"  # Heure de génération automatique
+MARKET_UPDATE_TIMEZONE = "Europe/Paris"  # Timezone pour les updates
+
+# Configuration API Manus pour rapports financiers
+MANUS_API_BASE_URL = "https://e5h6i7cn86z0.manus.space"
+
+# Configuration FreeCurrency (pour conversion USD/EUR vers CHF)
+FREECURRENCY_API_KEY = os.getenv("FREECURRENCY_API_KEY", "fca_live_MhoTdTd6auvKD1Dr5kVQ7ua9SwgGPApjylr3CrRe")
+
+# Vérifier que les variables sont définies
+if not SUPABASE_URL or not SUPABASE_KEY:
+    logger.error("Variables d'environnement manquantes")
+    logger.error(f"SUPABASE_URL: {'✅' if SUPABASE_URL else '❌'}")
+    logger.error(f"SUPABASE_KEY: {'✅' if SUPABASE_KEY else '❌'}")
+    raise EnvironmentError("SUPABASE_URL et SUPABASE_KEY sont requis")
+
+logger.info("Variables d'environnement validees")
+
+# Connexions avec gestion d'erreurs
+supabase = None
+openai_client = None
+gemini_client = None
+
+try:
+    from supabase import create_client
+    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+    logger.info("Supabase connecte")
+except Exception as e:
+    logger.error(f"Erreur Supabase: {e}")
+    raise
+
+try:
+    if OPENAI_API_KEY:
+        from openai import OpenAI
+        openai_client = OpenAI(api_key=OPENAI_API_KEY)
+        logger.info("OpenAI connecte")
+    else:
+        logger.warning("⚠️ OpenAI non configuré")
+except Exception as e:
+    logger.warning(f"⚠️ OpenAI non disponible: {e}")
+
+# Initialize Web Search Manager
+web_search_manager = None
+if openai_client:
+    try:
+        web_search_manager = create_web_search_manager(openai_client)
+        logger.info("✅ Gestionnaire de recherche web initialisé")
+    except Exception as e:
+        logger.error(f"❌ Erreur initialisation Web Search Manager: {e}")
+else:
+    logger.warning("⚠️ Gestionnaire de recherche web non disponible (OpenAI non configuré)")
+
+# Initialize Google Search Manager
+google_search_manager = None
+try:
+    google_search_manager = create_google_search_manager()
+    if google_search_manager:
+        logger.info("✅ Gestionnaire de recherche Google initialisé")
+    else:
+        logger.warning("⚠️ Gestionnaire de recherche Google non disponible (configuration manquante)")
+except Exception as e:
+    logger.error(f"❌ Erreur initialisation Google Search Manager: {e}")
+
+# Initialize Unified Market Manager
+unified_market_manager = None
+try:
+    unified_market_manager = create_unified_market_manager()
+    if unified_market_manager:
+        logger.info("✅ Gestionnaire de marché unifié initialisé")
+    else:
+        logger.warning("⚠️ Gestionnaire de marché unifié non disponible")
+except Exception as e:
+    logger.error(f"❌ Erreur initialisation Unified Market Manager: {e}")
+
+# Initialize Enhanced Google CSE AI Report Manager
+enhanced_ai_report_manager = None
+try:
+    enhanced_ai_report_manager = EnhancedGoogleCSEAIReport()
+    logger.info("✅ Gestionnaire de rapports IA Google CSE enrichi initialisé")
+except Exception as e:
+    logger.error(f"❌ Erreur initialisation Enhanced AI Report Manager: {e}")
+
+# Initialize Intelligent Scraper (DÉSACTIVÉ - Problème Playwright sur Render)
+intelligent_scraper_manager = None
+# try:
+#     intelligent_scraper_manager = IntelligentScraper()
+#     # Initialiser le navigateur de manière synchrone
+#     intelligent_scraper_manager.initialize_sync()
+#     logger.info("✅ Scraper intelligent initialisé")
+# except Exception as e:
+#     logger.error(f"❌ Erreur initialisation Intelligent Scraper: {e}")
+logger.info("⚠️ Intelligent Scraper désactivé (Playwright non disponible sur Render)")
+
+# Initialize ScrapingBee Scraper
+scrapingbee_scraper_manager = None
+try:
+    scrapingbee_scraper_manager = get_scrapingbee_scraper()
+    scrapingbee_scraper_manager.initialize_sync()
+    logger.info("✅ ScrapingBee Scraper initialisé")
+except Exception as e:
+    logger.error(f"❌ Erreur initialisation ScrapingBee Scraper: {e}")
+
+# ──────────────────────────────────────────────────────────
+# Gemini 2.5 client (SDK google-genai)
+# ──────────────────────────────────────────────────────────
+# Configuration Gemini - SUPPRIMÉ
+gemini_client = None
+
+# CSS optimisé pour PDFs noir et blanc professionnels
+def get_optimized_pdf_css():
+    """Retourne un CSS optimisé pour PDFs noir et blanc avec styles professionnels"""
+    return '''
+    @page {
+        size: A4;
+        margin: 0.75in;
+        @top-center {
+            content: "BONVIN - Collection Privée";
+            font-size: 9pt;
+            font-family: Arial, sans-serif;
+            color: #333;
+        }
+        @bottom-center {
+            content: "Page " counter(page) " sur " counter(pages);
+            font-size: 9pt;
+            font-family: Arial, sans-serif;
+            color: #333;
+        }
+    }
+    
+    /* Reset et base */
+    * {
+        box-sizing: border-box;
+    }
+    
+    body {
+        font-family: Arial, sans-serif;
+        font-size: 10pt;
+        line-height: 1.4;
+        color: #000;
+        margin: 0;
+        padding: 0;
+        background: white;
+    }
+    
+    /* En-têtes */
+    .header {
+        text-align: center;
+        margin-bottom: 2em;
+        padding-bottom: 1em;
+        border-bottom: 2px solid #000;
+    }
+    
+    .header h1 {
+        font-size: 18pt;
+        font-weight: bold;
+        margin: 0 0 0.5em 0;
+        color: #000;
+    }
+    
+    .header .subtitle {
+        font-size: 12pt;
+        color: #333;
+        margin: 0;
+    }
+    
+    .header .date {
+        font-size: 10pt;
+        color: #666;
+        margin-top: 0.5em;
+    }
+    
+    /* Sections */
+    .section {
+        margin-bottom: 2em;
+        page-break-inside: avoid;
+    }
+    
+    .section-title {
+        font-size: 14pt;
+        font-weight: bold;
+        margin-bottom: 1em;
+        color: #000;
+        border-bottom: 1px solid #333;
+        padding-bottom: 0.5em;
+        text-transform: uppercase;
+        letter-spacing: 0.5pt;
+    }
+    
+    /* Items */
+    .item {
+        margin-bottom: 1em;
+        padding: 0.75em;
+        border: 1px solid #ccc;
+        border-radius: 3px;
+        background: #fafafa;
+        page-break-inside: avoid;
+    }
+    
+    .item-name {
+        font-weight: bold;
+        font-size: 11pt;
+        color: #000;
+        margin-bottom: 0.5em;
+    }
+    
+    .item-details {
+        color: #333;
+        font-size: 9pt;
+        line-height: 1.3;
+    }
+    
+    .item-details strong {
+        color: #000;
+    }
+    
+    /* Prix et valeurs */
+    .price {
+        font-weight: bold;
+        font-size: 11pt;
+        color: #000;
+        background: #f0f0f0;
+        padding: 0.25em 0.5em;
+        border-radius: 2px;
+        display: inline-block;
+    }
+    
+    .value-highlight {
+        font-weight: bold;
+        color: #000;
+        background: #e8e8e8;
+        padding: 0.2em 0.4em;
+        border-radius: 2px;
+    }
+    
+    /* Statuts avec styles distinctifs */
+    .status-available { 
+        color: #000; 
+        font-weight: bold;
+        background: #e8f5e8;
+        padding: 0.2em 0.4em;
+        border-radius: 2px;
+        border: 1px solid #ccc;
+    }
+    .status-for-sale { 
+        color: #000; 
+        font-weight: bold;
+        background: #fff3cd;
+        padding: 0.2em 0.4em;
+        border-radius: 2px;
+        border: 1px solid #ccc;
+    }
+    .status-sold { 
+        color: #000; 
+        font-weight: bold;
+        background: #f8d7da;
+        padding: 0.2em 0.4em;
+        border-radius: 2px;
+        border: 1px solid #ccc;
+    }
+    
+    /* Tableaux optimisés */
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 1em;
+        font-size: 9pt;
+        page-break-inside: avoid;
+    }
+    
+    th {
+        background-color: #333;
+        color: white;
+        font-weight: bold;
+        padding: 0.5em;
+        text-align: left;
+        border: 1px solid #000;
+        font-size: 9pt;
+    }
+    
+    td {
+        border: 1px solid #ccc;
+        padding: 0.4em;
+        text-align: left;
+        vertical-align: top;
+    }
+    
+    tr:nth-child(even) {
+        background-color: #f9f9f9;
+    }
+    
+    tr:hover {
+        background-color: #f0f0f0;
+    }
+    
+    /* Résumés et statistiques */
+    .summary-box {
+        border: 2px solid #333;
+        padding: 1em;
+        margin: 1em 0;
+        background: #f8f8f8;
+        page-break-inside: avoid;
+    }
+    
+    .summary-title {
+        font-size: 12pt;
+        font-weight: bold;
+        color: #000;
+        margin-bottom: 0.5em;
+        border-bottom: 1px solid #333;
+        padding-bottom: 0.25em;
+    }
+    
+    .summary-item {
+        margin-bottom: 0.5em;
+        display: flex;
+        justify-content: space-between;
+    }
+    
+    .summary-label {
+        font-weight: bold;
+        color: #333;
+    }
+    
+    .summary-value {
+        font-weight: bold;
+        color: #000;
+    }
+    
+    /* Grilles et layouts */
+    .grid-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1em;
+        margin-bottom: 1em;
+    }
+    
+    .grid-3 {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 1em;
+        margin-bottom: 1em;
+    }
+    
+    /* Utilitaires */
+    .text-center { text-align: center; }
+    .text-right { text-align: right; }
+    .text-bold { font-weight: bold; }
+    .text-small { font-size: 8pt; }
+    .text-large { font-size: 12pt; }
+    
+    .mb-1 { margin-bottom: 0.5em; }
+    .mb-2 { margin-bottom: 1em; }
+    .mb-3 { margin-bottom: 1.5em; }
+    
+    .mt-1 { margin-top: 0.5em; }
+    .mt-2 { margin-top: 1em; }
+    .mt-3 { margin-top: 1.5em; }
+    
+    /* Saut de page contrôlé */
+    .page-break { page-break-before: always; }
+    .no-break { page-break-inside: avoid; }
+    
+    /* Notes et commentaires */
+    .note {
+        font-size: 8pt;
+        color: #666;
+        font-style: italic;
+        border-left: 2px solid #ccc;
+        padding-left: 0.5em;
+        margin: 0.5em 0;
+    }
+    
+    /* Codes et références */
+    .code {
+        font-family: 'Courier New', monospace;
+        background: #f0f0f0;
+        padding: 0.2em 0.4em;
+        border-radius: 2px;
+        font-size: 8pt;
+    }
+    '''
+
+# Fonction utilitaire pour générer des PDFs optimisés
+def generate_optimized_pdf(html_content: str, css_string: str, filename: str):
+    """Génère un PDF optimisé avec gestion d'erreur mémoire"""
+    try:
+        from weasyprint import HTML, CSS
+        from weasyprint.text.fonts import FontConfiguration
+        
+        # Configuration des polices
+        font_config = FontConfiguration()
+        
+        # Créer le PDF avec optimisations mémoire
+        html_doc = HTML(string=html_content)
+        css_doc = CSS(string=css_string, font_config=font_config)
+        
+        # Options pour réduire la consommation mémoire
+        pdf = html_doc.write_pdf(
+            stylesheets=[css_doc], 
+            font_config=font_config,
+            optimize_images=True,
+            jpeg_quality=85
+        )
+        
+        # Retourner le PDF
+        response = Response(pdf, mimetype='application/pdf')
+        response.headers['Content-Disposition'] = f'attachment; filename={filename}'
+        
+        return response
+        
+    except MemoryError:
+        logger.error("Erreur memoire lors de la generation PDF")
+        return jsonify({
+            "error": "Erreur mémoire. Le rapport est trop volumineux. Essayez de filtrer les données."
+        }), 500
+    except ImportError:
+        logger.error("WeasyPrint non installe")
+        return jsonify({
+            "error": "WeasyPrint non installe. Installez avec: pip install weasyprint"
+        }), 500
+    except Exception as e:
+        logger.error(f"Erreur generation PDF: {e}")
+        return jsonify({
+            "error": f"Erreur lors de la generation PDF: {str(e)}"
+        }), 500
+# Gestionnaire de notifications Gmail avec style exact de la web app
+class GmailNotificationManager:
+    """Gestionnaire de notifications Gmail avec style identique à la web app"""
+    
+    def __init__(self):
+        self.email_host = EMAIL_HOST
+        self.email_port = EMAIL_PORT
+        self.email_user = EMAIL_USER
+        self.email_password = EMAIL_PASSWORD
+        self.recipients = [email.strip() for email in EMAIL_RECIPIENTS if email.strip()]
+        # Feature flag to enable/disable emails easily (default OFF)
+        notif_flag = os.environ.get('EMAIL_NOTIFICATIONS_ENABLED', '0').lower() in {'1','true','yes','on'}
+        self.enabled = bool(EMAIL_USER and EMAIL_PASSWORD and self.recipients) and notif_flag
+        self.app_url = APP_URL
+        # Lightweight in-memory queue with background worker (avoids spawning many threads)
+        self._queue: "queue.Queue[dict]" = queue.Queue()
+        self._worker_started = False
+        
+        if self.enabled:
+            logger.info(f"Notifications Gmail activees pour {len(self.recipients)} destinataires")
+            logger.info(f"🔗 URL de l'app: {self.app_url}")
+            # Start background worker once
+            try:
+                if not self._worker_started:
+                    t = threading.Thread(target=self._worker_loop, daemon=True)
+                    t.start()
+                    self._worker_started = True
+            except Exception as _:
+                pass
+        else:
+            logger.warning("⚠️ Notifications Gmail désactivées - configuration manquante")
+    
+    def send_notification_async(self, subject: str, content: str, item_data: Optional[Dict] = None):
+        """Envoie une notification de manière asynchrone"""
+        if not self.enabled:
+            logger.warning("Notifications Gmail désactivées")
+            return
+        # Enqueue for background worker (retry-friendly, avoids thread storms)
+        try:
+            self._queue.put({
+                "subject": subject,
+                "content": content,
+                "item_data": item_data,
+                "attempt": 0
+            }, block=False)
+        except Exception as e:
+            logger.error(f"❌ File d'emails saturée: {e}")
+
+    def _worker_loop(self):
+        """Background worker that drains the email queue with retries."""
+        while True:
+            try:
+                job = self._queue.get(timeout=5)
+            except Exception:
+                # nothing to do
+                continue
+            try:
+                self._send_email(job.get("subject"), job.get("content"), job.get("item_data"))
+            except Exception as e:
+                # retry up to 3 times with basic backoff
+                attempt = int(job.get("attempt") or 0) + 1
+                if attempt <= 3:
+                    backoff_seconds = min(60, 2 ** attempt)
+                    logger.warning(f"📧 Retry email in {backoff_seconds}s (attempt {attempt}/3): {e}")
+                    time.sleep(backoff_seconds)
+                    job["attempt"] = attempt
+                    try:
+                        self._queue.put(job, block=False)
+                    except Exception:
+                        pass
+                else:
+                    logger.error(f"❌ Echec email après 3 tentatives: {e}")
+            finally:
+                try:
+                    self._queue.task_done()
+                except Exception:
+                    pass
+    
+    def _send_email(self, subject: str, content: str, item_data: Optional[Dict] = None):
+        """Envoie effectivement l'email via Gmail"""
+        try:
+            # Créer le message
+            msg = MIMEMultipart('alternative')
+            msg['From'] = self.email_user
+            msg['To'] = ", ".join(self.recipients)
+            msg['Subject'] = f"[BONVIN Collection] {subject}"
+            
+            # Contenu HTML avec style exact de la web app
+            html_content = self._create_webapp_style_html(subject, content, item_data)
+            
+            # Attacher le contenu HTML
+            html_part = MIMEText(html_content, 'html', 'utf-8')
+            msg.attach(html_part)
+            
+            # Contenu texte de secours
+            text_content = self._create_text_content(subject, content, item_data)
+            text_part = MIMEText(text_content, 'plain', 'utf-8')
+            msg.attach(text_part)
+            
+            # Envoyer l'email via Gmail
+            with smtplib.SMTP(self.email_host, self.email_port) as server:
+                server.starttls()
+                server.login(self.email_user, self.email_password)
+                server.send_message(msg)
+            
+            logger.info(f"Email Gmail envoye: {subject}")
+            
+        except Exception as e:
+            logger.error(f"Erreur envoi Gmail: {e}")
+    
+    def _create_webapp_style_html(self, subject: str, content: str, item_data: Optional[Dict] = None) -> str:
+        """Crée un HTML avec un style professionnel et lisible pour les emails"""
+        timestamp = datetime.now().strftime("%d/%m/%Y à %H:%M")
+        
+        # Données de l'objet si disponibles
+        item_section = ""
+        if item_data:
+            item_section = self._create_item_details_section(item_data)
+        
+        return f"""
+        <!DOCTYPE html>
+        <html lang="fr">
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>{subject}</title>
+            <style>
+                body {{
+                    font-family: Arial, sans-serif;
+                    line-height: 1.6;
+                    color: #333333;
+                    background-color: #f5f5f5;
+                    margin: 0;
+                    padding: 20px;
+                }}
+                
+                .container {{
+                    max-width: 600px;
+                    margin: 0 auto;
+                    background-color: #ffffff;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+                    overflow: hidden;
+                }}
+                
+                .header {{
+                    background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+                    color: white;
+                    padding: 30px;
+                    text-align: center;
+                }}
+                
+                .header h1 {{
+                    font-size: 24px;
+                    font-weight: bold;
+                    margin: 0 0 5px 0;
+                    letter-spacing: 1px;
+                }}
+                
+                .header p {{
+                    font-size: 14px;
+                    margin: 0;
+                    opacity: 0.9;
+                }}
+                
+                .content {{
+                    padding: 30px;
+                }}
+                
+                .timestamp {{
+                    background-color: #f8fafc;
+                    border-left: 4px solid #3b82f6;
+                    padding: 15px;
+                    margin: 20px 0;
+                    border-radius: 0 4px 4px 0;
+                    font-size: 14px;
+                    color: #64748b;
+                }}
+                
+                .message {{
+                    font-size: 16px;
+                    line-height: 1.7;
+                    margin: 20px 0;
+                    color: #374151;
+                }}
+                
+                .cta-button {{
+                    background: linear-gradient(135deg, #3b82f6, #1e40af);
+                    color: white;
+                    text-decoration: none;
+                    padding: 12px 24px;
+                    border-radius: 6px;
+                    font-weight: 600;
+                    display: inline-block;
+                    margin: 20px 0;
+                }}
+                
+                .footer {{
+                    background-color: #f8fafc;
+                    padding: 20px;
+                    text-align: center;
+                    border-top: 1px solid #e5e7eb;
+                    font-size: 12px;
+                    color: #6b7280;
+                }}
+                
+                .footer a {{
+                    color: #3b82f6;
+                    text-decoration: none;
+                }}
+                
+                .item-details {{
+                    background-color: #f8fafc;
+                    border: 1px solid #e5e7eb;
+                    border-radius: 6px;
+                    padding: 20px;
+                    margin: 20px 0;
+                }}
+                
+                .item-details h3 {{
+                    color: #1f2937;
+                    margin: 0 0 15px 0;
+                    font-size: 18px;
+                    font-weight: 600;
+                }}
+                
+                .detail-table {{
+                    width: 100%;
+                    border-collapse: collapse;
+                }}
+                
+                .detail-table td {{
+                    padding: 8px 0;
+                    border-bottom: 1px solid #e5e7eb;
+                    vertical-align: top;
+                }}
+                
+                .detail-table td:first-child {{
+                    font-weight: 600;
+                    color: #4b5563;
+                    width: 40%;
+                }}
+                
+                .detail-table tr:last-child td {{
+                    border-bottom: none;
+                }}
+                
+                .status-badge {{
+                    display: inline-block;
+                    padding: 4px 8px;
+                    border-radius: 4px;
+                    font-size: 12px;
+                    font-weight: 600;
+                }}
+                
+                .status-available {{
+                    background-color: #dcfce7;
+                    color: #166534;
+                }}
+                
+                .status-sold {{
+                    background-color: #fed7aa;
+                    color: #9a3412;
+                }}
+                
+                .status-for-sale {{
+                    background-color: #fee2e2;
+                    color: #991b1b;
+                }}
+                
+                .status-sale-progress {{
+                    background-color: #dbeafe;
+                    color: #1e40af;
+                }}
+                
+                .price {{
+                    font-weight: 700;
+                    color: #059669;
+                }}
+                
+                .offer {{
+                    font-weight: 700;
+                    color: #dc2626;
+                }}
+                
+                @media (max-width: 600px) {{
+                    body {{ padding: 10px; }}
+                    .content {{ padding: 20px; }}
+                    .header {{ padding: 20px; }}
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>BONVIN COLLECTION</h1>
+                    <p>Notification de changement</p>
+                </div>
+                
+                <div class="content">
+                    <h2 style="margin: 0 0 20px 0; font-size: 20px; color: #1f2937;">{subject}</h2>
+                    
+                    <div class="timestamp">
+                        <strong>{timestamp}</strong>
+                    </div>
+                    
+                    <div class="message">
+                        {content.replace(chr(10), '<br>')}
+                    </div>
+                    
+                    {item_section}
+                    
+                    <div style="text-align: center;">
+                        <a href="{self.app_url}" class="cta-button">
+                            Accéder au tableau de bord
+                        </a>
+                    </div>
+                </div>
+                
+                <div class="footer">
+                    <p style="margin: 0 0 5px 0;">
+                        <strong>Notification automatique BONVIN Collection</strong>
+                    </p>
+                    <p style="margin: 0;">
+                        Email généré automatiquement • <a href="{self.app_url}">Accéder à l'interface</a>
+                    </p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+    
+    def _create_item_details_section(self, item_data: Dict) -> str:
+        """Crée la section détails avec un style professionnel et lisible"""
+        details_rows = []
+        
+        # Nom
+        if item_data.get('name'):
+            details_rows.append(f'<tr><td>Nom:</td><td><strong>{item_data["name"]}</strong></td></tr>')
+        
+        # Catégorie
+        if item_data.get('category'):
+            details_rows.append(f'<tr><td>Catégorie:</td><td>{item_data["category"]}</td></tr>')
+        
+        # Localisation
+        if item_data.get('location'):
+            details_rows.append(f'<tr><td>Localisation:</td><td>{item_data["location"]}</td></tr>')
+        
+        # Statut avec badge
+        if item_data.get('status'):
+            status_class = 'status-available' if item_data['status'] == 'Available' else 'status-sold'
+            status_text = 'Disponible' if item_data['status'] == 'Available' else 'Vendu'
+            details_rows.append(f'<tr><td>Statut:</td><td><span class="status-badge {status_class}">{status_text}</span></td></tr>')
+        
+        # En vente
+        if item_data.get('for_sale'):
+            details_rows.append(f'<tr><td>En vente:</td><td><span class="status-badge status-for-sale">EN VENTE</span></td></tr>')
+        
+        # Statut de vente (seulement si différent de 'initial')
+        if item_data.get('sale_status') and item_data['sale_status'] != 'initial':
+            status_label = self._get_sale_status_label_text(item_data['sale_status'])
+            details_rows.append(f'<tr><td>Statut vente:</td><td><span class="status-badge status-sale-progress">{status_label}</span></td></tr>')
+        
+        # Valeur actuelle
+        if item_data.get('current_value'):
+            price_formatted = f"{item_data['current_value']:,.0f} CHF"
+            details_rows.append(f'<tr><td>Valeur actuelle:</td><td><span class="price">{price_formatted}</span></td></tr>')
+        
+        # Prix d'acquisition
+        if item_data.get('acquisition_price'):
+            acquisition_formatted = f"{item_data['acquisition_price']:,.0f} CHF"
+            details_rows.append(f'<tr><td>Prix d\'acquisition:</td><td>{acquisition_formatted}</td></tr>')
+        
+        # Offre actuelle
+        if item_data.get('current_offer'):
+            offer_formatted = f"{item_data['current_offer']:,.0f} CHF"
+            details_rows.append(f'<tr><td>Offre actuelle:</td><td><span class="offer">{offer_formatted}</span></td></tr>')
+        
+        # Prix de vente
+        if item_data.get('sold_price'):
+            sold_formatted = f"{item_data['sold_price']:,.0f} CHF"
+            details_rows.append(f'<tr><td>Vendu pour:</td><td><span class="price">{sold_formatted}</span></td></tr>')
+        
+        # Année
+        if item_data.get('construction_year'):
+            details_rows.append(f'<tr><td>Année:</td><td>{item_data["construction_year"]}</td></tr>')
+        
+        # Condition
+        if item_data.get('condition'):
+            details_rows.append(f'<tr><td>Condition:</td><td>{item_data["condition"]}</td></tr>')
+        
+        # Informations spécifiques aux actions
+        if item_data.get('category') == 'Actions':
+            if item_data.get('stock_symbol'):
+                details_rows.append(f'<tr><td>Symbole:</td><td>{item_data["stock_symbol"]}</td></tr>')
+            if item_data.get('stock_quantity'):
+                details_rows.append(f'<tr><td>Quantité:</td><td>{item_data["stock_quantity"]} actions</td></tr>')
+            if item_data.get('stock_exchange'):
+                details_rows.append(f'<tr><td>Bourse:</td><td>{item_data["stock_exchange"]}</td></tr>')
+        
+        # Intermédiaire
+        if item_data.get('intermediary'):
+            details_rows.append(f'<tr><td>Intermédiaire:</td><td>{item_data["intermediary"]}</td></tr>')
+        
+        # Détails du progrès
+        if item_data.get('sale_progress'):
+            progress_text = item_data['sale_progress'][:150] + ('...' if len(item_data['sale_progress']) > 150 else '')
+            details_rows.append(f'<tr><td>Détails du progrès:</td><td style="font-style: italic; color: #6b7280;">{progress_text}</td></tr>')
+        
+        # Description
+        if item_data.get('description'):
+            desc_text = item_data['description'][:200] + ('...' if len(item_data['description']) > 200 else '')
+            details_rows.append(f'<tr><td>Description:</td><td style="max-width: 300px; word-wrap: break-word;">{desc_text}</td></tr>')
+        
+        if details_rows:
+            return f'''
+            <div class="item-details">
+                <h3>Détails de l'objet</h3>
+                <table class="detail-table">
+                    {''.join(details_rows)}
+                </table>
+            </div>
+            '''
+        
+        return ""
+    
+    def _get_sale_status_label_text(self, status: str) -> str:
+        """Libellés de statut de vente"""
+        status_labels = {
+            'presentation': 'Préparation présentation',
+            'intermediary': 'Choix intermédiaires',
+            'inquiries': 'Premières demandes',
+            'viewing': 'Visites programmées',
+            'negotiation': 'En négociation',
+            'offer_received': 'Offre reçue',
+            'offer_accepted': 'Offre acceptée',
+            'paperwork': 'Formalités en cours',
+            'completed': 'Vente finalisée'
+        }
+        return status_labels.get(status, status)
+    
+    def _create_text_content(self, subject: str, content: str, item_data: Optional[Dict] = None) -> str:
+        """Crée un contenu texte de secours"""
+        timestamp = datetime.now().strftime("%d/%m/%Y à %H:%M")
+        
+        text_content = f"""
+BONVIN Collection - Notification
+================================
+
+{subject}
+
+Date: {timestamp}
+
+{content}
+"""
+        
+        if item_data:
+            text_content += f"""
+
+Détails de l'objet:
+------------------
+Nom: {item_data.get('name', 'N/A')}
+Catégorie: {item_data.get('category', 'N/A')}
+Statut: {item_data.get('status', 'N/A')}
+"""
+            if item_data.get('for_sale'):
+                text_content += f"En vente: Oui\n"
+            if item_data.get('sale_status'):
+                text_content += f"Statut vente: {self._get_sale_status_label_text(item_data.get('sale_status', ''))}\n"
+            if item_data.get('current_value'):
+                text_content += f"Valeur actuelle: {item_data.get('current_value', 0):,.0f} CHF\n"
+            if item_data.get('current_offer'):
+                text_content += f"Offre actuelle: {item_data.get('current_offer', 0):,.0f} CHF\n"
+            if item_data.get('sold_price'):
+                text_content += f"Vendu: {item_data.get('sold_price', 0):,.0f} CHF\n"
+            if item_data.get('construction_year'):
+                text_content += f"Année: {item_data.get('construction_year')}\n"
+            if item_data.get('category') == 'Actions':
+                if item_data.get('stock_symbol'):
+                    text_content += f"Symbole boursier: {item_data.get('stock_symbol')}\n"
+                if item_data.get('stock_quantity'):
+                    text_content += f"Quantité: {item_data.get('stock_quantity')} actions\n"
+            if item_data.get('sale_progress'):
+                text_content += f"Détails du progrès: {item_data.get('sale_progress')[:100]}{'...' if len(item_data.get('sale_progress', '')) > 100 else ''}\n"
+            if item_data.get('description'):
+                text_content += f"Description: {item_data.get('description')[:100]}{'...' if len(item_data.get('description', '')) > 100 else ''}\n"
+        
+        text_content += f"\n---\nAccéder au tableau de bord: {self.app_url}\nNotification automatique BONVIN Collection"
+        
+        return text_content
+    
+    def notify_item_created(self, item_data: Dict):
+        """Notification pour un nouvel objet"""
+        subject = f"Nouvel objet ajouté: {item_data.get('name', 'Objet sans nom')}"
+        content = f"""
+🆕 Un nouvel objet vient d'être ajouté à votre collection !
+
+L'objet "<strong>{item_data.get('name', 'N/A')}</strong>" de la catégorie "<strong>{item_data.get('category', 'N/A')}</strong>" a été créé avec succès.
+
+{"<strong>Cet objet est immediatement mis en vente !</strong>" if item_data.get('for_sale') else "Cet objet est ajoute a votre inventaire."}
+
+✨ Votre collection compte maintenant un objet de plus !
+        """
+        self.send_notification_async(subject, content, item_data)
+    
+    def notify_item_updated(self, old_data: Dict, new_data: Dict):
+        """Notification pour une modification d'objet"""
+        changes = self._detect_important_changes(old_data, new_data)
+        
+        if not changes:
+            return  # Pas de changements importants
+        
+        subject = f"Modification: {new_data.get('name', 'Objet')}"
+        
+        content = f"📝 Des informations importantes ont été mises à jour pour cet objet:\n\n"
+        
+        for change in changes:
+            content += f"• {change}\n"
+        
+        content += f"\nConsultez le tableau de bord pour voir tous les details."
+        
+        self.send_notification_async(subject, content, new_data)
+    
+    def notify_sale_status_change(self, item_data: Dict, old_status: str, new_status: str):
+        """Notification spéciale pour changement de statut de vente"""
+        old_label = self._get_sale_status_label_text(old_status)
+        new_label = self._get_sale_status_label_text(new_status)
+        
+        # Émojis selon la progression
+        emoji = ""
+        if new_status in ['offer_received', 'offer_accepted']:
+            emoji = ""
+        elif new_status == 'negotiation':
+            emoji = ""
+        elif new_status == 'completed':
+            emoji = ""
+        
+        subject = f"{emoji} Évolution de vente: {item_data.get('name', 'Objet')}"
+        
+        content = f"""
+        f"Le statut de vente de cet objet vient de progresser !"
+
+        f"<strong>Evolution:</strong> \"{old_label}\" → \"<strong>{new_label}</strong>\""
+
+{self._get_status_advice(new_status)}
+
+        f"{self._get_next_step_advice(new_status)}"
+        """
+        
+        self.send_notification_async(subject, content, item_data)
+    
+    def notify_new_offer(self, item_data: Dict, offer_amount: float):
+        """Notification pour une nouvelle offre"""
+        subject = f"Nouvelle offre: {item_data.get('name', 'Objet')}"
+        
+        current_value = item_data.get('current_value', 0)
+        percentage = (offer_amount / current_value * 100) if current_value > 0 else 0
+        
+        if percentage >= 90:
+            quality = "<strong>Excellente offre !</strong>"
+            advice = "Cette offre est très proche de votre valeur actuelle. Considérez sérieusement cette proposition."
+        elif percentage >= 75:
+            quality = "<strong>Offre interessante</strong>"
+            advice = "Cette offre mérite une analyse approfondie. Vous pouvez négocier ou accepter."
+        elif percentage >= 50:
+            quality = "⚠️ <strong>Offre à négocier</strong>"
+            advice = "Cette offre est en dessous de vos attentes. Contre-proposez ou négociez."
+        else:
+            quality = "<strong>Offre faible</strong>"
+            advice = "Cette offre est significativement en dessous de la valeur actuelle. Évaluez si une négociation est pertinente."
+        
+        content = f"""
+        f"Une nouvelle offre vient d'etre recue pour cet objet !"
+
+<strong>Montant de l'offre:</strong> {offer_amount:,.0f} CHF
+<strong>Valeur actuelle:</strong> {current_value:,.0f} CHF  
+<strong>Pourcentage:</strong> {percentage:.1f}% de la valeur actuelle
+
+{quality}
+
+        f"<strong>Conseil:</strong> {advice}"
+
+        f"<strong>Prochaine etape:</strong> Analysez cette offre et preparez votre reponse rapidement pour maintenir l'interet de l'acheteur."
+        """
+        
+        self.send_notification_async(subject, content, item_data)
+    
+    def send_market_report_email(self, market_report_data: Dict):
+        """Envoie un email avec le rapport de marché"""
+        if not self.enabled:
+            logger.warning("Notifications Gmail désactivées")
+            return False
+        
+        try:
+            # Extraire les données du rapport
+            report_date = market_report_data.get('date', 'Date inconnue')
+            report_time = market_report_data.get('time', 'Heure inconnue')
+            report_content = market_report_data.get('content', 'Contenu non disponible')
+            
+            subject = f"📰 Rapport de Marché - {report_date}"
+            
+            # Créer le contenu HTML structuré
+            html_content = self._create_market_report_html(report_date, report_time, report_content)
+            
+            # Créer le contenu texte
+            text_content = self._create_market_report_text(report_date, report_time, report_content)
+            
+            # Créer le message
+            msg = MIMEMultipart('alternative')
+            msg['From'] = self.email_user
+            msg['To'] = ", ".join(self.recipients)
+            msg['Subject'] = f"[BONVIN Collection] {subject}"
+            
+            # Attacher le contenu HTML
+            html_part = MIMEText(html_content, 'html', 'utf-8')
+            msg.attach(html_part)
+            
+            # Contenu texte de secours
+            text_part = MIMEText(text_content, 'plain', 'utf-8')
+            msg.attach(text_part)
+            
+            # Envoyer l'email via Gmail
+            with smtplib.SMTP(self.email_host, self.email_port) as server:
+                server.starttls()
+                server.login(self.email_user, self.email_password)
+                server.send_message(msg)
+            
+            logger.info(f"✅ Email rapport de marché envoyé: {subject}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Erreur envoi email rapport de marché: {e}")
+            return False
+    
+    def _create_market_report_html(self, report_date: str, report_time: str, report_content: str) -> str:
+        """Crée un HTML professionnel pour le rapport de marché"""
+        timestamp = datetime.now().strftime("%d/%m/%Y à %H:%M")
+        
+        return f"""
+        <!DOCTYPE html>
+        <html lang="fr">
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Rapport de Marché - {report_date}</title>
+            <style>
+                body {{
+                    font-family: Arial, sans-serif;
+                    line-height: 1.6;
+                    color: #333333;
+                    background-color: #f5f5f5;
+                    margin: 0;
+                    padding: 20px;
+                }}
+                
+                .container {{
+                    max-width: 700px;
+                    margin: 0 auto;
+                    background-color: #ffffff;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+                    overflow: hidden;
+                }}
+                
+                .header {{
+                    background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+                    color: white;
+                    padding: 30px;
+                    text-align: center;
+                }}
+                
+                .header h1 {{
+                    margin: 0;
+                    font-size: 28px;
+                    font-weight: bold;
+                }}
+                
+                .header .subtitle {{
+                    margin-top: 10px;
+                    font-size: 16px;
+                    opacity: 0.9;
+                }}
+                
+                .content {{
+                    padding: 30px;
+                }}
+                
+                .report-info {{
+                    background-color: #f8f9fa;
+                    border-left: 4px solid #1e3a8a;
+                    padding: 20px;
+                    margin-bottom: 25px;
+                    border-radius: 4px;
+                }}
+                
+                .report-info h3 {{
+                    margin: 0 0 10px 0;
+                    color: #1e3a8a;
+                    font-size: 18px;
+                }}
+                
+                .report-info p {{
+                    margin: 5px 0;
+                    color: #666;
+                }}
+                
+                .report-content {{
+                    background-color: #ffffff;
+                    border: 1px solid #e1e5e9;
+                    border-radius: 6px;
+                    padding: 25px;
+                    margin-bottom: 25px;
+                }}
+                
+                .report-content h3 {{
+                    margin: 0 0 20px 0;
+                    color: #1e3a8a;
+                    font-size: 20px;
+                    border-bottom: 2px solid #e1e5e9;
+                    padding-bottom: 10px;
+                }}
+                
+                .report-content pre {{
+                    white-space: pre-wrap;
+                    font-family: 'Courier New', monospace;
+                    font-size: 14px;
+                    line-height: 1.5;
+                    color: #333;
+                    background-color: #f8f9fa;
+                    padding: 15px;
+                    border-radius: 4px;
+                    border: 1px solid #e1e5e9;
+                    overflow-x: auto;
+                }}
+                
+                .footer {{
+                    background-color: #f8f9fa;
+                    padding: 20px;
+                    text-align: center;
+                    border-top: 1px solid #e1e5e9;
+                }}
+                
+                .footer p {{
+                    margin: 5px 0;
+                    color: #666;
+                    font-size: 14px;
+                }}
+                
+                .logo {{
+                    width: 60px;
+                    height: 60px;
+                    margin-bottom: 15px;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <img src="https://bonvin.ch/wp-content/uploads/2023/03/BONVIN_120x120.png" alt="BONVIN" class="logo">
+                    <h1>📰 Rapport de Marché</h1>
+                    <div class="subtitle">Analyse et insights des marchés financiers</div>
+                </div>
+                
+                <div class="content">
+                    <div class="report-info">
+                        <h3>📋 Informations du Rapport</h3>
+                        <p><strong>Date:</strong> {report_date}</p>
+                        <p><strong>Heure:</strong> {report_time}</p>
+                        <p><strong>Source:</strong> API Manus - Données temps réel</p>
+                        <p><strong>Généré le:</strong> {timestamp}</p>
+                    </div>
+                    
+                    <div class="report-content">
+                        <h3>📊 Analyse de Marché</h3>
+                        <pre>{report_content}</pre>
+                    </div>
+                </div>
+                
+                <div class="footer">
+                    <p><strong>BONVIN Collection</strong> - Gestion de portefeuille d'investissement</p>
+                    <p>Ce rapport a été généré automatiquement par votre système de gestion</p>
+                    <p>Pour plus d'informations, consultez votre tableau de bord</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+    
+    def _create_market_report_text(self, report_date: str, report_time: str, report_content: str) -> str:
+        """Crée le contenu texte pour le rapport de marché"""
+        timestamp = datetime.now().strftime("%d/%m/%Y à %H:%M")
+        
+        return f"""
+BONVIN Collection - Rapport de Marché
+====================================
+📋 INFORMATIONS DU RAPPORT
+Date: {report_date}
+Heure: {report_time}
+Source: API Manus - Données temps réel
+Généré le: {timestamp}
+📊 ANALYSE DE MARCHÉ
+{report_content}
+
+---
+BONVIN Collection - Gestion de portefeuille d'investissement
+Ce rapport a été généré automatiquement par votre système de gestion
+        """
+    
+    def _detect_important_changes(self, old_data: Dict, new_data: Dict) -> List[str]:
+        """Détecte les changements importants"""
+        changes = []
+        
+        # Changements de statut
+        if old_data.get('status') != new_data.get('status'):
+            changes.append(f"<strong>Statut:</strong> {old_data.get('status', 'N/A')} → {new_data.get('status', 'N/A')}")
+        
+        # Mise en vente
+        if old_data.get('for_sale') != new_data.get('for_sale'):
+            if new_data.get('for_sale'):
+                changes.append("🔥 <strong>Objet mis en vente</strong>")
+            else:
+                changes.append("📦 <strong>Objet retiré de la vente</strong>")
+        
+        # Changement de statut de vente
+        if old_data.get('sale_status') != new_data.get('sale_status'):
+            old_status = self._get_sale_status_label_text(old_data.get('sale_status', ''))
+            new_status = self._get_sale_status_label_text(new_data.get('sale_status', ''))
+            changes.append(f"<strong>Statut de vente:</strong> {old_status} → {new_status}")
+        
+        # Changement de détails du progrès
+        old_progress = (old_data.get('sale_progress') or '').strip()
+        new_progress = (new_data.get('sale_progress') or '').strip()
+        
+        if old_progress != new_progress:
+            if not old_progress and new_progress:
+                changes.append(f"📋 <strong>Détails du progrès ajoutés:</strong> {new_progress[:100]}{'...' if len(new_progress) > 100 else ''}")
+            elif old_progress and not new_progress:
+                changes.append(f"🗑️ <strong>Détails du progrès supprimés</strong>")
+            elif old_progress and new_progress:
+                changes.append(f"📋 <strong>Détails du progrès modifiés:</strong> {new_progress[:100]}{'...' if len(new_progress) > 100 else ''}")
+        
+        # Nouvelle offre
+        if old_data.get('current_offer') != new_data.get('current_offer'):
+            if new_data.get('current_offer'):
+                changes.append(f"💰 <strong>Nouvelle offre:</strong> {new_data.get('current_offer', 0):,.0f} CHF")
+        
+        # Changement de valeur
+        if old_data.get('current_value') != new_data.get('current_value'):
+            changes.append(f"<strong>Valeur actuelle:</strong> {old_data.get('current_value', 0):,.0f} CHF → {new_data.get('current_value', 0):,.0f} CHF")
+        
+        # Prix de vente final
+        if old_data.get('sold_price') != new_data.get('sold_price'):
+            if new_data.get('sold_price'):
+                changes.append(f"🎉 <strong>Vendu pour:</strong> {new_data.get('sold_price', 0):,.0f} CHF")
+        
+        # Changements spécifiques aux actions
+        if new_data.get('category') == 'Actions':
+            if old_data.get('stock_quantity') != new_data.get('stock_quantity'):
+                changes.append(f"<strong>Quantité d'actions:</strong> {old_data.get('stock_quantity', 0)} → {new_data.get('stock_quantity', 0)}")
+            if old_data.get('stock_symbol') != new_data.get('stock_symbol'):
+                changes.append(f"<strong>Symbole boursier:</strong> {old_data.get('stock_symbol', 'N/A')} → {new_data.get('stock_symbol', 'N/A')}")
+            if old_data.get('current_price') != new_data.get('current_price'):
+                changes.append(f"<strong>Prix actuel:</strong> {old_data.get('current_price', 0):,.0f} CHF → {new_data.get('current_price', 0):,.0f} CHF/action")
+        
+        return changes
+    
+    def _get_status_advice(self, status: str) -> str:
+        """Retourne un conseil selon le statut"""
+        advice = {
+            'negotiation': "🔥 <strong>Phase critique !</strong> Surveillez les négociations de près et répondez rapidement aux demandes.",
+            'offer_received': "💰 <strong>Offre en attente !</strong> Analysez l'offre et préparez votre réponse dans les plus brefs délais.",
+            'offer_accepted': "✅ <strong>Félicitations !</strong> L'offre a été acceptée. Préparez les documents pour finaliser la vente.",
+            'paperwork': "📋 <strong>Finalisation en cours</strong> Veillez à ce que toutes les formalités soient complétées rapidement.",
+            'completed': "🎉 <strong>Vente finalisée avec succès !</strong> Bravo pour cette transaction réussie !"
+        }
+        return advice.get(status, "📊 Continuez le suivi attentif de cette vente.")
+    
+    def _get_next_step_advice(self, status: str) -> str:
+        """Conseils pour les prochaines étapes"""
+        next_steps = {
+            'negotiation': "Préparez vos arguments de négociation et définissez votre prix minimum acceptable.",
+            'offer_received': "Évaluez l'offre, consultez un expert si nécessaire, et répondez dans les 24-48h.",
+            'offer_accepted': "Contactez votre notaire/avocat et préparez tous les documents nécessaires.",
+            'paperwork': "Suivez l'avancement des formalités et relancez si nécessaire.",
+            'completed': "Archivez les documents et mettez à jour votre comptabilité."
+        }
+        return f"<strong>Prochaine étape:</strong> {next_steps.get(status, 'Continuez le suivi de cette vente.')}"
+
+# Cache sophistiqué
+class SmartCache:
+    """Cache intelligent multi-niveaux"""
+    
+    def __init__(self):
+        self._caches = {
+            'items': {'data': None, 'timestamp': None, 'ttl': 60},
+            'analytics': {'data': None, 'timestamp': None, 'ttl': 300},
+            'ai_responses': {'data': {}, 'timestamp': None, 'ttl': 900},
+            'embeddings': {'data': {}, 'timestamp': None, 'ttl': 3600}
+        }
+    
+    def get(self, cache_name: str, key: str = 'default'):
+        """Récupère du cache"""
+        if cache_name not in self._caches:
+            return None
+        
+        cache_info = self._caches[cache_name]
+        now = datetime.now()
+        
+        if cache_info['timestamp'] and (now - cache_info['timestamp']).seconds < cache_info['ttl']:
+            if cache_name in ['ai_responses', 'embeddings']:
+                return cache_info['data'].get(key)
+            return cache_info['data']
+        
+        return None
+    
+    def set(self, cache_name: str, data: Any, key: str = 'default'):
+        """Stocke dans le cache"""
+        if cache_name not in self._caches:
+            return
+        
+        if cache_name in ['ai_responses', 'embeddings']:
+            if not isinstance(self._caches[cache_name]['data'], dict):
+                self._caches[cache_name]['data'] = {}
+            self._caches[cache_name]['data'][key] = data
+        else:
+            self._caches[cache_name]['data'] = data
+        
+        self._caches[cache_name]['timestamp'] = datetime.now()
+    
+    def invalidate(self, cache_name: str = None):
+        """Invalide le cache"""
+        if cache_name:
+            if cache_name in self._caches:
+                self._caches[cache_name]['data'] = None if cache_name not in ['ai_responses', 'embeddings'] else {}
+                self._caches[cache_name]['timestamp'] = None
+        else:
+            for cache_info in self._caches.values():
+                cache_info['data'] = None
+                cache_info['timestamp'] = None
+
+# Instance globale du cache
+smart_cache = SmartCache()
+
+# Instance globale du gestionnaire Gmail
+gmail_manager = GmailNotificationManager()
+
+# ──────────────────────────────────────────────────────────
+# Conversation Memory (SQLite local store)
+# ──────────────────────────────────────────────────────────
+
+class ConversationMemoryStore:
+    """SQLite-backed memory store for conversation history per session_id."""
+
+    def __init__(self, db_filename: str = "chat_memory.db"):
+        try:
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+        except Exception:
+            base_dir = os.getcwd()
+        self.db_path = os.path.join(base_dir, db_filename)
+        self._ensure_schema()
+
+    def _connect(self):
+        return sqlite3.connect(self.db_path, check_same_thread=False)
+
+    def _ensure_schema(self):
+        with self._connect() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS messages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                )
+                """
+            )
+            # Index for quick retrieval
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, id)")
+            conn.commit()
+
+    def add_message(self, session_id: str, role: str, content: str):
+        try:
+            with self._connect() as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    "INSERT INTO messages(session_id, role, content, created_at) VALUES (?,?,?,?)",
+                    (session_id, role, content, datetime.utcnow().isoformat()),
+                )
+                conn.commit()
+        except Exception:
+            # Memory is best-effort; avoid breaking the request
+            pass
+
+    def get_recent_messages(self, session_id: str, limit: int = 12):
+        try:
+            with self._connect() as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    "SELECT role, content FROM messages WHERE session_id=? ORDER BY id DESC LIMIT ?",
+                    (session_id, max(1, int(limit))),
+                )
+                rows = cur.fetchall()
+                # Return in chronological order
+                return [{"role": r[0], "content": r[1]} for r in reversed(rows)]
+        except Exception:
+            return []
+
+conversation_memory = ConversationMemoryStore()
+
+# ──────────────────────────────────────────────────────────
+# Basic Chatbot Metrics
+# ──────────────────────────────────────────────────────────
+
+chatbot_metrics = {
+    "requests": 0,
+    "errors": 0,
+    "avg_latency_ms": 0.0,
+    "last_error": None,
+}
+
+def _update_chatbot_metrics(start_time: float, error: Exception = None):
+    try:
+        chatbot_metrics["requests"] += 1
+        if error is not None:
+            chatbot_metrics["errors"] += 1
+            chatbot_metrics["last_error"] = str(error)
+        elapsed_ms = max(0.0, (time.time() - start_time) * 1000.0)
+        # simple moving average
+        prev = chatbot_metrics["avg_latency_ms"]
+        chatbot_metrics["avg_latency_ms"] = (prev * 0.9) + (elapsed_ms * 0.1)
+    except Exception:
+        pass
+
+# ──────────────────────────────────────────────────────────
+# Status normalization helpers
+# ──────────────────────────────────────────────────────────
+
+def is_item_sold(item: Any) -> bool:
+    """Detect if an item is sold using multiple signals (status, sale_status)."""
+    try:
+        status = str(getattr(item, 'status', '') or '').strip().lower()
+        sale_status = str(getattr(item, 'sale_status', '') or '').strip().lower()
+        sale_progress = str(getattr(item, 'sale_progress', '') or '').strip().lower()
+        if status in {'sold', 'vendu', 'vendue'}:
+            return True
+        if sale_status in {'completed', 'complete', 'finalisé', 'finalisee', 'finalise', 'completed sale', 'completed_sale'}:
+            return True
+        if sale_progress in {'completed', 'complete', 'finalisé', 'finalisee', 'finalise'}:
+            return True
+        try:
+            sold_price = getattr(item, 'sold_price', None)
+            if sold_price is not None and float(sold_price) > 0:
+                return True
+        except Exception:
+            pass
+    except Exception:
+        return False
+    return False
+
+def is_item_available(item: Any) -> bool:
+    try:
+        return not is_item_sold(item)
+    except Exception:
+        return True
+
+# ──────────────────────────────────────────────────────────
+# Simple moderation/guardrails
+# ──────────────────────────────────────────────────────────
+
+SENSITIVE_PATTERNS = [
+    "api key", "apikey", "token", "mot de passe", "password", "secret", "clé privée", "private key",
+    "carte de crédit", "credit card", "cvv"
+]
+
+def _should_block_query(user_text: str) -> Optional[str]:
+    try:
+        t = (user_text or "").lower()
+        if len(t) > 8000:
+            return "Votre message est trop long. Veuillez le résumer."
+        for pat in SENSITIVE_PATTERNS:
+            if pat in t:
+                return "Pour votre sécurité, je ne peux pas aider avec des informations sensibles (mots de passe, clés API, etc.)."
+    except Exception:
+        pass
+    return None
+
+# Application Flask
+app = Flask(__name__)
+app.config.update(
+    SECRET_KEY=os.environ.get('SECRET_KEY', 'bonvin-collection-secret'),
+    JSON_SORT_KEYS=False
+)
+CORS(app)
+# Register metrics blueprint under /api
+try:
+    app.register_blueprint(metrics_bp, url_prefix='/api')
+except Exception as _e:
+    pass
+
+# Configuration du dépôt de PDF marché
+app.config.setdefault('MARKET_PDF_UPLOAD_FOLDER', os.path.join(app.root_path, 'static', 'market_pdfs'))
+app.config.setdefault('MARKET_PDF_ALLOWED_EXTENSIONS', {'.pdf'})
+
+# Créer le dossier si nécessaire
+os.makedirs(app.config['MARKET_PDF_UPLOAD_FOLDER'], exist_ok=True)
+# Gestionnaire de données sophistiqué
+class AdvancedDataManager:
+    """Gestionnaire de données avec logique métier avancée"""
+    
+    @staticmethod
+    def fetch_all_items() -> List[CollectionItem]:
+        """Récupère tous les objets avec cache"""
+        cached_items = smart_cache.get('items')
+        if cached_items:
+            logger.info(f"📦 Cache: {len(cached_items)} objets")
+            return cached_items
+        
+        try:
+            if not supabase:
+                return []
+            
+            response = supabase.table("items").select("*").order("updated_at", desc=True).execute()
+            raw_items = response.data or []
+            
+            items = []
+            for raw_item in raw_items:
+                try:
+                    # Convertir l'embedding du format pgvector
+                    if 'embedding' in raw_item and raw_item['embedding']:
+                        embedding = raw_item['embedding']
+                        
+                        # Si c'est une string qui ressemble à un array pgvector
+                        if isinstance(embedding, str):
+                            # Format pgvector: "[0.1,0.2,0.3]" ou "(0.1,0.2,0.3)"
+                            embedding = embedding.strip()
+                            if embedding.startswith('[') and embedding.endswith(']'):
+                                # Format JSON array
+                                try:
+                                    raw_item['embedding'] = json.loads(embedding)
+                                except:
+                                    # Fallback: parser manuellement
+                                    raw_item['embedding'] = [float(x) for x in embedding[1:-1].split(',')]
+                            elif embedding.startswith('(') and embedding.endswith(')'):
+                                # Format pgvector tuple
+                                raw_item['embedding'] = [float(x) for x in embedding[1:-1].split(',')]
+                            else:
+                                logger.warning(f"Format d'embedding inconnu pour {raw_item.get('name', 'item')}: {embedding[:50]}")
+                                raw_item['embedding'] = None
+                        elif isinstance(embedding, list):
+                            # Déjà une liste, parfait
+                            pass
+                        else:
+                            logger.warning(f"Type d'embedding invalide pour {raw_item.get('name', 'item')}: {type(embedding)}")
+                            raw_item['embedding'] = None
+                    
+                    item = CollectionItem.from_dict(raw_item)
+                    items.append(item)
+                except Exception as e:
+                    logger.warning(f"Erreur item {raw_item.get('id', '?')}: {e}")
+                    continue
+            
+            smart_cache.set('items', items)
+            logger.info(f"🔄 {len(items)} objets chargés")
+            return items
+            
+        except Exception as e:
+            logger.error(f"Erreur fetch: {e}")
+            return []
+    
+    @staticmethod
+    def calculate_advanced_analytics(items: List[CollectionItem]) -> Dict[str, Any]:
+        """Calcule des analytics sophistiquées"""
+        cached_analytics = smart_cache.get('analytics')
+        if cached_analytics:
+            return cached_analytics
+        
+        analytics = {
+            'basic_metrics': AdvancedDataManager._basic_metrics(items),
+            'financial_metrics': AdvancedDataManager._financial_metrics(items),
+            'category_analytics': AdvancedDataManager._category_analytics(items),
+            'sales_pipeline': AdvancedDataManager._sales_pipeline(items),
+            'performance_kpis': AdvancedDataManager._performance_kpis(items),
+            'market_insights': AdvancedDataManager._market_insights(items),
+            'stock_analytics': AdvancedDataManager._stock_analytics(items)
+        }
+        
+        smart_cache.set('analytics', analytics)
+        return analytics
+    
+    @staticmethod
+    def _basic_metrics(items: List[CollectionItem]) -> Dict[str, Any]:
+        """Métriques de base enrichies"""
+        total = len(items)
+        # Utiliser la normalisation robuste (statuts/indices multiples)
+        available = len([i for i in items if is_item_available(i)])
+        sold = len([i for i in items if is_item_sold(i)])
+        for_sale = len([i for i in items if i.for_sale])
+        # Valeur totale par défaut = somme des valeurs disponibles (hors vendus)
+        total_value = sum((i.current_value or 0) for i in items if is_item_available(i) and (i.current_value is not None))
+        
+        return {
+            'total_items': total,
+            'available_items': available,
+            'sold_items': sold,
+            'items_for_sale': for_sale,
+            'total_value': total_value,
+            'availability_rate': (available / total * 100) if total > 0 else 0,
+            'conversion_rate': (sold / total * 100) if total > 0 else 0,
+            'active_sale_rate': (for_sale / available * 100) if available > 0 else 0
+        }
+    
+    @staticmethod
+    def _financial_metrics(items: List[CollectionItem]) -> Dict[str, Any]:
+        """Métriques financières avancées"""
+        total_current = sum(i.current_value or 0 for i in items if i.status == 'Available' and i.current_value)
+        total_sold = sum(i.sold_price or 0 for i in items if i.status == 'Sold' and i.sold_price)
+        total_acquisition = sum(i.acquisition_price or 0 for i in items if i.acquisition_price)
+        
+        # ROI calculation
+        profit_items = [
+            (i.sold_price or 0) - (i.acquisition_price or 0)
+            for i in items 
+            if i.status == 'Sold' and i.sold_price and i.acquisition_price
+        ]
+        
+        total_profit = sum(profit_items)
+        roi_percentage = (total_profit / total_acquisition * 100) if total_acquisition > 0 else 0
+        
+        return {
+            'portfolio_value': total_current,
+            'realized_sales': total_sold,
+            'total_acquisition_cost': total_acquisition,
+            'total_profit': total_profit,
+            'roi_percentage': roi_percentage,
+            'average_item_value': total_current / len([i for i in items if i.current_value]) if any(i.current_value for i in items) else 0,
+            'profit_margin': (total_profit / total_sold * 100) if total_sold > 0 else 0
+        }
+    
+    @staticmethod
+    def _category_analytics(items: List[CollectionItem]) -> Dict[str, Any]:
+        """Analytics par catégorie"""
+        categories = {}
+        
+        for item in items:
+            cat = item.category or 'Uncategorized'
+            if cat not in categories:
+                categories[cat] = {
+                    'total': 0, 'available': 0, 'sold': 0, 'for_sale': 0,
+                    'total_value': 0, 'avg_value': 0
+                }
+            
+            stats = categories[cat]
+            stats['total'] += 1
+            
+            if item.status == 'Available':
+                stats['available'] += 1
+            elif item.status == 'Sold':
+                stats['sold'] += 1
+            
+            if item.for_sale:
+                stats['for_sale'] += 1
+            
+            value = item.current_value or item.sold_price or 0
+            stats['total_value'] += value
+        
+        # Calculer les moyennes
+        for stats in categories.values():
+            if stats['total'] > 0:
+                stats['avg_value'] = stats['total_value'] / stats['total']
+        
+        return categories
+    
+    @staticmethod
+    def _sales_pipeline(items: List[CollectionItem]) -> Dict[str, Any]:
+        """Pipeline de vente sophistiqué"""
+        pipeline_stages = {
+            'initial': 'Mise en vente initiale',
+            'presentation': 'Préparation présentation',
+            'intermediary': 'Choix intermédiaires',
+            'inquiries': 'Premières demandes',
+            'viewing': 'Visites programmées',
+            'negotiation': 'En négociation',
+            'offer_received': 'Offres reçues',
+            'offer_accepted': 'Offres acceptées',
+            'paperwork': 'Formalités en cours',
+            'completed': 'Ventes finalisées'
+        }
+        
+        pipeline_data = {}
+        total_value = 0
+        
+        for stage_key, stage_name in pipeline_stages.items():
+            stage_items = [i for i in items if i.for_sale and i.sale_status == stage_key]
+            stage_value = sum(i.current_value or 0 for i in stage_items)
+            
+            pipeline_data[stage_key] = {
+                'name': stage_name,
+                'count': len(stage_items),
+                'total_value': stage_value,
+                'items': [{'name': i.name, 'value': i.current_value} for i in stage_items]
+            }
+            total_value += stage_value
+        
+        return {
+            'stages': pipeline_data,
+            'total_pipeline_value': total_value,
+            'active_negotiations': len([i for i in items if i.for_sale and i.sale_status in ['negotiation', 'offer_received']])
+        }
+    
+    @staticmethod
+    def _performance_kpis(items: List[CollectionItem]) -> Dict[str, Any]:
+        """KPIs de performance"""
+        # Top performers par valeur
+        top_sales = sorted(
+            [i for i in items if i.sold_price], 
+            key=lambda x: x.sold_price, 
+            reverse=True
+        )[:5]
+        
+                # Distribution des prix
+        prices = [i.sold_price or i.current_value for i in items if i.sold_price or i.current_value]
+        price_ranges = {
+            'under_100k': len([p for p in prices if p < 100000]),
+            '100k_500k': len([p for p in prices if 100000 <= p < 500000]),
+            '500k_1m': len([p for p in prices if 500000 <= p < 1000000]),
+            'over_1m': len([p for p in prices if p >= 1000000])
+        }
+        
+        return {
+            'top_value_sales': [{'name': i.name, 'value': i.sold_price} for i in top_sales],
+            'price_distribution': price_ranges,
+            'inventory_turnover': len([i for i in items if i.status == 'Sold']) / len(items) if items else 0
+        }
+    
+    @staticmethod
+    def _market_insights(items: List[CollectionItem]) -> Dict[str, Any]:
+        """Insights de marché"""
+        # Hotness par catégorie (basé sur l'activité)
+        category_activity = {}
+        
+        for item in items:
+            cat = item.category or 'Other'
+            if cat not in category_activity:
+                category_activity[cat] = 0
+            
+            # Score d'activité
+            if item.for_sale:
+                category_activity[cat] += 2
+            if item.sale_status in ['negotiation', 'offer_received']:
+                category_activity[cat] += 5
+            if item.status == 'Sold':
+                category_activity[cat] += 3
+        
+        return {
+            'category_activity_scores': category_activity,
+            'most_active_category': max(category_activity.items(), key=lambda x: x[1])[0] if category_activity else None,
+            'market_temperature': 'hot' if max(category_activity.values(), default=0) > 10 else 'warm' if max(category_activity.values(), default=0) > 5 else 'cool'
+        }
+    
+    @staticmethod
+    def _stock_analytics(items: List[CollectionItem]) -> Dict[str, Any]:
+        """Analytics spécifiques aux actions"""
+        stock_items = [i for i in items if i.category == 'Actions']
+        
+        if not stock_items:
+            return {
+                'total_stocks': 0,
+                'total_shares': 0,
+                'total_value': 0,
+                'by_exchange': {},
+                'top_holdings': []
+            }
+        
+        total_shares = sum(i.stock_quantity or 0 for i in stock_items)
+        total_value = sum(i.current_value or 0 for i in stock_items)
+        
+        # Grouper par bourse
+        by_exchange = {}
+        for item in stock_items:
+            exchange = item.stock_exchange or 'Unknown'
+            if exchange not in by_exchange:
+                by_exchange[exchange] = {'count': 0, 'value': 0}
+            by_exchange[exchange]['count'] += 1
+            by_exchange[exchange]['value'] += item.current_value or 0
+        
+        # Top holdings par valeur
+        top_holdings = sorted(
+            stock_items,
+            key=lambda x: x.current_value or 0,
+            reverse=True
+        )[:5]
+        
+        return {
+            'total_stocks': len(stock_items),
+            'total_shares': total_shares,
+            'total_value': total_value,
+            'average_holding_value': total_value / len(stock_items) if stock_items else 0,
+            'by_exchange': by_exchange,
+            'top_holdings': [
+                {
+                    'symbol': h.stock_symbol,
+                    'name': h.name,
+                    'quantity': h.stock_quantity,
+                    'value': h.current_value
+                }
+                for h in top_holdings
+            ]
+        }
+
+# Classe pour la recherche sémantique RAG
+class SemanticSearchRAG:
+    """Moteur de recherche sémantique avec RAG"""
+    
+    def __init__(self, openai_client):
+        self.client = openai_client
+        self.embedding_model = "text-embedding-3-small"
+    
+    def get_query_embedding(self, query: str) -> Optional[List[float]]:
+        """Génère l'embedding pour une requête"""
+        if not self.client:
+            return None
+        
+        try:
+            response = self.client.embeddings.create(
+                input=query,
+                model=self.embedding_model
+            )
+            return response.data[0].embedding
+        except Exception as e:
+            logger.error(f"Erreur génération embedding: {e}")
+            return None
+    
+    def semantic_search(self, query: str, items: List[CollectionItem], top_k: int = 10) -> List[Tuple[CollectionItem, float]]:
+        """Recherche sémantique hybride: embeddings + TF-IDF BM25-like fusion."""
+        # 1) Embedding route
+        embedding_scores: List[Tuple[CollectionItem, float]] = []
+        try:
+            query_embedding = self.get_query_embedding(query)
+            if query_embedding:
+                items_with_embeddings = [item for item in items if item.embedding]
+                for item in items_with_embeddings:
+                    try:
+                        s = self._cosine_similarity(query_embedding, item.embedding)
+                        embedding_scores.append((item, float(s)))
+                    except Exception:
+                        continue
+        except Exception:
+            pass
+
+        # 2) Sparse route (TF-IDF as a simple BM25-ish proxy)
+        sparse_scores: List[Tuple[CollectionItem, float]] = []
+        try:
+            corpus = []
+            corpus_items = []
+            for it in items:
+                parts = [it.name or "", it.category or "", it.description or ""]
+                if it.category == 'Actions':
+                    parts.extend([
+                        it.stock_symbol or "",
+                        it.stock_exchange or "",
+                    ])
+                doc = " \n".join([str(p) for p in parts if p])
+                corpus.append(doc)
+                corpus_items.append(it)
+            if corpus:
+                vectorizer = TfidfVectorizer(ngram_range=(1,2), min_df=1)
+                X = vectorizer.fit_transform(corpus)
+                qv = vectorizer.transform([query])
+                sims = (X @ qv.T).toarray().ravel()
+                for idx, score in enumerate(sims):
+                    sparse_scores.append((corpus_items[idx], float(score)))
+        except Exception:
+            pass
+
+        # 3) Fusion (Reciprocal Rank Fusion style simplified)
+        rank_map_embed = {id(item): rank for rank, (item, _) in enumerate(sorted(embedding_scores, key=lambda x: x[1], reverse=True), start=1)}
+        rank_map_sparse = {id(item): rank for rank, (item, _) in enumerate(sorted(sparse_scores, key=lambda x: x[1], reverse=True), start=1)}
+
+        all_ids = {id(item) for (item, _) in embedding_scores} | {id(item) for (item, _) in sparse_scores}
+        id_to_item = {}
+        for (it, _) in embedding_scores:
+            id_to_item[id(it)] = it
+        for (it, _) in sparse_scores:
+            id_to_item[id(it)] = it
+
+        fused: List[Tuple[CollectionItem, float]] = []
+        for iid in all_ids:
+            r1 = rank_map_embed.get(iid)
+            r2 = rank_map_sparse.get(iid)
+            score = 0.0
+            if r1:
+                score += 1.0 / (60.0 + r1)
+            if r2:
+                score += 1.0 / (60.0 + r2)
+            fused.append((id_to_item[iid], score))
+
+        fused.sort(key=lambda x: x[1], reverse=True)
+        return fused[:max(1, int(top_k))]
+    
+    def _cosine_similarity(self, vec1: List[float], vec2: List[float]) -> float:
+        """Calcule la similarité cosinus entre deux vecteurs"""
+        vec1_np = np.array(vec1).reshape(1, -1)
+        vec2_np = np.array(vec2).reshape(1, -1)
+        return cosine_similarity(vec1_np, vec2_np)[0][0]
+    
+    def generate_embedding_for_item(self, item: CollectionItem) -> Optional[List[float]]:
+        """Génère l'embedding pour un item"""
+        if not self.client:
+            return None
+        
+        # Créer le texte à encoder - INCLURE LES INFOS ACTIONS
+        text_parts = [
+            f"Nom: {item.name}",
+            f"Catégorie: {item.category}",
+            f"Statut: {item.status}",
+        ]
+        
+        # Ajouter le nom en plusieurs variations pour améliorer la recherche
+        name_variations = item.name.lower().split()
+        text_parts.extend(name_variations)
+        
+        if item.construction_year:
+            text_parts.append(f"Année: {item.construction_year}")
+        
+        if item.condition:
+            text_parts.append(f"État: {item.condition}")
+        
+        if item.description:
+            text_parts.append(f"Description: {item.description}")
+        
+        if item.for_sale:
+            text_parts.append("En vente actuellement")
+        
+        if item.sale_status:
+            text_parts.append(f"Statut de vente: {item.sale_status}")
+        
+        if item.current_value:
+            text_parts.append(f"valeur actuelle: {item.current_value} CHF")
+        
+        if item.sold_price:
+            text_parts.append(f"Prix de vente: {item.sold_price} CHF")
+        
+        # Informations spécifiques aux actions
+        if item.category == 'Actions':
+            if item.stock_symbol:
+                text_parts.append(f"Symbole boursier: {item.stock_symbol}")
+            if item.stock_quantity:
+                text_parts.append(f"Quantité: {item.stock_quantity} actions")
+            if item.stock_exchange:
+                text_parts.append(f"Bourse: {item.stock_exchange}")
+            if item.current_price:
+                text_parts.append(f"Prix actuel: {item.current_price} CHF")
+        
+        text = ". ".join(text_parts)
+        
+        try:
+            response = self.client.embeddings.create(
+                input=text,
+                model=self.embedding_model
+            )
+            return response.data[0].embedding
+        except Exception as e:
+            logger.error(f"Erreur génération embedding item: {e}")
+            return None
+# Moteur d'IA OpenAI Pure avec RAG
+class PureOpenAIEngineWithRAG:
+    """Moteur d'IA utilisant OpenAI GPT-4 avec recherche sémantique RAG"""
+    
+    def __init__(self, client):
+        self.client = client
+        self.semantic_search = SemanticSearchRAG(client) if client else None
+        self._tool_runtime_context: Dict[str, Any] = {}
+
+    def _get_tools_schema(self) -> List[Dict[str, Any]]:
+        return [
+            {
+                "type": "function",
+                "name": "get_stock_price",
+                "description": "Obtenir le prix actuel d'une action et ses métriques (devise, variation, volume).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "symbol": {"type": "string", "description": "Symbole boursier, ex: IREN.SW, AAPL, BTC-USD"},
+                        "force_refresh": {"type": "boolean", "description": "Ignorer le cache et rafraîchir", "default": False}
+                    },
+                    "required": ["symbol"]
+                }
+            },
+            {
+                "type": "function",
+                "name": "get_market_snapshot",
+                "description": "Obtenir un aperçu du marché (indices, matières premières, crypto).",
+                "parameters": {"type": "object", "properties": {}}
+            },
+            {
+                "type": "function",
+                "name": "get_analytics_summary",
+                "description": "Résumé analytique (métriques de base, financières, pipeline).",
+                "parameters": {"type": "object", "properties": {}}
+            },
+            {
+                "type": "function",
+                "name": "list_items_by_category",
+                "description": "Lister les objets par catégorie et statut, triés par valeur décroissante.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "category": {"type": "string"},
+                        "status": {"type": "string", "enum": ["available", "sold", "all"], "default": "available"},
+                        "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 10}
+                    },
+                    "required": ["category"]
+                }
+            }
+        ]
+
+    def _execute_tool(self, name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        try:
+            if name == "get_stock_price":
+                symbol = str(arguments.get("symbol", "")).strip()
+                if not symbol or not re.match(r"^[A-Za-z0-9.+\-]{1,32}$", symbol):
+                    return {"error": "Symbole invalide"}
+                force_refresh = bool(arguments.get("force_refresh", False))
+                from stock_api_manager import stock_api_manager  # local import to avoid cycles
+                data = stock_api_manager.get_stock_price(symbol, force_refresh)
+                return data or {"error": "Prix indisponible"}
+
+            if name == "get_market_snapshot":
+                from stock_api_manager import stock_api_manager
+                return stock_api_manager.get_market_snapshot()
+
+            if name == "get_analytics_summary":
+                items: List[CollectionItem] = self._tool_runtime_context.get("items", [])
+                analytics: Dict[str, Any] = self._tool_runtime_context.get("analytics", {})
+                if not analytics:
+                    analytics = AdvancedDataManager.calculate_advanced_analytics(items)
+                basic = analytics.get('basic_metrics', {})
+                perf = analytics.get('performance_kpis', {})
+                return {"basic_metrics": basic, "performance_kpis": perf}
+
+            if name == "list_items_by_category":
+                items: List[CollectionItem] = self._tool_runtime_context.get("items", [])
+                category = str(arguments.get("category", "")).strip()
+                status = (arguments.get("status") or "available").lower()
+                limit = int(arguments.get("limit") or 10)
+                def _item_value(it: CollectionItem) -> float:
+                    try:
+                        if it.category == 'Actions' and it.current_price and it.stock_quantity:
+                            return float(it.current_price) * float(it.stock_quantity)
+                        return float(it.current_value or 0)
+                    except Exception:
+                        return 0.0
+                chosen = [i for i in items if i.category == category]
+                if status == 'sold':
+                    chosen = [i for i in chosen if is_item_sold(i)]
+                elif status == 'available':
+                    chosen = [i for i in chosen if is_item_available(i)]
+                chosen.sort(key=_item_value, reverse=True)
+                top = chosen[:max(1, min(limit, 100))]
+                return {
+                    "items": [{
+                        "id": it.id,
+                        "name": it.name,
+                        "category": it.category,
+                        "status": it.status,
+                        "value": _item_value(it)
+                    } for it in top]
+                }
+        except Exception as e:
+            return {"error": str(e)}
+        return {"error": "Outil inconnu"}
+
+    def _run_with_tools(self, messages: List[Dict[str, Any]], items: List[CollectionItem], analytics: Dict[str, Any]) -> Optional[str]:
+
+        """Run the model with tool-calling (Responses API) and return final assistant text."""
+        try:
+            self._tool_runtime_context = {"items": items, "analytics": analytics}
+            tools = self._get_tools_schema()
+            loop_messages = list(messages)
+
+            # First turn
+            res = chat_tools_messages(
+                messages=loop_messages,
+                tools=tools,
+                model=os.getenv("AI_MODEL","gpt-5"),
+                max_output_tokens=900,
+                reasoning_effort="high",
+                client=self.client
+            )
+
+            for _ in range(2):  # up to 3 turns total
+                made_call = False
+                for item in getattr(res, "output", []) or []:
+                    if getattr(item, "type", None) == "tool_call":
+                        name = getattr(item, "tool_name", None)
+                        args = getattr(item, "arguments", {})
+                        if isinstance(args, str):
+                            import json as _json
+                            try:
+                                args = _json.loads(args)
+                            except Exception:
+                                args = {"input": args}
+
+                        # Dispatch locally
+                        tool_result = self._run_tool_by_name(name, args)
+
+                        # Send tool output back using previous_response_id
+                        res = self.client.responses.create(
+                            model=os.getenv("AI_MODEL","gpt-5"),
+                            previous_response_id=res.id,
+                            input=[{
+                                "role":"tool",
+                                "name": name,
+                                "content":[{"type":"output_text","text": json.dumps(tool_result, ensure_ascii=False)}]
+                            }],
+                        )
+                        made_call = True
+                        break
+                if not made_call:
+                    break
+
+            return getattr(res, "output_text", None)
+        except Exception as e:
+            logger.error(f"_run_with_tools (Responses) error: {e}")
+            return None
+
+    def detect_query_intent(self, query: str) -> QueryIntent:
+        """Détecte l'intention de la requête"""
+        query_lower = query.lower()
+        
+        # Mots-clés pour la recherche sémantique - ÉLARGI
+        semantic_keywords = [
+            'trouve', 'cherche', 'montre', 'affiche', 'liste',
+            'combien', 'quel', 'quels', 'quelle', 'quelles',
+            'où', 'qui', 'avec', 'comme', 'similaire',
+            'ai-je', 'j\'ai', 'mes', 'ma', 'mon',
+            'allemande', 'italienne', 'française', 'japonaise',
+            'porsche', 'ferrari', 'lamborghini', 'bmw', 'mercedes',
+            'actions', 'bourse', 'portefeuille', 'symbole',
+            'total', 'valeur', 'performance', 'analyse', 'statistiques',
+            'opportunités', 'tendances', 'recommandations', 'insights'
+        ]
+        
+        # Forcer la recherche sémantique pour les questions sur les quantités et marques
+        car_brands = ['porsche', 'mercedes', 'bmw', 'ferrari', 'lamborghini', 'audi', 'volkswagen', 'allemande', 'italienne']
+        car_models = ['urus', 'cayenne', 'panamera', '911', 'aventador', 'huracan', '488', 'f8']
+        complex_questions = ['pas en vente', 'non en vente', 'pas à vendre', 'en vente', 'à vendre', 'disponible', 'vendu']
+        if 'combien' in query_lower or any(word in query_lower for word in car_brands + car_models + ['actions', 'bourse'] + complex_questions):
+            logger.info(f"Intent détecté: SEMANTIC_SEARCH pour '{query}'")
+            return QueryIntent.SEMANTIC_SEARCH
+        
+        # Vérifier si c'est une recherche sémantique
+        if any(keyword in query_lower for keyword in semantic_keywords):
+            logger.info(f"Intent détecté: SEMANTIC_SEARCH pour '{query}'")
+            return QueryIntent.SEMANTIC_SEARCH
+        
+        # Autres intentions existantes
+        if any(word in query_lower for word in ['vente', 'négociation', 'offre', 'pipeline']):
+            return QueryIntent.SALE_PROGRESS_TRACKING
+        
+        if any(word in query_lower for word in ['financ', 'roi', 'profit', 'rentab']):
+            return QueryIntent.FINANCIAL_ANALYSIS
+        
+        if any(word in query_lower for word in ['voiture', 'montre', 'bateau', 'avion']):
+            return QueryIntent.VEHICLE_ANALYSIS
+        
+        return QueryIntent.UNKNOWN
+    
+    def generate_response(self, query: str, items: List[CollectionItem], analytics: Dict[str, Any]) -> str:
+        """Génère une réponse via OpenAI GPT-4 avec approche hybride intelligente (sans historique)"""
+        return self.generate_response_with_history(query, items, analytics, [])
+    
+    def generate_response_with_history(self, query: str, items: List[CollectionItem], analytics: Dict[str, Any], conversation_history: List[Dict[str, str]]) -> str:
+        """Génère une réponse via OpenAI GPT-4 avec intelligence naturelle et mémoire conversationnelle"""
+        
+        if not self.client:
+            return "Moteur IA Indisponible"
+        
+        # TOUJOURS utiliser l'approche FULL CONTEXT - faire confiance à GPT-5 (Responses API)
+        logger.info(f"Utilisation de l'approche FULL CONTEXT - Faire confiance à l'intelligence de GPT-5")
+        return self._generate_full_context_response_with_history(query, items, analytics, conversation_history, True)
+        
+        # Cache avec historique
+        history_hash = hashlib.md5(json.dumps(conversation_history, sort_keys=True).encode()).hexdigest()[:8]
+        cache_key = hashlib.md5(f"{query}{len(items)}{history_hash}{json.dumps(analytics.get('basic_metrics', {}), sort_keys=True)}".encode()).hexdigest()[:12]
+        cached_response = smart_cache.get('ai_responses', cache_key)
+        if cached_response:
+            return cached_response
+        
+        try:
+            # Construire le contexte complet
+            context = self._build_complete_context(items, analytics)
+            
+            # Prompt système unifié avec mémoire conversationnelle
+            system_prompt = """Tu es l'assistant IA expert de la collection BONVIN avec mémoire conversationnelle.
+Tu as accès à toutes les données de la collection et tu fournis des analyses précises et contextualisées.
+Tu peux te référer à l'historique de la conversation pour contextualiser tes réponses.
+
+RÈGLES:
+1. Utilise TOUJOURS des données factuelles de la collection
+2. Structure tes réponses avec des titres et des listes
+3. Sois PRÉCIS avec les chiffres et les détails
+4. Maximum 800 mots
+5. Pas de formules de politesse génériques
+6. Utilise ton intelligence pour comprendre et contextualiser les données
+7. Emojis sobres et professionnels autorisés (📈/📉, 🟢/🟡/🔴, ⚠️, 💡) pour signaler tendances/alertes/insights — 1–2 max; pas dans les nombres ou clés
+7. Réfère-toi à l'historique de conversation quand c'est pertinent
+8. Évite de répéter des informations déjà données sauf si demandé"""
+
+            # Construire les messages avec historique
+            messages = [{"role": "system", "content": system_prompt}]
+            
+            # Ajouter l'historique de conversation (limité à 10 messages pour éviter les tokens excessifs)
+            for msg in conversation_history[-10:]:
+                if msg.get('role') in ['user', 'assistant'] and msg.get('content'):
+                    messages.append({
+                        "role": msg['role'],
+                        "content": msg['content']
+                    })
+            
+            # Ajouter la question actuelle
+            user_prompt = f"""QUESTION: {query}
+
+DONNÉES COLLECTION BONVIN:
+{context}
+
+Analyse cette question en tenant compte de l'historique de notre conversation et fournis une réponse complète et contextualisée basée sur les données réelles de la collection.
+Si la question fait référence à des éléments mentionnés précédemment, utilise cette information pour enrichir ta réponse."""
+
+            messages.append({"role": "user", "content": user_prompt})
+
+            # Responses API only
+            resp = from_responses_simple(
+client=self.client, model=os.getenv("AI_MODEL", "gpt-5"),
+                messages=[
+                    {"role": m["role"], "content": [{"type": "input_text", "text": m["content"]}]} if isinstance(m.get("content"), str) else m
+                    for m in messages
+                ],
+                max_output_tokens=1000,
+                reasoning_effort="medium"
+            )
+            ai_response = (extract_output_text(resp) or "").strip()
+            
+            # Cache la réponse
+            smart_cache.set('ai_responses', ai_response, cache_key)
+            
+            return ai_response
+            
+        except Exception as e:
+            logger.error(f"Erreur OpenAI: {e}")
+            return "Moteur IA Indisponible"
+    
+    def _generate_full_context_response(self, query: str, items: List[CollectionItem], analytics: Dict[str, Any], is_concept_search: bool = False) -> str:
+        """Génère une réponse en donnant TOUTES les données à GPT-4 (pour petits datasets) - sans historique"""
+        return self._generate_full_context_response_with_history(query, items, analytics, [], is_concept_search)
+    
+    def _generate_full_context_response_with_history(self, query: str, items: List[CollectionItem], analytics: Dict[str, Any], conversation_history: List[Dict[str, str]], is_concept_search: bool = False) -> str:
+        """Génère une réponse en donnant TOUTES les données à GPT-4 (pour petits datasets)"""
+        try:
+            # Cache pour éviter les appels répétés (avec historique)
+            history_hash = hashlib.md5(json.dumps(conversation_history, sort_keys=True).encode()).hexdigest()[:8]
+            cache_key = hashlib.md5(f"{query}{len(items)}{history_hash}{json.dumps(analytics.get('basic_metrics', {}), sort_keys=True)}".encode()).hexdigest()[:12]
+            cached_response = smart_cache.get('ai_responses', cache_key)
+            if cached_response:
+                return cached_response
+            
+            # Construire le contexte COMPLET avec TOUS les objets
+            complete_context = self._build_complete_dataset_context(items, analytics)
+            
+            # Prompt système simplifié
+            system_prompt = """Tu es l'assistant IA expert de la collection BONVIN. Réponds de manière concise et directe.
+
+RÈGLES:
+1. Utilise les données exactes de la collection
+2. Comprends naturellement l'intention de la question
+3. Donne le nombre exact d'objets trouvés
+4. Utilise l'historique de conversation si pertinent
+5. Réponses courtes et précises
+6. Emojis sobres (📈/📉, 🟢/🟡/🔴, ⚠️, 💡) pour souligner tendances/risques/insights — 1–2 max; jamais dans les chiffres"""
+
+            # Construire les messages avec historique
+            messages = [{"role": "system", "content": system_prompt}]
+            
+            # Ajouter l'historique de conversation (limité à 8 messages pour éviter les tokens excessifs)
+            for msg in conversation_history[-8:]:
+                if msg.get('role') in ['user', 'assistant'] and msg.get('content'):
+                    messages.append({
+                        "role": msg['role'],
+                        "content": msg['content']
+                    })
+            
+            # Prompt utilisateur simplifié
+            user_prompt = f"""QUESTION: {query}
+DONNÉES: {complete_context}
+Réponds de manière concise et directe."""
+
+            messages.append({"role": "user", "content": user_prompt})
+
+            # Try tool-calling path first
+            ai_response = self._run_with_tools(messages, items, analytics)
+            if not ai_response:
+                # Fallback to Responses API (no Completions)
+                resp = from_responses_simple(
 client=self.client, model=os.getenv("AI_MODEL", "gpt-5"),
                     messages=[
                         {"role": m["role"], "content": [{"type": "input_text", "text": m["content"]}]} if isinstance(m.get("content"), str) else m
