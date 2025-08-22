@@ -11050,14 +11050,24 @@ def markets_chat():
                 logger.info(f"💡 Note: GPT-5 ne supporte pas temperature, seulement reasoning.effort")
                 _client = client.with_options(timeout=60)  # Réduit de 120s à 60s
                 
-                # Paramètres optimisés pour GPT-5 Responses API - Forçage d'émission via text + instructions
+                # Paramètres optimisés pour GPT-5 Responses API - Forçage d'émission via schema + instructions
                 api_params = {
                     "model": os.getenv("AI_MODEL", "gpt-5"),
-                    "instructions": "Tu raisonnes autant que nécessaire, mais tu DOIS fournir une sortie finale. Écris ta réponse directement après avoir analysé. N'utilise pas de formatage complexe, juste du texte brut.",
+                    "instructions": "Tu raisonnes autant que nécessaire, mais tu DOIS fournir une sortie finale. Tu DOIS respecter exactement ce format JSON : {\"final\": \"ta réponse commence par OK - \"}. Écris ta réponse directement après avoir analysé.",
                     "input": [
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_prompt_final},
                     ],
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "final": {
+                                "type": "string",
+                                "description": "Réponse finale en français, commence par 'OK – '"
+                            }
+                        },
+                        "required": ["final"]
+                    },
                     "text": {
                         "format": {"type": "text"},
                         "verbosity": "medium"
@@ -11098,8 +11108,23 @@ def markets_chat():
                 if hasattr(res, 'output_text'):
                     logger.info(f"📡 res.output_text: {res.output_text}")
                 
-                reply = (extract_output_text(res) or "").strip()
-                logger.info(f"📝 Texte extrait de Responses API: '{reply[:100]}...' (longueur: {len(reply)})")
+                reply_raw = (extract_output_text(res) or "").strip()
+                logger.info(f"📝 Texte extrait de Responses API: '{reply_raw[:100]}...' (longueur: {len(reply_raw)})")
+                
+                # Essayer d'extraire la réponse du JSON structuré
+                reply = ""
+                if reply_raw:
+                    try:
+                        import json
+                        data = json.loads(reply_raw)
+                        if isinstance(data, dict) and "final" in data:
+                            reply = data["final"]
+                            logger.info(f"✅ JSON structuré parsé avec succès, réponse extraite: '{reply[:100]}...'")
+                        else:
+                            logger.warning(f"⚠️ JSON invalide ou pas de champ 'final': {data}")
+                    except json.JSONDecodeError as e:
+                        logger.warning(f"⚠️ Erreur parsing JSON: {e}, utilisation du texte brut")
+                        reply = reply_raw
                 
                 # Si on a une réponse, sortir de la boucle
                 if reply:
