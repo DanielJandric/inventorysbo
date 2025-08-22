@@ -10976,77 +10976,25 @@ def markets_chat():
             logger.error(f"OpenAI init error: {e}")
             return jsonify({"success": False, "error": "OpenAI non configuré"}), 500
 
-        # Prompt système plus direct, avec mémoire et consignes
+        # Prompt système optimisé pour GPT-5 natif avec format simple
         system_prompt = (
-            "Tu es un analyste marchés. Réponds en français, de manière concise, actionnable et contextuelle. "
+            "Tu es un analyste marchés expert utilisant GPT-5 natif. Réponds en français, de manière concise, actionnable et contextuelle. "
             "Utilise la mémoire de conversation (si pertinente) pour assurer la continuité. "
             "Reconnais patterns (tendance, corrélations, régimes de volatilité) et commente risques/opportunités. "
             "N'invente jamais de chiffres. Utilise **gras** pour les points critiques, et des emojis sobres (↑, ↓, 🟢, 🔴, ⚠️, 💡). "
-            "Structure la réponse en 3–5 points maximum, puis une phrase de conclusion claire."
+            "Structure la réponse en 3–5 points maximum, puis une phrase de conclusion claire. "
+            "IMPORTANT: Réponds TOUJOURS en texte simple et direct, sans formatage complexe ni structures imbriquées. "
+            "Ta réponse doit être directement lisible et extractible par le système."
         )
 
-        # Appel Responses API (format role/content) avec web injecté en texte si demandé
-        try:
-            ws_text = ""
-            if bool(data.get("use_web", False)) and web_search_manager:
-                try:
-                    ws_res = web_search_manager.search_financial_markets(
-                        search_type=WebSearchType.MARKET_DATA,
-                        search_context_size="low"
-                    )
-                    if ws_res and getattr(ws_res, 'content', None):
-                        ws_text = str(ws_res.content)[:1200]
-                except Exception:
-                    ws_text = ""
-
-            eff = (os.getenv("AI_REASONING_EFFORT", "high") or "").strip().lower()
-            if eff not in ("low", "medium", "high"):
-                eff = "high"
-
-            user_parts = []
-            if ws_text:
-                user_parts.append(f"Contexte (recherche web):\n{ws_text}\n---\n")
-            if context_text:
-                user_parts.append(f"Contexte (rapports):\n{context_text}\n\n")
-            user_parts.append(f"Question: {user_message}")
-            user_prompt_final = "".join(user_parts)
-
-            logger.info(f"🔍 Tentative Responses API - Modèle: {os.getenv('AI_MODEL', 'gpt-5')}, Effort: {eff}")
-            _client = client.with_options(timeout=120)
-            res = _client.responses.create(
-                model=os.getenv("AI_MODEL", "gpt-5"),
-                input=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt_final},
-                ],
-                reasoning={"effort": eff},
-                max_output_tokens=1500,
-                timeout=120,
-            )
-            
-            # Log de la réponse brute de l'API Responses
-            logger.info(f"📡 Réponse brute Responses API reçue: {type(res)}")
-            logger.info(f"📡 Attributs de la réponse: {dir(res)}")
-            if hasattr(res, 'output'):
-                logger.info(f"📡 res.output: {res.output}")
-            if hasattr(res, 'output_text'):
-                logger.info(f"📡 res.output_text: {res.output_text}")
-            
-            reply = (extract_output_text(res) or "").strip()
-            logger.info(f"📝 Texte extrait de Responses API: '{reply[:100]}...' (longueur: {len(reply)})")
-            
-        except Exception as e:
-            logger.error(f"❌ Erreur Responses API: {e}")
-            logger.error(f"❌ Type d'erreur: {type(e)}")
-            reply = ""
-
-        # Fallback final: Chat Completions si texte vide (en pré-injectant un court contexte + web si demandé)
-        if not reply:
-            logger.info("🔄 Responses API n'a pas retourné de réponse, tentative Chat Completions...")
+        # Appel Responses API avec retry et paramètres optimisés pour GPT-5 natif
+        reply = ""
+        max_retries = 2
+        
+        for attempt in range(max_retries):
             try:
-                # Web search rapide si demandé
                 ws_text = ""
-                if use_web and web_search_manager:
+                if bool(data.get("use_web", False)) and web_search_manager:
                     try:
                         ws_res = web_search_manager.search_financial_markets(
                             search_type=WebSearchType.MARKET_DATA,
@@ -11057,54 +11005,79 @@ def markets_chat():
                     except Exception:
                         ws_text = ""
 
-                # Contexte court (RAG déjà compacté)
-                cc_messages = [
-                    {"role": "system", "content": system_prompt},
-                ]
-                if ws_text:
-                    cc_messages.append({"role": "user", "content": f"Contexte (recherche web):\n{ws_text}"})
-                if context_text:
-                    short_ctx = context_text[:1200]
-                    cc_messages.append({"role": "user", "content": f"Contexte (rapports):\n{short_ctx}"})
-                cc_messages.append({"role": "user", "content": f"Question: {user_message}"})
+                eff = (os.getenv("AI_REASONING_EFFORT", "high") or "").strip().lower()
+                if eff not in ("low", "medium", "high"):
+                    eff = "high"
 
-                logger.info(f"🔍 Tentative Chat Completions - Modèle: {os.getenv('AI_COMPLETIONS_MODEL', 'gpt-5-chat-latest')}")
-                cc = from_chat_completions_compat(
-                    client=client,
-                    model=os.getenv("AI_COMPLETIONS_MODEL", "gpt-5-chat-latest"),
-                    messages=cc_messages,
-                    max_tokens=1200,
-                    timeout=120,
-                )
+                user_parts = []
+                if ws_text:
+                    user_parts.append(f"Contexte (recherche web):\n{ws_text}\n---\n")
+                if context_text:
+                    user_parts.append(f"Contexte (rapports):\n{context_text}\n\n")
+                user_parts.append(f"Question: {user_message}")
+                user_prompt_final = "".join(user_parts)
+
+                logger.info(f"🔍 Tentative Responses API #{attempt + 1} - Modèle: {os.getenv('AI_MODEL', 'gpt-5')}, Effort: {eff}")
+                _client = client.with_options(timeout=120)
                 
-                # Log de la réponse brute de Chat Completions
-                logger.info(f"📡 Réponse brute Chat Completions reçue: {type(cc)}")
-                logger.info(f"📡 Attributs de la réponse: {dir(cc)}")
-                if hasattr(cc, 'choices'):
-                    logger.info(f"📡 cc.choices: {cc.choices}")
-                    if cc.choices and len(cc.choices) > 0:
-                        choice = cc.choices[0]
-                        logger.info(f"📡 Premier choix: {choice}")
-                        if hasattr(choice, 'message'):
-                            logger.info(f"📡 choice.message: {choice.message}")
-                            if hasattr(choice.message, 'content'):
-                                logger.info(f"📡 choice.message.content: {choice.message.content}")
+                # Paramètres optimisés pour GPT-5 natif
+                api_params = {
+                    "model": os.getenv("AI_MODEL", "gpt-5"),
+                    "input": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt_final},
+                    ],
+                    "reasoning": {"effort": eff},
+                    "max_output_tokens": 1500,
+                    "timeout": 120,
+                }
                 
-                # Extraction correcte pour Chat Completions
-                if cc.choices and len(cc.choices) > 0:
-                    choice = cc.choices[0]
-                    if hasattr(choice, 'message') and choice.message:
-                        reply = (choice.message.content or '').strip()
-                    else:
-                        reply = ''
+                # Ajuster les paramètres selon la tentative
+                if attempt == 0:
+                    # Première tentative : format texte strict
+                    api_params.update({
+                        "response_format": {"type": "text"},
+                        "temperature": 0.1,
+                    })
                 else:
-                    reply = ''
-                logger.info(f"📝 Texte extrait de Chat Completions: '{reply[:100]}...' (longueur: {len(reply)})")
+                    # Deuxième tentative : format plus flexible
+                    api_params.update({
+                        "temperature": 0.0,  # Plus déterministe
+                        "reasoning": {"effort": "medium"},  # Effort réduit
+                    })
                 
+                res = _client.responses.create(**api_params)
+                
+                # Log de la réponse brute de l'API Responses
+                logger.info(f"📡 Réponse brute Responses API reçue: {type(res)}")
+                logger.info(f"📡 Attributs de la réponse: {dir(res)}")
+                if hasattr(res, 'output'):
+                    logger.info(f"📡 res.output: {res.output}")
+                if hasattr(res, 'output_text'):
+                    logger.info(f"📡 res.output_text: {res.output_text}")
+                
+                reply = (extract_output_text(res) or "").strip()
+                logger.info(f"📝 Texte extrait de Responses API: '{reply[:100]}...' (longueur: {len(reply)})")
+                
+                # Si on a une réponse, sortir de la boucle
+                if reply:
+                    logger.info(f"✅ Réponse obtenue à la tentative #{attempt + 1}")
+                    break
+                    
             except Exception as e:
-                logger.error(f"❌ Erreur Chat Completions: {e}")
+                logger.error(f"❌ Erreur Responses API (tentative #{attempt + 1}): {e}")
                 logger.error(f"❌ Type d'erreur: {type(e)}")
-                reply = ""
+                if attempt == max_retries - 1:
+                    logger.error("🚨 Toutes les tentatives Responses API ont échoué")
+                else:
+                    logger.info(f"🔄 Nouvelle tentative dans 2 secondes...")
+                    import time
+                    time.sleep(2)
+
+        # Pas de fallback - Responses API uniquement pour GPT-5 natif
+        if not reply:
+            logger.warning("⚠️ Responses API n'a pas retourné de réponse - pas de fallback vers Chat Completions")
+            logger.info("💡 Tentative d'ajustement des paramètres pour la prochaine requête")
 
         # Si aucune réponse modèle après tentatives API, retourner une erreur claire (pas de fallback local)
         if not reply:
