@@ -11100,31 +11100,31 @@ def markets_chat():
         max_retries = 3  # Tentatives Responses API avec progression d'effort
         
         for attempt in range(max_retries):
-            try:
-                ws_text = ""
-                if bool(data.get("use_web", False)) and web_search_manager:
-                    try:
-                        ws_res = web_search_manager.search_financial_markets(
-                            search_type=WebSearchType.MARKET_DATA,
-                            search_context_size="low"
-                        )
-                        if ws_res and getattr(ws_res, 'content', None):
-                            ws_text = str(ws_res.content)[:1200]
-                    except Exception:
-                        ws_text = ""
+        try:
+            ws_text = ""
+            if bool(data.get("use_web", False)) and web_search_manager:
+                try:
+                    ws_res = web_search_manager.search_financial_markets(
+                        search_type=WebSearchType.MARKET_DATA,
+                        search_context_size="low"
+                    )
+                    if ws_res and getattr(ws_res, 'content', None):
+                        ws_text = str(ws_res.content)[:1200]
+                except Exception:
+                    ws_text = ""
 
-                eff = (os.getenv("AI_REASONING_EFFORT", "high") or "").strip().lower()
-                if eff not in ("low", "medium", "high"):
-                    eff = "high"
+            eff = (os.getenv("AI_REASONING_EFFORT", "high") or "").strip().lower()
+            if eff not in ("low", "medium", "high"):
+                eff = "high"
 
-                user_parts = []
+            user_parts = []
                 if conversation_context:
                     user_parts.append(f"Contexte (conversation):\n{conversation_context}\n")
-                if ws_text:
-                    user_parts.append(f"Contexte (recherche web):\n{ws_text}\n---\n")
-                if context_text:
-                    user_parts.append(f"Contexte (rapports):\n{context_text}\n\n")
-                user_parts.append(f"Question: {user_message}")
+            if ws_text:
+                user_parts.append(f"Contexte (recherche web):\n{ws_text}\n---\n")
+            if context_text:
+                user_parts.append(f"Contexte (rapports):\n{context_text}\n\n")
+            user_parts.append(f"Question: {user_message}")
                     
                 # Consigne finale impérative pour forcer le raisonnement ET l'émission
                 user_parts.append(f"\n\n===\nTÂCHE: {user_message}\n")
@@ -11137,7 +11137,7 @@ def markets_chat():
                 user_parts.append("===\nRAISONNEMENT + RÉPONSE FINALE (obligatoire) :")
                 user_parts.append("\n\nANALYSE et ÉCRIS MAINTENANT :")
                     
-                user_prompt_final = "".join(user_parts)
+            user_prompt_final = "".join(user_parts)
 
                 logger.info(f"🔍 Tentative Chat Completions API #{attempt + 1} - Modèle: {os.getenv('AI_MODEL', 'gpt-5')}, Temperature: 0.4")
                 logger.info(f"💡 Note: Utilisation de l'API Chat Completions classique avec GPT-5")
@@ -11170,9 +11170,9 @@ def markets_chat():
                 api_params = {
                     "model": os.getenv("AI_MODEL", "gpt-5"),
                     "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt_final},
-                    ],
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt_final},
+                ],
                     "temperature": 0.4,  # FORCER la cohérence et la précision
                     "max_tokens": 800,  # Budget suffisant pour raisonnement + réponse
                     "top_p": 0.9,  # Contrôle de la diversité
