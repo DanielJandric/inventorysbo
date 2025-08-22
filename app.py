@@ -1653,6 +1653,72 @@ class ConversationMemoryStore:
                 return [{"role": r[0], "content": r[1]} for r in reversed(rows)]
         except Exception:
             return []
+    
+    def get_conversation_summary(self, session_id: str, max_messages: int = 10):
+        """Génère un résumé de la conversation pour éviter de surcharger le contexte."""
+        try:
+            messages = self.get_recent_messages(session_id, max_messages)
+            if not messages:
+                return ""
+            
+            # Limiter la longueur totale du résumé
+            total_length = sum(len(msg.get("content", "")) for msg in messages)
+            if total_length > 2000:  # Limite pour éviter de surcharger le contexte
+                # Garder seulement les messages les plus récents et courts
+                filtered_messages = []
+                current_length = 0
+                for msg in reversed(messages):  # Commencer par les plus récents
+                    msg_length = len(msg.get("content", ""))
+                    if current_length + msg_length <= 1500:  # Limite plus stricte
+                        filtered_messages.insert(0, msg)  # Remettre dans l'ordre chronologique
+                        current_length += msg_length
+                    else:
+                        break
+                return self._format_conversation_context(filtered_messages)
+            
+            return self._format_conversation_context(messages)
+        except Exception:
+            return ""
+    
+    def _format_conversation_context(self, messages):
+        """Formate les messages pour le contexte de conversation."""
+        if not messages:
+            return ""
+        
+        context = "Historique de conversation récent:\n"
+        for msg in messages:
+            role = "Vous" if msg["role"] == "user" else "Assistant"
+            content = msg["content"][:200] + "..." if len(msg["content"]) > 200 else msg["content"]
+            context += f"{role}: {content}\n"
+        context += "---\n"
+        return context
+    
+    def clear_old_conversations(self, days_old: int = 30):
+        """Nettoie les anciennes conversations pour économiser l'espace."""
+        try:
+            with self._connect() as conn:
+                cur = conn.cursor()
+                cutoff_date = (datetime.utcnow() - timedelta(days=days_old)).isoformat()
+                cur.execute(
+                    "DELETE FROM messages WHERE created_at < ?",
+                    (cutoff_date,)
+                )
+                conn.commit()
+        except Exception:
+            pass
+    
+    def clear_session_memory(self, session_id: str):
+        """Efface tous les messages d'une session spécifique."""
+        try:
+            with self._connect() as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    "DELETE FROM messages WHERE session_id = ?",
+                    (session_id,)
+                )
+                conn.commit()
+        except Exception:
+            pass
 
 conversation_memory = ConversationMemoryStore()
 
@@ -10909,9 +10975,12 @@ def markets_chat():
 
         # Récupérer mémoire de session (messages précédents)
         try:
-            history_persisted = conversation_memory.get_recent_messages(session_id, limit=2)
+            history_persisted = conversation_memory.get_recent_messages(session_id, limit=6)  # Augmenté de 2 à 6
         except Exception:
             history_persisted = []
+
+        # Construire le contexte de conversation avec résumé intelligent
+        conversation_context = conversation_memory.get_conversation_summary(session_id, max_messages=8)
 
         # Contexte: rapide par défaut; ajouter RAG seulement si demandé
         context_text = ""
@@ -10976,10 +11045,10 @@ def markets_chat():
             logger.error(f"OpenAI init error: {e}")
             return jsonify({"success": False, "error": "OpenAI non configuré"}), 500
 
-        # Prompt système optimisé pour GPT-5 natif avec format simple
+        # Prompt système optimisé pour GPT-5 natif avec format simple et mémoire
         system_prompt = (
             "Tu es un analyste marchés expert utilisant GPT-5 natif. Réponds en français, de manière concise, actionnable et contextuelle. "
-            "Utilise la mémoire de conversation (si pertinente) pour assurer la continuité. "
+            "Utilise la mémoire de conversation (si pertinente) pour assurer la continuité et référencer les discussions précédentes. "
             "Reconnais patterns (tendance, corrélations, régimes de volatilité) et commente risques/opportunités. "
             "N'invente jamais de chiffres. Utilise **gras** pour les points critiques, et des emojis sobres (↑, ↓, 🟢, 🔴, ⚠️, 💡). "
             "Structure la réponse en 3–5 points maximum, puis une phrase de conclusion claire. "
@@ -11010,6 +11079,8 @@ def markets_chat():
                     eff = "high"
 
                 user_parts = []
+                if conversation_context:
+                    user_parts.append(f"Contexte (conversation):\n{conversation_context}\n")
                 if ws_text:
                     user_parts.append(f"Contexte (recherche web):\n{ws_text}\n---\n")
                 if context_text:
@@ -11018,7 +11089,7 @@ def markets_chat():
                 user_prompt_final = "".join(user_parts)
 
                 logger.info(f"🔍 Tentative Responses API #{attempt + 1} - Modèle: {os.getenv('AI_MODEL', 'gpt-5')}, Effort: {eff}")
-                logger.info(f"💡 Note: GPT-5 ne supporte pas temperature, seulement reasoning.effort et response_format")
+                logger.info(f"💡 Note: GPT-5 ne supporte pas temperature, seulement reasoning.effort")
                 _client = client.with_options(timeout=120)
                 
                 # Paramètres optimisés pour GPT-5 natif (sans temperature - non supporté)
@@ -11035,9 +11106,9 @@ def markets_chat():
                 
                 # Ajuster les paramètres selon la tentative
                 if attempt == 0:
-                    # Première tentative : format texte strict
+                    # Première tentative : effort élevé
                     api_params.update({
-                        "response_format": {"type": "text"},
+                        "reasoning": {"effort": "high"},
                     })
                 else:
                     # Deuxième tentative : effort réduit pour plus de stabilité
@@ -11097,6 +11168,24 @@ def markets_chat():
         return jsonify({"success": True, "reply": clipped, "metadata": {"session_id": session_id}})
     except Exception as e:
         logger.error(f"Erreur markets_chat: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route("/api/markets/chat/clear-memory", methods=["POST"])
+def clear_chat_memory():
+    """Nettoie la mémoire de conversation pour une session donnée."""
+    try:
+        data = request.get_json(silent=True) or {}
+        session_id = (data.get("session_id") or "").strip()
+        
+        if not session_id:
+            return jsonify({"success": False, "error": "Session ID requis"}), 400
+        
+        # Nettoyer la mémoire pour cette session
+        conversation_memory.clear_session_memory(session_id)
+        
+        return jsonify({"success": True, "message": "Mémoire de conversation effacée"})
+    except Exception as e:
+        logger.error(f"Erreur clear_chat_memory: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 @app.route("/api/markets/chat/export-pdf", methods=["POST"])
 def markets_chat_export_pdf():

@@ -121,8 +121,18 @@
                         <button id="chat-send" class="px-4 py-2 rounded-lg bg-cyan-500/20 border border-cyan-400/30 hover:bg-cyan-500/30 text-cyan-100 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed">Envoyer</button>
                     </div>
                     <textarea id="chat-context" class="mt-2 w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-cyan-200/80 placeholder-cyan-200/50 focus:border-cyan-400/50 focus:outline-none focus:ring-1 focus:ring-cyan-400/30" rows="3" placeholder="Optionnel: Collez ici un extrait de rapport ou un contexte métier pour guider l'analyse (utilisé en plus des 10-15 derniers rapports)."></textarea>
-                    <div class="flex justify-end">
-                        <button id="chat-export" class="mt-2 px-3 py-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 text-xs text-cyan-200/80 transition-colors"><i class="fas fa-file-pdf mr-1"></i> Exporter en PDF</button>
+                    <div class="flex justify-between items-center">
+                        <div class="text-xs text-cyan-200/60">
+                            <span id="session-info">Session: Chargement...</span>
+                        </div>
+                        <div class="flex gap-2">
+                            <button id="chat-clear-memory" class="px-3 py-2 rounded-lg bg-red-500/20 border border-red-500/30 hover:bg-red-500/30 text-red-200 text-xs transition-colors">
+                                <i class="fas fa-trash mr-1"></i> Effacer mémoire
+                            </button>
+                            <button id="chat-export" class="px-3 py-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 text-xs text-cyan-200/80 transition-colors">
+                                <i class="fas fa-file-pdf mr-1"></i> Exporter en PDF
+                            </button>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -399,9 +409,61 @@
             const inputEl = document.getElementById('chat-input');
             const sendBtn = document.getElementById('chat-send');
             const exportBtn = document.getElementById('chat-export');
+            const clearMemoryBtn = document.getElementById('chat-clear-memory');
+            const sessionInfo = document.getElementById('session-info');
             
             // Initialiser le chat avec un message de bienvenue
             addMsg('assistant', 'Bonjour ! Je suis votre assistant marchés. Posez-moi vos questions sur les tendances, risques, opportunités ou tout autre sujet lié aux marchés financiers.');
+            
+            // Initialiser et afficher la session ID
+            function initSession() {
+                let sid = localStorage.getItem('markets_chat_session_id');
+                if (!sid) {
+                    sid = (crypto && crypto.randomUUID) ? crypto.randomUUID() : (Date.now() + '-' + Math.random().toString(36).slice(2));
+                    localStorage.setItem('markets_chat_session_id', sid);
+                }
+                sessionInfo.textContent = `Session: ${sid.substring(0, 8)}...`;
+                return sid;
+            }
+            
+            // Effacer la mémoire de conversation
+            async function clearMemory() {
+                if (!confirm('Êtes-vous sûr de vouloir effacer la mémoire de cette conversation ?')) {
+                    return;
+                }
+                
+                try {
+                    const sid = localStorage.getItem('markets_chat_session_id');
+                    if (sid) {
+                        const response = await fetch('/api/markets/chat/clear-memory', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ session_id: sid })
+                        });
+                        
+                        if (response.ok) {
+                            // Vider l'interface
+                            messagesDiv.innerHTML = '';
+                            addMsg('assistant', 'Mémoire effacée. Nouvelle conversation commencée.');
+                            
+                            // Générer une nouvelle session
+                            const newSid = initSession();
+                            localStorage.setItem('markets_chat_session_id', newSid);
+                        } else {
+                            throw new Error('Erreur lors de l\'effacement de la mémoire');
+                        }
+                    }
+                } catch (error) {
+                    console.error('Erreur clearMemory:', error);
+                    alert('Erreur lors de l\'effacement de la mémoire: ' + error.message);
+                }
+            }
+            
+            // Bind events
+            clearMemoryBtn.addEventListener('click', clearMemory);
+            
+            // Initialiser la session au chargement
+            initSession();
             
             function addMsg(role, text) {
                 const color = role === 'user' ? 'text-cyan-100' : 'text-cyan-200/80';
