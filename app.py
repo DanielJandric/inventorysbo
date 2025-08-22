@@ -11011,6 +11011,7 @@ def markets_chat():
             user_parts.append(f"Question: {user_message}")
             user_prompt_final = "".join(user_parts)
 
+            logger.info(f"🔍 Tentative Responses API - Modèle: {os.getenv('AI_MODEL', 'gpt-5')}, Effort: {eff}")
             _client = client.with_options(timeout=120)
             res = _client.responses.create(
                 model=os.getenv("AI_MODEL", "gpt-5"),
@@ -11022,12 +11023,26 @@ def markets_chat():
                 max_output_tokens=1500,
                 timeout=120,
             )
+            
+            # Log de la réponse brute de l'API Responses
+            logger.info(f"📡 Réponse brute Responses API reçue: {type(res)}")
+            logger.info(f"📡 Attributs de la réponse: {dir(res)}")
+            if hasattr(res, 'output'):
+                logger.info(f"📡 res.output: {res.output}")
+            if hasattr(res, 'output_text'):
+                logger.info(f"📡 res.output_text: {res.output_text}")
+            
             reply = (extract_output_text(res) or "").strip()
-        except Exception:
+            logger.info(f"📝 Texte extrait de Responses API: '{reply[:100]}...' (longueur: {len(reply)})")
+            
+        except Exception as e:
+            logger.error(f"❌ Erreur Responses API: {e}")
+            logger.error(f"❌ Type d'erreur: {type(e)}")
             reply = ""
 
         # Fallback final: Chat Completions si texte vide (en pré-injectant un court contexte + web si demandé)
         if not reply:
+            logger.info("🔄 Responses API n'a pas retourné de réponse, tentative Chat Completions...")
             try:
                 # Web search rapide si demandé
                 ws_text = ""
@@ -11053,6 +11068,7 @@ def markets_chat():
                     cc_messages.append({"role": "user", "content": f"Contexte (rapports):\n{short_ctx}"})
                 cc_messages.append({"role": "user", "content": f"Question: {user_message}"})
 
+                logger.info(f"🔍 Tentative Chat Completions - Modèle: {os.getenv('AI_COMPLETIONS_MODEL', 'gpt-5-chat-latest')}")
                 cc = from_chat_completions_compat(
                     client=client,
                     model=os.getenv("AI_COMPLETIONS_MODEL", "gpt-5-chat-latest"),
@@ -11060,8 +11076,26 @@ def markets_chat():
                     max_tokens=1200,
                     timeout=120,
                 )
+                
+                # Log de la réponse brute de Chat Completions
+                logger.info(f"📡 Réponse brute Chat Completions reçue: {type(cc)}")
+                logger.info(f"📡 Attributs de la réponse: {dir(cc)}")
+                if hasattr(cc, 'choices'):
+                    logger.info(f"📡 cc.choices: {cc.choices}")
+                    if cc.choices and len(cc.choices) > 0:
+                        choice = cc.choices[0]
+                        logger.info(f"📡 Premier choix: {choice}")
+                        if hasattr(choice, 'message'):
+                            logger.info(f"📡 choice.message: {choice.message}")
+                            if hasattr(choice.message, 'content'):
+                                logger.info(f"📡 choice.message.content: {choice.message.content}")
+                
                 reply = (getattr(cc, 'choices', [{}])[0].get('message', {}).get('content') or '').strip()
-            except Exception:
+                logger.info(f"📝 Texte extrait de Chat Completions: '{reply[:100]}...' (longueur: {len(reply)})")
+                
+            except Exception as e:
+                logger.error(f"❌ Erreur Chat Completions: {e}")
+                logger.error(f"❌ Type d'erreur: {type(e)}")
                 reply = ""
 
         # Si aucune réponse modèle après tentatives API, retourner une erreur claire (pas de fallback local)
