@@ -83,6 +83,18 @@ def _extract_output_text_from_response(res: Any) -> str:
                             text_content = content.get("text") or content.get("content")
                             if text_content:
                                 parts.append(str(text_content))
+                    
+                    # NOUVEAU: Chercher dans tous les attributs de l'item reasoning
+                    if not parts:
+                        for attr_name in ["text", "message", "output", "response", "result"]:
+                            attr_value = getattr(item, attr_name, None)
+                            if attr_value:
+                                if isinstance(attr_value, str):
+                                    parts.append(attr_value)
+                                elif isinstance(attr_value, dict):
+                                    text_content = attr_value.get("text") or attr_value.get("content") or attr_value.get("message")
+                                    if text_content:
+                                        parts.append(str(text_content))
                 
                 elif item_type == "output_text":
                     # Type output_text direct
@@ -113,7 +125,7 @@ def _extract_output_text_from_response(res: Any) -> str:
         
         # Si on n'a rien trouvé, essayer d'autres attributs de la réponse
         if not parts:
-            for attr_name in ["text", "content", "message", "response"]:
+            for attr_name in ["text", "content", "message", "response", "result"]:
                 attr_value = getattr(res, attr_name, None)
                 if attr_value:
                     if isinstance(attr_value, str):
@@ -125,18 +137,34 @@ def _extract_output_text_from_response(res: Any) -> str:
         
         # Log pour debug si pas de réponse
         if not parts:
-            logger = getattr(res, '_logger', None)
-            if logger:
+            # Essayer de logger la structure complète pour debug
+            try:
+                import logging
+                logger = logging.getLogger(__name__)
                 logger.warning(f"⚠️ Aucun texte extrait de la réponse Responses API: {type(res)}")
                 logger.warning(f"📡 Structure de la réponse: {res}")
+                # Essayer de voir s'il y a des attributs cachés
+                for attr in dir(res):
+                    if not attr.startswith('_'):
+                        try:
+                            value = getattr(res, attr)
+                            if value and str(value) not in ['None', '[]', '{}']:
+                                logger.warning(f"📡 {attr}: {value}")
+                        except:
+                            pass
+            except:
+                pass
         
         return " ".join(parts)
         
     except Exception as e:
         # Log de l'erreur pour debug
-        logger = getattr(res, '_logger', None)
-        if logger:
+        try:
+            import logging
+            logger = logging.getLogger(__name__)
             logger.error(f"❌ Erreur lors de l'extraction du texte: {e}")
+        except:
+            pass
         return ""
 
 

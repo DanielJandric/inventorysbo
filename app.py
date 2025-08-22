@@ -10987,15 +10987,17 @@ def markets_chat():
             logger.error(f"OpenAI init error: {e}")
             return jsonify({"success": False, "error": "OpenAI non configuré"}), 500
 
-        # Prompt système optimisé pour GPT-5 natif avec format simple et mémoire
+        # Prompt système optimisé pour GPT-5 Responses API - FORCER réponse textuelle
         system_prompt = (
-            "Tu es un analyste marchés expert utilisant GPT-5 natif. Réponds en français, de manière concise, actionnable et contextuelle. "
+            "Tu es un analyste marchés expert utilisant GPT-5 Responses API. "
+            "MISSION CRITIQUE: Tu DOIS répondre avec du texte direct et lisible. "
+            "Réponds en français, de manière concise, actionnable et contextuelle. "
             "Utilise la mémoire de conversation (si pertinente) pour assurer la continuité et référencer les discussions précédentes. "
             "Reconnais patterns (tendance, corrélations, régimes de volatilité) et commente risques/opportunités. "
             "N'invente jamais de chiffres. Utilise **gras** pour les points critiques, et des emojis sobres (↑, ↓, 🟢, 🔴, ⚠️, 💡). "
             "Structure la réponse en 3–5 points maximum, puis une phrase de conclusion claire. "
-            "IMPORTANT: Réponds TOUJOURS en texte simple et direct, sans formatage complexe ni structures imbriquées. "
-            "Ta réponse doit être directement lisible et extractible par le système."
+            "IMPORTANT: Tu DOIS générer du texte lisible et direct. Évite les structures complexes. "
+            "Ta réponse sera extraite par le système - assure-toi qu'elle soit directement accessible."
         )
 
         # Appel Responses API avec retry et paramètres optimisés pour GPT-5 natif
@@ -11032,9 +11034,9 @@ def markets_chat():
 
                 logger.info(f"🔍 Tentative Responses API #{attempt + 1} - Modèle: {os.getenv('AI_MODEL', 'gpt-5')}, Effort: {eff}")
                 logger.info(f"💡 Note: GPT-5 ne supporte pas temperature, seulement reasoning.effort")
-                _client = client.with_options(timeout=120)
+                _client = client.with_options(timeout=60)  # Réduit de 120s à 60s
                 
-                # Paramètres optimisés pour GPT-5 natif (sans temperature - non supporté)
+                # Paramètres optimisés pour GPT-5 Responses API - forcer réponse textuelle
                 api_params = {
                     "model": os.getenv("AI_MODEL", "gpt-5"),
                     "input": [
@@ -11043,19 +11045,21 @@ def markets_chat():
                     ],
                     "reasoning": {"effort": eff},
                     "max_output_tokens": 1500,
-                    "timeout": 120,
+                    "timeout": 60,  # Réduit de 120s à 60s
                 }
                 
-                # Ajuster les paramètres selon la tentative
+                # Ajuster les paramètres selon la tentative - forcer réponse textuelle
                 if attempt == 0:
-                    # Première tentative : effort élevé
+                    # Première tentative : effort élevé + max_tokens réduit
                     api_params.update({
                         "reasoning": {"effort": "high"},
+                        "max_output_tokens": 1000,  # Réduit pour forcer la génération
                     })
                 else:
-                    # Deuxième tentative : effort réduit pour plus de stabilité
+                    # Deuxième tentative : effort moyen + tokens encore plus réduits
                     api_params.update({
-                        "reasoning": {"effort": "medium"},  # Effort réduit
+                        "reasoning": {"effort": "medium"},
+                        "max_output_tokens": 800,  # Très réduit pour forcer la génération
                     })
                 
                 res = _client.responses.create(**api_params)
