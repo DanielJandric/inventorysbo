@@ -414,6 +414,7 @@ class AIService:
                 )
                 
                 raw_response = extract_output_text(response) or ''
+                logger.info(f"GPT-5 Responses API successful, response length: {len(raw_response)}")
                 
             except Exception as gpt5_error:
                 logger.warning(f"GPT-5 Responses API failed, falling back to Chat Completions: {gpt5_error}")
@@ -427,10 +428,13 @@ class AIService:
                 
                 if response:
                     raw_response = response.choices[0].message.content
+                    logger.info(f"Chat Completions fallback successful, response length: {len(raw_response) if raw_response else 0}")
                 else:
+                    logger.error("Chat Completions API returned no response")
                     return {'error': 'Erreur lors de l\'appel API'}
             
             if not raw_response:
+                logger.error("AI price estimation: No response received from OpenAI API")
                 return {'error': 'Aucune réponse de l\'IA'}
             
             # Robust JSON parsing from original app
