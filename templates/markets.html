@@ -39,6 +39,14 @@
         .glowing-element { position: relative; transition: all .3s ease; }
         .glowing-element::before { content:''; position:absolute; inset:0; border-radius:inherit; background: radial-gradient(circle at 50% 50%, var(--glass-glow), transparent 70%); filter: blur(30px); opacity:.6; z-index:-1; transition: opacity .3s ease; }
         .glowing-element:hover::before, .glowing-element.is-active::before { opacity: 1; }
+        /* Chat: verrouiller en une seule colonne et empêcher toute mise en colonnes automatique */
+        #chat-messages, #chat-messages * {
+            column-count: 1 !important;
+            column-width: auto !important;
+            columns: auto !important;
+            column-gap: 0 !important;
+        }
+        .chat-bubble { word-break: break-word; overflow-wrap: anywhere; }
     </style>
 </head>
 <body class="h-full">
@@ -405,10 +413,8 @@
                 wrapper.className = role === 'user' ? 'w-full flex justify-end' : 'w-full flex justify-start';
                 const bubble = document.createElement('div');
                 bubble.className = role === 'user'
-                  ? 'max-w-[80%] rounded-2xl px-4 py-3 bg-cyan-500/20 border border-cyan-400/30 text-cyan-100 shadow break-words whitespace-pre-wrap leading-6'
-                  : 'max-w-[80%] rounded-2xl px-4 py-3 bg-white/5 border border-white/10 text-cyan-100/90 shadow break-words whitespace-pre-wrap leading-6';
-                bubble.style.wordBreak = 'break-word';
-                bubble.style.overflowWrap = 'anywhere';
+                  ? 'chat-bubble max-w-[80%] rounded-2xl px-4 py-3 bg-cyan-500/20 border border-cyan-400/30 text-cyan-100 shadow whitespace-pre-wrap leading-6'
+                  : 'chat-bubble max-w-[80%] rounded-2xl px-4 py-3 bg-white/5 border border-white/10 text-cyan-100/90 shadow whitespace-pre-wrap leading-6';
                 bubble.innerHTML = html;
                 wrapper.appendChild(bubble);
                 messagesDiv.appendChild(wrapper);
@@ -419,9 +425,7 @@
                 const wrapper = document.createElement('div');
                 wrapper.className = 'w-full flex justify-start';
                 const bubble = document.createElement('div');
-                bubble.className = 'max-w-[80%] rounded-2xl px-4 py-3 bg-white/5 border border-white/10 text-cyan-100/90 shadow flex items-center gap-1';
-                bubble.style.wordBreak = 'break-word';
-                bubble.style.overflowWrap = 'anywhere';
+                bubble.className = 'chat-bubble max-w-[80%] rounded-2xl px-4 py-3 bg-white/5 border border-white/10 text-cyan-100/90 shadow flex items-center gap-1';
                 const d1 = document.createElement('span'); d1.className = 'w-2 h-2 bg-cyan-300 rounded-full animate-bounce';
                 const d2 = document.createElement('span'); d2.className = 'w-2 h-2 bg-cyan-300 rounded-full animate-bounce'; d2.style.animationDelay = '0.15s';
                 const d3 = document.createElement('span'); d3.className = 'w-2 h-2 bg-cyan-300 rounded-full animate-bounce'; d3.style.animationDelay = '0.3s';
