@@ -425,10 +425,13 @@
                     }
 
                     const reqBody = { message: msg, context: extra, session_id: sid, previous_response_id: prevId };
+                    const controller = new AbortController();
+                    const signal = controller.signal;
                     let resp = await fetch('/api/markets/chat/stream', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(reqBody)
+                        body: JSON.stringify(reqBody),
+                        signal
                     });
                     // Fallback sync si 502/500 ou pas de body
                     if (!resp.ok || !resp.body) {
@@ -453,11 +456,18 @@
                     messagesDiv.appendChild(streamingEl);
 
                     let hadData = false;
+                    // Timeouts pour éviter blocage
+                    const firstChunkTimeoutMs = 12000;
+                    const hardTimeoutMs = 60000;
+                    let timedOut = false;
+                    const firstChunkTimer = setTimeout(() => { try { controller.abort(); } catch {} }, firstChunkTimeoutMs);
+                    const hardTimer = setTimeout(() => { timedOut = true; try { controller.abort(); } catch {} }, hardTimeoutMs);
                     while (true) {
                         const { done, value } = await reader.read();
                         if (done) break;
                         const chunk = decoder.decode(value, { stream: true });
-                        if (chunk && chunk.trim()) hadData = true;
+                        if (/[A-Za-zÀ-ÿ0-9]/.test(chunk)) hadData = true;
+                        if (hadData) clearTimeout(firstChunkTimer);
                         buf += chunk;
 
                         // Footer END
@@ -481,6 +491,17 @@
                         if (errMatch) {
                             const errTxt = errMatch[1];
                             buf = buf.replace(/\n?\n?\[ERROR:[^\]]+\]$/, '');
+                            // Fallback sync immédiat sur erreur
+                            try {
+                                const rf = await fetch('/api/markets/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(reqBody) });
+                                const df = await rf.json();
+                                if (df && df.success) {
+                                    streamingEl.remove();
+                                    addMsg('assistant', df.reply);
+                                    clearTimeout(firstChunkTimer); clearTimeout(hardTimer);
+                                    return;
+                                }
+                            } catch {}
                             streamingEl.innerHTML = `<strong>Assistant:</strong> ❌ ${errTxt}`;
                             break;
                         }
@@ -490,8 +511,9 @@
                           .replace(/\n/g, '<br/>' );
                         messagesDiv.scrollTop = messagesDiv.scrollHeight;
                     }
-                    // Si pas de data utile reçue (proxy a coupé), fallback sync une fois
-                    if (!hadData) {
+                    clearTimeout(firstChunkTimer); clearTimeout(hardTimer);
+                    // Si pas de data utile reçue (proxy a coupé) ou timeout, fallback sync une fois
+                    if (!hadData || timedOut) {
                         const r2 = await fetch('/api/markets/chat', {
                             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(reqBody)
                         });
