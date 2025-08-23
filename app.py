@@ -98,7 +98,7 @@ def create_app():
     # Validate configuration first - but continue even if some services are unavailable
     config_valid = Config.validate()
     if not config_valid:
-        logger.warning("⚠️ Some configuration missing - continuing with limited functionality")
+        logger.warning("Some configuration missing - continuing with limited functionality")
     
     app = Flask(__name__)
     app.config['SECRET_KEY'] = Config.SECRET_KEY
@@ -358,7 +358,7 @@ def create_app():
             }
         })
     
-    logger.info("✅ Flask application created successfully")
+    logger.info("Flask application created successfully")
     return app
 
 

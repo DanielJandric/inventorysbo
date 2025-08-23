@@ -202,9 +202,9 @@ class AIService:
             try:
                 self.client = OpenAI(api_key=Config.OPENAI_API_KEY)
                 self.semantic_search = SemanticSearchRAG(self.client)
-                logger.info("✅ OpenAI client initialized")
+                logger.info("OpenAI client initialized")
             except Exception as e:
-                logger.error(f"❌ Failed to initialize OpenAI: {e}")
+                logger.error(f"Failed to initialize OpenAI: {e}")
     
     def is_available(self) -> bool:
         """Check if AI service is available"""

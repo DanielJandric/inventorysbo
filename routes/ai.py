@@ -342,7 +342,7 @@ Réponds en JSON avec:
         updated_item = db_manager.update_item(item_id, update_data)
         
         if updated_item:
-            logger.info(f"✅ Prix IA mis à jour pour {target_item.name}: {estimated_price:,.0f} CHF")
+            logger.info(f"Prix IA mis à jour pour {target_item.name}: {estimated_price:,.0f} CHF")
             
             return jsonify({
                 'success': True,

@@ -97,7 +97,7 @@ class Config:
         """Try to load configuration from local config.py file"""
         try:
             import config as local_config
-            logger.info("✅ Local configuration loaded")
+            logger.info("Local configuration loaded")
             
             # Override with local config values
             for attr in dir(local_config):
@@ -109,7 +109,7 @@ class Config:
                         if isinstance(value, str):
                             os.environ[attr] = value
         except ImportError:
-            logger.info("⚠️ Local config.py not found, using environment variables")
+            logger.info("Local config.py not found, using environment variables")
 
 
 # Initialize configuration

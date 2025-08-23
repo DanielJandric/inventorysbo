@@ -25,11 +25,11 @@ class DatabaseManager:
         try:
             if Config.SUPABASE_URL and Config.SUPABASE_KEY:
                 self.supabase = create_client(Config.SUPABASE_URL, Config.SUPABASE_KEY)
-                logger.info("✅ Supabase connected successfully")
+                logger.info("Supabase connected successfully")
             else:
-                logger.error("❌ Supabase credentials missing")
+                logger.error("Supabase credentials missing")
         except Exception as e:
-            logger.error(f"❌ Failed to connect to Supabase: {e}")
+            logger.error(f"Failed to connect to Supabase: {e}")
             self.supabase = None
     
     def is_connected(self) -> bool:
