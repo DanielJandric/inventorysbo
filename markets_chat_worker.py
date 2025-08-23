@@ -34,7 +34,9 @@ class MarketsChatWorker:
             except Exception:
                 pass
 
-        self.model = os.getenv("AI_MODEL", "gpt-5").strip() or "gpt-5"
+        # Enforce GPT-5 only (ignore non GPT-5 env values)
+        env_model = (os.getenv("AI_MODEL") or "gpt-5").strip()
+        self.model = env_model if env_model.startswith("gpt-5") else "gpt-5"
         self.max_output_tokens = min(1200, int(os.getenv("MAX_OUTPUT_TOKENS", "1200")))
 
         # Stable, concise system prompt (verbosity low)
@@ -93,7 +95,7 @@ class MarketsChatWorker:
             except Exception:
                 text = ""
 
-        return text or "Je n'ai pas pu générer une réponse pour le moment. Réessaie plus tard."
+        return text  # laisser l'endpoint décider si vide => 502
 
     def stream_reply(self, message: str, context: Optional[str] = None) -> Generator[str, None, None]:
         """Yield response chunks (plain text). No END footer here; caller may add it.
