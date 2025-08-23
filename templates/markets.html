@@ -426,14 +426,24 @@
                     
 
                     const reqBody = { message: msg, context: extra, session_id: sid, previous_response_id: prevId };
-                    // Mode sécurisé: utiliser l'endpoint sync (désactivation temporaire du streaming)
-                    const rSync = await fetch('/api/markets/chat', {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(reqBody)
+                    // Réactiver streaming avec watchdog + fallback sync
+                    const controller = new AbortController();
+                    const signal = controller.signal;
+                    let resp = await fetch('/api/markets/chat/stream', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(reqBody),
+                        signal
                     });
-                    const dSync = await rSync.json();
-                    if (!dSync.success) throw new Error(dSync.error || 'Erreur API');
-                    addMsg('assistant', dSync.reply);
-                    return;
+                    if (!resp.ok || !resp.body) {
+                        const rSync = await fetch('/api/markets/chat', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(reqBody)
+                        });
+                        const dSync = await rSync.json();
+                        if (!dSync.success) throw new Error(dSync.error || 'Erreur API');
+                        addMsg('assistant', dSync.reply);
+                        return;
+                    }
 
                     const reader = resp.body.getReader();
                     const decoder = new TextDecoder();
