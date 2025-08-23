@@ -788,8 +788,17 @@ Contenu: {data.content[:8000]}
         try:
             logger.info(f"🚀 Début exécution tâche: {task_id}")
             
-            # Scraping - Utiliser 8 sources pour un rapport vraiment complet
+            # Scraping - Utiliser 8 sources (sites financiers)
             scraped_data = await self.search_and_scrape(task.prompt, num_results=8)
+
+            # Ajouter X.com (tweets récents ≤2h) sur la même thématique
+            try:
+                x_items = await self.search_x_recent(task.prompt, max_items=6, max_age_hours=2)
+                if x_items:
+                    # Préfixer pour priorité aux signaux temps réel
+                    scraped_data = x_items + scraped_data
+            except Exception as _ex:
+                logger.warning(f"⚠️ X.com indisponible: {_ex}")
             
             if not scraped_data:
                 task.status = "failed"
