@@ -8378,14 +8378,17 @@ def markets_chat_stream():
         if prev_id and not str(prev_id).startswith("resp"):
             prev_id = None
 
-        # Client OpenAI avec timeout
+        # Client OpenAI avec timeout (augmenté pour reasoning=high)
         try:
             from openai import OpenAI
-            timeout_s = int(os.getenv('TIMEOUT_S', '60'))
+            timeout_s = int(os.getenv('TIMEOUT_S', '120'))
             client = openai_client.with_options(timeout=timeout_s) if openai_client else OpenAI(api_key=os.getenv("OPENAI_API_KEY"), timeout=timeout_s)
         except Exception as e:
             logger.error(f"OpenAI init error (stream): {e}")
-            return jsonify({"success": False, "error": "OpenAI non configuré"}), 500
+            def _err_gen():
+                yield "\u200b"
+                yield f"[ERROR:{str(e)}]"
+            return Response(stream_with_context(_err_gen()), mimetype="text/plain", headers={'X-Accel-Buffering': 'no', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive'})
 
         # Prompt et input utilisateur (verbosity low; add latest report context)
         system_prompt = (
@@ -8431,6 +8434,8 @@ def markets_chat_stream():
             response_id = None
             # Préférence: API streaming dédiée; fallback create(stream=True)
             try:
+                # Envoi immédiat d'un caractère invisible pour éviter les timeouts proxy
+                yield "\u200b"
                 try:
                     streamer = client.responses.stream(**kwargs)
                     ctx = streamer
@@ -8498,10 +8503,13 @@ def markets_chat_stream():
             except Exception as e:
                 yield f"\n\n[ERROR:{e}]"
 
-        return Response(stream_with_context(gen()), mimetype="text/plain")
+        return Response(stream_with_context(gen()), mimetype="text/plain", headers={'X-Accel-Buffering': 'no', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive'})
     except Exception as e:
         logger.error(f"Erreur markets_chat_stream: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
+        def _err_gen2():
+            yield "\u200b"
+            yield f"[ERROR:{str(e)}]"
+        return Response(stream_with_context(_err_gen2()), mimetype="text/plain", headers={'X-Accel-Buffering': 'no', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive'})
 @app.route("/api/markets/chat/export-pdf", methods=["POST"])
 def markets_chat_export_pdf():
     """Export serveur de la discussion chat au format PDF (Puppeteer, fallback WeasyPrint)."""
