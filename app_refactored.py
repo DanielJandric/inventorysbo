@@ -30,10 +30,9 @@ logger = logging.getLogger(__name__)
 def create_app():
     """Application factory pattern"""
     
-    # Validate configuration first - but continue even if some services are unavailable
-    config_valid = Config.validate()
-    if not config_valid:
-        logger.warning("⚠️ Some configuration missing - continuing with limited functionality")
+    # Validate configuration first
+    if not Config.validate():
+        raise RuntimeError("Invalid configuration")
     
     app = Flask(__name__)
     app.config['SECRET_KEY'] = Config.SECRET_KEY
