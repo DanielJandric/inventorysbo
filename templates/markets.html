@@ -525,7 +525,20 @@
                         return;
                     }
                 } catch (e) {
-                    addMsg('assistant', `❌ ${e.message}`);
+                    try {
+                        const reqBody = {
+                            message: (document.getElementById('chat-input').value || msg || '').trim() || msg,
+                            context: (document.getElementById('chat-context').value || '').trim(),
+                            session_id: localStorage.getItem('markets_chat_session_id') || '',
+                            previous_response_id: localStorage.getItem('markets_prev_response_id') || ''
+                        };
+                        const r2 = await fetch('/api/markets/chat', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(reqBody)
+                        });
+                        const d2 = await r2.json();
+                        if (d2 && d2.success) { addMsg('assistant', d2.reply); return; }
+                    } catch {}
+                    addMsg('assistant', `❌ ${e && e.message ? e.message : 'Erreur réseau'}`);
                 }
             }
             sendBtn.addEventListener('click', sendChat);
