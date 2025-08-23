@@ -423,26 +423,17 @@
                     if (!(prevId && prevId.startsWith('resp'))) {
                         prevId = '';
                     }
+                    
 
                     const reqBody = { message: msg, context: extra, session_id: sid, previous_response_id: prevId };
-                    const controller = new AbortController();
-                    const signal = controller.signal;
-                    let resp = await fetch('/api/markets/chat/stream', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(reqBody),
-                        signal
+                    // Mode sécurisé: utiliser l'endpoint sync (désactivation temporaire du streaming)
+                    const rSync = await fetch('/api/markets/chat', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(reqBody)
                     });
-                    // Fallback sync si 502/500 ou pas de body
-                    if (!resp.ok || !resp.body) {
-                        const r2 = await fetch('/api/markets/chat', {
-                            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(reqBody)
-                        });
-                        const d2 = await r2.json();
-                        if (!d2.success) throw new Error(d2.error || 'Erreur API');
-                        addMsg('assistant', d2.reply);
-                        return;
-                    }
+                    const dSync = await rSync.json();
+                    if (!dSync.success) throw new Error(dSync.error || 'Erreur API');
+                    addMsg('assistant', dSync.reply);
+                    return;
 
                     const reader = resp.body.getReader();
                     const decoder = new TextDecoder();
