@@ -457,9 +457,9 @@
                     messagesDiv.appendChild(streamingEl);
 
                     let hadData = false;
-                    // Timeouts pour éviter blocage
-                    const firstChunkTimeoutMs = 12000;
-                    const hardTimeoutMs = 60000;
+                    // Timeouts plus tolérants (évite abort prématuré)
+                    const firstChunkTimeoutMs = 45000;
+                    const hardTimeoutMs = 180000;
                     let timedOut = false;
                     const firstChunkTimer = setTimeout(() => { try { controller.abort(); } catch {} }, firstChunkTimeoutMs);
                     const hardTimer = setTimeout(() => { timedOut = true; try { controller.abort(); } catch {} }, hardTimeoutMs);
@@ -467,7 +467,7 @@
                         const { done, value } = await reader.read();
                         if (done) break;
                         const chunk = decoder.decode(value, { stream: true });
-                        if (/[A-Za-zÀ-ÿ0-9]/.test(chunk)) hadData = true;
+                        if (chunk && chunk.length) hadData = true; // compte heartbeat
                         if (hadData) clearTimeout(firstChunkTimer);
                         buf += chunk;
 
