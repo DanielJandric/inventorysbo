@@ -8,7 +8,7 @@ from flask_cors import CORS
 
 # Import des modules refactorisés
 from configuration import validate_environment, SUPABASE_URL, SUPABASE_KEY, OPENAI_API_KEY
-from managers import SmartCache, ConversationMemoryStore, GmailNotificationManager
+from managers import smart_cache, conversation_memory, gmail_manager
 from models import CollectionItem, QueryIntent
 from routes_markets import markets_bp, init_markets_routes
 
@@ -27,10 +27,7 @@ except EnvironmentError as e:
     logger.error(f"❌ Erreur configuration: {e}")
     raise
 
-# Initialisation des managers globaux
-smart_cache = SmartCache()
-conversation_memory = ConversationMemoryStore()
-gmail_manager = GmailNotificationManager()
+# Les managers globaux sont importés de managers.py
 
 # Initialisation des clients et connexions
 supabase = None

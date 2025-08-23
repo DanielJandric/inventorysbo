@@ -13,6 +13,9 @@ from email.mime.multipart import MIMEMultipart
 
 logger = logging.getLogger(__name__)
 
+# Store previous Responses API IDs per session to enable stateful conversations
+responses_prev_ids: Dict[str, str] = {}
+
 
 class SmartCache:
     """Cache intelligent multi-niveaux"""
@@ -390,3 +393,9 @@ Généré le: {timestamp}
 BONVIN Collection - Gestion de portefeuille d'investissement
 Ce rapport a été généré automatiquement par votre système de gestion
         """
+
+
+# Instances globales
+smart_cache = SmartCache()
+conversation_memory = ConversationMemoryStore()
+gmail_manager = GmailNotificationManager()
