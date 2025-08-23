@@ -44,7 +44,7 @@ class DatabaseManager:
             return []
         
         try:
-            response = self.supabase.table('collection_items').select('*').execute()
+            response = self.supabase.table('items').select('*').order('updated_at', desc=True).execute()
             return response.data if response.data else []
         except Exception as e:
             logger.error(f"Error fetching items: {e}")
@@ -56,7 +56,7 @@ class DatabaseManager:
             return None
         
         try:
-            response = self.supabase.table('collection_items').select('*').eq('id', item_id).single().execute()
+            response = self.supabase.table('items').select('*').eq('id', item_id).single().execute()
             return response.data
         except Exception as e:
             logger.error(f"Error fetching item {item_id}: {e}")
@@ -70,7 +70,7 @@ class DatabaseManager:
         try:
             # Clean data
             clean_data = self._clean_item_data(item_data)
-            response = self.supabase.table('collection_items').insert(clean_data).execute()
+            response = self.supabase.table('items').insert(clean_data).execute()
             return response.data[0] if response.data else None
         except Exception as e:
             logger.error(f"Error creating item: {e}")
@@ -86,7 +86,7 @@ class DatabaseManager:
             clean_data = self._clean_item_data(item_data)
             clean_data['updated_at'] = datetime.now().isoformat()
             
-            response = self.supabase.table('collection_items').update(clean_data).eq('id', item_id).execute()
+            response = self.supabase.table('items').update(clean_data).eq('id', item_id).execute()
             return response.data[0] if response.data else None
         except Exception as e:
             logger.error(f"Error updating item {item_id}: {e}")
@@ -98,7 +98,7 @@ class DatabaseManager:
             return False
         
         try:
-            self.supabase.table('collection_items').delete().eq('id', item_id).execute()
+            self.supabase.table('items').delete().eq('id', item_id).execute()
             return True
         except Exception as e:
             logger.error(f"Error deleting item {item_id}: {e}")
@@ -110,7 +110,7 @@ class DatabaseManager:
             return []
         
         try:
-            response = self.supabase.table('collection_items').select('*').eq('category', category).execute()
+            response = self.supabase.table('items').select('*').eq('category', category).execute()
             return response.data if response.data else []
         except Exception as e:
             logger.error(f"Error fetching items by category {category}: {e}")
@@ -122,7 +122,7 @@ class DatabaseManager:
             return []
         
         try:
-            response = self.supabase.table('collection_items').select('*').eq('for_sale', True).execute()
+            response = self.supabase.table('items').select('*').eq('for_sale', True).execute()
             return response.data if response.data else []
         except Exception as e:
             logger.error(f"Error fetching items for sale: {e}")
@@ -134,7 +134,7 @@ class DatabaseManager:
             return []
         
         try:
-            response = self.supabase.table('collection_items').select('*').eq('status', 'sold').execute()
+            response = self.supabase.table('items').select('*').eq('status', 'sold').execute()
             return response.data if response.data else []
         except Exception as e:
             logger.error(f"Error fetching sold items: {e}")
@@ -148,7 +148,7 @@ class DatabaseManager:
             return []
         
         try:
-            response = self.supabase.table('collection_items').select('*').not_.is_('stock_symbol', 'null').execute()
+            response = self.supabase.table('items').select('*').not_.is_('stock_symbol', 'null').execute()
             return response.data if response.data else []
         except Exception as e:
             logger.error(f"Error fetching stock items: {e}")
@@ -175,7 +175,7 @@ class DatabaseManager:
             # Remove None values
             update_data = {k: v for k, v in update_data.items() if v is not None}
             
-            self.supabase.table('collection_items').update(update_data).eq('id', item_id).execute()
+            self.supabase.table('items').update(update_data).eq('id', item_id).execute()
             return True
         except Exception as e:
             logger.error(f"Error updating stock price for item {item_id}: {e}")
@@ -228,7 +228,7 @@ class DatabaseManager:
             return False
         
         try:
-            self.supabase.table('collection_items').update({
+            self.supabase.table('items').update({
                 'embedding': embedding,
                 'updated_at': datetime.now().isoformat()
             }).eq('id', item_id).execute()
@@ -243,7 +243,7 @@ class DatabaseManager:
             return []
         
         try:
-            response = self.supabase.table('collection_items').select('*').not_.is_('embedding', 'null').execute()
+            response = self.supabase.table('items').select('*').not_.is_('embedding', 'null').execute()
             return response.data if response.data else []
         except Exception as e:
             logger.error(f"Error fetching items with embeddings: {e}")
