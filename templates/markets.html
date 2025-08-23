@@ -463,54 +463,62 @@
                     let timedOut = false;
                     const firstChunkTimer = setTimeout(() => { try { controller.abort(); } catch {} }, firstChunkTimeoutMs);
                     const hardTimer = setTimeout(() => { timedOut = true; try { controller.abort(); } catch {} }, hardTimeoutMs);
-                    while (true) {
-                        const { done, value } = await reader.read();
-                        if (done) break;
-                        const chunk = decoder.decode(value, { stream: true });
-                        if (chunk && chunk.length) hadData = true; // compte heartbeat
-                        if (hadData) clearTimeout(firstChunkTimer);
-                        buf += chunk;
-
-                        // Footer END
-                        const endMatch = buf.match(/\[END:([^\]]+)\]$/);
-                        const endNoId = /\[END\]$/.test(buf);
-                        if (endMatch || endNoId) {
-                            if (endMatch) {
-                                responseId = endMatch[1];
-                                if (responseId && responseId.startsWith('resp')) {
-                                    localStorage.setItem('markets_prev_response_id', responseId);
-                                }
-                                buf = buf.replace(/\n?\n?\[END:[^\]]+\]$/, '');
-                            } else {
-                                // Pas d'ID valide; on ne stocke rien
-                                buf = buf.replace(/\n?\n?\[END\]$/, '');
-                            }
-                        }
-
-                        // Footer ERROR
-                        const errMatch = buf.match(/\[ERROR:([^\]]+)\]$/);
-                        if (errMatch) {
-                            const errTxt = errMatch[1];
-                            buf = buf.replace(/\n?\n?\[ERROR:[^\]]+\]$/, '');
-                            // Fallback sync immédiat sur erreur
-                            try {
-                                const rf = await fetch('/api/markets/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(reqBody) });
-                                const df = await rf.json();
-                                if (df && df.success) {
-                                    streamingEl.remove();
-                                    addMsg('assistant', df.reply);
-                                    clearTimeout(firstChunkTimer); clearTimeout(hardTimer);
-                                    return;
-                                }
-                            } catch {}
-                            streamingEl.innerHTML = `<strong>Assistant:</strong> ❌ ${errTxt}`;
-                            break;
-                        }
-
+                    // Throttle DOM updates to avoid flicker
+                    let scheduled = false;
+                    const flush = () => {
                         streamingEl.innerHTML = '<strong>Assistant:</strong> ' + buf
                           .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
                           .replace(/\n/g, '<br/>' );
                         messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                        scheduled = false;
+                    };
+
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        const raw = decoder.decode(value, { stream: true });
+                        if (!raw) continue;
+                        hadData = true;
+                        clearTimeout(firstChunkTimer);
+
+                        const events = raw.split('\n\n').filter(Boolean);
+                        for (const ev of events) {
+                            if (ev.startsWith(':')) continue; // heartbeat
+                            if (!ev.startsWith('data:')) continue;
+                            const jsonStr = ev.replace(/^data:\s*/, '');
+                            try {
+                                const obj = JSON.parse(jsonStr);
+                                if (obj.error) {
+                                    // Fallback sync immédiat sur erreur
+                                    try {
+                                        const rf = await fetch('/api/markets/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(reqBody) });
+                                        const df = await rf.json();
+                                        if (df && df.success) {
+                                            streamingEl.remove();
+                                            addMsg('assistant', df.reply);
+                                            clearTimeout(firstChunkTimer); clearTimeout(hardTimer);
+                                            return;
+                                        }
+                                    } catch {}
+                                    streamingEl.innerHTML = `<strong>Assistant:</strong> ❌ ${obj.error}`;
+                                    continue;
+                                }
+                                if (obj.delta) {
+                                    buf += String(obj.delta);
+                                    if (!scheduled) { scheduled = true; setTimeout(flush, 60); }
+                                }
+                                if (obj.done) {
+                                    if (obj.id && String(obj.id).startsWith('resp')) {
+                                        localStorage.setItem('markets_prev_response_id', obj.id);
+                                    }
+                                    clearTimeout(firstChunkTimer); clearTimeout(hardTimer);
+                                    flush();
+                                    break;
+                                }
+                            } catch {
+                                // ignore malformed chunk
+                            }
+                        }
                     }
                     clearTimeout(firstChunkTimer); clearTimeout(hardTimer);
                     // Si pas de data utile reçue (proxy a coupé) ou timeout, fallback sync une fois
