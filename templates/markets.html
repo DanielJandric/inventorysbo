@@ -42,11 +42,12 @@
         /* Chat: verrouiller en une seule colonne et empêcher toute mise en colonnes automatique */
         #chat-messages, #chat-messages * {
             column-count: 1 !important;
+            columns: initial !important;
             column-width: auto !important;
-            columns: auto !important;
-            column-gap: 0 !important;
+            column-gap: normal !important;
+            writing-mode: horizontal-tb !important;
         }
-        .chat-bubble { word-break: break-word; overflow-wrap: anywhere; }
+        .chat-bubble { display: inline-block; word-break: break-word; overflow-wrap: anywhere; width: auto; max-width: 80%; }
     </style>
 </head>
 <body class="h-full">
