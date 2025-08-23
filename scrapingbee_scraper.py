@@ -166,22 +166,67 @@ class ScrapingBeeScraper:
 
             # Build X search URL for live (latest) posts, restrict to FR/EN via query keywords
             q = quote_plus(topic_query)
-            url = f"https://x.com/search?q={q}&f=live"
-
+            url_primary = f"https://x.com/search?q={q}&f=live"
             params = {
                 'api_key': self.api_key,
-                'url': url,
+                'url': url_primary,
                 'render_js': 'true',
-                'premium_proxy': 'false',
+                'premium_proxy': 'true',  # protéger contre les blocs
+                'block_resources': 'false',
+                'wait': '2000',
                 'country_code': 'us'
             }
 
+            html = None
             async with aiohttp.ClientSession() as session:
-                async with session.get(self.base_url, params=params) as resp:
-                    if resp.status != 200:
-                        logger.warning(f"⚠️ X search status {resp.status} pour {topic_query}")
-                        return items
-                    html = await resp.text()
+                try:
+                    async with session.get(self.base_url, params=params) as resp:
+                        if resp.status == 200:
+                            html = await resp.text()
+                        else:
+                            logger.warning(f"⚠️ X search status {resp.status} pour {topic_query}")
+                except Exception as e:
+                    logger.warning(f"⚠️ X primary fetch error: {e}")
+
+            # Fallback 1: mobile.twitter.com
+            if not html or 'Log in' in html or 'signup' in (html or '').lower():
+                try:
+                    url_mobile = f"https://mobile.twitter.com/search?q={q}&s=typd"
+                    params_mobile = {
+                        'api_key': self.api_key,
+                        'url': url_mobile,
+                        'render_js': 'true',
+                        'premium_proxy': 'true',
+                        'block_resources': 'false',
+                        'wait': '2000',
+                        'country_code': 'us'
+                    }
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(self.base_url, params=params_mobile) as r2:
+                            if r2.status == 200:
+                                html = await r2.text()
+                                url_primary = url_mobile
+                except Exception as e:
+                    logger.warning(f"⚠️ X mobile fetch error: {e}")
+
+            # Fallback 2: nitter.net (si disponible)
+            if not html or 'Log in' in html or 'signup' in (html or '').lower():
+                try:
+                    url_nitter = f"https://nitter.net/search?f=tweets&q={q}"
+                    params_nitter = {
+                        'api_key': self.api_key,
+                        'url': url_nitter,
+                        'render_js': 'false',
+                        'premium_proxy': 'true',
+                        'country_code': 'us'
+                    }
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(self.base_url, params=params_nitter) as r3:
+                            if r3.status == 200:
+                                html = await r3.text()
+                                url_primary = url_nitter
+                except Exception as e:
+                    logger.warning(f"⚠️ Nitter fetch error: {e}")
 
             try:
                 from bs4 import BeautifulSoup  # type: ignore
@@ -193,6 +238,7 @@ class ScrapingBeeScraper:
             now = datetime.now()
             candidates = []
             # Tweets sont souvent dans <article role="article">
+            # Try X/modern layout
             for art in soup.find_all('article'):
                 try:
                     # timestamp
@@ -222,6 +268,36 @@ class ScrapingBeeScraper:
                     candidates.append((ts, content, status_link))
                 except Exception:
                     continue
+
+            # If none, try Nitter/mobile patterns
+            if not candidates:
+                # Nitter: tweets in div.timeline-item or article
+                for div in soup.find_all(['div','article']):
+                    try:
+                        cls = ' '.join(div.get('class') or [])
+                        if 'timeline-item' not in cls and 'tweet' not in cls:
+                            continue
+                        a_date = div.find('a', href=re.compile(r"/status/"))
+                        status_link = None
+                        if a_date and a_date.get('href'):
+                            href = a_date.get('href')
+                            status_link = href if href.startswith('http') else f"https://nitter.net{href}"
+                        # time parsing (approx): look for time tag or title attr
+                        t = div.find('time')
+                        iso = t.get('datetime') if t else None
+                        ts = None
+                        if iso:
+                            try:
+                                ts = datetime.fromisoformat(iso.replace('Z', '+00:00'))
+                            except Exception:
+                                ts = None
+                        # content text
+                        txt_nodes = [n.get_text(' ', strip=True) for n in div.find_all(['p','div','span'])]
+                        content = self._clean_content(' '.join([x for x in txt_nodes if x]))[:800]
+                        if content:
+                            candidates.append((ts, content, status_link))
+                    except Exception:
+                        continue
 
             # Filtrer par recence: <= max_age_hours
             max_age = timedelta(hours=max_age_hours)
