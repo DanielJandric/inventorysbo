@@ -3,6 +3,9 @@ Application Flask principale - Version refactorisée
 """
 import logging
 import uuid
+import json
+import re
+import os
 from datetime import datetime, timezone
 from flask import Flask, render_template, jsonify, request, make_response
 from flask_cors import CORS
@@ -441,7 +444,7 @@ def list_market_pdfs():
 
 @app.route("/api/chatbot", methods=["POST"])
 def chatbot():
-    """Chatbot utilisant OpenAI GPT-4 avec recherche sémantique RAG"""
+    """Chatbot utilisant OpenAI GPT-4 avec recherche sémantique RAG et mémoire conversationnelle"""
     try:
         if not openai_client:
             return jsonify({"error": "Moteur IA indisponible"}), 503
@@ -454,28 +457,98 @@ def chatbot():
         if not query:
             return jsonify({"error": "Message requis"}), 400
         
-        # Session et historique simple
-        session_id = data.get("session_id", str(uuid.uuid4()))
+        # Session et historique
+        session_id = data.get("session_id") or request.headers.get("X-Session-Id") or str(uuid.uuid4())
+        session_id = session_id.strip()
         
-        # Utiliser l'API Chat Completions simple pour le chatbot principal
+        history_client = data.get("history", [])
+        history_persisted = conversation_memory.get_recent_messages(session_id, limit=12)
+        
+        # Fusion: mémoire persistée + derniers messages du client
+        conversation_history = (history_persisted or []) + (list(history_client[-8:]) if isinstance(history_client, list) else [])
+        
+        logger.info(f"🎯 Requête chatbot: '{query}' avec {len(conversation_history)} messages d'historique")
+        
+        # Récupérer les items de la collection pour le contexte
+        try:
+            items_response = supabase.table("items").select("*").execute()
+            items = items_response.data or []
+        except Exception as e:
+            logger.error(f"Erreur récupération items: {e}")
+            items = []
+        
+        # Construire le contexte de la collection
+        collection_context = ""
+        if items:
+            total_value = sum(float(item.get('current_value', 0)) for item in items)
+            categories = {}
+            for item in items:
+                cat = item.get('category', 'Unknown')
+                categories[cat] = categories.get(cat, 0) + 1
+            
+            collection_context = f"""
+CONTEXTE COLLECTION BONVIN:
+- Total items: {len(items)}
+- Valeur totale: {total_value:,.0f} CHF
+- Catégories: {', '.join(f"{cat} ({count})" for cat, count in categories.items())}
+
+DERNIERS ITEMS:
+"""
+            for item in items[:5]:  # Top 5 items par valeur
+                collection_context += f"- {item.get('name', 'N/A')} ({item.get('category', 'N/A')}) - {item.get('current_value', 0):,.0f} CHF\n"
+        
+        # Messages pour l'IA avec contexte
+        messages = [
+            {"role": "system", "content": f"""Tu es l'assistant IA de BONVIN Collection, une collection privée d'objets de luxe et d'investissements.
+
+RÔLE: Aide avec les questions sur la collection, l'évaluation d'objets, les investissements et les marchés financiers.
+
+{collection_context}
+
+INSTRUCTIONS:
+- Sois précis et informatif
+- Utilise les données de la collection quand pertinent
+- Aide avec l'évaluation, l'analyse et les conseils d'investissement
+- Si on te demande d'ajouter un objet, explique que tu peux analyser mais pas modifier la base directement"""}
+        ]
+        
+        # Ajouter l'historique de conversation
+        for msg in conversation_history[-10:]:  # Limiter à 10 derniers messages
+            if isinstance(msg, dict) and msg.get('role') in ['user', 'assistant']:
+                messages.append({
+                    "role": msg['role'],
+                    "content": msg['content']
+                })
+        
+        # Ajouter le message actuel
+        messages.append({"role": "user", "content": query})
+        
+        # Appeler l'IA
         response = openai_client.chat.completions.create(
-            model="gpt-4-turbo-preview",
-            messages=[
-                {"role": "system", "content": "Tu es un assistant IA pour BONVIN Collection. Aide avec les questions sur la collection, les investissements et les marchés financiers."},
-                {"role": "user", "content": query}
-            ],
+            model=os.getenv("AI_MODEL", "gpt-4-turbo-preview"),
+            messages=messages,
             max_tokens=1000,
-            temperature=0.7
+            temperature=0.7,
+            timeout=30
         )
         
         reply = response.choices[0].message.content.strip()
+        
+        # Sauvegarder dans la mémoire conversationnelle
+        try:
+            conversation_memory.add_message(session_id, 'user', query)
+            conversation_memory.add_message(session_id, 'assistant', reply)
+        except Exception as e:
+            logger.error(f"Erreur sauvegarde conversation: {e}")
         
         return jsonify({
             "reply": reply,
             "metadata": {
                 "session_id": session_id,
-                "mode": "chatbot",
-                "model": "gpt-4-turbo-preview"
+                "mode": "chatbot_rag",
+                "model": os.getenv("AI_MODEL", "gpt-4-turbo-preview"),
+                "items_count": len(items),
+                "conversation_length": len(conversation_history)
             }
         })
         
@@ -485,58 +558,131 @@ def chatbot():
 
 @app.route("/api/ai-update-price/<int:item_id>", methods=["POST"])
 def ai_update_price(item_id):
-    """Mise à jour automatique du prix via IA"""
+    """Mise à jour automatique du prix via IA et sauvegarde en base"""
+    if not openai_client:
+        return jsonify({"error": "Moteur IA Indisponible"}), 503
+    
     try:
-        if not openai_client:
-            return jsonify({"error": "Moteur IA indisponible"}), 503
-        
-        # Récupérer l'item
+        # Récupérer l'item cible
         response = supabase.table("items").select("*").eq("id", item_id).execute()
-        
         if not response.data:
-            return jsonify({"error": "Item non trouvé"}), 404
-            
-        item = response.data[0]
+            return jsonify({"error": "Objet non trouvé"}), 404
         
-        # Générer une estimation de prix via IA
-        prompt = f"""
-        Estime le prix actuel de marché pour cet item de collection:
+        target_item = response.data[0]
         
-        Nom: {item.get('name', 'N/A')}
-        Catégorie: {item.get('category', 'N/A')}
-        Année: {item.get('construction_year', 'N/A')}
-        Condition: {item.get('condition', 'N/A')}
-        Prix actuel: {item.get('current_value', 'N/A')} CHF
+        # Vérifier que c'est pas une action
+        if target_item.get('category') == 'Actions':
+            return jsonify({"error": "Cette fonction est réservée aux véhicules. Utilisez la mise à jour des prix d'actions pour les actions."}), 400
         
-        Réponds UNIQUEMENT avec un nombre (le prix estimé en CHF), sans texte.
-        """
+        # Récupérer tous les items pour comparaison
+        all_items_response = supabase.table("items").select("*").execute()
+        all_items = all_items_response.data or []
         
-        ai_response = openai_client.chat.completions.create(
-            model="gpt-4-turbo-preview",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=50,
-            temperature=0.1
+        # Trouver des objets similaires
+        similar_items = [
+            i for i in all_items 
+            if i.get('category') == target_item.get('category') 
+            and i.get('id') != item_id
+            and (i.get('current_value') or i.get('sold_price'))
+        ]
+        
+        # Contexte des objets similaires
+        similar_context = ""
+        if similar_items[:3]:  # Top 3
+            similar_context = "\n\nOBJETS SIMILAIRES DANS LA COLLECTION:"
+            for i, similar_item in enumerate(similar_items[:3], 1):
+                price = similar_item.get('sold_price') or similar_item.get('current_value')
+                status = "Vendu" if similar_item.get('sold_price') else "valeur actuelle"
+                similar_context += f"\n{i}. {similar_item.get('name')} ({similar_item.get('construction_year') or 'N/A'}) - {status}: {price:,.0f} CHF"
+                if similar_item.get('description'):
+                    similar_context += f" - {similar_item['description'][:80]}..."
+        
+        # Prompt JSON structuré
+        prompt = f"""Estime le prix de marché actuel de cet objet en CHF en te basant sur le marché réel :
+
+OBJET À ÉVALUER:
+- Nom: {target_item.get('name', 'N/A')}
+- Catégorie: {target_item.get('category', 'N/A')}
+- Année: {target_item.get('construction_year', 'N/A')}
+- État: {target_item.get('condition', 'N/A')}
+- Description: {target_item.get('description', 'N/A')}
+{similar_context}
+
+INSTRUCTIONS IMPORTANTES:
+1. Recherche les prix actuels du marché pour ce modèle exact ou des modèles très similaires
+2. Utilise tes connaissances du marché automobile/horloger/immobilier actuel
+3. Compare avec des ventes récentes d'objets similaires sur le marché (pas dans ma collection)
+4. Prends en compte l'année, l'état et les spécificités du modèle
+
+Pour les voitures : considère les sites comme AutoScout24, Comparis, annonces spécialisées
+Pour les montres : marché des montres d'occasion, chrono24, enchères récentes
+Pour l'immobilier : prix au m² dans la région, transactions récentes
+
+Réponds en JSON avec:
+- estimated_price (nombre en CHF basé sur le marché actuel)
+- reasoning (explication détaillée en français avec références de marché)
+- confidence_score (0.1-0.9)
+- market_trend (hausse/stable/baisse)"""
+
+        # Utiliser l'API GPT-4 avec format JSON
+        from gpt5_compat import from_responses_simple, extract_output_text
+        
+        response = from_responses_simple(
+            client=openai_client, 
+            model=os.getenv("AI_MODEL", "gpt-4-turbo-preview"),
+            messages=[
+                {"role": "system", "content": [{"type": "input_text", "text": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."}]},
+                {"role": "user", "content": [{"type": "input_text", "text": prompt}]}
+            ],
+            max_output_tokens=800,
+            timeout=20,
+            reasoning_effort="medium"
         )
         
-        # Extraire le prix
-        price_text = ai_response.choices[0].message.content.strip()
-        try:
-            estimated_price = float(price_text.replace('CHF', '').replace(',', '').strip())
-            
-            # Mettre à jour en base
-            update_data = {"current_value": estimated_price}
-            supabase.table("items").update(update_data).eq("id", item_id).execute()
-            
-            return jsonify({
-                "success": True,
-                "item_id": item_id,
-                "estimated_price": estimated_price,
-                "previous_price": item.get('current_value')
-            })
-            
-        except ValueError:
-            return jsonify({"error": f"Prix IA invalide: {price_text}"}), 400
-            
+        raw = extract_output_text(response) or ''
+        
+        # Parsing robuste JSON
+        def _safe_parse_json(text: str):
+            s = (text or '').strip()
+            try:
+                import re
+                s = re.sub(r"```\s*json\s*", "", s, flags=re.IGNORECASE)
+                s = s.replace('```', '').strip()
+                # Normaliser les quotes
+                trans = {ord('\u201c'): '"', ord('\u201d'): '"', ord('\u2019'): "'", ord('\u2013'): '-', ord('\u2014'): '-'}
+                s = s.translate(trans)
+                return json.loads(s)
+            except Exception as e:
+                logger.error(f"JSON parse error: {e}, text: {s[:200]}")
+                return None
+        
+        parsed = _safe_parse_json(raw)
+        if not parsed:
+            return jsonify({"error": f"L'IA n'a pas renvoyé un JSON valide. Réponse brute: {raw[:200]}..."}), 400
+        
+        estimated_price = parsed.get('estimated_price')
+        if not isinstance(estimated_price, (int, float)) or estimated_price <= 0:
+            return jsonify({"error": f"Prix estimé invalide: {estimated_price}"}), 400
+        
+        # Mettre à jour en base
+        update_response = supabase.table("items").update({
+            "current_value": float(estimated_price)
+        }).eq("id", item_id).execute()
+        
+        if not update_response.data:
+            return jsonify({"error": "Échec mise à jour base de données"}), 500
+        
+        return jsonify({
+            "success": True,
+            "item_id": item_id,
+            "estimated_price": float(estimated_price),
+            "previous_price": target_item.get('current_value'),
+            "reasoning": parsed.get('reasoning', 'N/A'),
+            "confidence_score": parsed.get('confidence_score', 0.5),
+            "market_trend": parsed.get('market_trend', 'stable'),
+            "ai_response": raw[:200] + "..." if len(raw) > 200 else raw
+        })
+        
     except Exception as e:
         logger.error(f"Erreur ai_update_price: {e}")
         return jsonify({"error": str(e)}), 500
