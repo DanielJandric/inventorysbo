@@ -2,9 +2,10 @@
 Routes for collection items management.
 """
 
+import json
+import logging
 from flask import Blueprint, jsonify, request
 from typing import Dict, Any
-import logging
 from core.database import db_manager
 from core.models import CollectionItem
 from services.email_service import email_service
@@ -17,20 +18,40 @@ items_bp = Blueprint('items', __name__, url_prefix='/api/items')
 
 @items_bp.route('', methods=['GET'])
 def get_items():
-    """Get all collection items"""
+    """Get all collection items - matches original app format"""
     try:
-        items = db_manager.get_all_items()
-        return jsonify({
-            'success': True,
-            'items': items,
-            'count': len(items)
-        })
+        items_data = db_manager.get_all_items()
+        # Convert to CollectionItem objects and then to dicts for consistency with original
+        items = []
+        for item_data in items_data:
+            try:
+                # Handle embedding format conversion if needed (like original app)
+                if 'embedding' in item_data and item_data['embedding']:
+                    embedding = item_data['embedding']
+                    if isinstance(embedding, str):
+                        embedding = embedding.strip()
+                        if embedding.startswith('[') and embedding.endswith(']'):
+                            try:
+                                item_data['embedding'] = json.loads(embedding)
+                            except:
+                                item_data['embedding'] = [float(x) for x in embedding[1:-1].split(',')]
+                        elif embedding.startswith('(') and embedding.endswith(')'):
+                            item_data['embedding'] = [float(x) for x in embedding[1:-1].split(',')]
+                
+                # Convert to CollectionItem and back to dict for consistency
+                item = CollectionItem.from_dict(item_data)
+                items.append(item.to_dict())
+            except Exception as e:
+                logger.warning(f"Error processing item {item_data.get('id', 'unknown')}: {e}")
+                # Include the item anyway with raw data
+                items.append(item_data)
+        
+        logger.info(f"Fetched {len(items)} items successfully")
+        return jsonify(items)  # Return simple list like original app
+        
     except Exception as e:
         logger.error(f"Error fetching items: {e}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        return jsonify({"error": str(e)}), 500
 
 
 @items_bp.route('', methods=['POST'])

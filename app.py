@@ -4,12 +4,14 @@ This is a completely restructured version of the original app.py with modular ar
 """
 
 import logging
+from datetime import datetime
 from flask import Flask, render_template, jsonify
 from flask_cors import CORS
 
 # Core imports
 from core.app_config import Config
 from core.database import db_manager
+from core.models import CollectionItem
 
 # Service imports
 from services.ai_service import ai_service
@@ -25,6 +27,69 @@ from routes.market import market_bp
 from metrics_api import metrics_bp
 
 logger = logging.getLogger(__name__)
+
+
+def calculate_advanced_analytics(items):
+    """Calculate advanced analytics similar to original app"""
+    from core.utils import is_item_available, is_item_sold
+    
+    # Basic metrics
+    total = len(items)
+    available = len([i for i in items if is_item_available(i)])
+    sold = len([i for i in items if is_item_sold(i)])
+    for_sale = len([i for i in items if getattr(i, 'for_sale', False)])
+    
+    total_value = sum((getattr(i, 'current_value', 0) or 0) for i in items if is_item_available(i))
+    
+    # Category analytics
+    categories = {}
+    for item in items:
+        cat = getattr(item, 'category', 'Unknown')
+        if cat not in categories:
+            categories[cat] = {'count': 0, 'value': 0}
+        categories[cat]['count'] += 1
+        if is_item_available(item):
+            categories[cat]['value'] += (getattr(item, 'current_value', 0) or 0)
+    
+    # Stock analytics
+    stock_items = [i for i in items if getattr(i, 'stock_symbol', None)]
+    stock_value = 0
+    for item in stock_items:
+        if hasattr(item, 'current_price') and hasattr(item, 'stock_quantity'):
+            if item.current_price and item.stock_quantity:
+                stock_value += float(item.current_price) * float(item.stock_quantity)
+    
+    return {
+        'basic_metrics': {
+            'total_items': total,
+            'available_items': available,
+            'sold_items': sold,
+            'items_for_sale': for_sale,
+            'total_value': total_value,
+            'average_value': total_value / available if available > 0 else 0
+        },
+        'financial_metrics': {
+            'total_portfolio_value': total_value + stock_value,
+            'stock_portfolio_value': stock_value,
+            'collection_value': total_value,
+            'currency': 'CHF'
+        },
+        'category_analytics': categories,
+        'stock_analytics': {
+            'total_stocks': len(stock_items),
+            'stock_value': stock_value,
+            'stock_symbols': [getattr(i, 'stock_symbol', '') for i in stock_items]
+        },
+        'sales_pipeline': {
+            'items_for_sale': for_sale,
+            'sale_conversion_rate': (sold / (sold + for_sale)) * 100 if (sold + for_sale) > 0 else 0
+        },
+        'performance_kpis': {
+            'total_items': total,
+            'portfolio_diversity': len(categories),
+            'completion_rate': 100.0  # Placeholder
+        }
+    }
 
 
 def create_app():
@@ -138,12 +203,12 @@ def create_app():
             
             status = {
                 'status': 'healthy',
-                'timestamp': '2024-01-01T00:00:00Z',  # Would be actual timestamp
+                'timestamp': datetime.now().isoformat(),
                 'services': {
                     'database': 'connected' if db_connected else 'disconnected',
                     'ai': 'available' if ai_available else 'unavailable',
                     'email': 'enabled' if email_status['enabled'] else 'disabled',
-                    'market': 'active' if market_status['managers_status'] else 'inactive'
+                    'market': 'active' if market_status.get('yfinance_available', False) else 'inactive'
                 },
                 'version': '2.0.0-refactored'
             }
@@ -157,6 +222,28 @@ def create_app():
                 'error': str(e)
             }), 500
     
+    @app.route("/api/analytics/advanced")
+    def advanced_analytics():
+        """Advanced analytics - matches original app"""
+        try:
+            items_data = db_manager.get_all_items()
+            items = [CollectionItem.from_dict(item) for item in items_data]
+            
+            # Calculate analytics similar to original app
+            analytics = calculate_advanced_analytics(items)
+            
+            return jsonify({
+                "analytics": analytics,
+                "metadata": {
+                    "items_analyzed": len(items),
+                    "timestamp": datetime.now().isoformat(),
+                    "version": "2.0.0-refactored"
+                }
+            })
+        except Exception as e:
+            logger.error(f"Error in advanced analytics: {e}")
+            return jsonify({"error": str(e)}), 500
+
     @app.route("/api/endpoints")
     def list_endpoints():
         """List all available API endpoints"""
