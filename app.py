@@ -8385,11 +8385,12 @@ def markets_chat():
             # Si la BDD ou la désérialisation pose souci, continuer sans contexte
             context_text = (f"Contexte additionnel (utilisateur):\n{extra_context}\n---\n" if extra_context else "")
 
-        # Client OpenAI (GPT-5 pur) avec timeout global
+        # Client OpenAI (Réponses) avec timeout global + fallback sur client global
         try:
             from openai import OpenAI
             timeout_s = int(os.getenv('TIMEOUT_S', '60'))
-            client = OpenAI(timeout=timeout_s)
+            # Réutiliser le client global quand possible pour éviter les erreurs d'initialisation
+            client = openai_client.with_options(timeout=timeout_s) if openai_client else OpenAI(api_key=os.getenv("OPENAI_API_KEY"), timeout=timeout_s)
         except Exception as e:
             logger.error(f"OpenAI init error: {e}")
             return jsonify({"success": False, "error": "OpenAI non configuré"}), 500
@@ -8403,7 +8404,7 @@ def markets_chat():
             "Structure la réponse en 3–5 points maximum, puis une phrase de conclusion claire."
         )
 
-        # Appel Responses API (GPT-5 pur) avec web en texte si demandé
+        # Appel Responses API (prioritaire) avec web en texte si demandé; fallback Chat Completions en cas d'échec
         try:
             ws_text = ""
             if bool(data.get("use_web", False)) and web_search_manager:
@@ -8451,8 +8452,28 @@ def markets_chat():
             except Exception:
                 pass
         except Exception as _e:
+            # Fallback robuste: Chat Completions compatible
             logger.error(f"Responses API error: {_e}")
-            return jsonify({"success": False, "error": f"Responses API error: {_e}"}), 500
+            try:
+                # Construire un historique minimal pour Chat Completions
+                messages_cc = [{"role": "system", "content": system_prompt}]
+                if context_text:
+                    messages_cc.append({"role": "user", "content": f"Contexte:\n{context_text}\n\nQuestion: {user_message}"})
+                else:
+                    messages_cc.append({"role": "user", "content": f"Question: {user_message}"})
+
+                cc_model = os.getenv("AI_COMPLETIONS_MODEL", os.getenv("AI_MODEL", "gpt-4o-mini"))
+                # Utiliser le wrapper de compatibilité pour forcer un style Chat Completions stable
+                cc_res = from_chat_completions_compat(
+                    client=client,
+                    model=cc_model,
+                    messages=messages_cc,
+                    max_tokens=min(1500, int(os.getenv("MAX_OUTPUT_TOKENS", "1500")))
+                )
+                reply = (getattr(cc_res, "choices", [{}])[0].get("message", {}).get("content", "") or "").strip()
+            except Exception as _e2:
+                logger.error(f"Completions fallback error: {_e2}")
+                return jsonify({"success": False, "error": f"OpenAI error: {_e2}"}), 500
 
         if not reply:
             return jsonify({"success": False, "error": "Réponse vide du modèle"}), 502
