@@ -8314,7 +8314,28 @@ def markets_chat():
         extra_context = (data.get("context") or "").strip()
         session_id = (data.get("session_id") or "").strip() or str(uuid.uuid4())
 
-        # Chat minimal via worker dédié
+        # Ajouter le dernier rapport comme contexte (si disponible)
+        try:
+            from market_analysis_db import get_market_analysis_db
+            db = get_market_analysis_db()
+            latest = db.get_recent_analyses(limit=1)
+            latest_txt = ""
+            if latest:
+                a = latest[0]
+                exec_summary = "\n".join([f"- {p}" for p in (a.executive_summary or [])]) if getattr(a, 'executive_summary', None) else ""
+                summary_compact = (a.summary or "")[:800]
+                ts = a.timestamp or a.created_at or ""
+                latest_txt = (
+                    f"[Dernier rapport | {a.analysis_type or 'auto'} | {ts}]\n"
+                    f"Executive Summary:\n{exec_summary}\n"
+                    f"Résumé:\n{summary_compact}"
+                )
+            if latest_txt:
+                extra_context = (extra_context + "\n---\n" + latest_txt).strip() if extra_context else latest_txt
+        except Exception:
+            pass
+
+        # Chat via worker dédié (Responses only)
         from markets_chat_worker import get_markets_chat_worker
         worker = get_markets_chat_worker()
         reply = worker.generate_reply(user_message, extra_context)
@@ -8366,12 +8387,32 @@ def markets_chat_stream():
             logger.error(f"OpenAI init error (stream): {e}")
             return jsonify({"success": False, "error": "OpenAI non configuré"}), 500
 
-        # Prompt et input utilisateur
+        # Prompt et input utilisateur (verbosity low; add latest report context)
         system_prompt = (
-            "Tu es un analyste marchés. Réponds en français, de manière concise, actionnable et contextuelle. "
-            "Utilise la mémoire si fournie. N'invente pas de chiffres. Mets en **gras** les points critiques."
+            "Tu es un analyste marchés. Réponds en français, concis (verbosité faible), actionnable et contextuel. "
+            "N'invente pas de chiffres. Mets en **gras** les points critiques."
         )
-        user_prompt_final = f"Contexte (utilisateur):\n{extra_context}\n---\nQuestion: {user_message}" if extra_context else user_message
+
+        # Injecter le dernier rapport comme contexte si disponible
+        report_ctx = ""
+        try:
+            from market_analysis_db import get_market_analysis_db
+            db = get_market_analysis_db()
+            latest = db.get_recent_analyses(limit=1)
+            if latest:
+                a = latest[0]
+                exec_summary = "\n".join([f"- {p}" for p in (a.executive_summary or [])]) if getattr(a, 'executive_summary', None) else ""
+                summary_compact = (a.summary or "")[:800]
+                ts = a.timestamp or a.created_at or ""
+                report_ctx = (
+                    f"Contexte (dernier rapport):\n[Type {a.analysis_type or 'auto'} | {ts}]\n"
+                    f"Executive Summary:\n{exec_summary}\nRésumé:\n{summary_compact}\n---\n"
+                )
+        except Exception:
+            report_ctx = ""
+
+        prefix_ctx = "".join([report_ctx, (f"Contexte (utilisateur):\n{extra_context}\n---\n" if extra_context else "")])
+        user_prompt_final = f"{prefix_ctx}Question: {user_message}" if prefix_ctx else user_message
 
         model_name = os.getenv("AI_MODEL", "gpt-5")
         kwargs = {
@@ -8380,6 +8421,7 @@ def markets_chat_stream():
             "input": user_prompt_final,
             "stream": True,
             "store": True,
+            "reasoning": {"effort": "high"},
         }
         if prev_id:
             kwargs["previous_response_id"] = prev_id

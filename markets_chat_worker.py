@@ -37,9 +37,9 @@ class MarketsChatWorker:
         self.model = os.getenv("AI_MODEL", "gpt-5").strip() or "gpt-5"
         self.max_output_tokens = min(1200, int(os.getenv("MAX_OUTPUT_TOKENS", "1200")))
 
-        # Stable, concise system prompt
+        # Stable, concise system prompt (verbosity low)
         self.system_prompt = (
-            "Tu es un analyste marchés. Réponds en français, concis, structuré, actionnable. "
+            "Tu es un analyste marchés. Réponds en français, concis (verbosité faible), structuré, actionnable. "
             "Ne fournis pas de chiffres non étayés. Utilise **gras** pour les points clés. "
             "Structure 3–5 points puis une conclusion brève."
         )
@@ -52,9 +52,9 @@ class MarketsChatWorker:
         return message
 
     def generate_reply(self, message: str, context: Optional[str] = None) -> str:
-        """Synchronous, one-shot reply with Responses; falls back to Chat Completions.
+        """Synchronous, one-shot reply via Responses API only (no fallback).
 
-        Returns plain text. Never raises on model-side empty output; returns a safe message instead.
+        Returns plain text. If model output is empty, returns a safe message instead.
         """
         msg = (message or "").strip()
         if not msg:
@@ -62,36 +62,19 @@ class MarketsChatWorker:
 
         user_input = self._build_user_input(msg, context)
 
-        # Primary: Responses API
+        # Responses API (exclusive)
         try:
             res = self.client.responses.create(
                 model=self.model,
                 instructions=self.system_prompt,
                 input=user_input,
-                reasoning={"effort": (os.getenv("AI_REASONING_EFFORT", "low") or "low")},
+                reasoning={"effort": "high"},
                 max_output_tokens=self.max_output_tokens,
                 store=False,
             )
             text = (extract_output_text(res) or "").strip()
         except Exception:
             text = ""
-
-        # Fallback: Chat Completions compatibility
-        if not text:
-            try:
-                cc_model = os.getenv("AI_COMPLETIONS_MODEL", os.getenv("AI_MODEL", "gpt-4o-mini"))
-                cc_res = from_chat_completions_compat(
-                    client=self.client,
-                    model=cc_model,
-                    messages=[
-                        {"role": "system", "content": self.system_prompt},
-                        {"role": "user", "content": user_input},
-                    ],
-                    max_tokens=self.max_output_tokens,
-                )
-                text = (getattr(cc_res, "choices", [{}])[0].get("message", {}).get("content", "") or "").strip()
-            except Exception:
-                text = ""
 
         return text or "Je n'ai pas pu générer une réponse pour le moment. Réessaie plus tard."
 
