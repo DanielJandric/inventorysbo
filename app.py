@@ -6690,16 +6690,34 @@ Réponds en JSON avec:
 - market_trend (hausse/stable/baisse)
 - price_range (objet avec min et max basés sur le marché)"""
 
-        response = from_responses_simple(
-client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"),
-            messages=[
-                {"role": "system", "content": [{"type": "input_text", "text": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."}]},
-                {"role": "user", "content": [{"type": "input_text", "text": prompt}]}
-            ],
-            max_output_tokens=800,
-            timeout=120,
-            reasoning_effort="medium"
-        )
+        # Appel IA avec fallback de modèles
+        models_to_try = []
+        _env_model = os.getenv("AI_MODEL")
+        if _env_model:
+            models_to_try.append(_env_model)
+        models_to_try += ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo-preview"]
+        ai_call_error = None
+        response = None
+        for _model in models_to_try:
+            try:
+                response = from_responses_simple(
+                    client=openai_client,
+                    model=_model,
+                    messages=[
+                        {"role": "system", "content": [{"type": "input_text", "text": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."}]},
+                        {"role": "user", "content": [{"type": "input_text", "text": prompt}]}
+                    ],
+                    max_output_tokens=800,
+                    timeout=120,
+                    reasoning_effort="medium"
+                )
+                break
+            except Exception as _e:
+                ai_call_error = _e
+                continue
+        if response is None:
+            logger.error(f"AI call failed for all models in market_price: {ai_call_error}")
+            return jsonify({"error": "Moteur IA Indisponible"}), 503
         
         raw = extract_output_text(response) or ''
         def _safe_parse_json(text: str):
@@ -6878,16 +6896,34 @@ Réponds en JSON avec:
 - confidence_score (0.1-0.9)
 - market_trend (hausse/stable/baisse)"""
 
-            response = from_responses_simple(
-client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"),
-                messages=[
-                    {"role": "system", "content": [{"type": "input_text", "text": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."}]},
-                    {"role": "user", "content": [{"type": "input_text", "text": prompt}]}
-                ],
-                max_output_tokens=800,
-                timeout=120,
-                reasoning_effort="medium"
-            )
+            # Appel IA avec fallback de modèles
+            models_to_try = []
+            _env_model = os.getenv("AI_MODEL")
+            if _env_model:
+                models_to_try.append(_env_model)
+            models_to_try += ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo-preview"]
+            ai_call_error = None
+            response = None
+            for _model in models_to_try:
+                try:
+                    response = from_responses_simple(
+                        client=openai_client,
+                        model=_model,
+                        messages=[
+                            {"role": "system", "content": [{"type": "input_text", "text": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."}]},
+                            {"role": "user", "content": [{"type": "input_text", "text": prompt}]}
+                        ],
+                        max_output_tokens=800,
+                        timeout=120,
+                        reasoning_effort="medium"
+                    )
+                    break
+                except Exception as _e:
+                    ai_call_error = _e
+                    continue
+            if response is None:
+                logger.error(f"AI call failed for all models in ai_update_price: {ai_call_error}")
+                return jsonify({"error": "Moteur IA Indisponible"}), 503
             
             raw = extract_output_text(response) or ''
             # Parsing robuste: retirer les code fences et extraire le premier objet JSON équilibré
