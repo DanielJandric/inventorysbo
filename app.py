@@ -57,7 +57,7 @@ def create_app():
     @app.route("/")
     def index():
         """Main dashboard"""
-        return render_template('dashboard.html')
+        return render_template('index.html')
     
     @app.route("/analytics")
     def analytics():
@@ -87,7 +87,7 @@ def create_app():
     @app.route("/real-estate")
     def real_estate():
         """Real estate page"""
-        return render_template('real-estate.html')
+        return render_template('real_estate.html')
     
     @app.route("/web-search")
     def web_search():
