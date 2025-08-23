@@ -8355,8 +8355,8 @@ def markets_chat():
         try:
             conversation_memory.add_message(session_id, 'user', user_message)
             conversation_memory.add_message(session_id, 'assistant', reply)
-            except Exception:
-                pass
+        except Exception:
+            pass
 
         return jsonify({"success": True, "reply": reply, "metadata": {"session_id": session_id}})
     except Exception as e:
