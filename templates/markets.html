@@ -40,14 +40,7 @@
         .glowing-element::before { content:''; position:absolute; inset:0; border-radius:inherit; background: radial-gradient(circle at 50% 50%, var(--glass-glow), transparent 70%); filter: blur(30px); opacity:.6; z-index:-1; transition: opacity .3s ease; }
         .glowing-element:hover::before, .glowing-element.is-active::before { opacity: 1; }
         /* Chat: verrouiller en une seule colonne et empêcher toute mise en colonnes automatique */
-        #chat-messages, #chat-messages * {
-            column-count: 1 !important;
-            columns: initial !important;
-            column-width: auto !important;
-            column-gap: normal !important;
-            writing-mode: horizontal-tb !important;
-        }
-        .chat-bubble { display: inline-block; word-break: break-word; overflow-wrap: anywhere; width: auto; max-width: 80%; }
+        .chat-bubble { word-break: break-word; overflow-wrap: anywhere; }
     </style>
 </head>
 <body class="h-full">
