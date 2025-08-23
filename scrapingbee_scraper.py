@@ -764,7 +764,8 @@ Contraintes générales:
                             {"role": "user", "content": [{"type": "input_text", "text": f"Demande: {prompt}\n\nDONNÉES FACTUELLES (snapshot):\n{json.dumps(market_snapshot, indent=2)}\n\nDONNÉES COLLECTÉES (articles):\n{context}"}]}
                         ],
                         max_output_tokens=15000,
-                        reasoning_effort=os.getenv("AI_REASONING_EFFORT", "medium")
+                        reasoning_effort=os.getenv("AI_REASONING_EFFORT", "medium"),
+                        response_format={"type": "json_object"}
                     )
                     raw = extract_output_text(resp) or ""
 
