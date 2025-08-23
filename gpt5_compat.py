@@ -35,53 +35,136 @@ def _to_responses_input(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 def _extract_output_text_from_response(res: Any) -> str:
-    """Robust extraction of text from a Responses API result.
-
-    Priority:
-    1) SDK shortcut: `output_text`
-    2) Fallback: inspect dict via `model_dump()` (or dict) and parse `output[*].content[*]` blocks
-       Also surface explicit refusals when present.
-    """
-    # 1) SDK shortcut when available
+    """Best-effort extraction of text from a Responses API result."""
     try:
-        maybe = getattr(res, "output_text", None)
-        if isinstance(maybe, str) and maybe.strip():
-            return maybe.strip()
-    except Exception:
-        pass
-
-    # 2) Generic fallback via model_dump or dict
-    try:
-        data: Dict[str, Any]
-        if hasattr(res, "model_dump"):
-            try:
-                data = res.model_dump()  # type: ignore[attr-defined]
-            except Exception:
-                data = {}
-        elif isinstance(res, dict):
-            data = res
-        else:
-            data = {}
-
-        # Refusal handling
-        refusal = data.get("refusal")
-        if isinstance(refusal, str) and refusal.strip():
-            return f"[REFUSAL] {refusal.strip()}"
-
+        # Vérifier d'abord output_text direct
+        text = getattr(res, "output_text", None)
+        if text:
+            return str(text)
+        
+        # Vérifier les outputs
+        outputs = getattr(res, "output", None) or []
         parts: List[str] = []
-        for item in data.get("output", []) or []:
+        
+        for item in outputs:
             try:
-                content_list = (item or {}).get("content", []) or []
-                for block in content_list:
-                    if isinstance(block, dict) and block.get("type") == "output_text":
-                        txt = str(block.get("text") or "").strip()
-                        if txt:
-                            parts.append(txt)
+                # Obtenir le type de l'item
+                item_type = getattr(item, "type", None) or (item.get("type") if isinstance(item, dict) else None)
+                
+                # Gérer les différents types de réponses
+                if item_type == "message":
+                    # Type message classique - structure: {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "..."}]}
+                    content = getattr(item, "content", None) or (item.get("content") if isinstance(item, dict) else [])
+                    for c in content or []:
+                        c_type = getattr(c, "type", None) or (c.get("type") if isinstance(c, dict) else None)
+                        if c_type in ("output_text", "text"):
+                            t = getattr(c, "text", None) or (c.get("text") if isinstance(c, dict) else "")
+                            if t:
+                                parts.append(str(t))
+                
+                elif item_type == "reasoning":
+                    # Type reasoning - chercher dans summary et content
+                    summary = getattr(item, "summary", None) or (item.get("summary") if isinstance(item, dict) else [])
+                    if summary:
+                        for s in summary:
+                            if isinstance(s, str):
+                                parts.append(s)
+                            elif isinstance(s, dict):
+                                text_content = s.get("text") or s.get("content")
+                                if text_content:
+                                    parts.append(str(text_content))
+                    
+                    # Chercher aussi dans content
+                    content = getattr(item, "content", None) or (item.get("content") if isinstance(item, dict) else None)
+                    if content:
+                        if isinstance(content, str):
+                            parts.append(content)
+                        elif isinstance(content, dict):
+                            text_content = content.get("text") or content.get("content")
+                            if text_content:
+                                parts.append(str(text_content))
+                    
+                    # NOUVEAU: Chercher dans tous les attributs de l'item reasoning
+                    if not parts:
+                        for attr_name in ["text", "message", "output", "response", "result"]:
+                            attr_value = getattr(item, attr_name, None)
+                            if attr_value:
+                                if isinstance(attr_value, str):
+                                    parts.append(attr_value)
+                                elif isinstance(attr_value, dict):
+                                    text_content = attr_value.get("text") or attr_value.get("content") or attr_value.get("message")
+                                    if text_content:
+                                        parts.append(str(text_content))
+                
+                elif item_type == "output_text":
+                    # Type output_text direct
+                    text = getattr(item, "text", None) or (item.get("text") if isinstance(item, dict) else "")
+                    if text:
+                        parts.append(str(text))
+                
+                elif item_type == "text":
+                    # Type text direct
+                    text = getattr(item, "text", None) or (item.get("text") if isinstance(item, dict) else "")
+                    if text:
+                        parts.append(str(text))
+                
+                # Fallback: chercher dans tous les attributs de l'item
+                else:
+                    for attr_name in ["text", "content", "message", "output"]:
+                        attr_value = getattr(item, attr_name, None)
+                        if attr_value:
+                            if isinstance(attr_value, str):
+                                parts.append(attr_value)
+                            elif isinstance(attr_value, dict):
+                                text_content = attr_value.get("text") or attr_value.get("content")
+                                if text_content:
+                                    parts.append(str(text_content))
+                
             except Exception:
                 continue
-        joined = "\n".join(p for p in parts if p).strip()
-        return joined or "Aucun texte extrait de la réponse API"
-    except Exception:
+        
+        # Si on n'a rien trouvé, essayer d'autres attributs de la réponse
+        if not parts:
+            for attr_name in ["text", "content", "message", "response", "result"]:
+                attr_value = getattr(res, attr_name, None)
+                if attr_value:
+                    if isinstance(attr_value, str):
+                        parts.append(attr_value)
+                    elif isinstance(attr_value, dict):
+                        text_content = attr_value.get("text") or attr_value.get("content")
+                        if text_content:
+                            parts.append(str(text_content))
+        
+        # Log pour debug si pas de réponse
+        if not parts:
+            # Essayer de logger la structure complète pour debug
+            try:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"⚠️ Aucun texte extrait de la réponse Responses API: {type(res)}")
+                logger.warning(f"📡 Structure de la réponse: {res}")
+                # Essayer de voir s'il y a des attributs cachés
+                for attr in dir(res):
+                    if not attr.startswith('_'):
+                        try:
+                            value = getattr(res, attr)
+                            if value and str(value) not in ['None', '[]', '{}']:
+                                logger.warning(f"📡 {attr}: {value}")
+                        except:
+                            pass
+            except:
+                pass
+        
+        return " ".join(parts)
+        
+    except Exception as e:
+        # Log de l'erreur pour debug
+        try:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"❌ Erreur lors de l'extraction du texte: {e}")
+        except:
+            pass
         return ""
 
 
