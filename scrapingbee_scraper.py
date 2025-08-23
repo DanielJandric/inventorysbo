@@ -8,6 +8,7 @@ from typing import List, Dict, Optional
 from dataclasses import dataclass
 from urllib.parse import quote_plus
 import re
+from datetime import timedelta
 
 # Configuration du logging
 logging.basicConfig(level=logging.INFO)
@@ -150,6 +151,109 @@ class ScrapingBeeScraper:
             logger.error(f"❌ Erreur recherche/scraping: {e}")
         
         return results
+
+    async def search_x_recent(self, topic_query: str, max_items: int = 6, max_age_hours: int = 2) -> List[ScrapedData]:
+        """Scrape X (Twitter) search results for recent posts on a topic.
+
+        - Uses ScrapingBee with JS rendering to load X search page
+        - Parses tweets' text and ISO timestamps from <time datetime="...">
+        - Filters to items within the last `max_age_hours` hours
+        """
+        items: List[ScrapedData] = []
+        try:
+            if not self._initialized:
+                await self.initialize()
+
+            # Build X search URL for live (latest) posts, restrict to FR/EN via query keywords
+            q = quote_plus(topic_query)
+            url = f"https://x.com/search?q={q}&f=live"
+
+            params = {
+                'api_key': self.api_key,
+                'url': url,
+                'render_js': 'true',
+                'premium_proxy': 'false',
+                'country_code': 'us'
+            }
+
+            async with aiohttp.ClientSession() as session:
+                async with session.get(self.base_url, params=params) as resp:
+                    if resp.status != 200:
+                        logger.warning(f"⚠️ X search status {resp.status} pour {topic_query}")
+                        return items
+                    html = await resp.text()
+
+            try:
+                from bs4 import BeautifulSoup  # type: ignore
+            except Exception:
+                logger.warning("⚠️ BeautifulSoup non disponible, impossible de parser X.com")
+                return items
+
+            soup = BeautifulSoup(html or '', 'lxml')
+            now = datetime.now()
+            candidates = []
+            # Tweets sont souvent dans <article role="article">
+            for art in soup.find_all('article'):
+                try:
+                    # timestamp
+                    t = art.find('time')
+                    iso = t.get('datetime') if t else None
+                    ts = None
+                    if iso:
+                        try:
+                            ts = datetime.fromisoformat(iso.replace('Z', '+00:00'))
+                        except Exception:
+                            ts = None
+                    # content
+                    # concaténer les textes
+                    text_parts = [n.get_text(' ', strip=True) for n in art.find_all('div')]
+                    raw_text = ' '.join([p for p in text_parts if p]).strip()
+                    # heuristique pour nettoyer
+                    content = self._clean_content(raw_text)[:800]
+                    if not content:
+                        continue
+                    # link
+                    status_link = None
+                    for a in art.find_all('a'):
+                        href = a.get('href') or ''
+                        if '/status/' in href:
+                            status_link = f"https://x.com{href}"
+                            break
+                    candidates.append((ts, content, status_link))
+                except Exception:
+                    continue
+
+            # Filtrer par recence: <= max_age_hours
+            max_age = timedelta(hours=max_age_hours)
+            filtered = []
+            for ts, content, link in candidates:
+                if ts is None:
+                    continue
+                try:
+                    age = now - ts
+                    if age <= max_age:
+                        filtered.append((ts, content, link))
+                except Exception:
+                    continue
+
+            # trier recent d'abord, limiter
+            filtered.sort(key=lambda x: x[0], reverse=True)
+            for ts, content, link in filtered[:max_items]:
+                items.append(ScrapedData(
+                    url=link or url,
+                    title=f"X.com: {topic_query[:40]}",
+                    content=content,
+                    timestamp=ts,
+                    metadata={
+                        'source': 'x.com',
+                        'topic': topic_query,
+                        'language': 'und',
+                        'word_count': len(content.split()),
+                    }
+                ))
+        except Exception as e:
+            logger.error(f"❌ Erreur X.com scraping: {e}")
+        return items
     
     async def _search_google(self, query: str, num_results: int = 5) -> List[Dict]:
         """Recherche sur des sites financiers directs avec ScrapingBee"""
