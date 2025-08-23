@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.feature_extraction.text import TfidfVectorizer
 from openai import OpenAI
-from core.config import Config
+from core.app_config import Config
 from core.models import CollectionItem, ChatMessage
 from core.database import db_manager
 from gpt5_compat import from_responses_simple, extract_output_text

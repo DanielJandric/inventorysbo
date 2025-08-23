@@ -5,7 +5,7 @@ Market and stock services for data retrieval and analysis using yfinance.
 import logging
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
-from core.config import Config
+from core.app_config import Config
 from core.utils import get_live_exchange_rate, retry_on_failure, rate_limit
 from core.database import db_manager
 

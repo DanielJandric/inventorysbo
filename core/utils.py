@@ -347,7 +347,7 @@ def get_live_exchange_rate(from_currency: str, to_currency: str = 'CHF') -> floa
     
     try:
         # Try FreeCurrency API
-        from core.config import Config
+        from core.app_config import Config
         api_key = Config.FREECURRENCY_API_KEY
         
         if api_key:

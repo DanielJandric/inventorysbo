@@ -6,7 +6,7 @@ import logging
 from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime
 from supabase import create_client, Client
-from core.config import Config
+from core.app_config import Config
 from core.models import CollectionItem, MarketUpdate
 
 logger = logging.getLogger(__name__)

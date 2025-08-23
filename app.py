@@ -8,7 +8,7 @@ from flask import Flask, render_template, jsonify
 from flask_cors import CORS
 
 # Core imports
-from core.config import Config
+from core.app_config import Config
 from core.database import db_manager
 
 # Service imports

@@ -12,7 +12,7 @@ from typing import Dict, List, Optional, Any
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
-from core.config import Config
+from core.app_config import Config
 
 logger = logging.getLogger(__name__)
 
