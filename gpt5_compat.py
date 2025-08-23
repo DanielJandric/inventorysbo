@@ -35,27 +35,52 @@ def _to_responses_input(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 def _extract_output_text_from_response(res: Any) -> str:
-    """Best-effort extraction of text from a Responses API result."""
+    """Robust extraction of text from a Responses API result.
+
+    Priority:
+    1) SDK shortcut: `output_text`
+    2) Fallback: inspect dict via `model_dump()` (or dict) and parse `output[*].content[*]` blocks
+       Also surface explicit refusals when present.
+    """
+    # 1) SDK shortcut when available
     try:
-        text = getattr(res, "output_text", None)
-        if text:
-            return text
-        outputs = getattr(res, "output", None) or []
-        parts: List[str] = []
-        for item in outputs:
+        maybe = getattr(res, "output_text", None)
+        if isinstance(maybe, str) and maybe.strip():
+            return maybe.strip()
+    except Exception:
+        pass
+
+    # 2) Generic fallback via model_dump or dict
+    try:
+        data: Dict[str, Any]
+        if hasattr(res, "model_dump"):
             try:
-                item_type = getattr(item, "type", None) or (item.get("type") if isinstance(item, dict) else None)
-                if item_type == "message":
-                    content = getattr(item, "content", None) or (item.get("content") if isinstance(item, dict) else [])
-                    for c in content or []:
-                        c_type = getattr(c, "type", None) or (c.get("type") if isinstance(c, dict) else None)
-                        if c_type in ("output_text", "text"):
-                            t = getattr(c, "text", None) or (c.get("text") if isinstance(c, dict) else "")
-                            if t:
-                                parts.append(str(t))
+                data = res.model_dump()  # type: ignore[attr-defined]
+            except Exception:
+                data = {}
+        elif isinstance(res, dict):
+            data = res
+        else:
+            data = {}
+
+        # Refusal handling
+        refusal = data.get("refusal")
+        if isinstance(refusal, str) and refusal.strip():
+            return f"[REFUSAL] {refusal.strip()}"
+
+        parts: List[str] = []
+        for item in data.get("output", []) or []:
+            try:
+                content_list = (item or {}).get("content", []) or []
+                for block in content_list:
+                    if isinstance(block, dict) and block.get("type") == "output_text":
+                        txt = str(block.get("text") or "").strip()
+                        if txt:
+                            parts.append(txt)
             except Exception:
                 continue
-        return "".join(parts)
+        joined = "\n".join(p for p in parts if p).strip()
+        return joined or "Aucun texte extrait de la réponse API"
     except Exception:
         return ""
 
