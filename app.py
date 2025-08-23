@@ -8476,7 +8476,26 @@ def markets_chat():
                 return jsonify({"success": False, "error": f"OpenAI error: {_e2}"}), 500
 
         if not reply:
-            return jsonify({"success": False, "error": "Réponse vide du modèle"}), 502
+            # Fallback: tenter Chat Completions si la réponse Responses est vide
+            try:
+                messages_cc = [{"role": "system", "content": system_prompt}]
+                if context_text:
+                    messages_cc.append({"role": "user", "content": f"Contexte:\n{context_text}\n\nQuestion: {user_message}"})
+                else:
+                    messages_cc.append({"role": "user", "content": f"Question: {user_message}"})
+                cc_model = os.getenv("AI_COMPLETIONS_MODEL", os.getenv("AI_MODEL", "gpt-4o-mini"))
+                cc_res = from_chat_completions_compat(
+                    client=client,
+                    model=cc_model,
+                    messages=messages_cc,
+                    max_tokens=min(1500, int(os.getenv("MAX_OUTPUT_TOKENS", "1500")))
+                )
+                reply = (getattr(cc_res, "choices", [{}])[0].get("message", {}).get("content", "") or "").strip()
+            except Exception as _e3:
+                logger.error(f"Empty reply fallback error: {_e3}")
+                reply = ""
+            if not reply:
+                return jsonify({"success": False, "error": "Réponse vide du modèle"}), 502
 
         # Persister dans la mémoire
         try:
