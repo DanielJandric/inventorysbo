@@ -419,7 +419,10 @@
                         sid = (crypto && crypto.randomUUID) ? crypto.randomUUID() : (Date.now() + '-' + Math.random().toString(36).slice(2));
                         localStorage.setItem('markets_chat_session_id', sid);
                     }
-                    const prevId = localStorage.getItem('markets_prev_response_id') || '';
+                    let prevId = localStorage.getItem('markets_prev_response_id') || '';
+                    if (!(prevId && prevId.startsWith('resp'))) {
+                        prevId = '';
+                    }
 
                     const resp = await fetch('/api/markets/chat/stream', {
                         method: 'POST',
@@ -447,10 +450,18 @@
 
                         // Footer END
                         const endMatch = buf.match(/\[END:([^\]]+)\]$/);
-                        if (endMatch) {
-                            responseId = endMatch[1];
-                            localStorage.setItem('markets_prev_response_id', responseId);
-                            buf = buf.replace(/\n?\n?\[END:[^\]]+\]$/, '');
+                        const endNoId = /\[END\]$/.test(buf);
+                        if (endMatch || endNoId) {
+                            if (endMatch) {
+                                responseId = endMatch[1];
+                                if (responseId && responseId.startsWith('resp')) {
+                                    localStorage.setItem('markets_prev_response_id', responseId);
+                                }
+                                buf = buf.replace(/\n?\n?\[END:[^\]]+\]$/, '');
+                            } else {
+                                // Pas d'ID valide; on ne stocke rien
+                                buf = buf.replace(/\n?\n?\[END\]$/, '');
+                            }
                         }
 
                         // Footer ERROR

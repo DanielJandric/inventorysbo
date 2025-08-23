@@ -8348,7 +8348,14 @@ def markets_chat_stream():
             return jsonify({"success": False, "error": "Message vide"}), 400
         extra_context = (data.get("context") or "").strip()
         session_id = (data.get("session_id") or "").strip() or str(uuid.uuid4())
-        prev_id = (data.get("previous_response_id") or "").strip() or responses_prev_ids.get(session_id)
+        # Nettoyer previous_response_id transmis par le client
+        _prev_raw = str(data.get("previous_response_id") or "").strip()
+        prev_id = responses_prev_ids.get(session_id)
+        if _prev_raw and _prev_raw.lower() not in ("none", "null", "undefined"):
+            prev_id = _prev_raw
+        # Valider la forme de l'ID (Responses commence généralement par 'resp')
+        if prev_id and not str(prev_id).startswith("resp"):
+            prev_id = None
 
         # Client OpenAI avec timeout
         try:
@@ -8412,7 +8419,10 @@ def markets_chat_stream():
                                         conversation_memory.add_message(session_id, 'assistant', "".join(full_chunks))
                                 except Exception:
                                     pass
-                                yield f"\n\n[END:{response_id}]"
+                                if isinstance(response_id, str) and response_id.startswith('resp'):
+                                    yield f"\n\n[END:{response_id}]"
+                                else:
+                                    yield "\n\n[END]"
                             elif etype == "error":
                                 err_text = str(getattr(event, 'error', 'unknown'))
                                 yield f"\n\n[ERROR:{err_text}]"
@@ -8436,7 +8446,10 @@ def markets_chat_stream():
                                     conversation_memory.add_message(session_id, 'assistant', "".join(full_chunks))
                             except Exception:
                                 pass
-                            yield f"\n\n[END:{response_id}]"
+                            if isinstance(response_id, str) and response_id.startswith('resp'):
+                                yield f"\n\n[END:{response_id}]"
+                            else:
+                                yield "\n\n[END]"
                         elif etype == "error":
                             err_text = str(getattr(event, 'error', 'unknown'))
                             yield f"\n\n[ERROR:{err_text}]"
