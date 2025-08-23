@@ -484,14 +484,15 @@ class StockAPIManager:
         return result
 
     def get_market_snapshot(self) -> Dict[str, Any]:
-        """Récupère un aperçu des principaux indicateurs de marché (comportement historique).
+        """Récupère un aperçu des principaux indicateurs de marché (version stricte yfinance).
 
-        - Utilise le gestionnaire multi-APIs (Alpha Vantage → EODHD → Finnhub → yfinance)
-        - Pas d'attente forcée de 11s entre requêtes (respect du rate-limit via décorateurs)
-        - Inclut: Actions, Indices, Volatilité, Matières premières, Crypto, Forex, Obligations (FRED prioritaire)
-        - En cas d'indisponibilité: {"error": "Data not available"}
+        Exigences:
+        - Utiliser yfinance uniquement
+        - Attendre 11 secondes AVANT chaque requête
+        - Inclure: NVDA, MSFT, AMD, AAPL, Or (Gold), Bitcoin, S&P 500, Nasdaq, Dow Jones, VIX
+        - Ne pas inventer: si indisponible, retourner {"error": "Data not available"}
         """
-        logger.info("📊 Récupération de l'aperçu du marché (multi-APIs historique)...")
+        logger.info("📊 Récupération de l'aperçu du marché (mode strict yfinance)...")
 
         snapshot: Dict[str, Any] = {
             "stocks": {},
@@ -551,9 +552,9 @@ class StockAPIManager:
             ("bonds", "US10Y", "^TNX"),
         ]
 
-        # Utiliser le gestionnaire multi-APIs pour tous les actifs (hors obligations via FRED)
+        # Utiliser exclusivement yfinance
         start_time = time.time()
-        max_execution_time = 240  # 4 minutes max
+        max_execution_time = 420  # 7 minutes max
         
         for category, display_name, symbol in ordered_symbols:
             # Vérifier le timeout global
@@ -577,10 +578,12 @@ class StockAPIManager:
                     }
                 continue  # Ne pas essayer yfinance pour les bonds
             
-            # Pour tous les autres actifs, utiliser le gestionnaire multi-APIs (avec rate-limit intégré)
+            # Pour tous les autres actifs, utiliser yfinance
             try:
-                logger.info(f"🔄 Récupération multi-APIs pour {symbol} ({display_name})...")
-                data = self.get_stock_price(symbol)
+                logger.info(f"⏳ Attente 11s avant la requête yfinance pour {symbol} ({display_name})...")
+                time.sleep(11)
+                logger.info(f"🔄 Récupération yfinance pour {symbol} ({display_name})...")
+                data = self.yfinance.get_stock_price(symbol)
                 if data and data.get('price') is not None:
                     if category == 'forex' and display_name == 'DXY':
                         snapshot[category][display_name] = {
@@ -590,16 +593,9 @@ class StockAPIManager:
                             "source": data.get('source')
                         }
                     else:
-                        snapshot[category][display_name] = {
-                            "price": data.get('price'),
-                            "change": data.get('change'),
-                            "change_percent": data.get('change_percent'),
-                            "source": data.get('source')
-                        }
+                        snapshot[category][display_name] = {"price": data.get('price'), "change": data.get('change'), "change_percent": data.get('change_percent'), "source": data.get('source')}
                 else:
                     snapshot[category][display_name] = {"error": "Data not available"}
-                # Court délai pour respirer sans bloquer (décorateurs font déjà le gros)
-                time.sleep(0.5)
             except Exception as e:
                 logger.warning(f"⚠️ Erreur pour {symbol} ({display_name}): {e}")
                 snapshot[category][display_name] = {"error": f"Error: {str(e)}"}
