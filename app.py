@@ -8323,16 +8323,16 @@ def markets_chat():
             if latest:
                 a = latest[0]
                 exec_summary = "\n".join([f"- {p}" for p in (a.executive_summary or [])]) if getattr(a, 'executive_summary', None) else ""
-                summary_compact = (a.summary or "")[:800]
-                ts = a.timestamp or a.created_at or ""
+                    summary_compact = (a.summary or "")[:800]
+                    ts = a.timestamp or a.created_at or ""
                 latest_txt = (
                     f"[Dernier rapport | {a.analysis_type or 'auto'} | {ts}]\n"
-                    f"Executive Summary:\n{exec_summary}\n"
+                        f"Executive Summary:\n{exec_summary}\n"
                     f"Résumé:\n{summary_compact}"
-                )
+                    )
             if latest_txt:
                 extra_context = (extra_context + "\n---\n" + latest_txt).strip() if extra_context else latest_txt
-        except Exception:
+                except Exception:
             pass
 
         # Récupérer un court historique pour continuité
@@ -8355,8 +8355,8 @@ def markets_chat():
         try:
             conversation_memory.add_message(session_id, 'user', user_message)
             conversation_memory.add_message(session_id, 'assistant', reply)
-        except Exception:
-            pass
+            except Exception:
+                pass
 
         return jsonify({"success": True, "reply": reply, "metadata": {"session_id": session_id}})
     except Exception as e:
@@ -8418,37 +8418,37 @@ def markets_chat_stream():
                     f"Contexte (dernier rapport):\n[Type {a.analysis_type or 'auto'} | {ts}]\n"
                     f"Executive Summary:\n{exec_summary}\nRésumé:\n{summary_compact}\n---\n"
                 )
-        except Exception:
+                except Exception:
             report_ctx = ""
 
         prefix_ctx = "".join([report_ctx, (f"Contexte (utilisateur):\n{extra_context}\n---\n" if extra_context else "")])
         user_prompt_final = f"{prefix_ctx}Question: {user_message}" if prefix_ctx else user_message
 
         model_name = os.getenv("AI_MODEL", "gpt-5")
-        kwargs = {
+            kwargs = {
             "model": model_name,
-            "instructions": system_prompt,
-            "input": user_prompt_final,
+                "instructions": system_prompt,
+                "input": user_prompt_final,
             "stream": True,
-            "store": True,
+                "store": True,
             "reasoning": {"effort": "high"},
             "max_output_tokens": min(30000, int(os.getenv("STREAM_MAX_OUTPUT_TOKENS", "30000"))),
-        }
-        if prev_id:
-            kwargs["previous_response_id"] = prev_id
+            }
+            if prev_id:
+                kwargs["previous_response_id"] = prev_id
 
         def gen():
             full_chunks: list[str] = []
             response_id = None
             # Préférence: API streaming dédiée; fallback create(stream=True)
             try:
-                # Envoi immédiat d'un caractère invisible pour éviter les timeouts proxy
-                yield "\u200b"
+                # SSE heartbeat initial
+                yield ":heartbeat\n\n"
                 try:
                     streamer = client.responses.stream(**kwargs)
                     ctx = streamer
                     use_cm = True
-                except Exception:
+            except Exception:
                     streamer = client.responses.create(**kwargs)
                     ctx = streamer
                     use_cm = False
@@ -8463,24 +8463,27 @@ def markets_chat_stream():
                                 chunk = getattr(event, 'delta', None)
                                 if chunk:
                                     full_chunks.append(str(chunk))
-                                    yield str(chunk)
+                                    try:
+                                        payload = json.dumps({"delta": str(chunk), "done": False}, ensure_ascii=False)
+                                    except Exception:
+                                        payload = '{"delta":"" , "done": false}'
+                                    yield f"data: {payload}\n\n"
                             elif etype == "response.completed":
                                 # Persist mappings & memory best-effort
                                 try:
                                     if response_id:
                                         responses_prev_ids[session_id] = response_id
                                     if full_chunks:
-                                        conversation_memory.add_message(session_id, 'user', user_message)
+            conversation_memory.add_message(session_id, 'user', user_message)
                                         conversation_memory.add_message(session_id, 'assistant', "".join(full_chunks))
-                                except Exception:
-                                    pass
-                                if isinstance(response_id, str) and response_id.startswith('resp'):
-                                    yield f"\n\n[END:{response_id}]"
-                                else:
-                                    yield "\n\n[END]"
+        except Exception:
+            pass
+                                rid = response_id if isinstance(response_id, str) else ""
+                                yield f"data: {{\"done\": true, \"id\": \"{rid}\"}}\n\n"
                             elif etype == "error":
                                 err_text = str(getattr(event, 'error', 'unknown'))
-                                yield f"\n\n[ERROR:{err_text}]"
+                                err_payload = json.dumps({"error": err_text, "done": False})
+                                yield f"data: {err_payload}\n\n"
                 else:
                     # Iterator fallback
                     for event in ctx:
@@ -8491,7 +8494,11 @@ def markets_chat_stream():
                             chunk = getattr(event, 'delta', None)
                             if chunk:
                                 full_chunks.append(str(chunk))
-                                yield str(chunk)
+                                try:
+                                    payload = json.dumps({"delta": str(chunk), "done": False}, ensure_ascii=False)
+        except Exception:
+                                    payload = '{"delta":"" , "done": false}'
+                                yield f"data: {payload}\n\n"
                         elif etype == "response.completed":
                             try:
                                 if response_id:
@@ -8501,17 +8508,17 @@ def markets_chat_stream():
                                     conversation_memory.add_message(session_id, 'assistant', "".join(full_chunks))
                             except Exception:
                                 pass
-                            if isinstance(response_id, str) and response_id.startswith('resp'):
-                                yield f"\n\n[END:{response_id}]"
-                            else:
-                                yield "\n\n[END]"
+                            rid = response_id if isinstance(response_id, str) else ""
+                            yield f"data: {{\"done\": true, \"id\": \"{rid}\"}}\n\n"
                         elif etype == "error":
                             err_text = str(getattr(event, 'error', 'unknown'))
-                            yield f"\n\n[ERROR:{err_text}]"
-            except Exception as e:
-                yield f"\n\n[ERROR:{e}]"
+                            err_payload = json.dumps({"error": err_text, "done": False})
+                            yield f"data: {err_payload}\n\n"
+    except Exception as e:
+                err_payload = json.dumps({"error": str(e), "done": False})
+                yield f"data: {err_payload}\n\n"
 
-        return Response(stream_with_context(gen()), mimetype="text/plain", headers={'X-Accel-Buffering': 'no', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive'})
+        return Response(stream_with_context(gen()), mimetype="text/event-stream", headers={'X-Accel-Buffering': 'no', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive'})
     except Exception as e:
         logger.error(f"Erreur markets_chat_stream: {e}")
         def _err_gen2():
