@@ -356,6 +356,11 @@ class ScrapingBeeScraper:
                         'url': "https://www.cnbc.com/markets/",
                         'title': "CNBC - Marchés"
                     },
+                    # Géopolitique majeure (ajout CNN)
+                    {
+                        'url': "https://www.cnn.com/world",
+                        'title': "CNN - World / Geopolitics"
+                    },
                     {
                         'url': "https://www.marketwatch.com/",
                         'title': "MarketWatch - Actualités"
@@ -713,7 +718,7 @@ Schéma attendu (extrait):
 }
 
 Exigences géopolitiques (obligatoire):
-- Analyse à jour issue des DERNIÈRES nouvelles scrappées (≤72h); si plusieurs versions d’un même événement, privilégie la plus récente et cite la source.
+- Analyse géopolitique à jour issue des DERNIÈRES nouvelles scrappées (≤72h), en priorité depuis Reuters, FT, Bloomberg, CNN (rubrique World) et X.com (≤12h). Si plusieurs versions d’un même événement, privilégie la plus récente et cite la source (titre+URL).
 - Détaille causes → effets de 2e ordre → risques de queue; propose hedges concrets.
 
 Exigences indicateurs (obligatoire):
