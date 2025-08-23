@@ -8,7 +8,7 @@ try:
 except Exception as _e:  # pragma: no cover
     raise RuntimeError("openai SDK is required: pip install -U openai") from _e
 
-from gpt5_compat import extract_output_text, from_chat_completions_compat
+from gpt5_compat import extract_output_text, from_responses_simple
 
 
 class MarketsChatWorker:
@@ -62,7 +62,7 @@ class MarketsChatWorker:
 
         user_input = self._build_user_input(msg, context)
 
-        # Responses API (exclusive)
+        # Responses API (exclusive) – try direct input first
         try:
             res = self.client.responses.create(
                 model=self.model,
@@ -75,6 +75,23 @@ class MarketsChatWorker:
             text = (extract_output_text(res) or "").strip()
         except Exception:
             text = ""
+
+        # If empty, retry using typed messages via Responses API
+        if not text:
+            try:
+                res2 = from_responses_simple(
+                    client=self.client,
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": self.system_prompt},
+                        {"role": "user", "content": user_input},
+                    ],
+                    reasoning_effort="high",
+                    max_output_tokens=self.max_output_tokens,
+                )
+                text = (extract_output_text(res2) or "").strip()
+            except Exception:
+                text = ""
 
         return text or "Je n'ai pas pu générer une réponse pour le moment. Réessaie plus tard."
 

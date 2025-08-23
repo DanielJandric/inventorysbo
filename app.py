@@ -8339,6 +8339,8 @@ def markets_chat():
         from markets_chat_worker import get_markets_chat_worker
         worker = get_markets_chat_worker()
         reply = worker.generate_reply(user_message, extra_context)
+        if not (reply and reply.strip()):
+            return jsonify({"success": False, "error": "Réponse vide du modèle"}), 502
 
         # Persister succinctement (best-effort)
         try:
