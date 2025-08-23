@@ -16,6 +16,7 @@ from core.app_config import Config
 from core.models import CollectionItem, ChatMessage
 from core.database import db_manager
 from gpt5_compat import from_responses_simple, extract_output_text
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -236,8 +237,11 @@ class AIService:
             return None
         
         try:
+            # Extract model from kwargs to avoid duplicate parameter
+            model = kwargs.pop('model', 'gpt-4o-mini')
+            
             return self.client.chat.completions.create(
-                model=kwargs.get('model', 'gpt-4o-mini'),
+                model=model,
                 messages=messages,
                 stream=stream,
                 **kwargs
@@ -386,6 +390,135 @@ class AIService:
             logger.error(f"Error generating market briefing: {e}")
         
         return "Unable to generate market briefing at this time."
+    
+    def get_sophisticated_price_estimate(self, prompt: str) -> Dict[str, Any]:
+        """Get sophisticated price estimate using GPT-5 compatible API - matches original app"""
+        if not self.client:
+            return {'error': 'AI service not available'}
+        
+        try:
+            # First try GPT-5 Responses API if supported
+            raw_response = None
+            
+            try:
+                response = from_responses_simple(
+                    client=self.client,
+                    model=os.getenv("AI_MODEL", "gpt-5"),
+                    messages=[
+                        {"role": "system", "content": [{"type": "input_text", "text": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."}]},
+                        {"role": "user", "content": [{"type": "input_text", "text": prompt}]}
+                    ],
+                    max_output_tokens=800,
+                    timeout=20,
+                    reasoning_effort="medium"
+                )
+                
+                raw_response = extract_output_text(response) or ''
+                
+            except Exception as gpt5_error:
+                logger.warning(f"GPT-5 Responses API failed, falling back to Chat Completions: {gpt5_error}")
+                
+                # Fallback to standard Chat Completions API
+                # Use gpt-4o for fallback instead of the default gpt-4o-mini
+                response = self.chat_completion([
+                    {"role": "system", "content": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds UNIQUEMENT en JSON avec les champs: estimated_price, reasoning, confidence_score, market_trend."},
+                    {"role": "user", "content": prompt}
+                ], model=os.getenv("AI_FALLBACK_MODEL", "gpt-4o"))
+                
+                if response:
+                    raw_response = response.choices[0].message.content
+                else:
+                    return {'error': 'Erreur lors de l\'appel API'}
+            
+            if not raw_response:
+                return {'error': 'Aucune réponse de l\'IA'}
+            
+            # Robust JSON parsing from original app
+            market_data = self._safe_parse_json(raw_response)
+            if market_data is None:
+                logger.error(f"AI JSON parse failed, content starts with: {str(raw_response)[:120]}")
+                return {'error': 'Réponse IA invalide'}
+            
+            # Normalize numeric fields
+            market_data = self._normalize_price_fields(market_data)
+            
+            return market_data
+            
+        except Exception as e:
+            logger.error(f"Error in sophisticated price estimation: {e}")
+            return {'error': 'Erreur lors de l\'estimation IA'}
+    
+    def _safe_parse_json(self, text: str) -> Optional[Dict[str, Any]]:
+        """Robust JSON parsing - matches original app implementation"""
+        try:
+            s = (text or '').strip()
+            
+            # Remove code fences
+            import re
+            s = re.sub(r"```\s*json\s*", "", s, flags=re.IGNORECASE)
+            s = s.replace('```', '').strip()
+            
+            # Normalize special characters that can break JSON
+            trans = {
+                ord('\u201c'): '"', ord('\u201d'): '"', ord('\u2019'): "'",
+                ord('\u2013'): '-', ord('\u2014'): '-'
+            }
+            s = s.translate(trans)
+            
+            try:
+                return json.loads(s)
+            except Exception:
+                # Extract by brace balancing
+                depth = 0
+                start_idx = None
+                for i, ch in enumerate(s):
+                    if ch == '{':
+                        if depth == 0:
+                            start_idx = i
+                        depth += 1
+                    elif ch == '}' and depth > 0:
+                        depth -= 1
+                        if depth == 0 and start_idx is not None:
+                            candidate = s[start_idx:i+1]
+                            try:
+                                return json.loads(candidate)
+                            except Exception:
+                                start_idx = None
+                                continue
+        except Exception:
+            pass
+        return None
+    
+    def _normalize_price_fields(self, market_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Normalize numeric fields in market data - matches original app"""
+        try:
+            import re
+            
+            # Normalize estimated_price
+            ep = market_data.get('estimated_price')
+            if isinstance(ep, str):
+                cleaned = re.sub(r"[^0-9.,-]", "", ep)
+                if cleaned.count('.') > 1 and ',' not in cleaned:
+                    parts = cleaned.split('.')
+                    cleaned = ''.join(parts[:-1]) + '.' + parts[-1]
+                cleaned = cleaned.replace("'", "").replace(" ", "").replace(',', '.')
+                try:
+                    market_data['estimated_price'] = float(cleaned)
+                except Exception:
+                    pass
+            
+            # Normalize confidence_score
+            cs = market_data.get('confidence_score')
+            if isinstance(cs, str):
+                csc = re.sub(r"[^0-9.,-]", "", cs).replace(',', '.')
+                try:
+                    market_data['confidence_score'] = float(csc)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        
+        return market_data
 
 
 # Create singleton instance
