@@ -8418,24 +8418,24 @@ def markets_chat_stream():
                     f"Contexte (dernier rapport):\n[Type {a.analysis_type or 'auto'} | {ts}]\n"
                     f"Executive Summary:\n{exec_summary}\nRésumé:\n{summary_compact}\n---\n"
                 )
-                except Exception:
+        except Exception:
             report_ctx = ""
 
         prefix_ctx = "".join([report_ctx, (f"Contexte (utilisateur):\n{extra_context}\n---\n" if extra_context else "")])
         user_prompt_final = f"{prefix_ctx}Question: {user_message}" if prefix_ctx else user_message
 
         model_name = os.getenv("AI_MODEL", "gpt-5")
-            kwargs = {
+        kwargs = {
             "model": model_name,
-                "instructions": system_prompt,
-                "input": user_prompt_final,
+            "instructions": system_prompt,
+            "input": user_prompt_final,
             "stream": True,
-                "store": True,
+            "store": True,
             "reasoning": {"effort": "high"},
             "max_output_tokens": min(30000, int(os.getenv("STREAM_MAX_OUTPUT_TOKENS", "30000"))),
             }
-            if prev_id:
-                kwargs["previous_response_id"] = prev_id
+        if prev_id:
+            kwargs["previous_response_id"] = prev_id
 
         def gen():
             full_chunks: list[str] = []
@@ -8448,7 +8448,7 @@ def markets_chat_stream():
                     streamer = client.responses.stream(**kwargs)
                     ctx = streamer
                     use_cm = True
-            except Exception:
+                except Exception:
                     streamer = client.responses.create(**kwargs)
                     ctx = streamer
                     use_cm = False
