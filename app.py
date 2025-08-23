@@ -8513,6 +8513,119 @@ def markets_chat():
     except Exception as e:
         logger.error(f"Erreur markets_chat: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route("/api/markets/chat/stream", methods=["POST"])
+def markets_chat_stream():
+    """Streaming text (plain) pour le chatbot marchés, basé sur Responses API.
+    Entrée JSON: { message: str, context?: str, session_id?: str, previous_response_id?: str }
+    Sortie: flux text/plain de chunks, puis footer "\n\n[END:<response_id>]".
+    """
+    try:
+        data = request.get_json(silent=True) or {}
+        user_message = (data.get("message") or "").strip()
+        if not user_message:
+            return jsonify({"success": False, "error": "Message vide"}), 400
+        extra_context = (data.get("context") or "").strip()
+        session_id = (data.get("session_id") or "").strip() or str(uuid.uuid4())
+        prev_id = (data.get("previous_response_id") or "").strip() or responses_prev_ids.get(session_id)
+
+        # Client OpenAI avec timeout
+        try:
+            from openai import OpenAI
+            timeout_s = int(os.getenv('TIMEOUT_S', '60'))
+            client = openai_client.with_options(timeout=timeout_s) if openai_client else OpenAI(api_key=os.getenv("OPENAI_API_KEY"), timeout=timeout_s)
+        except Exception as e:
+            logger.error(f"OpenAI init error (stream): {e}")
+            return jsonify({"success": False, "error": "OpenAI non configuré"}), 500
+
+        # Prompt et input utilisateur
+        system_prompt = (
+            "Tu es un analyste marchés. Réponds en français, de manière concise, actionnable et contextuelle. "
+            "Utilise la mémoire si fournie. N'invente pas de chiffres. Mets en **gras** les points critiques."
+        )
+        user_prompt_final = f"Contexte (utilisateur):\n{extra_context}\n---\nQuestion: {user_message}" if extra_context else user_message
+
+        model_name = os.getenv("AI_MODEL", "gpt-5")
+        kwargs = {
+            "model": model_name,
+            "instructions": system_prompt,
+            "input": user_prompt_final,
+            "stream": True,
+            "store": True,
+        }
+        if prev_id:
+            kwargs["previous_response_id"] = prev_id
+
+        def gen():
+            full_chunks: list[str] = []
+            response_id = None
+            # Préférence: API streaming dédiée; fallback create(stream=True)
+            try:
+                try:
+                    streamer = client.responses.stream(**kwargs)
+                    ctx = streamer
+                    use_cm = True
+                except Exception:
+                    streamer = client.responses.create(**kwargs)
+                    ctx = streamer
+                    use_cm = False
+
+                if use_cm:
+                    with ctx as stream:
+                        for event in stream:
+                            etype = getattr(event, 'type', None)
+                            if etype == "response.created":
+                                response_id = getattr(getattr(event, 'data', None), 'id', None) or getattr(event, 'id', None)
+                            elif etype == "response.output_text.delta":
+                                chunk = getattr(event, 'delta', None)
+                                if chunk:
+                                    full_chunks.append(str(chunk))
+                                    yield str(chunk)
+                            elif etype == "response.completed":
+                                # Persist mappings & memory best-effort
+                                try:
+                                    if response_id:
+                                        responses_prev_ids[session_id] = response_id
+                                    if full_chunks:
+                                        conversation_memory.add_message(session_id, 'user', user_message)
+                                        conversation_memory.add_message(session_id, 'assistant', "".join(full_chunks))
+                                except Exception:
+                                    pass
+                                yield f"\n\n[END:{response_id}]"
+                            elif etype == "error":
+                                err_text = str(getattr(event, 'error', 'unknown'))
+                                yield f"\n\n[ERROR:{err_text}]"
+                else:
+                    # Iterator fallback
+                    for event in ctx:
+                        etype = getattr(event, 'type', None)
+                        if etype == "response.created":
+                            response_id = getattr(getattr(event, 'data', None), 'id', None) or getattr(event, 'id', None)
+                        elif etype == "response.output_text.delta":
+                            chunk = getattr(event, 'delta', None)
+                            if chunk:
+                                full_chunks.append(str(chunk))
+                                yield str(chunk)
+                        elif etype == "response.completed":
+                            try:
+                                if response_id:
+                                    responses_prev_ids[session_id] = response_id
+                                if full_chunks:
+                                    conversation_memory.add_message(session_id, 'user', user_message)
+                                    conversation_memory.add_message(session_id, 'assistant', "".join(full_chunks))
+                            except Exception:
+                                pass
+                            yield f"\n\n[END:{response_id}]"
+                        elif etype == "error":
+                            err_text = str(getattr(event, 'error', 'unknown'))
+                            yield f"\n\n[ERROR:{err_text}]"
+            except Exception as e:
+                yield f"\n\n[ERROR:{e}]"
+
+        return Response(stream_with_context(gen()), mimetype="text/plain")
+    except Exception as e:
+        logger.error(f"Erreur markets_chat_stream: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
 @app.route("/api/markets/chat/export-pdf", methods=["POST"])
 def markets_chat_export_pdf():
     """Export serveur de la discussion chat au format PDF (Puppeteer, fallback WeasyPrint)."""
