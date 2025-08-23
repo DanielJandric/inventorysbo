@@ -869,7 +869,9 @@ Contenu: {data.content[:8000]}
 
             # Ajouter X.com (tweets récents ≤2h) sur la même thématique
             try:
+                logger.info(f"🐦 X.com: collecte des posts récents (≤2h) pour '{task.prompt[:60]}…'")
                 x_items = await self.search_x_recent(task.prompt, max_items=6, max_age_hours=2)
+                logger.info(f"🐦 X.com: {len(x_items)} posts retenus (≤2h)")
                 if x_items:
                     # Préfixer pour priorité aux signaux temps réel
                     scraped_data = x_items + scraped_data
