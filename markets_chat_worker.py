@@ -19,7 +19,7 @@ class MarketsChatWorker:
     - Optional streaming
     """
 
-    def __init__(self, *, api_key: Optional[str] = None, timeout_s: int = 45):
+    def __init__(self, *, api_key: Optional[str] = None, timeout_s: int = 120):
         api_key = api_key or os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise RuntimeError("OPENAI_API_KEY missing")
