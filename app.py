@@ -8496,7 +8496,7 @@ def markets_chat_stream():
                                 full_chunks.append(str(chunk))
                                 try:
                                     payload = json.dumps({"delta": str(chunk), "done": False}, ensure_ascii=False)
-        except Exception:
+                                except Exception:
                                     payload = '{"delta":"" , "done": false}'
                                 yield f"data: {payload}\n\n"
                         elif etype == "response.completed":
