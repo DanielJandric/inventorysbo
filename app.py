@@ -8350,11 +8350,7 @@ def markets_chat():
         except Exception:
             pass
 
-        try:
-            clipped = reply[:3000] if isinstance(reply, str) and len(reply) > 3000 else reply
-        except Exception:
-            clipped = reply
-        return jsonify({"success": True, "reply": clipped, "metadata": {"session_id": session_id}})
+        return jsonify({"success": True, "reply": reply, "metadata": {"session_id": session_id}})
     except Exception as e:
         logger.error(f"Erreur markets_chat: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
@@ -8428,7 +8424,7 @@ def markets_chat_stream():
             "stream": True,
             "store": True,
             "reasoning": {"effort": "high"},
-            "max_output_tokens": min(1000, int(os.getenv("STREAM_MAX_OUTPUT_TOKENS", "900"))),
+            "max_output_tokens": min(30000, int(os.getenv("STREAM_MAX_OUTPUT_TOKENS", "30000"))),
         }
         if prev_id:
             kwargs["previous_response_id"] = prev_id
