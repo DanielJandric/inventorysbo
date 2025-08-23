@@ -84,7 +84,7 @@ try:
     from metrics_api import metrics_bp as metrics_blueprint
     app.register_blueprint(metrics_blueprint, url_prefix='/api/metrics')
     logger.info("✅ Metrics blueprint enregistré")
-        except Exception as e:
+except Exception as e:
     logger.error(f"❌ Erreur enregistrement metrics: {e}")
 
 # Routes principales de base
@@ -160,7 +160,7 @@ def update_item(item_id):
         if response.data:
             logger.info(f"✅ Item {item_id} mis à jour")
             return jsonify({"success": True, "data": response.data[0]})
-            else:
+        else:
             return jsonify({"error": "Item non trouvé"}), 404
             
     except Exception as e:
@@ -173,13 +173,13 @@ def delete_item(item_id):
     try:
         response = supabase.table("items").delete().eq('id', item_id).execute()
         
-                    if response.data:
+        if response.data:
             logger.info(f"✅ Item {item_id} supprimé")
             return jsonify({"success": True})
-                else:
+        else:
             return jsonify({"error": "Item non trouvé"}), 404
             
-                except Exception as e:
+    except Exception as e:
         logger.error(f"Erreur delete_item: {e}")
         return jsonify({"error": str(e)}), 500
 
@@ -192,7 +192,7 @@ def advanced_analytics():
         items = response.data or []
 
         if not items:
-                return jsonify({
+            return jsonify({
                 "total_items": 0,
                 "total_value": 0,
                 "asset_classes": {},
@@ -201,7 +201,7 @@ def advanced_analytics():
 
         # Calculs analytics
         total_value = sum(float(item.get('current_value', 0)) for item in items)
-                total_items = len(items)
+        total_items = len(items)
 
         # Répartition par catégories
         asset_classes = {}
@@ -218,13 +218,13 @@ def advanced_analytics():
         # Top 10 items par valeur
         top_items = sorted(items, key=lambda x: float(x.get('current_value', 0)), reverse=True)[:10]
 
-                        return jsonify({
+        return jsonify({
             "total_items": total_items,
             "total_value": total_value,
             "asset_classes": asset_classes,
             "top_items": top_items
-            })
-        
+        })
+
     except Exception as e:
         logger.error(f"Erreur advanced_analytics: {e}")
         return jsonify({"error": str(e)}), 500
@@ -282,8 +282,8 @@ def generate_portfolio_pdf():
         response.headers['Content-Type'] = 'application/pdf'
         response.headers['Content-Disposition'] = f'attachment; filename="portfolio_{datetime.now().strftime("%Y%m%d")}.pdf"'
         
-            return response
-            
+        return response
+        
     except Exception as e:
         logger.error(f"Erreur portfolio_pdf: {e}")
         return jsonify({"error": str(e)}), 500
@@ -316,9 +316,9 @@ def real_estate():
 @app.route("/api/health")
 def health_check():
     """Health check endpoint"""
-            return jsonify({
+    return jsonify({
         "status": "healthy",
-                "timestamp": datetime.now().isoformat(),
+        "timestamp": datetime.now().isoformat(),
         "services": {
             "supabase": bool(supabase),
             "openai": bool(openai_client),
@@ -326,50 +326,115 @@ def health_check():
         }
     })
 
-@app.route("/api/setup/create-items-table", methods=["POST"])
-def create_items_table():
-    """Créer la table items si elle n'existe pas (pour débogage)"""
-    if not supabase:
-        return jsonify({"error": "Supabase non connecté"}), 500
-        
+# ===== ROUTES API ANALYSES DE MARCHÉ =====
+
+@app.route("/api/market-analyses/recent", methods=["GET"])
+def get_recent_market_analyses():
+    """Retourne les 15 dernières analyses pour affichage dans la page marchés."""
     try:
-        # Tester si la table existe
-        test_result = supabase.table("items").select("id").limit(1).execute()
-            return jsonify({
-                "success": True,
-            "message": "Table 'items' existe déjà", 
-            "count": len(test_result.data)
+        from market_analysis_db import get_market_analysis_db
+        db = get_market_analysis_db()
+        items = db.get_recent_analyses(limit=15)
+        return jsonify({
+            "success": True,
+            "items": [a.to_frontend_dict() for a in items]
         })
     except Exception as e:
-        if "does not exist" in str(e):
-            return jsonify({
-                "error": "Table 'items' n'existe pas",
-                "message": "Créez la table via l'interface Supabase SQL",
-                "sql_hint": "CREATE TABLE items (id SERIAL PRIMARY KEY, name TEXT, category TEXT, current_value DECIMAL);"
-            }), 404
-        else:
-            return jsonify({"error": f"Erreur table: {e}"}), 500
+        logger.error(f"Erreur get_recent_market_analyses: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
-@app.route("/api/setup/test-tables", methods=["GET"])  
-def test_tables():
-    """Tester quelles tables existent"""
-    if not supabase:
-        return jsonify({"error": "Supabase non connecté"}), 500
-    
-    tables_to_test = ["items", "collection_items", "bonvin_collection"]
-    results = {}
-    
-    for table_name in tables_to_test:
-        try:
-            result = supabase.table(table_name).select("id").limit(1).execute()
-            results[table_name] = {"exists": True, "count": len(result.data)}
+@app.route("/api/market-analyses/<int:analysis_id>", methods=["DELETE"])
+def delete_market_analysis(analysis_id):
+    """Supprimer une analyse de marché"""
+    try:
+        from market_analysis_db import get_market_analysis_db
+        db = get_market_analysis_db()
+        success = db.delete_analysis(analysis_id)
+        
+        if success:
+            return jsonify({"success": True})
+        else:
+            return jsonify({"success": False, "error": "Analyse non trouvée"}), 404
+            
     except Exception as e:
-            results[table_name] = {"exists": False, "error": str(e)}
-    
+        logger.error(f"Erreur delete_market_analysis: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route("/api/market-updates", methods=["GET"])
+def get_market_updates():
+    """Récupère tous les briefings de marché"""
+    try:
+        if not supabase:
+            return jsonify({"error": "Supabase non connecté"}), 500
+        
+        response = supabase.table("market_updates").select("*").order("created_at", desc=True).limit(10).execute()
+        
+        if response.data:
             return jsonify({
-        "timestamp": datetime.now().isoformat(),
-        "tables": results
-    })
+                "success": True,
+                "updates": response.data
+            })
+        else:
+            return jsonify({
+                "success": True,
+                "updates": [],
+                "message": "Aucun briefing trouvé"
+            })
+            
+    except Exception as e:
+        logger.error(f"Erreur get_market_updates: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route("/api/market-pdfs", methods=["GET"])
+def list_market_pdfs():
+    """Liste les PDFs déposés pour les updates de marché."""
+    try:
+        import os
+        
+        # Chercher dans différents dossiers possibles
+        possible_folders = [
+            "static/market_pdfs",
+            "market_pdfs", 
+            "uploads/market_pdfs"
+        ]
+        
+        folder_path = None
+        for folder in possible_folders:
+            if os.path.exists(folder):
+                folder_path = folder
+                break
+        
+        if not folder_path:
+            # Créer le dossier s'il n'existe pas
+            folder_path = "static/market_pdfs"
+            os.makedirs(folder_path, exist_ok=True)
+        
+        files = []
+        try:
+            for entry in os.scandir(folder_path):
+                if entry.is_file() and entry.name.lower().endswith('.pdf'):
+                    stat = entry.stat()
+                    files.append({
+                        "name": entry.name,
+                        "url": f"/static/market_pdfs/{entry.name}",
+                        "size_bytes": stat.st_size,
+                        "modified_at": datetime.fromtimestamp(stat.st_mtime).isoformat()
+                    })
+        except OSError:
+            pass  # Dossier vide ou inaccessible
+        
+        # Les plus récents d'abord
+        files.sort(key=lambda x: x["modified_at"], reverse=True)
+        
+        return jsonify({
+            "success": True,
+            "files": files,
+            "folder": folder_path
+        })
+        
+    except Exception as e:
+        logger.error(f"Erreur list_market_pdfs: {e}")
+        return jsonify({"success": False, "error": str(e), "files": []}), 500
 
 if __name__ == "__main__":
     logger.info("🚀 Démarrage de l'application refactorisée")
