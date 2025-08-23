@@ -413,23 +413,59 @@
                 inputEl.value = '';
                 try {
                     const extra = (document.getElementById('chat-context').value || '').trim();
-                    // Gestion d'une session_id persistée pour la mémoire conversationnelle
+                    // session_id persistée
                     let sid = localStorage.getItem('markets_chat_session_id');
                     if (!sid) {
                         sid = (crypto && crypto.randomUUID) ? crypto.randomUUID() : (Date.now() + '-' + Math.random().toString(36).slice(2));
                         localStorage.setItem('markets_chat_session_id', sid);
                     }
-                    const r = await fetch('/api/markets/chat', {
+                    const prevId = localStorage.getItem('markets_prev_response_id') || '';
+
+                    const resp = await fetch('/api/markets/chat/stream', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ message: msg, limit: 3, context: extra, session_id: sid })
+                        body: JSON.stringify({ message: msg, context: extra, session_id: sid, previous_response_id: prevId })
                     });
-                    const d = await r.json();
-                    if (!d.success) throw new Error(d.error || 'Erreur API');
-                    addMsg('assistant', d.reply);
-                    // Mettre à jour session_id si renvoyée par le serveur
-                    if (d.metadata && d.metadata.session_id) {
-                        localStorage.setItem('markets_chat_session_id', d.metadata.session_id);
+                    if (!resp.ok || !resp.body) throw new Error('Erreur réseau/stream');
+
+                    const reader = resp.body.getReader();
+                    const decoder = new TextDecoder();
+                    let buf = '';
+                    let responseId = null;
+
+                    // Prépare une bulle d'output en cours
+                    const streamingEl = document.createElement('div');
+                    streamingEl.className = 'text-cyan-200/80';
+                    streamingEl.innerHTML = '<strong>Assistant:</strong> ';
+                    messagesDiv.appendChild(streamingEl);
+
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        const chunk = decoder.decode(value, { stream: true });
+                        buf += chunk;
+
+                        // Footer END
+                        const endMatch = buf.match(/\[END:([^\]]+)\]$/);
+                        if (endMatch) {
+                            responseId = endMatch[1];
+                            localStorage.setItem('markets_prev_response_id', responseId);
+                            buf = buf.replace(/\n?\n?\[END:[^\]]+\]$/, '');
+                        }
+
+                        // Footer ERROR
+                        const errMatch = buf.match(/\[ERROR:([^\]]+)\]$/);
+                        if (errMatch) {
+                            const errTxt = errMatch[1];
+                            buf = buf.replace(/\n?\n?\[ERROR:[^\]]+\]$/, '');
+                            streamingEl.innerHTML = `<strong>Assistant:</strong> ❌ ${errTxt}`;
+                            break;
+                        }
+
+                        streamingEl.innerHTML = '<strong>Assistant:</strong> ' + buf
+                          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                          .replace(/\n/g, '<br/>' );
+                        messagesDiv.scrollTop = messagesDiv.scrollHeight;
                     }
                 } catch (e) {
                     addMsg('assistant', `❌ ${e.message}`);
