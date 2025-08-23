@@ -8323,16 +8323,16 @@ def markets_chat():
             if latest:
                 a = latest[0]
                 exec_summary = "\n".join([f"- {p}" for p in (a.executive_summary or [])]) if getattr(a, 'executive_summary', None) else ""
-                    summary_compact = (a.summary or "")[:800]
-                    ts = a.timestamp or a.created_at or ""
+                summary_compact = (a.summary or "")[:800]
+                ts = a.timestamp or a.created_at or ""
                 latest_txt = (
                     f"[Dernier rapport | {a.analysis_type or 'auto'} | {ts}]\n"
-                        f"Executive Summary:\n{exec_summary}\n"
+                    f"Executive Summary:\n{exec_summary}\n"
                     f"Résumé:\n{summary_compact}"
-                    )
+                )
             if latest_txt:
                 extra_context = (extra_context + "\n---\n" + latest_txt).strip() if extra_context else latest_txt
-                except Exception:
+        except Exception:
             pass
 
         # Récupérer un court historique pour continuité
