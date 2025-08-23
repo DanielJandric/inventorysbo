@@ -424,12 +424,22 @@
                         prevId = '';
                     }
 
-                    const resp = await fetch('/api/markets/chat/stream', {
+                    const reqBody = { message: msg, context: extra, session_id: sid, previous_response_id: prevId };
+                    let resp = await fetch('/api/markets/chat/stream', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ message: msg, context: extra, session_id: sid, previous_response_id: prevId })
+                        body: JSON.stringify(reqBody)
                     });
-                    if (!resp.ok || !resp.body) throw new Error('Erreur réseau/stream');
+                    // Fallback sync si 502/500 ou pas de body
+                    if (!resp.ok || !resp.body) {
+                        const r2 = await fetch('/api/markets/chat', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(reqBody)
+                        });
+                        const d2 = await r2.json();
+                        if (!d2.success) throw new Error(d2.error || 'Erreur API');
+                        addMsg('assistant', d2.reply);
+                        return;
+                    }
 
                     const reader = resp.body.getReader();
                     const decoder = new TextDecoder();
@@ -442,10 +452,12 @@
                     streamingEl.innerHTML = '<strong>Assistant:</strong> ';
                     messagesDiv.appendChild(streamingEl);
 
+                    let hadData = false;
                     while (true) {
                         const { done, value } = await reader.read();
                         if (done) break;
                         const chunk = decoder.decode(value, { stream: true });
+                        if (chunk && chunk.trim()) hadData = true;
                         buf += chunk;
 
                         // Footer END
@@ -477,6 +489,17 @@
                           .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
                           .replace(/\n/g, '<br/>' );
                         messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                    }
+                    // Si pas de data utile reçue (proxy a coupé), fallback sync une fois
+                    if (!hadData) {
+                        const r2 = await fetch('/api/markets/chat', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(reqBody)
+                        });
+                        const d2 = await r2.json();
+                        if (!d2.success) throw new Error(d2.error || 'Erreur API');
+                        streamingEl.remove();
+                        addMsg('assistant', d2.reply);
+                        return;
                     }
                 } catch (e) {
                     addMsg('assistant', `❌ ${e.message}`);

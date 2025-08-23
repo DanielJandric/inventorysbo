@@ -8425,6 +8425,7 @@ def markets_chat_stream():
             "stream": True,
             "store": True,
             "reasoning": {"effort": "high"},
+            "max_output_tokens": min(1000, int(os.getenv("STREAM_MAX_OUTPUT_TOKENS", "900"))),
         }
         if prev_id:
             kwargs["previous_response_id"] = prev_id
