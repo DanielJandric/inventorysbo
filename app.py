@@ -99,7 +99,7 @@ def index():
 def get_items():
     """Récupérer tous les items de la collection"""
     try:
-        query = supabase.table("bonvin_collection").select("*").order('created_at', desc=True)
+        query = supabase.table("items").select("*").order('created_at', desc=True)
         response = query.execute()
         return jsonify(response.data)
     except Exception as e:
@@ -115,7 +115,7 @@ def add_item():
             return jsonify({"error": "Aucune donnée fournie"}), 400
 
         # Validation des champs requis
-        required_fields = ['name', 'asset_class', 'current_value']
+        required_fields = ['name', 'category', 'current_value']
         for field in required_fields:
             if field not in data or not data[field]:
                 return jsonify({"error": f"Champ requis manquant: {field}"}), 400
@@ -127,7 +127,7 @@ def add_item():
             return jsonify({"error": "current_value doit être un nombre"}), 400
 
         # Insertion dans Supabase
-        response = supabase.table("bonvin_collection").insert(data).execute()
+        response = supabase.table("items").insert(data).execute()
         
         if response.data:
             logger.info(f"✅ Item ajouté: {data['name']}")
@@ -155,7 +155,7 @@ def update_item(item_id):
                 return jsonify({"error": "current_value doit être un nombre"}), 400
 
         # Mise à jour
-        response = supabase.table("bonvin_collection").update(data).eq('id', item_id).execute()
+        response = supabase.table("items").update(data).eq('id', item_id).execute()
         
         if response.data:
             logger.info(f"✅ Item {item_id} mis à jour")
@@ -171,7 +171,7 @@ def update_item(item_id):
 def delete_item(item_id):
     """Supprimer un item de la collection"""
     try:
-        response = supabase.table("bonvin_collection").delete().eq('id', item_id).execute()
+        response = supabase.table("items").delete().eq('id', item_id).execute()
         
         if response.data:
             logger.info(f"✅ Item {item_id} supprimé")
@@ -188,7 +188,7 @@ def advanced_analytics():
     """Analytics avancés de la collection"""
     try:
         # Récupérer tous les items
-        response = supabase.table("bonvin_collection").select("*").execute()
+        response = supabase.table("items").select("*").execute()
         items = response.data or []
 
         if not items:
@@ -203,17 +203,17 @@ def advanced_analytics():
         total_value = sum(float(item.get('current_value', 0)) for item in items)
         total_items = len(items)
 
-        # Répartition par classe d'actifs
+        # Répartition par catégories
         asset_classes = {}
         for item in items:
-            asset_class = item.get('asset_class', 'Unknown')
+            category = item.get('category', 'Unknown')
             value = float(item.get('current_value', 0))
             
-            if asset_class not in asset_classes:
-                asset_classes[asset_class] = {"count": 0, "value": 0}
+            if category not in asset_classes:
+                asset_classes[category] = {"count": 0, "value": 0}
             
-            asset_classes[asset_class]["count"] += 1
-            asset_classes[asset_class]["value"] += value
+            asset_classes[category]["count"] += 1
+            asset_classes[category]["value"] += value
 
         # Top 10 items par valeur
         top_items = sorted(items, key=lambda x: float(x.get('current_value', 0)), reverse=True)[:10]
@@ -265,7 +265,7 @@ def generate_portfolio_pdf():
     """Générer un PDF du portfolio"""
     try:
         # Récupérer les données de la collection
-        response = supabase.table("bonvin_collection").select("*").order('current_value', desc=True).execute()
+        response = supabase.table("items").select("*").order('current_value', desc=True).execute()
         items = response.data or []
         
         if not items:
