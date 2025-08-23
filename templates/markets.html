@@ -115,7 +115,7 @@
                     <h2 class="text-xl font-semibold">Chatbot Marchés</h2>
                 </div>
                 <div id="chatbox" class="space-y-3">
-                    <div id="chat-messages" class="bg-white/5 border border-white/10 rounded-xl p-4 h-64 overflow-y-auto text-sm"></div>
+                    <div id="chat-messages" class="bg-white/5 border border-white/10 rounded-xl p-4 h-64 overflow-y-auto text-sm space-y-2"></div>
                     <div class="flex gap-2">
                         <input id="chat-input" class="flex-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10" placeholder="Posez votre question (ex: patterns, risques, scénarios)..."/>
                         <button id="chat-send" class="px-4 py-2 rounded-lg bg-cyan-500/20 border border-cyan-400/30 hover:bg-cyan-500/30">Envoyer</button>
@@ -400,11 +400,30 @@
             const sendBtn = document.getElementById('chat-send');
             const exportBtn = document.getElementById('chat-export');
             function addMsg(role, text) {
-                const color = role === 'user' ? 'text-cyan-100' : 'text-cyan-200/80';
-                const who = role === 'user' ? 'Vous' : 'Assistant';
-                const html = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br/>');
-                messagesDiv.insertAdjacentHTML('beforeend', `<div class='${color}'><strong>${who}:</strong> ${html}</div>`);
+                const html = (text || '').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br/>');
+                const wrapper = document.createElement('div');
+                wrapper.className = role === 'user' ? 'w-full flex justify-end' : 'w-full flex justify-start';
+                const bubble = document.createElement('div');
+                bubble.className = role === 'user'
+                  ? 'max-w-[80%] rounded-2xl px-4 py-3 bg-cyan-500/20 border border-cyan-400/30 text-cyan-100 shadow'
+                  : 'max-w-[80%] rounded-2xl px-4 py-3 bg-white/5 border border-white/10 text-cyan-100/90 shadow';
+                bubble.innerHTML = html;
+                wrapper.appendChild(bubble);
+                messagesDiv.appendChild(wrapper);
                 messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            }
+
+            function createTypingBubble() {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'w-full flex justify-start';
+                const bubble = document.createElement('div');
+                bubble.className = 'max-w-[80%] rounded-2xl px-4 py-3 bg-white/5 border border-white/10 text-cyan-100/90 shadow flex items-center gap-1';
+                const d1 = document.createElement('span'); d1.className = 'w-2 h-2 bg-cyan-300 rounded-full animate-bounce';
+                const d2 = document.createElement('span'); d2.className = 'w-2 h-2 bg-cyan-300 rounded-full animate-bounce'; d2.style.animationDelay = '0.15s';
+                const d3 = document.createElement('span'); d3.className = 'w-2 h-2 bg-cyan-300 rounded-full animate-bounce'; d3.style.animationDelay = '0.3s';
+                bubble.appendChild(d1); bubble.appendChild(d2); bubble.appendChild(d3);
+                wrapper.appendChild(bubble);
+                return { wrapper, bubble };
             }
             async function sendChat() {
                 const msg = (inputEl.value || '').trim();
@@ -450,11 +469,9 @@
                     let buf = '';
                     let responseId = null;
 
-                    // Prépare une bulle d'output en cours
-                    const streamingEl = document.createElement('div');
-                    streamingEl.className = 'text-cyan-200/80';
-                    streamingEl.innerHTML = '<strong>Assistant:</strong> ';
-                    messagesDiv.appendChild(streamingEl);
+                    // Prépare une bulle d'output + indicateur de frappe
+                    const typing = createTypingBubble();
+                    messagesDiv.appendChild(typing.wrapper);
 
                     let hadData = false;
                     // Timeouts plus tolérants (évite abort prématuré)
@@ -494,25 +511,41 @@
                                         const rf = await fetch('/api/markets/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(reqBody) });
                                         const df = await rf.json();
                                         if (df && df.success) {
-                                            streamingEl.remove();
+                                            typing.wrapper.remove();
                                             addMsg('assistant', df.reply);
                                             clearTimeout(firstChunkTimer); clearTimeout(hardTimer);
                                             return;
                                         }
                                     } catch {}
-                                    streamingEl.innerHTML = `<strong>Assistant:</strong> ❌ ${obj.error}`;
+                                    typing.bubble.innerHTML = `❌ ${obj.error}`;
                                     continue;
                                 }
                                 if (obj.delta) {
                                     buf += String(obj.delta);
-                                    if (!scheduled) { scheduled = true; setTimeout(flush, 60); }
+                                    // Afficher/mettre à jour la bulle de réponse (remplacer typing)
+                                    if (!typing.wrapper.dataset.upgraded) {
+                                        typing.bubble.innerHTML = '';
+                                        typing.wrapper.dataset.upgraded = '1';
+                                    }
+                                    if (!scheduled) {
+                                        scheduled = true;
+                                        setTimeout(() => {
+                                            typing.bubble.innerHTML = buf
+                                                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                                                .replace(/\n/g, '<br/>' );
+                                            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                                            scheduled = false;
+                                        }, 60);
+                                    }
                                 }
                                 if (obj.done) {
                                     if (obj.id && String(obj.id).startsWith('resp')) {
                                         localStorage.setItem('markets_prev_response_id', obj.id);
                                     }
                                     clearTimeout(firstChunkTimer); clearTimeout(hardTimer);
-                                    flush();
+                                    typing.bubble.innerHTML = buf
+                                        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                                        .replace(/\n/g, '<br/>' );
                                     break;
                                 }
                             } catch {
