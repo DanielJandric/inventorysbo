@@ -8474,10 +8474,10 @@ def markets_chat_stream():
                                     if response_id:
                                         responses_prev_ids[session_id] = response_id
                                     if full_chunks:
-            conversation_memory.add_message(session_id, 'user', user_message)
+                                        conversation_memory.add_message(session_id, 'user', user_message)
                                         conversation_memory.add_message(session_id, 'assistant', "".join(full_chunks))
-        except Exception:
-            pass
+                                except Exception:
+                                    pass
                                 rid = response_id if isinstance(response_id, str) else ""
                                 yield f"data: {{\"done\": true, \"id\": \"{rid}\"}}\n\n"
                             elif etype == "error":
@@ -8514,7 +8514,7 @@ def markets_chat_stream():
                             err_text = str(getattr(event, 'error', 'unknown'))
                             err_payload = json.dumps({"error": err_text, "done": False})
                             yield f"data: {err_payload}\n\n"
-    except Exception as e:
+            except Exception as e:
                 err_payload = json.dumps({"error": str(e), "done": False})
                 yield f"data: {err_payload}\n\n"
 
