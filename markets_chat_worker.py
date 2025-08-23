@@ -57,7 +57,7 @@ class MarketsChatWorker:
             return f"Contexte:\n{ctx}\n---\nQuestion: {message}"
         return message
 
-    def generate_reply(self, message: str, context: Optional[str] = None) -> str:
+    def generate_reply(self, message: str, context: Optional[str] = None, history: Optional[list] = None) -> str:
         """Synchronous, one-shot reply via Responses API only (no fallback).
 
         Returns plain text. If model output is empty, returns a safe message instead.
@@ -68,12 +68,24 @@ class MarketsChatWorker:
 
         user_input = self._build_user_input(msg, context)
 
+        # Construire des messages typés avec un petit historique
+        typed_messages = []
+        typed_messages.append({"role": "system", "content": self.system_prompt})
+        try:
+            for h in (history or [])[-6:]:
+                role = 'assistant' if (h.get('role') == 'assistant') else 'user'
+                content = str(h.get('content', '')).strip()
+                if content:
+                    typed_messages.append({"role": role, "content": content})
+        except Exception:
+            pass
+        typed_messages.append({"role": "user", "content": user_input})
+
         # Responses API (exclusive) – try direct input first
         try:
             res = self.client.responses.create(
                 model=self.model,
-                instructions=self.system_prompt,
-                input=user_input,
+                input=[{"role": m["role"], "content": [{"type": "input_text" if m["role"]=="user" else "output_text", "text": m["content"]}]} for m in typed_messages],
                 reasoning={"effort": "high"},
                 max_output_tokens=self.max_output_tokens,
                 store=False,
@@ -88,10 +100,7 @@ class MarketsChatWorker:
                 res2 = from_responses_simple(
                     client=self.client,
                     model=self.model,
-                    messages=[
-                        {"role": "system", "content": self.system_prompt},
-                        {"role": "user", "content": user_input},
-                    ],
+                    messages=typed_messages,
                     reasoning_effort="high",
                     max_output_tokens=self.max_output_tokens,
                 )

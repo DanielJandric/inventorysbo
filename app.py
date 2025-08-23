@@ -8335,10 +8335,18 @@ def markets_chat():
         except Exception:
             pass
 
+        # Récupérer un court historique pour continuité
+        history = []
+        try:
+            # limiter à 6 derniers messages pour ne pas dépasser les tokens
+            history = conversation_memory.get_recent_messages(session_id, limit=6) or []
+        except Exception:
+            history = []
+
         # Chat via worker dédié (Responses only)
         from markets_chat_worker import get_markets_chat_worker
         worker = get_markets_chat_worker()
-        reply = worker.generate_reply(user_message, extra_context)
+        reply = worker.generate_reply(user_message, extra_context, history=history)
         if not (reply and reply.strip()):
             # Détail pour debug côté navigateur
             return jsonify({"success": False, "error": "Réponse vide du modèle (Responses)"}), 502
