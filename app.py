@@ -3,7 +3,7 @@ Application Flask principale - Version refactorisée
 """
 import logging
 from datetime import datetime
-from flask import Flask, render_template, jsonify
+from flask import Flask, render_template, jsonify, request, make_response
 from flask_cors import CORS
 
 # Import des modules refactorisés
@@ -92,6 +92,201 @@ except Exception as e:
 def index():
     """Page d'accueil"""
     return render_template('index.html')
+
+# ===== ROUTES API COLLECTION (CRITIQUES) =====
+
+@app.route("/api/items", methods=["GET"])
+def get_items():
+    """Récupérer tous les items de la collection"""
+    try:
+        query = supabase.table("bonvin_collection").select("*").order('created_at', desc=True)
+        response = query.execute()
+        return jsonify(response.data)
+    except Exception as e:
+        logger.error(f"Erreur get_items: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/items", methods=["POST"])
+def add_item():
+    """Ajouter un nouvel item à la collection"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Aucune donnée fournie"}), 400
+
+        # Validation des champs requis
+        required_fields = ['name', 'asset_class', 'current_value']
+        for field in required_fields:
+            if field not in data or not data[field]:
+                return jsonify({"error": f"Champ requis manquant: {field}"}), 400
+
+        # Conversion du prix
+        try:
+            data['current_value'] = float(data['current_value'])
+        except (ValueError, TypeError):
+            return jsonify({"error": "current_value doit être un nombre"}), 400
+
+        # Insertion dans Supabase
+        response = supabase.table("bonvin_collection").insert(data).execute()
+        
+        if response.data:
+            logger.info(f"✅ Item ajouté: {data['name']}")
+            return jsonify({"success": True, "data": response.data[0]})
+        else:
+            return jsonify({"error": "Échec de l'ajout"}), 500
+            
+    except Exception as e:
+        logger.error(f"Erreur add_item: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/items/<int:item_id>", methods=["PUT"])
+def update_item(item_id):
+    """Mettre à jour un item existant"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Aucune donnée fournie"}), 400
+
+        # Conversion du prix si présent
+        if 'current_value' in data:
+            try:
+                data['current_value'] = float(data['current_value'])
+            except (ValueError, TypeError):
+                return jsonify({"error": "current_value doit être un nombre"}), 400
+
+        # Mise à jour
+        response = supabase.table("bonvin_collection").update(data).eq('id', item_id).execute()
+        
+        if response.data:
+            logger.info(f"✅ Item {item_id} mis à jour")
+            return jsonify({"success": True, "data": response.data[0]})
+        else:
+            return jsonify({"error": "Item non trouvé"}), 404
+            
+    except Exception as e:
+        logger.error(f"Erreur update_item: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/items/<int:item_id>", methods=["DELETE"])
+def delete_item(item_id):
+    """Supprimer un item de la collection"""
+    try:
+        response = supabase.table("bonvin_collection").delete().eq('id', item_id).execute()
+        
+        if response.data:
+            logger.info(f"✅ Item {item_id} supprimé")
+            return jsonify({"success": True})
+        else:
+            return jsonify({"error": "Item non trouvé"}), 404
+            
+    except Exception as e:
+        logger.error(f"Erreur delete_item: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/analytics/advanced")
+def advanced_analytics():
+    """Analytics avancés de la collection"""
+    try:
+        # Récupérer tous les items
+        response = supabase.table("bonvin_collection").select("*").execute()
+        items = response.data or []
+
+        if not items:
+            return jsonify({
+                "total_items": 0,
+                "total_value": 0,
+                "asset_classes": {},
+                "top_items": []
+            })
+
+        # Calculs analytics
+        total_value = sum(float(item.get('current_value', 0)) for item in items)
+        total_items = len(items)
+
+        # Répartition par classe d'actifs
+        asset_classes = {}
+        for item in items:
+            asset_class = item.get('asset_class', 'Unknown')
+            value = float(item.get('current_value', 0))
+            
+            if asset_class not in asset_classes:
+                asset_classes[asset_class] = {"count": 0, "value": 0}
+            
+            asset_classes[asset_class]["count"] += 1
+            asset_classes[asset_class]["value"] += value
+
+        # Top 10 items par valeur
+        top_items = sorted(items, key=lambda x: float(x.get('current_value', 0)), reverse=True)[:10]
+
+        return jsonify({
+            "total_items": total_items,
+            "total_value": total_value,
+            "asset_classes": asset_classes,
+            "top_items": top_items
+        })
+
+    except Exception as e:
+        logger.error(f"Erreur advanced_analytics: {e}")
+        return jsonify({"error": str(e)}), 500
+
+# ===== ROUTES API STOCK ET PRIX =====
+
+@app.route("/api/stock-price/<symbol>")
+def get_stock_price(symbol):
+    """Obtenir le prix d'une action"""
+    try:
+        from stock_api_manager import get_stock_price_stable
+        price_data = get_stock_price_stable(symbol)
+        return jsonify(price_data)
+    except Exception as e:
+        logger.error(f"Erreur stock_price {symbol}: {e}")
+        return jsonify({"error": str(e), "symbol": symbol}), 500
+
+@app.route("/api/exchange-rate/<from_currency>/<to_currency>")
+def get_exchange_rate(from_currency, to_currency):
+    """Obtenir un taux de change"""
+    try:
+        from manus_integration import get_exchange_rate_manus
+        rate = get_exchange_rate_manus(from_currency, to_currency)
+        return jsonify({
+            "from": from_currency,
+            "to": to_currency,
+            "rate": rate,
+            "timestamp": datetime.now().isoformat()
+        })
+    except Exception as e:
+        logger.error(f"Erreur exchange_rate {from_currency}/{to_currency}: {e}")
+        return jsonify({"error": str(e)}), 500
+
+# ===== ROUTES API RAPPORTS =====
+
+@app.route("/api/portfolio/pdf", methods=["GET"])
+def generate_portfolio_pdf():
+    """Générer un PDF du portfolio"""
+    try:
+        # Récupérer les données de la collection
+        response = supabase.table("bonvin_collection").select("*").order('current_value', desc=True).execute()
+        items = response.data or []
+        
+        if not items:
+            return jsonify({"error": "Aucun item dans la collection"}), 404
+
+        # Import du générateur PDF
+        from pdf_optimizer import generate_optimized_pdf
+        
+        # Générer le PDF
+        pdf_content = generate_optimized_pdf(items)
+        
+        # Créer la réponse
+        response = make_response(pdf_content)
+        response.headers['Content-Type'] = 'application/pdf'
+        response.headers['Content-Disposition'] = f'attachment; filename="portfolio_{datetime.now().strftime("%Y%m%d")}.pdf"'
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"Erreur portfolio_pdf: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/analytics')
 def analytics():
