@@ -39,8 +39,7 @@
         .glowing-element { position: relative; transition: all .3s ease; }
         .glowing-element::before { content:''; position:absolute; inset:0; border-radius:inherit; background: radial-gradient(circle at 50% 50%, var(--glass-glow), transparent 70%); filter: blur(30px); opacity:.6; z-index:-1; transition: opacity .3s ease; }
         .glowing-element:hover::before, .glowing-element.is-active::before { opacity: 1; }
-        /* Chat: verrouiller en une seule colonne et empêcher toute mise en colonnes automatique */
-        .chat-bubble { word-break: break-word; overflow-wrap: anywhere; }
+        /* Chat simple (rollback) */
     </style>
 </head>
 <body class="h-full">
@@ -402,30 +401,21 @@
             const sendBtn = document.getElementById('chat-send');
             const exportBtn = document.getElementById('chat-export');
             function addMsg(role, text) {
-                const html = (text || '').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br/>');
-                const wrapper = document.createElement('div');
-                wrapper.className = role === 'user' ? 'w-full flex justify-end' : 'w-full flex justify-start';
-                const bubble = document.createElement('div');
-                bubble.className = role === 'user'
-                  ? 'chat-bubble max-w-[80%] rounded-2xl px-4 py-3 bg-cyan-500/20 border border-cyan-400/30 text-cyan-100 shadow whitespace-pre-wrap leading-6'
-                  : 'chat-bubble max-w-[80%] rounded-2xl px-4 py-3 bg-white/5 border border-white/10 text-cyan-100/90 shadow whitespace-pre-wrap leading-6';
-                bubble.innerHTML = html;
-                wrapper.appendChild(bubble);
-                messagesDiv.appendChild(wrapper);
+                const line = document.createElement('div');
+                line.className = 'whitespace-pre-wrap leading-6';
+                const safe = (text || '').replace(/\*\*(.*?)\*\*/g, '<strong>$1<\/strong>').replace(/\n/g, '<br\/>' );
+                line.innerHTML = `<strong>${role === 'user' ? 'Vous' : 'Assistant'}:<\/strong> ${safe}`;
+                messagesDiv.appendChild(line);
                 messagesDiv.scrollTop = messagesDiv.scrollHeight;
             }
 
-            function createTypingBubble() {
-                const wrapper = document.createElement('div');
-                wrapper.className = 'w-full flex justify-start';
-                const bubble = document.createElement('div');
-                bubble.className = 'chat-bubble max-w-[80%] rounded-2xl px-4 py-3 bg-white/5 border border-white/10 text-cyan-100/90 shadow flex items-center gap-1';
-                const d1 = document.createElement('span'); d1.className = 'w-2 h-2 bg-cyan-300 rounded-full animate-bounce';
-                const d2 = document.createElement('span'); d2.className = 'w-2 h-2 bg-cyan-300 rounded-full animate-bounce'; d2.style.animationDelay = '0.15s';
-                const d3 = document.createElement('span'); d3.className = 'w-2 h-2 bg-cyan-300 rounded-full animate-bounce'; d3.style.animationDelay = '0.3s';
-                bubble.appendChild(d1); bubble.appendChild(d2); bubble.appendChild(d3);
-                wrapper.appendChild(bubble);
-                return { wrapper, bubble };
+            function createAssistantLine() {
+                const line = document.createElement('div');
+                line.className = 'whitespace-pre-wrap leading-6';
+                line.innerHTML = '<strong>Assistant:<\/strong> ';
+                messagesDiv.appendChild(line);
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                return line;
             }
 
             function shouldAutoScroll() {
@@ -478,9 +468,8 @@
                     let buf = '';
                     let responseId = null;
 
-                    // Prépare une bulle d'output + indicateur de frappe
-                    const typing = createTypingBubble();
-                    messagesDiv.appendChild(typing.wrapper);
+                    // Prépare une ligne d'output pour le streaming
+                    const assistantEl = createAssistantLine();
 
                     let hadData = false;
                     // Timeouts plus tolérants (évite abort prématuré)
@@ -489,15 +478,8 @@
                     let timedOut = false;
                     const firstChunkTimer = setTimeout(() => { try { controller.abort(); } catch {} }, firstChunkTimeoutMs);
                     const hardTimer = setTimeout(() => { timedOut = true; try { controller.abort(); } catch {} }, hardTimeoutMs);
-                    // Throttle DOM updates to avoid flicker
+                    // Throttle DOM updates pour limiter les reflows
                     let scheduled = false;
-                    const flush = () => {
-                        streamingEl.innerHTML = '<strong>Assistant:</strong> ' + buf
-                          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                          .replace(/\n/g, '<br/>' );
-                        messagesDiv.scrollTop = messagesDiv.scrollHeight;
-                        scheduled = false;
-                    };
 
                     while (true) {
                         const { done, value } = await reader.read();
@@ -520,28 +502,24 @@
                                         const rf = await fetch('/api/markets/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(reqBody) });
                                         const df = await rf.json();
                                         if (df && df.success) {
-                                            typing.wrapper.remove();
-                                            addMsg('assistant', df.reply);
+                                            assistantEl.innerHTML = '<strong>Assistant:<\/strong> ' + String(df.reply || '')
+                                                .replace(/\*\*(.*?)\*\*/g, '<strong>$1<\/strong>')
+                                                .replace(/\n/g, '<br\/>');
                                             clearTimeout(firstChunkTimer); clearTimeout(hardTimer);
                                             return;
                                         }
                                     } catch {}
-                                    typing.bubble.innerHTML = `❌ ${obj.error}`;
+                                    assistantEl.innerHTML = `❌ ${obj.error}`;
                                     continue;
                                 }
                                 if (obj.delta) {
                                     buf += String(obj.delta);
-                                    // Afficher/mettre à jour la bulle de réponse (remplacer typing)
-                                    if (!typing.wrapper.dataset.upgraded) {
-                                        typing.bubble.innerHTML = '';
-                                        typing.wrapper.dataset.upgraded = '1';
-                                    }
                                     if (!scheduled) {
                                         scheduled = true;
                                         setTimeout(() => {
-                                            typing.bubble.innerHTML = buf
-                                                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                                                .replace(/\n/g, '<br/>' );
+                                            assistantEl.innerHTML = '<strong>Assistant:<\/strong> ' + buf
+                                                .replace(/\*\*(.*?)\*\*/g, '<strong>$1<\/strong>')
+                                                .replace(/\n/g, '<br\/>');
                                             if (shouldAutoScroll()) { messagesDiv.scrollTop = messagesDiv.scrollHeight; }
                                             scheduled = false;
                                         }, 60);
@@ -552,9 +530,9 @@
                                         localStorage.setItem('markets_prev_response_id', obj.id);
                                     }
                                     clearTimeout(firstChunkTimer); clearTimeout(hardTimer);
-                                    typing.bubble.innerHTML = buf
-                                        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                                        .replace(/\n/g, '<br/>' );
+                                    assistantEl.innerHTML = '<strong>Assistant:<\/strong> ' + buf
+                                        .replace(/\*\*(.*?)\*\*/g, '<strong>$1<\/strong>')
+                                        .replace(/\n/g, '<br\/>');
                                     if (shouldAutoScroll()) { messagesDiv.scrollTop = messagesDiv.scrollHeight; }
                                     break;
                                 }
@@ -571,8 +549,9 @@
                         });
                         const d2 = await r2.json();
                         if (!d2.success) throw new Error(d2.error || 'Erreur API');
-                        streamingEl.remove();
-                        addMsg('assistant', d2.reply);
+                        assistantEl.innerHTML = '<strong>Assistant:<\/strong> ' + String(d2.reply || '')
+                            .replace(/\*\*(.*?)\*\*/g, '<strong>$1<\/strong>')
+                            .replace(/\n/g, '<br\/>');
                         return;
                     }
                 } catch (e) {
