@@ -1246,8 +1246,11 @@ L'objet "<strong>{item_data.get('name', 'N/A')}</strong>" de la catégorie "<str
             
             subject = f"📰 Rapport de Marché - {report_date}"
             
-            # Créer le contenu HTML structuré
-            html_content = self._create_market_report_html(report_date, report_time, report_content)
+            # Utiliser la version robuste si disponible
+            if hasattr(self, '_create_market_report_html_v2'):
+                html_content = self._create_market_report_html_v2(report_date, report_time, report_content)
+            else:
+                html_content = self._create_market_report_html(report_date, report_time, report_content)
             
             # Créer le contenu texte
             text_content = self._create_market_report_text(report_date, report_time, report_content)
@@ -1451,6 +1454,203 @@ Généré le: {timestamp}
 ---
 BONVIN Collection - Gestion de portefeuille d'investissement
 Ce rapport a été généré automatiquement par votre système de gestion
+        """
+
+    def _create_market_report_html_v2(self, report_date: str, report_time: str, report_content: str) -> str:
+        """Version robuste du HTML: parse JSON si présent et rend Executive Summary et sections.
+        Fallback vers rendu <pre> si non-structuré.
+        """
+        timestamp = datetime.now().strftime("%d/%m/%Y à %H:%M")
+
+        def _safe_parse_json(text: str):
+            try:
+                s = (text or '').strip()
+                import re as _re
+                s = _re.sub(r"```\s*json\s*", "", s, flags=_re.IGNORECASE)
+                s = s.replace('```', '').strip()
+                trans = {ord('\u201c'): '"', ord('\u201d'): '"', ord('\u2019'): "'", ord('\u2013'): '-', ord('\u2014'): '-'}
+                s = s.translate(trans)
+                try:
+                    return json.loads(s)
+                except Exception:
+                    depth = 0
+                    start_idx = None
+                    for i, ch in enumerate(s):
+                        if ch == '{':
+                            if depth == 0:
+                                start_idx = i
+                            depth += 1
+                        elif ch == '}' and depth > 0:
+                            depth -= 1
+                            if depth == 0 and start_idx is not None:
+                                candidate = s[start_idx:i+1]
+                                try:
+                                    return json.loads(candidate)
+                                except Exception:
+                                    start_idx = None
+                                    continue
+            except Exception:
+                return None
+            return None
+
+        def _normalize_list(val):
+            try:
+                if val is None:
+                    return []
+                if isinstance(val, list):
+                    return [str(x).strip() for x in val if str(x).strip()]
+                if isinstance(val, str):
+                    raw = val.replace('\r', '\n')
+                    for bullet in ['\n- ', '\n• ', '\n* ']:
+                        raw = raw.replace(bullet, '\n')
+                    parts = [p.strip(' -•*\t') for p in raw.split('\n')]
+                    return [p for p in parts if p]
+                return [str(val)] if str(val).strip() else []
+            except Exception:
+                return []
+
+        parsed = _safe_parse_json(report_content)
+        has_structured = isinstance(parsed, dict) and (parsed.get('executive_summary') is not None or parsed.get('summary') is not None)
+
+        if has_structured:
+            executive_summary = _normalize_list(parsed.get('executive_summary'))
+            key_points = _normalize_list(parsed.get('key_points'))
+            insights = _normalize_list(parsed.get('insights'))
+            risks = _normalize_list(parsed.get('risks'))
+            opportunities = _normalize_list(parsed.get('opportunities'))
+            summary_text = str(parsed.get('summary') or '').strip()
+
+            # Sources
+            sources_html = ''
+            sources = parsed.get('sources') or []
+            if isinstance(sources, str):
+                sources = [sources]
+            src_items = []
+            for src in sources:
+                if isinstance(src, dict):
+                    url = src.get('url') or '#'
+                    title = src.get('title') or src.get('name') or url
+                    src_items.append(f'<li>📎 <a href="{url}" target="_blank" style="color:#3b82f6;text-decoration:none;">{title}</a></li>')
+                else:
+                    txt = str(src)
+                    if txt.startswith('http'):
+                        title = txt if len(txt) <= 80 else txt[:77] + '...'
+                        src_items.append(f'<li>📎 <a href="{txt}" target="_blank" style="color:#3b82f6;text-decoration:none;">{title}</a></li>')
+                    elif txt:
+                        src_items.append(f'<li>{txt}</li>')
+            if src_items:
+                sources_html = '<ul>' + ''.join(src_items) + '</ul>'
+
+            def _render_paragraphs(t: str) -> str:
+                if not t:
+                    return ''
+                raw = t.replace('\r', '\n').strip()
+                parts = [p.strip() for p in raw.split('\n\n') if p.strip()]
+                if len(parts) == 1:
+                    parts = [p.strip() for p in raw.split('\n') if p.strip()]
+                return '\n'.join([f'<p style="font-size:14px;line-height:1.8;">{p}</p>' for p in parts])
+
+            return f"""
+        <!DOCTYPE html>
+        <html lang=\"fr\">
+        <head>
+            <meta charset=\"utf-8\">
+            <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
+            <title>Rapport de Marché - {report_date}</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; background: #f5f5f5; margin: 0; padding: 20px; }}
+                .container {{ max-width: 760px; margin: 0 auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,.08); overflow: hidden; }}
+                .header {{ background: linear-gradient(135deg,#1e3a8a,#3b82f6); color:#fff; padding: 24px; text-align:center; }}
+                .header h1 {{ margin: 0; font-size: 24px; }}
+                .header .subtitle {{ margin-top: 6px; opacity:.9; }}
+                .section {{ padding: 24px; border-top: 1px solid #eef2f7; }}
+                .section h3 {{ margin: 0 0 12px 0; color: #1e3a8a; font-size: 18px; }}
+                .exec {{ background:#0f172a; color:#fff; }}
+                .exec h3 {{ color:#fbbf24; }}
+                .exec li {{ border-bottom: 1px solid rgba(255,255,255,.12); padding: 8px 0; }}
+                ul {{ margin: 0; padding-left: 20px; }}
+                .footer {{ background:#f8fafc; padding: 20px; text-align:center; font-size:12px; color:#64748b; }}
+                .grid {{ display:grid; grid-template-columns:1fr; gap:14px; }}
+                @media (min-width: 640px) {{ .grid-2 {{ grid-template-columns: 1fr 1fr; }} }}
+            </style>
+        </head>
+        <body>
+            <div class=\"container\"> 
+                <div class=\"header\">
+                    <h1>📰 Rapport de Marché</h1>
+                    <div class=\"subtitle\">{report_date} • {report_time} • Généré le {timestamp}</div>
+                </div>
+
+                <div class=\"section exec\">
+                    <h3>🎯 Executive Summary</h3>
+                    <ul>
+                        {''.join(f'<li>{p}</li>' for p in executive_summary) if executive_summary else '<li>N/D</li>'}
+                    </ul>
+                </div>
+
+                <div class=\"section\">
+                    <h3>📝 Résumé</h3>
+                    {_render_paragraphs(summary_text) or '<p>N/D</p>'}
+                </div>
+
+                <div class=\"section grid grid-2\">
+                    <div>
+                        <h3>🔑 Points clés</h3>
+                        {'<ul>' + ''.join(f'<li>{p}</li>' for p in key_points) + '</ul>' if key_points else '<p>N/D</p>'}
+                    </div>
+                    <div>
+                        <h3>💡 Insights</h3>
+                        {'<ul>' + ''.join(f'<li>{p}</li>' for p in insights) + '</ul>' if insights else '<p>N/D</p>'}
+                    </div>
+                </div>
+
+                <div class=\"section grid grid-2\">
+                    <div>
+                        <h3>⚠️ Risques</h3>
+                        {'<ul>' + ''.join(f'<li>{p}</li>' for p in risks) + '</ul>' if risks else '<p>N/D</p>'}
+                    </div>
+                    <div>
+                        <h3>🚀 Opportunités</h3>
+                        {'<ul>' + ''.join(f'<li>{p}</li>' for p in opportunities) + '</ul>' if opportunities else '<p>N/D</p>'}
+                    </div>
+                </div>
+                {f'<div class=\"section\"><h3>📚 Sources</h3>{sources_html}</div>' if sources_html else ''}
+                <div class=\"footer\"><p><strong>BONVIN Collection</strong> — Rapport généré automatiquement</p></div>
+            </div>
+        </body>
+        </html>
+            """
+
+        # Fallback: rendu texte en <pre>
+        return f"""
+        <!DOCTYPE html>
+        <html lang=\"fr\">
+        <head>
+            <meta charset=\"utf-8\">
+            <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
+            <title>Rapport de Marché - {report_date}</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; background-color: #f5f5f5; margin: 0; padding: 20px; }}
+                .container {{ max-width: 700px; margin: 0 auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,.1); overflow: hidden; }}
+                .header {{ background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); color: white; padding: 30px; text-align: center; }}
+                .content {{ padding: 30px; }}
+                pre {{ white-space: pre-wrap; background:#f8f9fa; border:1px solid #e1e5e9; padding:15px; border-radius:4px; }}
+                .footer {{ background:#f8fafc; padding:20px; text-align:center; border-top:1px solid #e1e5e9; }}
+            </style>
+        </head>
+        <body>
+            <div class=\"container\"> 
+                <div class=\"header\">
+                    <h1>📰 Rapport de Marché</h1>
+                    <div>{report_date} • {report_time} • Généré le {timestamp}</div>
+                </div>
+                <div class=\"content\">
+                    <pre>{(report_content or '').replace('<','&lt;').replace('>','&gt;')}</pre>
+                </div>
+                <div class=\"footer\"><p><strong>BONVIN Collection</strong> — Rapport généré automatiquement</p></div>
+            </div>
+        </body>
+        </html>
         """
     
     def _detect_important_changes(self, old_data: Dict, new_data: Dict) -> List[str]:
@@ -4230,7 +4430,7 @@ client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"),
                     try:
                         return json.loads(s)
                     except Exception:
-                        # Extraction par équilibrage d’accolades
+                        # Extraction par équilibrage d'accolades
                         depth = 0
                         start_idx = None
                         for i, ch in enumerate(s):
@@ -4481,7 +4681,6 @@ client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"
     except Exception as e:
         logger.error(f"Erreur ai_update_all_vehicles: {e}")
         return jsonify({"error": "Erreur lors de la mise à jour en masse"}), 500
-
 @app.route("/api/fix-vehicle-categories", methods=["POST"])
 def fix_vehicle_categories():
     """Corriger automatiquement les catégories 'Véhicules' en 'Voitures'"""
@@ -5191,7 +5390,6 @@ def chatbot():
                 })
         except Exception:
             pass
-
         # Chatbot-assisted item creation (natural language → new asset)
         try:
             query_lower = query.lower()
@@ -5872,7 +6070,6 @@ def generate_portfolio_pdf():
         return jsonify({
             "error": str(e)
         }), 500
-
 @app.route("/api/reports/asset-class/<asset_class_name>", methods=["GET"])
 def generate_asset_class_report(asset_class_name):
     """Génère un rapport PDF pour une classe d'actif spécifique"""
@@ -6648,7 +6845,6 @@ def clean_date_format(date_str: str) -> Optional[str]:
     # Si c'est un format non reconnu, l'ignorer
     logger.warning(f"Format de date non reconnu ignoré: {date_str}")
     return None
-
 def clean_update_data(data: Dict[str, Any]) -> Dict[str, Any]:
     """Nettoie les données de mise à jour - CORRIGÉ POUR INCLURE LES ACTIONS"""
     cleaned = {}
@@ -7448,7 +7644,6 @@ def unified_get_stock_price(symbol):
     except Exception as e:
         logger.error(f"Erreur récupération prix unifié {symbol}: {e}")
         return jsonify({"error": str(e)}), 500
-
 @app.route("/api/unified/market-briefing", methods=["POST"])
 def unified_get_market_briefing():
     """Récupère un briefing de marché via le gestionnaire unifié"""
@@ -8246,9 +8441,6 @@ def trigger_background_worker():
     except Exception as e:
         logger.error(f"Erreur déclenchement Background Worker: {e}")
         return jsonify({"error": str(e)}), 500
-
-
-
 @app.route("/api/background-worker/status", methods=["GET"])
 def get_background_worker_status():
     """Récupère le statut de la dernière analyse."""
