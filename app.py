@@ -1614,7 +1614,7 @@ Ce rapport a été généré automatiquement par votre système de gestion
                         {'<ul>' + ''.join(f'<li>{p}</li>' for p in opportunities) + '</ul>' if opportunities else '<p>N/D</p>'}
                     </div>
                 </div>
-                {f'<div class=\"section\"><h3>📚 Sources</h3>{sources_html}</div>' if sources_html else ''}
+                {('<div class=\"section\"><h3>📚 Sources</h3>' + sources_html + '</div>') if sources_html else ''}
                 <div class=\"footer\"><p><strong>BONVIN Collection</strong> — Rapport généré automatiquement</p></div>
             </div>
         </body>
