@@ -761,17 +761,50 @@ class ScrapingBeeScraper:
             return None
 
     async def _scrape_page_with_metadata(self, url: str) -> Optional[Dict]:
-        """Scrape une page et renvoie le texte + date de publication si détectable."""
+        """Scrape une page et renvoie le texte + date de publication si détectable.
+
+        Optimisations:
+        - Pour Yahoo JSON (query1.finance.yahoo.com/...), préfère récupérer directement le JSON (sans JS)
+        - Pour HTML nécessitant consent/hydratation, active JS + premium proxy US + blocage des ressources + petit scénario si besoin
+        """
         try:
+            # Fast‑path: Yahoo JSON endpoints (pas de JS)
+            if 'query1.finance.yahoo.com' in (url or '').lower():
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(self.base_url, params={
+                        'api_key': self.api_key,
+                        'url': url,
+                        'render_js': 'false'
+                    }) as rj:
+                        if rj.status != 200:
+                            return None
+                        try:
+                            data = await rj.json()
+                        except Exception:
+                            text = await rj.text()
+                            try:
+                                data = json.loads(text)
+                            except Exception:
+                                return None
+                        # Aplatir quelques champs utiles
+                        text_blob = json.dumps(data, ensure_ascii=False)
+                        return {
+                            'text': self._clean_content(text_blob)[:8000],
+                            'published_at': None,
+                            'published_at_raw': None
+                        }
+
+            # Heuristique: certaines pages exigent JS (consent/hydratation)
+            u = (url or '').lower()
+            needs_js = any(k in u for k in ['marketwatch.com', 'cnn.com', '/quote/', '/key-statistics'])
             params = {
                 'api_key': self.api_key,
                 'url': url,
-                # éviter headers trop longs: pas de JS, proxy premium pour stabilité
-                'render_js': 'false',
+                'render_js': 'true' if needs_js else 'false',
                 'premium_proxy': 'true',
-                'block_resources': 'true',
+                'block_resources': 'true' if needs_js else 'false',
                 'country_code': 'us',
-                'wait': '1200'
+                'wait': '2000' if needs_js else '1200'
             }
             async with aiohttp.ClientSession() as session:
                 async with session.get(self.base_url, params=params) as response:
