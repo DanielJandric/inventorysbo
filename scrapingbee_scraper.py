@@ -236,63 +236,87 @@ class ScrapingBeeScraper:
                 import xml.etree.ElementTree as ET  # lightweight
             except Exception:
                 return items
+            
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119 Safari/537.36'
             }
+            
             async with aiohttp.ClientSession(headers=headers) as session:
                 for f in feeds:
                     try:
-                        # Essai direct
+                        # Essai direct avec timeout court
                         text = None
-                        async with session.get(f, timeout=15) as resp:
-                            if resp.status == 200:
-                                text = await resp.text()
-                        # Fallback via ScrapingBee proxy (sans JS)
+                        try:
+                            async with session.get(f, timeout=10) as resp:
+                                if resp.status == 200:
+                                    text = await resp.text()
+                                    logger.info(f"📰 RSS direct réussi: {f} ({len(text)} chars)")
+                        except Exception as e:
+                            logger.debug(f"📰 RSS direct échoué {f}: {e}")
+                        
+                        # Fallback via ScrapingBee proxy (sans JS) si clé API disponible
+                        if not text and self.api_key and self.api_key != 'test_key_for_testing':
+                            try:
+                                async with session.get(self.base_url, params={
+                                    'api_key': self.api_key,
+                                    'url': f,
+                                    'render_js': 'false'
+                                }, timeout=15) as r2:
+                                    if r2.status == 200:
+                                        text = await r2.text()
+                                        logger.info(f"📰 RSS via ScrapingBee: {f}")
+                            except Exception as e:
+                                logger.debug(f"📰 RSS ScrapingBee échoué {f}: {e}")
+                        
                         if not text:
-                            async with session.get(self.base_url, params={
-                                'api_key': self.api_key,
-                                'url': f,
-                                'render_js': 'false'
-                            }, timeout=20) as r2:
-                                if r2.status == 200:
-                                    text = await r2.text()
-                        if not text:
+                            logger.warning(f"⚠️ Impossible de récupérer RSS: {f}")
                             continue
+                        
                         try:
                             root = ET.fromstring(text)
-                        except Exception:
+                        except Exception as e:
+                            logger.warning(f"⚠️ Erreur parsing XML {f}: {e}")
                             continue
-                            # RSS 2.0: channel/item
-                            for item in root.findall('.//item'):
-                                try:
-                                    link_el = item.find('link')
-                                    title_el = item.find('title')
-                                    desc_el = item.find('description')
-                                    pub_el = item.find('pubDate')
-                                    link = (link_el.text or '').strip() if link_el is not None else ''
-                                    title = (title_el.text or '').strip() if title_el is not None else link[:120]
-                                    desc = (desc_el.text or '').strip() if desc_el is not None else ''
-                                    ts = self._parse_datetime_str(pub_el.text) if pub_el is not None else None
-                                    if not link:
-                                        continue
-                                    if not _is_recent_dt(ts):
-                                        continue
-                                    # Content depuis description (fallback)
-                                    items.append(ScrapedData(
-                                        url=link,
-                                        title=title[:120],
-                                        content=desc[:4000],
-                                        timestamp=ts or datetime.now(),
-                                        metadata={'source': source_name, 'from': 'rss'}
-                                    ))
-                                    if len(items) >= max_items:
-                                        break
-                                except Exception:
+                        
+                        # RSS 2.0: channel/item
+                        for item in root.findall('.//item'):
+                            try:
+                                link_el = item.find('link')
+                                title_el = item.find('title')
+                                desc_el = item.find('description')
+                                pub_el = item.find('pubDate')
+                                
+                                link = (link_el.text or '').strip() if link_el is not None else ''
+                                title = (title_el.text or '').strip() if title_el is not None else link[:120]
+                                desc = (desc_el.text or '').strip() if desc_el is not None else ''
+                                ts = self._parse_datetime_str(pub_el.text) if pub_el is not None else None
+                                
+                                if not link:
                                     continue
-                            # Atom: feed/entry (optionnel, ignoré si absent)
-                            # Simplifié pour éviter erreurs d'analyse; RSS suffit pour nos besoins
-                    except Exception:
+                                if not _is_recent_dt(ts):
+                                    continue
+                                
+                                # Content depuis description (fallback)
+                                items.append(ScrapedData(
+                                    url=link,
+                                    title=title[:120],
+                                    content=desc[:4000],
+                                    timestamp=ts or datetime.now(),
+                                    metadata={'source': source_name, 'from': 'rss'}
+                                ))
+                                if len(items) >= max_items:
+                                    break
+                            except Exception as e:
+                                logger.debug(f"⚠️ Erreur parsing item RSS: {e}")
+                                continue
+                        
+                        if len(items) >= max_items:
+                            break
+                            
+                    except Exception as e:
+                        logger.warning(f"⚠️ Erreur RSS {f}: {e}")
                         continue
+                        
             return items
 
         # Collecter des liens/articles via RSS en priorité
@@ -304,15 +328,13 @@ class ScrapingBeeScraper:
             'https://feeds.marketwatch.com/marketwatch/topstories/',
             'https://feeds.marketwatch.com/marketwatch/marketpulse/',
         ]
+        # CNN RSS peut avoir des problèmes de connectivité, utiliser des alternatives
         cnn_rss = [
             'https://rss.cnn.com/rss/edition_world.rss',
             'https://rss.cnn.com/rss/edition_business.rss',
-            'https://rss.cnn.com/rss/money_news_international.rss',
         ]
-        # Flux RSS alternatifs et fallbacks
+        # Flux RSS alternatifs qui fonctionnent
         alt_rss = [
-            'https://feeds.reuters.com/reuters/businessNews',
-            'https://feeds.reuters.com/reuters/technologyNews',
             'https://feeds.bloomberg.com/markets/news.rss',
             'https://feeds.bloomberg.com/politics/news.rss',
             'https://www.ft.com/rss/home',
