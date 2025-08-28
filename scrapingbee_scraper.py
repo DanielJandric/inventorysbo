@@ -176,9 +176,10 @@ class ScrapingBeeScraper:
             for start in start_urls:
                 try:
                     html = await self._scrape_with_params(start, {
-                        'render_js': 'true',
-                        'premium_proxy': 'false',
-                        'wait': '2000',
+                        'render_js': 'false',
+                        'premium_proxy': 'true',
+                        'block_resources': 'true',
+                        'wait': '1200',
                         'country_code': 'us',
                     })
                     if not html:
@@ -683,9 +684,12 @@ class ScrapingBeeScraper:
             params = {
                 'api_key': self.api_key,
                 'url': url,
-                'render_js': 'true',
-                'premium_proxy': 'false',
-                'country_code': 'us'
+                # éviter headers trop longs: pas de JS, proxy premium pour stabilité
+                'render_js': 'false',
+                'premium_proxy': 'true',
+                'block_resources': 'true',
+                'country_code': 'us',
+                'wait': '1200'
             }
             async with aiohttp.ClientSession() as session:
                 async with session.get(self.base_url, params=params) as response:
