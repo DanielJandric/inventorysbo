@@ -1823,9 +1823,8 @@ Ce rapport a été généré automatiquement par votre système de gestion
                     </div>
                 </div>
 
-                {('<div class="section"><h3>📊 Indicateurs Économiques</h3><div class="economic-grid">' + econ_html + '</div></div>') if econ_html else ''}
-
-                {('<div class="section"><h3>🌍 Analyse Géopolitique</h3><div class="geopolitical card">' + geo_html + '</div></div>') if geo_html else ''}
+                
+                
 
                 {('<div class="section"><h3>🧭 Tableau de Bord Exécutif</h3>' + exec_dash_html + '</div>') if exec_dash_html else ''}
 

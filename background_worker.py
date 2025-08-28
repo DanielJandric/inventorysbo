@@ -611,19 +611,8 @@ class MarketAnalysisWorker:
                     </ul>
                 </div>
                 
-                <!-- Indicateurs Économiques -->
-                <div class="section">
-                    <h3>📊 Indicateurs Économiques</h3>
-                    <div class="economic-grid">
-                        {econ_html}
-                    </div>
-                </div>
                 
-                <!-- Analyse Géopolitique -->
-                <div class="section">
-                    <h3>🌍 Analyse Géopolitique</h3>
-                    <div class="geopolitical card">{geo_html}</div>
-                </div>
+                
                 
                 <!-- Aperçu du marché -->
                 <div class="section">
