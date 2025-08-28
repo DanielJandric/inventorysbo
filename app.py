@@ -1470,28 +1470,41 @@ Ce rapport a été généré automatiquement par votre système de gestion
                 s = s.replace('```', '').strip()
                 trans = {ord('\u201c'): '"', ord('\u201d'): '"', ord('\u2019'): "'", ord('\u2013'): '-', ord('\u2014'): '-'}
                 s = s.translate(trans)
+                
+                # Log pour debug
                 try:
+                    logger.info(f"email_v2: tentative parse JSON direct")
                     return json.loads(s)
-                except Exception:
-                    depth = 0
-                    start_idx = None
-                    for i, ch in enumerate(s):
-                        if ch == '{':
-                            if depth == 0:
-                                start_idx = i
-                            depth += 1
-                        elif ch == '}' and depth > 0:
-                            depth -= 1
-                            if depth == 0 and start_idx is not None:
-                                candidate = s[start_idx:i+1]
-                                try:
-                                    return json.loads(candidate)
-                                except Exception:
-                                    start_idx = None
-                                    continue
-            except Exception:
+                except Exception as e1:
+                    logger.info(f"email_v2: parse direct échoué: {e1}")
+                    
+                # Fallback: recherche de JSON imbriqué
+                depth = 0
+                start_idx = None
+                for i, ch in enumerate(s):
+                    if ch == '{':
+                        if depth == 0:
+                            start_idx = i
+                        depth += 1
+                    elif ch == '}' and depth > 0:
+                        depth -= 1
+                        if depth == 0 and start_idx is not None:
+                            candidate = s[start_idx:i+1]
+                            try:
+                                logger.info(f"email_v2: tentative parse candidat JSON de {len(candidate)} chars")
+                                parsed = json.loads(candidate)
+                                logger.info(f"email_v2: parse candidat réussi avec {len(parsed)} clés")
+                                return parsed
+                            except Exception as e2:
+                                logger.info(f"email_v2: parse candidat échoué: {e2}")
+                                start_idx = None
+                                continue
+                                
+                logger.warning("email_v2: aucun JSON valide trouvé")
                 return None
-            return None
+            except Exception as e:
+                logger.error(f"email_v2: erreur _safe_parse_json: {e}")
+                return None
 
         def _normalize_list(val):
             try:
@@ -1511,10 +1524,18 @@ Ce rapport a été généré automatiquement par votre système de gestion
 
         parsed = _safe_parse_json(report_content)
         has_structured = isinstance(parsed, dict) and (parsed.get('executive_summary') is not None or parsed.get('summary') is not None)
+        
+        # Logs détaillés pour debug
         try:
             logger.info(f"email_v2: parsed_json={bool(parsed)} has_structured={has_structured}")
-        except Exception:
-            pass
+            if parsed:
+                logger.info(f"email_v2: clés disponibles: {list(parsed.keys())}")
+                logger.info(f"email_v2: executive_summary type={type(parsed.get('executive_summary'))} len={len(parsed.get('executive_summary') or [])}")
+                logger.info(f"email_v2: key_points type={type(parsed.get('key_points'))} len={len(parsed.get('key_points') or [])}")
+            else:
+                logger.warning(f"email_v2: report_content preview: {str(report_content)[:200]}...")
+        except Exception as e:
+            logger.error(f"email_v2: erreur logging: {e}")
 
         if has_structured:
             executive_summary = _normalize_list(parsed.get('executive_summary'))
