@@ -6024,40 +6024,62 @@ def send_market_report_email():
                 "error": "Configuration email non disponible"
             }), 400
         
-        # Récupérer de préférence la DERNIÈRE analyse structurée (executive_summary, etc.).
+        # Récupérer le dernier rapport de marché (priorité: market_analyses structuré, puis market_reports)
+        market_report_data = None
+        
+        # Essayer d'abord market_analyses (données structurées)
         try:
-            market_report_data = None
-            try:
-                from market_analysis_db import get_market_analysis_db
-                db = get_market_analysis_db()
+            from market_analysis_db import get_market_analysis_db
+            db = get_market_analysis_db()
+            if db and db.is_connected():
                 recent = db.get_recent_analyses(limit=1)
-                if recent:
+                if recent and recent[0]:
                     a = recent[0]
                     ts = (a.timestamp or a.created_at or datetime.utcnow().isoformat())
-                    # Construire un contenu JSON structuré pour l'email robuste
-                    structured_payload = {
-                        "executive_summary": getattr(a, 'executive_summary', []) or [],
-                        "summary": getattr(a, 'summary', '') or '',
-                        "key_points": getattr(a, 'key_points', []) or [],
-                        "insights": getattr(a, 'insights', []) or [],
-                        "risks": getattr(a, 'risks', []) or [],
-                        "opportunities": getattr(a, 'opportunities', []) or [],
-                        "sources": getattr(a, 'sources', []) or [],
-                        "confidence_score": float(getattr(a, 'confidence_score', 0.0) or 0.0)
-                    }
-                    market_report_data = {
-                        'date': ts[:10],
-                        'time': ts[11:16] if len(ts) >= 16 else datetime.now().strftime('%H:%M'),
-                        'content': json.dumps(structured_payload, ensure_ascii=False)
-                    }
-            except Exception as _e:
-                # Pas d'analyse structurée dispo → fallback legacy
-                market_report_data = None
+                    
+                    # Vérifier que l'analyse a du contenu structuré
+                    has_content = (a.executive_summary and len(a.executive_summary) > 0) or \
+                                 (a.key_points and len(a.key_points) > 0) or \
+                                 (a.summary and len(str(a.summary).strip()) > 0)
+                    
+                    if has_content:
+                        # Construire un contenu JSON structuré pour l'email robuste
+                        structured_payload = {
+                            "executive_summary": a.executive_summary or [],
+                            "summary": str(a.summary or ''),
+                            "key_points": a.key_points or [],
+                            "insights": a.insights or [],
+                            "risks": a.risks or [],
+                            "opportunities": a.opportunities or [],
+                            "sources": a.sources or [],
+                            "structured_data": a.structured_data or {},
+                            "geopolitical_analysis": a.geopolitical_analysis or {},
+                            "economic_indicators": a.economic_indicators or {},
+                            "confidence_score": float(a.confidence_score or 0.0)
+                        }
+                        
+                        market_report_data = {
+                            'date': ts[:10] if len(ts) >= 10 else datetime.now().strftime('%d/%m/%Y'),
+                            'time': ts[11:16] if len(ts) >= 16 else datetime.now().strftime('%H:%M'),
+                            'content': json.dumps(structured_payload, ensure_ascii=False)
+                        }
+                        logger.info(f"✅ Utilisation analyse structurée ID {a.id} avec {len(a.executive_summary or [])} points exec")
+        except Exception as e:
+            logger.warning(f"⚠️ Erreur récupération market_analyses: {e}")
 
-            if not market_report_data:
-                # Fallback: ancien rapport texte depuis market_reports
+        # Fallback: ancien rapport texte depuis market_reports
+        if not market_report_data:
+            try:
                 response = supabase.table('market_reports').select('*').order('created_at', desc=True).limit(1).execute()
-                if not response.data:
+                if response.data:
+                    latest_report = response.data[0]
+                    market_report_data = {
+                        'date': latest_report.get('date', 'Date inconnue'),
+                        'time': latest_report.get('time', 'Heure inconnue'),
+                        'content': latest_report.get('content', 'Contenu non disponible')
+                    }
+                    logger.info("✅ Utilisation rapport legacy market_reports")
+                else:
                     logger.info("Aucun rapport trouvé, génération d'un nouveau rapport...")
                     briefing = generate_market_briefing()
                     if briefing.get('status') == 'success':
@@ -6066,43 +6088,43 @@ def send_market_report_email():
                             'time': datetime.now().strftime('%H:%M'),
                             'content': briefing.get('briefing', {}).get('content', 'Contenu non disponible')
                         }
+                        logger.info("✅ Nouveau rapport généré")
                     else:
                         return jsonify({
                             "success": False,
                             "error": "Impossible de générer un nouveau rapport de marché"
                         }), 500
-                else:
-                    latest_report = response.data[0]
-                    market_report_data = {
-                        'date': latest_report.get('date', 'Date inconnue'),
-                        'time': latest_report.get('time', 'Heure inconnue'),
-                        'content': latest_report.get('content', 'Contenu non disponible')
-                    }
-            
-            # Envoyer l'email
-            success = gmail_manager.send_market_report_email(market_report_data)
-            
-            if success:
-                logger.info(f"✅ Rapport de marché envoyé par email à {len(gmail_manager.recipients)} destinataires")
-                return jsonify({
-                    "success": True,
-                    "message": f"Rapport de marché envoyé avec succès à {len(gmail_manager.recipients)} destinataires",
-                    "recipients": gmail_manager.recipients,
-                    "report_date": market_report_data['date'],
-                    "report_time": market_report_data['time']
-                })
-            else:
+            except Exception as e:
+                logger.error(f"❌ Erreur fallback market_reports: {e}")
                 return jsonify({
                     "success": False,
-                    "error": "Erreur lors de l'envoi de l'email"
+                    "error": f"Erreur récupération rapport: {str(e)}"
                 }), 500
-                
-        except Exception as e:
-            logger.error(f"Erreur récupération rapport de marché: {e}")
+        
+        # Envoyer l'email
+        success = gmail_manager.send_market_report_email(market_report_data)
+        
+        if success:
+            logger.info(f"✅ Rapport de marché envoyé par email à {len(gmail_manager.recipients)} destinataires")
+            return jsonify({
+                "success": True,
+                "message": f"Rapport de marché envoyé avec succès à {len(gmail_manager.recipients)} destinataires",
+                "recipients": gmail_manager.recipients,
+                "report_date": market_report_data['date'],
+                "report_time": market_report_data['time']
+            })
+        else:
             return jsonify({
                 "success": False,
-                "error": f"Erreur récupération rapport: {str(e)}"
+                "error": "Erreur lors de l'envoi de l'email"
             }), 500
+            
+    except Exception as e:
+        logger.error(f"Erreur envoi email rapport de marché: {e}")
+        return jsonify({
+            "success": False,
+            "error": f"Erreur système: {str(e)}"
+        }), 500
             
     except Exception as e:
         logger.error(f"Erreur envoi email rapport de marché: {e}")
