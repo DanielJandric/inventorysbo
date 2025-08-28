@@ -9,9 +9,10 @@ from dataclasses import dataclass
 from urllib.parse import quote_plus
 import re
 from datetime import timedelta
+from datetime import timezone
 
 # Configuration du logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)  # Changed to DEBUG
 logger = logging.getLogger(__name__)
 
 # Charger les variables d'environnement de manière sécurisée
@@ -122,6 +123,7 @@ class ScrapingBeeScraper:
                     # Ajouter un résultat d'erreur
                     results.append(ScrapedData(
                         url=result['url'],
+
                         title=result['title'],
                         content=f"Erreur lors du scraping: {str(e)}",
                         timestamp=datetime.now(),
@@ -162,11 +164,30 @@ class ScrapingBeeScraper:
         if not self._initialized:
             await self.initialize()
 
+        def _now_utc() -> datetime:
+            try:
+                return datetime.now(timezone.utc)
+            except Exception:
+                # Fallback naïf
+                return datetime.utcnow().replace(tzinfo=None)
+
+        def _normalize_ts(dt_obj: Optional[datetime]) -> Optional[datetime]:
+            if not dt_obj:
+                return None
+            try:
+                if dt_obj.tzinfo is None:
+                    return dt_obj.replace(tzinfo=timezone.utc)
+                return dt_obj.astimezone(timezone.utc)
+            except Exception:
+                return dt_obj
+
         def _is_recent_dt(dt: Optional[datetime]) -> bool:
             try:
                 if not dt:
                     return False
-                return (datetime.now() - dt) <= timedelta(hours=max_age_hours)
+                dtz = _normalize_ts(dt)
+                nowz = _now_utc()
+                return (nowz - dtz) <= timedelta(hours=max_age_hours)
             except Exception:
                 return False
 
@@ -283,12 +304,17 @@ class ScrapingBeeScraper:
                                 title = (title_el.text or '').strip() if title_el is not None else link[:120]
                                 desc = (desc_el.text or '').strip() if desc_el is not None else ''
                                 ts = self._parse_datetime_str(pub_el.text) if pub_el is not None else None
+                                ts = _normalize_ts(ts)
+                                
+                                # Debug logging
+                                logger.debug(f"📰 RSS item: link='{link[:50]}...', title='{title[:50]}...', desc_len={len(desc)}, ts={ts}")
                                 
                                 if not link:
+                                    logger.debug("⚠️ RSS item ignoré: pas de lien")
                                     continue
                                 
                                 # Pour RSS, être plus permissif sur la date (articles jusqu'à 7 jours)
-                                if ts and (datetime.now() - ts) > timedelta(days=7):
+                                if ts and (_now_utc() - ts) > timedelta(days=7):
                                     logger.debug(f"📰 Article trop ancien ignoré: {title[:50]}... ({ts})")
                                     continue
                                 
@@ -296,11 +322,11 @@ class ScrapingBeeScraper:
                                 items.append(ScrapedData(
                                     url=link,
                                     title=title[:120],
-                                    content=desc[:4000],
+                                    content=desc[:4000] if desc else title[:200],  # Fallback sur titre si pas de description
                                     timestamp=ts or datetime.now(),
                                     metadata={'source': source_name, 'from': 'rss'}
                                 ))
-                                logger.info(f"📰 Article RSS ajouté: {title[:60]}... ({source_name})")
+                                logger.info(f"📰 Article RSS ajouté: {title[:60]}... ({source_name}) - {len(desc)} chars")
                                 if len(items) >= max_items:
                                     break
                             except Exception as e:
@@ -352,6 +378,10 @@ class ScrapingBeeScraper:
         cnn_links = []
         # Autoriser le crawl si RSS insuffisant OU si explicitement configuré
         allow_crawl = (len(rss_items) < per_site * 2) or (os.getenv('ALLOW_DOMAIN_CRAWL', 'false').lower() == 'true')
+        # Robustesse: forcer le crawl si les RSS sont quasi nuls
+        if len(rss_items) < per_site:
+            allow_crawl = True
+        logger.info(f"📰 RSS+state: collected={len(rss_items)} | allow_crawl={allow_crawl}")
         if allow_crawl:
             logger.info(f"📰 Domain crawl activé (RSS insuffisant: {len(rss_items)} < {per_site * 2})")
             if len([i for i in rss_items if i.metadata.get('source') == 'marketwatch']) < per_site:
@@ -491,184 +521,7 @@ class ScrapingBeeScraper:
         logger.info(f"📰 Deep scrape: {len(items)} articles récents | chars={sum(len(i.content) for i in items)}")
         return items
 
-    async def search_x_recent(self, topic_query: str, max_items: int = 6, max_age_hours: int = 2) -> List[ScrapedData]:
-        """Scrape X (Twitter) search results for recent posts on a topic.
-
-        - Uses ScrapingBee with JS rendering to load X search page
-        - Parses tweets' text and ISO timestamps from <time datetime="...">
-        - Filters to items within the last `max_age_hours` hours
-        """
-        items: List[ScrapedData] = []
-        try:
-            if not self._initialized:
-                await self.initialize()
-
-            # Build X search URL for live (latest) posts, restrict to FR/EN via query keywords
-            q = quote_plus(topic_query)
-            url_primary = f"https://x.com/search?q={q}&f=live"
-            params = {
-                'api_key': self.api_key,
-                'url': url_primary,
-                'render_js': 'true',
-                'premium_proxy': 'true',  # protéger contre les blocs
-                'block_resources': 'false',
-                'wait': '2000',
-                'country_code': 'us'
-            }
-
-            html = None
-            async with aiohttp.ClientSession() as session:
-                try:
-                    async with session.get(self.base_url, params=params) as resp:
-                        if resp.status == 200:
-                            html = await resp.text()
-                        else:
-                            logger.warning(f"⚠️ X search status {resp.status} pour {topic_query}")
-                except Exception as e:
-                    logger.warning(f"⚠️ X primary fetch error: {e}")
-
-            # Fallback 1: mobile.twitter.com
-            if not html or 'Log in' in html or 'signup' in (html or '').lower():
-                try:
-                    url_mobile = f"https://mobile.twitter.com/search?q={q}&s=typd"
-                    params_mobile = {
-                        'api_key': self.api_key,
-                        'url': url_mobile,
-                        'render_js': 'true',
-                        'premium_proxy': 'true',
-                        'block_resources': 'false',
-                        'wait': '2000',
-                        'country_code': 'us'
-                    }
-                    async with aiohttp.ClientSession() as session:
-                        async with session.get(self.base_url, params=params_mobile) as r2:
-                            if r2.status == 200:
-                                html = await r2.text()
-                                url_primary = url_mobile
-                except Exception as e:
-                    logger.warning(f"⚠️ X mobile fetch error: {e}")
-
-            # Fallback 2: nitter.net (si disponible)
-            if not html or 'Log in' in html or 'signup' in (html or '').lower():
-                try:
-                    url_nitter = f"https://nitter.net/search?f=tweets&q={q}"
-                    params_nitter = {
-                        'api_key': self.api_key,
-                        'url': url_nitter,
-                        'render_js': 'false',
-                        'premium_proxy': 'true',
-                        'country_code': 'us'
-                    }
-                    async with aiohttp.ClientSession() as session:
-                        async with session.get(self.base_url, params=params_nitter) as r3:
-                            if r3.status == 200:
-                                html = await r3.text()
-                                url_primary = url_nitter
-                except Exception as e:
-                    logger.warning(f"⚠️ Nitter fetch error: {e}")
-
-            try:
-                from bs4 import BeautifulSoup  # type: ignore
-            except Exception:
-                logger.warning("⚠️ BeautifulSoup non disponible, impossible de parser X.com")
-                return items
-
-            soup = BeautifulSoup(html or '', 'lxml')
-            now = datetime.now()
-            candidates = []
-            # Tweets sont souvent dans <article role="article">
-            # Try X/modern layout
-            for art in soup.find_all('article'):
-                try:
-                    # timestamp
-                    t = art.find('time')
-                    iso = t.get('datetime') if t else None
-                    ts = None
-                    if iso:
-                        try:
-                            ts = datetime.fromisoformat(iso.replace('Z', '+00:00'))
-                        except Exception:
-                            ts = None
-                    # content
-                    # concaténer les textes
-                    text_parts = [n.get_text(' ', strip=True) for n in art.find_all('div')]
-                    raw_text = ' '.join([p for p in text_parts if p]).strip()
-                    # heuristique pour nettoyer
-                    content = self._clean_content(raw_text)[:800]
-                    if not content:
-                        continue
-                    # link
-                    status_link = None
-                    for a in art.find_all('a'):
-                        href = a.get('href') or ''
-                        if '/status/' in href:
-                            status_link = f"https://x.com{href}"
-                            break
-                    candidates.append((ts, content, status_link))
-                except Exception:
-                    continue
-
-            # If none, try Nitter/mobile patterns
-            if not candidates:
-                # Nitter: tweets in div.timeline-item or article
-                for div in soup.find_all(['div','article']):
-                    try:
-                        cls = ' '.join(div.get('class') or [])
-                        if 'timeline-item' not in cls and 'tweet' not in cls:
-                            continue
-                        a_date = div.find('a', href=re.compile(r"/status/"))
-                        status_link = None
-                        if a_date and a_date.get('href'):
-                            href = a_date.get('href')
-                            status_link = href if href.startswith('http') else f"https://nitter.net{href}"
-                        # time parsing (approx): look for time tag or title attr
-                        t = div.find('time')
-                        iso = t.get('datetime') if t else None
-                        ts = None
-                        if iso:
-                            try:
-                                ts = datetime.fromisoformat(iso.replace('Z', '+00:00'))
-                            except Exception:
-                                ts = None
-                        # content text
-                        txt_nodes = [n.get_text(' ', strip=True) for n in div.find_all(['p','div','span'])]
-                        content = self._clean_content(' '.join([x for x in txt_nodes if x]))[:800]
-                        if content:
-                            candidates.append((ts, content, status_link))
-                    except Exception:
-                        continue
-
-            # Filtrer par recence: <= max_age_hours
-            max_age = timedelta(hours=max_age_hours)
-            filtered = []
-            for ts, content, link in candidates:
-                if ts is None:
-                    continue
-                try:
-                    age = now - ts
-                    if age <= max_age:
-                        filtered.append((ts, content, link))
-                except Exception:
-                    continue
-
-            # trier recent d'abord, limiter
-            filtered.sort(key=lambda x: x[0], reverse=True)
-            for ts, content, link in filtered[:max_items]:
-                items.append(ScrapedData(
-                    url=link or url,
-                    title=f"X.com: {topic_query[:40]}",
-                    content=content,
-                    timestamp=ts,
-                    metadata={
-                        'source': 'x.com',
-                        'topic': topic_query,
-                        'language': 'und',
-                        'word_count': len(content.split()),
-                    }
-                ))
-        except Exception as e:
-            logger.error(f"❌ Erreur X.com scraping: {e}")
-        return items
+    # search_x_recent retiré (X.com désactivé)
     
     async def _search_google(self, query: str, num_results: int = 5) -> List[Dict]:
         """Recherche sur des sites financiers directs avec ScrapingBee"""
@@ -912,24 +765,70 @@ class ScrapingBeeScraper:
         return text.strip()[:15000]
 
     def _parse_datetime_str(self, s: str) -> Optional[datetime]:
+        """Parse datetime string with better RSS support"""
         try:
+            if not s or not isinstance(s, str):
+                return None
+                
             st = s.strip()
             if not st:
                 return None
+                
+            # RSS format: "Thu, 28 Aug 2025 15:52:00 GMT"
+            if ',' in st and len(st.split()) >= 6:
+                try:
+                    from email.utils import parsedate_to_datetime
+                    return parsedate_to_datetime(st)
+                except Exception:
+                    pass
+            
             # ISO 8601 simple
             st = st.replace('Z', '+00:00')
             try:
                 return datetime.fromisoformat(st)
             except Exception:
                 pass
+                
             # RFC 2822 (headers)
             try:
                 from email.utils import parsedate_to_datetime
                 return parsedate_to_datetime(st)
             except Exception:
-                return None
+                pass
+                
+            # Fallback: try common RSS patterns
+            import re
+            patterns = [
+                r'(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{4})',
+                r'(\d{4})-(\d{1,2})-(\d{1,2})',
+                r'(\d{1,2})/(\d{1,2})/(\d{4})'
+            ]
+            
+            for pattern in patterns:
+                match = re.search(pattern, st, re.IGNORECASE)
+                if match:
+                    try:
+                        if len(match.groups()) == 3:
+                            if pattern == patterns[0]:  # "28 Aug 2025"
+                                month_map = {
+                                    'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
+                                    'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12
+                                }
+                                day, month_str, year = match.groups()
+                                month = month_map.get(month_str.lower(), 1)
+                                return datetime(int(year), month, int(day))
+                            elif pattern == patterns[1]:  # "2025-08-28"
+                                year, month, day = match.groups()
+                                return datetime(int(year), int(month), int(day))
+                            elif pattern == patterns[2]:  # "08/28/2025"
+                                month, day, year = match.groups()
+                                return datetime(int(year), int(month), int(day))
+                    except Exception:
+                        continue
+                        
         except Exception:
-            return None
+            pass
+        return None
 
     def _extract_published_time(self, html_content: str, headers: Optional[Dict] = None) -> (Optional[datetime], Optional[str]):
         """Extrait la date de publication depuis le HTML ou les en-têtes HTTP."""
@@ -1282,16 +1181,8 @@ Contenu: {data.content[:8000]}
             min_chars = int(os.getenv('LLM_MIN_CONTEXT_CHARS', '25000'))
             scraped_data = await self.search_and_scrape_deep(task.prompt, per_site=12, max_age_hours=48, min_chars=min_chars)
 
-            # Ajouter X.com (tweets récents ≤2h) sur la même thématique
-            try:
-                logger.info(f"🐦 X.com: collecte des posts récents (≤2h) pour '{task.prompt[:60]}…'")
-                x_items = await self.search_x_recent(task.prompt, max_items=6, max_age_hours=2)
-                logger.info(f"🐦 X.com: {len(x_items)} posts retenus (≤2h)")
-                if x_items:
-                    # Préfixer pour priorité aux signaux temps réel
-                    scraped_data = x_items + scraped_data
-            except Exception as _ex:
-                logger.warning(f"⚠️ X.com indisponible: {_ex}")
+            # X.com désactivé sur demande: pas d'enrichissement par tweets
+            logger.info("🐦 X.com désactivé (pas d'intégration dans le scraping)")
             
             if not scraped_data:
                 task.status = "failed"
