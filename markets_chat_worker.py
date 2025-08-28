@@ -47,7 +47,8 @@ class MarketsChatWorker:
         self.system_prompt = (
             "Tu es un analyste marchés. Réponds en français, concis (verbosité faible), structuré, actionnable. "
             "Ne fournis pas de chiffres non étayés. Utilise **gras** pour les points clés. "
-            "Structure 3–5 points puis une conclusion brève."
+            "Structure 3–5 points puis une conclusion brève. "
+            "N’inclus aucune URL, citation ou section ‘Sources’ dans ta réponse."
         )
 
     def _build_user_input(self, message: str, context: Optional[str]) -> str:

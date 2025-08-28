@@ -1417,7 +1417,6 @@ L'objet "<strong>{item_data.get('name', 'N/A')}</strong>" de la catégorie "<str
                         <h3>📋 Informations du Rapport</h3>
                         <p><strong>Date:</strong> {report_date}</p>
                         <p><strong>Heure:</strong> {report_time}</p>
-                        <p><strong>Source:</strong> API Manus - Données temps réel</p>
                         <p><strong>Généré le:</strong> {timestamp}</p>
                     </div>
                     
@@ -1447,7 +1446,6 @@ BONVIN Collection - Rapport de Marché
 📋 INFORMATIONS DU RAPPORT
 Date: {report_date}
 Heure: {report_time}
-Source: API Manus - Données temps réel
 Généré le: {timestamp}
 📊 ANALYSE DE MARCHÉ
 {report_content}
@@ -1586,26 +1584,8 @@ Ce rapport a été généré automatiquement par votre système de gestion
                     except Exception:
                         executive_summary = []
 
-            # Sources
+            # Ne pas afficher les sources pour éviter de polluer le narratif
             sources_html = ''
-            sources = parsed.get('sources') or []
-            if isinstance(sources, str):
-                sources = [sources]
-            src_items = []
-            for src in sources:
-                if isinstance(src, dict):
-                    url = src.get('url') or '#'
-                    title = src.get('title') or src.get('name') or url
-                    src_items.append(f'<li>📎 <a href="{url}" target="_blank" style="color:#3b82f6;text-decoration:none;">{title}</a></li>')
-                else:
-                    txt = str(src)
-                    if txt.startswith('http'):
-                        title = txt if len(txt) <= 80 else txt[:77] + '...'
-                        src_items.append(f'<li>📎 <a href="{txt}" target="_blank" style="color:#3b82f6;text-decoration:none;">{title}</a></li>')
-                    elif txt:
-                        src_items.append(f'<li>{txt}</li>')
-            if src_items:
-                sources_html = '<ul>' + ''.join(src_items) + '</ul>'
             
             # Sections optionnelles (éco / géopolitique / structured_data)
             econ = parsed.get('economic_indicators') or {}
@@ -1867,7 +1847,7 @@ Ce rapport a été généré automatiquement par votre système de gestion
                         {'<ul>' + ''.join(f'<li>{p}</li>' for p in opportunities) + '</ul>' if opportunities else '<p>N/D</p>'}
                     </div>
                 </div>
-                {('<div class="section"><h3>📚 Sources</h3>' + sources_html + '</div>') if sources_html else ''}
+                
                 <div class=\"footer\"><p><strong>BONVIN Collection</strong> — Rapport généré automatiquement</p></div>
             </div>
         </body>

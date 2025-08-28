@@ -368,25 +368,8 @@ class MarketAnalysisWorker:
         geo_analysis = geo_chess if geo_chess else (legacy_geo if isinstance(legacy_geo, dict) else {})
         analytics_data = market_snapshot.get('analytics', {}) if isinstance(market_snapshot, dict) else {}
 
-        # Sources: accepter dicts, URLs ou simples textes
-        raw_sources = result.get('sources', [])
-        if isinstance(raw_sources, str):
-            raw_sources = [raw_sources]
-        sources_items: list[str] = []
-        for src in (raw_sources or []):
-            if isinstance(src, dict):
-                url = src.get('url') or '#'
-                title = src.get('title') or src.get('name') or url
-                sources_items.append(f'<li style="margin-bottom: 8px;">📎 <a href="{url}" target="_blank" style="color: #3b82f6; text-decoration: none;">{title}</a></li>')
-            else:
-                txt = str(src)
-                if txt.startswith('http'):
-                    url = txt
-                    title = txt if len(txt) <= 80 else txt[:77] + '...'
-                    sources_items.append(f'<li style="margin-bottom: 8px;">📎 <a href="{url}" target="_blank" style="color: #3b82f6; text-decoration: none;">{title}</a></li>')
-                elif txt:
-                    sources_items.append(f'<li style="margin-bottom: 8px;">{txt}</li>')
-        sources_html = "\n".join(sources_items)
+        # Ne pas afficher ni rendre de sources pour garder un narratif épuré
+        sources_html = ""
 
         # Calculer un pourcentage de confiance sûr pour l'affichage
         _score_raw = result.get('confidence_score', 0)
@@ -722,8 +705,7 @@ class MarketAnalysisWorker:
                 <!-- Synthèse Actionnable (structured_data) -->
                 {f'<div class="section"><h3>✅ Synthèse Actionnable</h3>{actionable_html}</div>' if actionable_html else ''}
                 
-                <!-- Sources -->
-                {f'<div class="section"><h3>📚 Sources</h3><ul>{sources_html}</ul></div>' if sources_html else ''}
+                
                 
                 <div class="footer">
                     <p>Rapport généré automatiquement par le système BONVIN Collection</p>
