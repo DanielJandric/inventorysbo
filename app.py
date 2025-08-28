@@ -1246,10 +1246,11 @@ L'objet "<strong>{item_data.get('name', 'N/A')}</strong>" de la catégorie "<str
             
             subject = f"📰 Rapport de Marché - {report_date}"
             
-            # Utiliser la version robuste si disponible
-            if hasattr(self, '_create_market_report_html_v2'):
+            # Utiliser systématiquement la version robuste (fallback en cas d'erreur)
+            try:
                 html_content = self._create_market_report_html_v2(report_date, report_time, report_content)
-            else:
+            except Exception as _e_html_v2:
+                logger.warning(f"email_v2: fallback vers rendu simple: {_e_html_v2}")
                 html_content = self._create_market_report_html(report_date, report_time, report_content)
             
             # Créer le contenu texte

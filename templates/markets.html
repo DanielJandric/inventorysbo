@@ -40,6 +40,9 @@
         .glowing-element::before { content:''; position:absolute; inset:0; border-radius:inherit; background: radial-gradient(circle at 50% 50%, var(--glass-glow), transparent 70%); filter: blur(30px); opacity:.6; z-index:-1; transition: opacity .3s ease; }
         .glowing-element:hover::before, .glowing-element.is-active::before { opacity: 1; }
         /* Chat simple (rollback) */
+        /* Robust wrapping for long content */
+        .break-any { word-break: break-word; overflow-wrap: anywhere; }
+        .wrap-pre { white-space: pre-wrap; }
     </style>
 </head>
 <body class="h-full">
@@ -116,7 +119,7 @@
                     <h2 class="text-xl font-semibold">Chatbot Marchés</h2>
                 </div>
                 <div id="chatbox" class="space-y-3">
-                    <div id="chat-messages" class="bg-white/5 border border-white/10 rounded-xl p-4 h-64 overflow-y-auto overflow-x-hidden text-sm space-y-2 scroll-smooth overscroll-contain"></div>
+                    <div id="chat-messages" class="bg-white/5 border border-white/10 rounded-xl p-4 h-64 overflow-y-auto overflow-x-hidden text-sm space-y-2 scroll-smooth overscroll-contain break-any wrap-pre"></div>
                     <div class="flex gap-2">
                         <input id="chat-input" class="flex-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10" placeholder="Posez votre question (ex: patterns, risques, scénarios)..."/>
                         <button id="chat-send" class="px-4 py-2 rounded-lg bg-cyan-500/20 border border-cyan-400/30 hover:bg-cyan-500/30">Envoyer</button>
@@ -235,17 +238,17 @@
                         ${analysis.executive_summary ? `
                         <div class="glass p-4 rounded-xl lg:col-span-2 bg-gradient-to-r from-cyan-900/20 to-blue-900/20 border border-cyan-400/30">
                             <h5 class="font-bold mb-3 text-cyan-200"><i class="fas fa-chart-bar mr-2"></i>EXECUTIVE SUMMARY</h5>
-                            <div class="space-y-2 text-cyan-100 font-medium">
-                                ${(analysis.executive_summary || []).map(point => `<div class="pl-2">${point}</div>`).join('')}
+                            <div class="space-y-2 text-cyan-100 font-medium break-any">
+                                ${(analysis.executive_summary || []).map(point => `<div class="pl-2 break-any">${point}</div>`).join('')}
                             </div>
                         </div>
                         ` : ''}
                         <!-- Analyse IA (cartes colorées sobres) -->
-                        <div class="glass p-4 rounded-xl bg-indigo-500/10 border border-indigo-400/30"><h6 class="font-medium mb-2"><i class="fas fa-chart-line mr-2"></i>Résumé</h6><p class="text-indigo-100/80 text-sm">${analysis.summary || 'N/A'}</p></div>
-                        <div class="glass p-4 rounded-xl bg-fuchsia-500/10 border border-fuchsia-400/30"><h6 class="font-medium mb-2"><i class="fas fa-list mr-2"></i>Points Clés</h6><ul class="list-disc list-inside text-fuchsia-100/90 text-sm">${(analysis.key_points || []).map(p => `<li>${p}</li>`).join('')}</ul></div>
-                        <div class="glass p-4 rounded-xl bg-amber-500/10 border border-amber-400/30"><h6 class="font-medium mb-2"><i class="fas fa-lightbulb mr-2"></i>Insights</h6><ul class="list-disc list-inside text-amber-100/90 text-sm">${(analysis.insights || []).map(p => `<li>${p}</li>`).join('')}</ul></div>
-                        <div class="glass p-4 rounded-xl bg-rose-500/10 border border-rose-400/30"><h6 class="font-medium mb-2"><i class="fas fa-exclamation-triangle mr-2"></i>Risques</h6><ul class="list-disc list-inside text-rose-100/90 text-sm">${(analysis.risks || []).map(p => `<li>${p}</li>`).join('')}</ul></div>
-                        <div class="glass p-4 rounded-xl lg:col-span-2 bg-emerald-500/10 border border-emerald-400/30"><h6 class="font-medium mb-2"><i class="fas fa-star mr-2"></i>Opportunités</h6><ul class="list-disc list-inside text-emerald-100/90 text-sm">${(analysis.opportunities || []).map(p => `<li>${p}</li>`).join('')}</ul></div>
+                        <div class="glass p-4 rounded-xl bg-indigo-500/10 border border-indigo-400/30"><h6 class="font-medium mb-2"><i class="fas fa-chart-line mr-2"></i>Résumé</h6><p class="text-indigo-100/80 text-sm break-any wrap-pre">${analysis.summary || 'N/A'}</p></div>
+                        <div class="glass p-4 rounded-xl bg-fuchsia-500/10 border border-fuchsia-400/30"><h6 class="font-medium mb-2"><i class="fas fa-list mr-2"></i>Points Clés</h6><ul class="list-disc list-inside text-fuchsia-100/90 text-sm break-any">${(analysis.key_points || []).map(p => `<li class='break-any'>${p}</li>`).join('')}</ul></div>
+                        <div class="glass p-4 rounded-xl bg-amber-500/10 border border-amber-400/30"><h6 class="font-medium mb-2"><i class="fas fa-lightbulb mr-2"></i>Insights</h6><ul class="list-disc list-inside text-amber-100/90 text-sm break-any">${(analysis.insights || []).map(p => `<li class='break-any'>${p}</li>`).join('')}</ul></div>
+                        <div class="glass p-4 rounded-xl bg-rose-500/10 border border-rose-400/30"><h6 class="font-medium mb-2"><i class="fas fa-exclamation-triangle mr-2"></i>Risques</h6><ul class="list-disc list-inside text-rose-100/90 text-sm break-any">${(analysis.risks || []).map(p => `<li class='break-any'>${p}</li>`).join('')}</ul></div>
+                        <div class="glass p-4 rounded-xl lg:col-span-2 bg-emerald-500/10 border border-emerald-400/30"><h6 class="font-medium mb-2"><i class="fas fa-star mr-2"></i>Opportunités</h6><ul class="list-disc list-inside text-emerald-100/90 text-sm break-any">${(analysis.opportunities || []).map(p => `<li class='break-any'>${p}</li>`).join('')}</ul></div>
                         
                     </div>`;
             }
@@ -267,15 +270,38 @@
                     }
                     container.innerHTML = data.items.map((a) => {
                         const id = a.id;
-                        // Rendu enrichi: on autorise quelques marqueurs Markdown légers (**gras**) -> <strong>
-                        let htmlSummary = (a.summary || '')
+                        // Helpers: normalize lists and pick narrative
+                        const normalizeList = (val) => {
+                            if (!val) return [];
+                            if (Array.isArray(val)) return val.map(x => String(x)).filter(Boolean);
+                            const s = String(val || '').replace(/\r/g, '\n');
+                            return s.split(/\n+/).map(p => p.trim().replace(/^[-•*]\s*/, '')).filter(Boolean);
+                        };
+                        const pickSummary = (obj) => {
+                            const s = (obj.summary || '').trim();
+                            if (s) return s;
+                            try { return (obj.structured_data && obj.structured_data.deep_analysis && obj.structured_data.deep_analysis.narrative) || ''; } catch {}
+                            try { return (obj.deep_analysis && obj.deep_analysis.narrative) || ''; } catch {}
+                            return '';
+                        };
+                        // Summary with minimal markdown and emojis retained
+                        let htmlSummary = pickSummary(a)
                           .replace(/\*\*(.*?)\*\*/g, '<strong>$1<\/strong>')
-                          .replace(/\n/g, '<br/>' )
+                          .replace(/\n/g, '<br\/>' )
                           .replace(/↑/g, '<span class="text-green-400">↑<\/span>')
                           .replace(/↓/g, '<span class="text-red-400">↓<\/span>')
                           .replace(/🟢/g, '<span class="text-green-400">🟢<\/span>')
                           .replace(/🔴/g, '<span class="text-red-400">🔴<\/span>');
-                        const execHtml = (a.executive_summary || []).map(p => `<li>${p}</li>`).join('');
+                        const execArr = normalizeList(a.executive_summary);
+                        const keyArr = normalizeList(a.key_points);
+                        const insArr = normalizeList(a.insights);
+                        const riskArr = normalizeList(a.risks);
+                        const oppArr = normalizeList(a.opportunities);
+                        const execHtml = execArr.map(p => `<li class='break-any'>${p}</li>`).join('');
+                        const keyHtml = keyArr.map(p => `<li class='break-any'>${p}</li>`).join('');
+                        const insHtml = insArr.map(p => `<li class='break-any'>${p}</li>`).join('');
+                        const riskHtml = riskArr.map(p => `<li class='break-any'>${p}</li>`).join('');
+                        const oppHtml = oppArr.map(p => `<li class='break-any'>${p}</li>`).join('');
                         const fullHtml = `
                           <article class="glass p-4 rounded-2xl">
                             <header class="flex items-center justify-between gap-3">
@@ -285,8 +311,12 @@
                               </div>
                               <button data-id="${id}" class="delete-btn px-3 py-1.5 rounded-lg bg-red-500/20 border border-red-500/40 text-red-200 text-xs hover:bg-red-500/30">Supprimer</button>
                             </header>
-                            ${a.executive_summary ? `<div class='mt-3'><h6 class='font-semibold mb-1'>Executive Summary</h6><ul class='text-sm text-cyan-100/90 list-disc list-inside'>${execHtml}</ul></div>` : ''}
-                            ${htmlSummary ? `<div class='mt-3 text-sm leading-6'>${htmlSummary}</div>` : ''}
+                            ${execArr.length ? `<div class='mt-3'><h6 class='font-semibold mb-1'>Executive Summary</h6><ul class='text-sm text-cyan-100/90 list-disc list-inside break-any'>${execHtml}</ul></div>` : ''}
+                            ${htmlSummary ? `<div class='mt-3 text-sm leading-6 break-any wrap-pre'>${htmlSummary}</div>` : ''}
+                            ${keyArr.length ? `<div class='mt-3'><h6 class='font-semibold mb-1'>Points clés</h6><ul class='text-sm text-cyan-100/90 list-disc list-inside break-any'>${keyHtml}</ul></div>` : ''}
+                            ${insArr.length ? `<div class='mt-3'><h6 class='font-semibold mb-1'>Insights</h6><ul class='text-sm text-cyan-100/90 list-disc list-inside break-any'>${insHtml}</ul></div>` : ''}
+                            ${riskArr.length ? `<div class='mt-3'><h6 class='font-semibold mb-1'>Risques</h6><ul class='text-sm text-cyan-100/90 list-disc list-inside break-any'>${riskHtml}</ul></div>` : ''}
+                            ${oppArr.length ? `<div class='mt-3'><h6 class='font-semibold mb-1'>Opportunités</h6><ul class='text-sm text-cyan-100/90 list-disc list-inside break-any'>${oppHtml}</ul></div>` : ''}
                           </article>`;
                         return fullHtml;
                     }).join('');
