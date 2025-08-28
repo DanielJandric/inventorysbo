@@ -229,13 +229,88 @@ class ScrapingBeeScraper:
             'https://www.cnn.com/business',
         ]
 
-        # Collecter des liens
-        yf_links = await _gather_domain('finance.yahoo.com', yahoo_starts, _is_yf_article, per_site * 2)
-        mw_links = await _gather_domain('www.marketwatch.com', marketwatch_starts, _is_mw_article, per_site * 2)
-        cnn_links = await _gather_domain('www.cnn.com', cnn_starts, _is_cnn_article, per_site * 2)
+        # RSS helpers (contournent headers trop longs et anti‑bot JS)
+        async def _fetch_rss_items(feeds: List[str], source_name: str, max_items: int) -> List[ScrapedData]:
+            items: List[ScrapedData] = []
+            try:
+                import xml.etree.ElementTree as ET  # lightweight
+            except Exception:
+                return items
+            async with aiohttp.ClientSession() as session:
+                for f in feeds:
+                    try:
+                        async with session.get(f, timeout=15) as resp:
+                            if resp.status != 200:
+                                continue
+                            text = await resp.text()
+                            try:
+                                root = ET.fromstring(text)
+                            except Exception:
+                                continue
+                            # RSS 2.0: channel/item
+                            for item in root.findall('.//item'):
+                                try:
+                                    link_el = item.find('link')
+                                    title_el = item.find('title')
+                                    desc_el = item.find('description')
+                                    pub_el = item.find('pubDate')
+                                    link = (link_el.text or '').strip() if link_el is not None else ''
+                                    title = (title_el.text or '').strip() if title_el is not None else link[:120]
+                                    desc = (desc_el.text or '').strip() if desc_el is not None else ''
+                                    ts = self._parse_datetime_str(pub_el.text) if pub_el is not None else None
+                                    if not link:
+                                        continue
+                                    if not _is_recent_dt(ts):
+                                        continue
+                                    # Content depuis description (fallback)
+                                    items.append(ScrapedData(
+                                        url=link,
+                                        title=title[:120],
+                                        content=desc[:4000],
+                                        timestamp=ts or datetime.now(),
+                                        metadata={'source': source_name, 'from': 'rss'}
+                                    ))
+                                    if len(items) >= max_items:
+                                        break
+                                except Exception:
+                                    continue
+                    except Exception:
+                        continue
+            return items
+
+        # Collecter des liens/articles via RSS en priorité
+        yf_rss = [
+            'https://finance.yahoo.com/news/rssindex',
+            'https://finance.yahoo.com/rss/topstories',
+        ]
+        mw_rss = [
+            'https://feeds.marketwatch.com/marketwatch/topstories/',
+            'https://feeds.marketwatch.com/marketwatch/marketpulse/',
+        ]
+        cnn_rss = [
+            'https://rss.cnn.com/rss/edition_world.rss',
+            'https://rss.cnn.com/rss/edition_business.rss',
+            'https://rss.cnn.com/rss/money_news_international.rss',
+        ]
+
+        rss_items: List[ScrapedData] = []
+        rss_items += await _fetch_rss_items(yf_rss, 'yahoo_finance', per_site * 2)
+        rss_items += await _fetch_rss_items(mw_rss, 'marketwatch', per_site * 2)
+        rss_items += await _fetch_rss_items(cnn_rss, 'cnn', per_site * 2)
+
+        # Fallback domain crawl si RSS insuffisant
+        yf_links = []
+        mw_links = []
+        cnn_links = []
+        if len([i for i in rss_items if i.metadata.get('source') == 'yahoo_finance']) < per_site:
+            yf_links = await _gather_domain('finance.yahoo.com', yahoo_starts, _is_yf_article, per_site * 2)
+        if len([i for i in rss_items if i.metadata.get('source') == 'marketwatch']) < per_site:
+            mw_links = await _gather_domain('www.marketwatch.com', marketwatch_starts, _is_mw_article, per_site * 2)
+        if len([i for i in rss_items if i.metadata.get('source') == 'cnn']) < per_site:
+            cnn_links = await _gather_domain('www.cnn.com', cnn_starts, _is_cnn_article, per_site * 2)
 
         # Scraper les pages et filtrer
-        items: List[ScrapedData] = []
+        items: List[ScrapedData] = list(rss_items)
         async def _scrape_links(links: List[str], source_name: str):
             for url in links[:per_site]:
                 try:
@@ -262,9 +337,12 @@ class ScrapingBeeScraper:
                 except Exception:
                     continue
 
-        await _scrape_links(yf_links, 'yahoo_finance')
-        await _scrape_links(mw_links, 'marketwatch')
-        await _scrape_links(cnn_links, 'cnn')
+        if yf_links:
+            await _scrape_links(yf_links, 'yahoo_finance')
+        if mw_links:
+            await _scrape_links(mw_links, 'marketwatch')
+        if cnn_links:
+            await _scrape_links(cnn_links, 'cnn')
 
         # Assurer un minimum de caractères
         def _total_chars(data: List[ScrapedData]) -> int:
