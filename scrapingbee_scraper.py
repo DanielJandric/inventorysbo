@@ -152,7 +152,7 @@ class ScrapingBeeScraper:
         
         return results
 
-    async def search_and_scrape_deep(self, topic_query: str, per_site: int = 12, max_age_hours: int = 48, min_chars: int = 25000) -> List[ScrapedData]:
+    async def search_and_scrape_deep(self, topic_query: str, per_site: int = 12, max_age_hours: int = 72, min_chars: int = 25000) -> List[ScrapedData]:
         """Scrape en profondeur uniquement Yahoo Finance, MarketWatch et CNN, en retenant les articles récents.
 
         - Sites: finance.yahoo.com, marketwatch.com, cnn.com (world/business)
@@ -236,17 +236,32 @@ class ScrapingBeeScraper:
                 import xml.etree.ElementTree as ET  # lightweight
             except Exception:
                 return items
-            async with aiohttp.ClientSession() as session:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119 Safari/537.36'
+            }
+            async with aiohttp.ClientSession(headers=headers) as session:
                 for f in feeds:
                     try:
+                        # Essai direct
+                        text = None
                         async with session.get(f, timeout=15) as resp:
-                            if resp.status != 200:
-                                continue
-                            text = await resp.text()
-                            try:
-                                root = ET.fromstring(text)
-                            except Exception:
-                                continue
+                            if resp.status == 200:
+                                text = await resp.text()
+                        # Fallback via ScrapingBee proxy (sans JS)
+                        if not text:
+                            async with session.get(self.base_url, params={
+                                'api_key': self.api_key,
+                                'url': f,
+                                'render_js': 'false'
+                            }, timeout=20) as r2:
+                                if r2.status == 200:
+                                    text = await r2.text()
+                        if not text:
+                            continue
+                        try:
+                            root = ET.fromstring(text)
+                        except Exception:
+                            continue
                             # RSS 2.0: channel/item
                             for item in root.findall('.//item'):
                                 try:
@@ -274,6 +289,8 @@ class ScrapingBeeScraper:
                                         break
                                 except Exception:
                                     continue
+                            # Atom: feed/entry (optionnel, ignoré si absent)
+                            # Simplifié pour éviter erreurs d'analyse; RSS suffit pour nos besoins
                     except Exception:
                         continue
             return items
@@ -294,9 +311,9 @@ class ScrapingBeeScraper:
         ]
 
         rss_items: List[ScrapedData] = []
-        rss_items += await _fetch_rss_items(yf_rss, 'yahoo_finance', per_site * 2)
-        rss_items += await _fetch_rss_items(mw_rss, 'marketwatch', per_site * 2)
-        rss_items += await _fetch_rss_items(cnn_rss, 'cnn', per_site * 2)
+        rss_items += await _fetch_rss_items(yf_rss, 'yahoo_finance', per_site * 3)
+        rss_items += await _fetch_rss_items(mw_rss, 'marketwatch', per_site * 3)
+        rss_items += await _fetch_rss_items(cnn_rss, 'cnn', per_site * 3)
 
         # Fallback domain crawl SI explicitement autorisé
         yf_links = []
@@ -315,6 +332,10 @@ class ScrapingBeeScraper:
 
         # Scraper les pages et filtrer
         items: List[ScrapedData] = list(rss_items)
+        # Préparer les URLs issues des RSS pour enrichir le contenu (sans domain crawl)
+        rss_yf_links = [i.url for i in rss_items if i.metadata.get('source') == 'yahoo_finance']
+        rss_mw_links = [i.url for i in rss_items if i.metadata.get('source') == 'marketwatch']
+        rss_cnn_links = [i.url for i in rss_items if i.metadata.get('source') == 'cnn']
         async def _scrape_links(links: List[str], source_name: str):
             for url in links[:per_site]:
                 try:
@@ -340,6 +361,11 @@ class ScrapingBeeScraper:
                     ))
                 except Exception:
                     continue
+
+        # Enrichir d'abord à partir des liens RSS (texte complet)
+        await _scrape_links(rss_yf_links, 'yahoo_finance')
+        await _scrape_links(rss_mw_links, 'marketwatch')
+        await _scrape_links(rss_cnn_links, 'cnn')
 
         if yf_links:
             await _scrape_links(yf_links, 'yahoo_finance')
@@ -378,10 +404,18 @@ class ScrapingBeeScraper:
                     except Exception:
                         continue
 
-            await _scrape_more(yf_links, 'yahoo_finance')
+            # Essayer d'abord plus d'articles depuis les liens RSS
+            await _scrape_more(rss_yf_links, 'yahoo_finance')
             if _total_chars(items + extra_items) < min_chars:
+                await _scrape_more(rss_mw_links, 'marketwatch')
+            if _total_chars(items + extra_items) < min_chars:
+                await _scrape_more(rss_cnn_links, 'cnn')
+            # Si autorisé, compléter via un crawl léger
+            if allow_crawl and _total_chars(items + extra_items) < min_chars:
+                await _scrape_more(yf_links, 'yahoo_finance')
+            if allow_crawl and _total_chars(items + extra_items) < min_chars:
                 await _scrape_more(mw_links, 'marketwatch')
-            if _total_chars(items + extra_items) < min_chars:
+            if allow_crawl and _total_chars(items + extra_items) < min_chars:
                 await _scrape_more(cnn_links, 'cnn')
             items.extend(extra_items)
 
