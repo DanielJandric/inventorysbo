@@ -89,6 +89,7 @@ class MarketsChatWorker:
                 reasoning={"effort": "high"},
                 max_output_tokens=self.max_output_tokens,
                 store=False,
+                response_format={"type": "text"},
             )
             text = (extract_output_text(res) or "").strip()
         except Exception:
@@ -103,6 +104,7 @@ class MarketsChatWorker:
                     messages=typed_messages,
                     reasoning_effort="high",
                     max_output_tokens=self.max_output_tokens,
+                    response_format={"type": "text"},
                 )
                 text = (extract_output_text(res2) or "").strip()
             except Exception:
