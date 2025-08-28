@@ -149,26 +149,89 @@ class MarketAnalysisWorker:
                 raise ValueError(result['error'])
 
             processing_time = int(time.time() - start_time)
-            
+
             logger.info(f"📊 Résultats obtenus:")
             logger.info(f"   - Executive Summary: {len(result.get('executive_summary', []))} points")
             logger.info(f"   - Résumé: {len(result.get('summary', ''))} caractères")
             logger.info(f"   - Points clés: {len(result.get('key_points', []))} points")
             logger.info(f"   - Insights: {len(result.get('insights', []))} insights")
             logger.info(f"   - Sources: {len(result.get('sources', []))} sources")
-            
-            # 4. Mettre à jour la tâche avec les résultats complets
+
+            # Derivations for missing sections (frontend/UI completeness)
+            def _norm_list(val):
+                try:
+                    if val is None:
+                        return []
+                    if isinstance(val, list):
+                        return [str(x).strip() for x in val if str(x).strip()]
+                    s = str(val or '').replace('\r', '\n')
+                    parts = [p.strip(' -•*\t') for p in s.split('\n')]
+                    return [p for p in parts if p]
+                except Exception:
+                    return []
+
+            def _derive_from_summary(text: str, max_items: int = 8) -> list:
+                try:
+                    if not text:
+                        return []
+                    s = str(text).replace('\r', '\n')
+                    # Split by sentence-ish separators
+                    for sep in ['\n\n', '\n', '. ']:
+                        parts = [p.strip() for p in s.split(sep) if p.strip()]
+                        if len(parts) >= 2:
+                            break
+                    else:
+                        parts = [s]
+                    # Keep concise bullets
+                    bullets = []
+                    for p in parts:
+                        if len(p) > 2:
+                            bullets.append(p if p.endswith('.') else p + '.')
+                        if len(bullets) >= max_items:
+                            break
+                    return bullets
+                except Exception:
+                    return []
+
+            exec_summary = _norm_list(result.get('executive_summary', []))
+            key_points = _norm_list(result.get('key_points', []))
+            insights = _norm_list(result.get('insights', []))
+
+            # Derive key_points from exec summary or summary if empty
+            if not key_points:
+                if exec_summary:
+                    key_points = exec_summary[:10]
+                else:
+                    key_points = _derive_from_summary(result.get('summary', ''), max_items=8)
+
+            # Derive insights from meta_analysis.key_drivers if empty
+            if not insights:
+                try:
+                    meta = (result.get('structured_data') or {}).get('meta_analysis') or result.get('meta_analysis') or {}
+                    kd = meta.get('key_drivers') or {}
+                    cand = []
+                    if isinstance(kd.get('primary'), str) and kd.get('primary').strip():
+                        cand.append(kd.get('primary').strip())
+                    for lbl in ['secondary', 'emerging']:
+                        arr = kd.get(lbl) or []
+                        if isinstance(arr, list):
+                            cand += [str(x).strip() for x in arr if str(x).strip()]
+                    insights = cand[:8] if cand else insights
+                except Exception:
+                    pass
+
+            # 4. Mettre à jour la tâche avec les résultats complets (avec dérivations)
             update_data = {
-                'executive_summary': result.get('executive_summary', []),
+                'executive_summary': exec_summary,
                 'summary': result.get('summary'),
-                'key_points': result.get('key_points', []),
+                'key_points': key_points,
                 'structured_data': result.get('structured_data', {}),
                 'geopolitical_analysis': result.get('geopolitical_analysis', {}),
                 'economic_indicators': result.get('economic_indicators', {}),
-                'insights': result.get('insights', []),
+                'insights': insights,
                 'risks': result.get('risks', []),
                 'opportunities': result.get('opportunities', []),
-                'sources': [],
+                'sources': result.get('sources', []),
                 'confidence_score': result.get('confidence_score', 0.0),
                 'worker_status': 'completed',
                 'processing_time_seconds': processing_time
