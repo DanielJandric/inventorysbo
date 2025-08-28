@@ -1523,7 +1523,9 @@ Ce rapport a été généré automatiquement par votre système de gestion
                 return []
 
         parsed = _safe_parse_json(report_content)
-        has_structured = isinstance(parsed, dict) and (parsed.get('executive_summary') is not None or parsed.get('summary') is not None)
+        has_structured = isinstance(parsed, dict) and any(k in parsed for k in [
+            'executive_summary', 'summary', 'deep_analysis', 'structured_data', 'executive_dashboard', 'meta_analysis'
+        ])
         
         # Logs détaillés pour debug
         try:
@@ -1543,7 +1545,20 @@ Ce rapport a été généré automatiquement par votre système de gestion
             insights = _normalize_list(parsed.get('insights'))
             risks = _normalize_list(parsed.get('risks'))
             opportunities = _normalize_list(parsed.get('opportunities'))
-            summary_text = str(parsed.get('summary') or '').strip()
+            try:
+                # Fallback vers deep_analysis.narrative si 'summary' absent
+                deep_narr = ''
+                try:
+                    deep_narr = str((parsed.get('deep_analysis') or {}).get('narrative') or '').strip()
+                except Exception:
+                    deep_narr = ''
+                try:
+                    deep_narr2 = str(((parsed.get('structured_data') or {}).get('deep_analysis') or {}).get('narrative') or '').strip()
+                except Exception:
+                    deep_narr2 = ''
+                summary_text = str(parsed.get('summary') or deep_narr or deep_narr2 or '').strip()
+            except Exception:
+                summary_text = str(parsed.get('summary') or '').strip()
             # Si pas de bullets, tenter de dériver un mini exec summary depuis key_points/summary
             if not executive_summary:
                 if key_points:
@@ -1553,6 +1568,20 @@ Ce rapport a été généré automatiquement par votre système de gestion
                         # découpes naïves: phrases séparées par '.'
                         pts = [p.strip() for p in summary_text.split('.') if p.strip()]
                         executive_summary = [x + '.' for x in pts[:8]]
+                    except Exception:
+                        executive_summary = []
+                else:
+                    # Fallback ultime: dériver depuis meta_analysis.key_drivers
+                    try:
+                        kd = (parsed.get('meta_analysis') or {}).get('key_drivers') or {}
+                        bullets = []
+                        if kd.get('primary'):
+                            bullets.append(str(kd.get('primary')).strip())
+                        for lbl in ['secondary', 'emerging']:
+                            arr = kd.get(lbl) or []
+                            if isinstance(arr, list) and arr:
+                                bullets.extend([str(x).strip() for x in arr if str(x).strip()])
+                        executive_summary = bullets[:10]
                     except Exception:
                         executive_summary = []
 
