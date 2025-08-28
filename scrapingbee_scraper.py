@@ -309,18 +309,37 @@ class ScrapingBeeScraper:
             'https://rss.cnn.com/rss/edition_business.rss',
             'https://rss.cnn.com/rss/money_news_international.rss',
         ]
+        # Flux RSS alternatifs et fallbacks
+        alt_rss = [
+            'https://feeds.reuters.com/reuters/businessNews',
+            'https://feeds.reuters.com/reuters/technologyNews',
+            'https://feeds.bloomberg.com/markets/news.rss',
+            'https://feeds.bloomberg.com/politics/news.rss',
+            'https://www.ft.com/rss/home',
+            'https://www.ft.com/rss/world',
+            'https://www.ft.com/rss/companies',
+            'https://www.cnbc.com/id/100003114/device/rss/rss.xml',
+            'https://www.cnbc.com/id/10000664/device/rss/rss.xml',
+        ]
 
         rss_items: List[ScrapedData] = []
         rss_items += await _fetch_rss_items(yf_rss, 'yahoo_finance', per_site * 3)
         rss_items += await _fetch_rss_items(mw_rss, 'marketwatch', per_site * 3)
         rss_items += await _fetch_rss_items(cnn_rss, 'cnn', per_site * 3)
+        # Fallback vers des flux alternatifs si les principaux échouent
+        if len(rss_items) < per_site * 2:
+            logger.info(f"📰 RSS principal: {len(rss_items)} articles, ajout de flux alternatifs...")
+            rss_items += await _fetch_rss_items(alt_rss, 'alternative', per_site * 2)
+        logger.info(f"📰 Total RSS collecté: {len(rss_items)} articles")
 
         # Fallback domain crawl SI explicitement autorisé
         yf_links = []
         mw_links = []
         cnn_links = []
-        allow_crawl = os.getenv('ALLOW_DOMAIN_CRAWL', 'false').lower() == 'true'
+        # Autoriser le crawl si RSS insuffisant OU si explicitement configuré
+        allow_crawl = (len(rss_items) < per_site * 2) or (os.getenv('ALLOW_DOMAIN_CRAWL', 'false').lower() == 'true')
         if allow_crawl:
+            logger.info(f"📰 Domain crawl activé (RSS insuffisant: {len(rss_items)} < {per_site * 2})")
             if len([i for i in rss_items if i.metadata.get('source') == 'yahoo_finance']) < per_site:
                 yf_links = await _gather_domain('finance.yahoo.com', yahoo_starts, _is_yf_article, per_site * 2)
             if len([i for i in rss_items if i.metadata.get('source') == 'marketwatch']) < per_site:
@@ -336,6 +355,49 @@ class ScrapingBeeScraper:
         rss_yf_links = [i.url for i in rss_items if i.metadata.get('source') == 'yahoo_finance']
         rss_mw_links = [i.url for i in rss_items if i.metadata.get('source') == 'marketwatch']
         rss_cnn_links = [i.url for i in rss_items if i.metadata.get('source') == 'cnn']
+        
+        # Ajouter des sites d'actualités financières directes si RSS insuffisant
+        if len(rss_items) < per_site:
+            logger.info("📰 Ajout de sites d'actualités financières directes...")
+            direct_sites = [
+                'https://www.reuters.com/markets/',
+                'https://www.bloomberg.com/markets',
+                'https://www.ft.com/markets',
+                'https://www.cnbc.com/markets/',
+            ]
+            for site in direct_sites:
+                try:
+                    html = await self._scrape_with_params(site, {
+                        'render_js': 'false',
+                        'premium_proxy': 'true',
+                        'block_resources': 'true',
+                        'wait': '1200',
+                        'country_code': 'us',
+                    })
+                    if html:
+                        from bs4 import BeautifulSoup
+                        soup = BeautifulSoup(html, 'lxml')
+                        for a in soup.find_all('a', href=True):
+                            href = a.get('href')
+                            if href and any(domain in href for domain in ['/news/', '/story/', '/article/']):
+                                if href.startswith('/'):
+                                    href = f"https://{site.split('/')[2]}{href}"
+                                if href not in [i.url for i in items]:
+                                    items.append(ScrapedData(
+                                        url=href,
+                                        title=a.get_text()[:120] or href[:120],
+                                        content='',
+                                        timestamp=datetime.now(),
+                                        metadata={'source': 'direct_scrape', 'scraped_at': datetime.now().isoformat()}
+                                    ))
+                                    if len(items) >= per_site * 2:
+                                        break
+                        if len(items) >= per_site * 2:
+                            break
+                except Exception as e:
+                    logger.warning(f"⚠️ Erreur scraping direct {site}: {e}")
+                    continue
+
         async def _scrape_links(links: List[str], source_name: str):
             for url in links[:per_site]:
                 try:
