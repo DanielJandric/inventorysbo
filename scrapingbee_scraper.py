@@ -298,16 +298,20 @@ class ScrapingBeeScraper:
         rss_items += await _fetch_rss_items(mw_rss, 'marketwatch', per_site * 2)
         rss_items += await _fetch_rss_items(cnn_rss, 'cnn', per_site * 2)
 
-        # Fallback domain crawl si RSS insuffisant
+        # Fallback domain crawl SI explicitement autorisé
         yf_links = []
         mw_links = []
         cnn_links = []
-        if len([i for i in rss_items if i.metadata.get('source') == 'yahoo_finance']) < per_site:
-            yf_links = await _gather_domain('finance.yahoo.com', yahoo_starts, _is_yf_article, per_site * 2)
-        if len([i for i in rss_items if i.metadata.get('source') == 'marketwatch']) < per_site:
-            mw_links = await _gather_domain('www.marketwatch.com', marketwatch_starts, _is_mw_article, per_site * 2)
-        if len([i for i in rss_items if i.metadata.get('source') == 'cnn']) < per_site:
-            cnn_links = await _gather_domain('www.cnn.com', cnn_starts, _is_cnn_article, per_site * 2)
+        allow_crawl = os.getenv('ALLOW_DOMAIN_CRAWL', 'false').lower() == 'true'
+        if allow_crawl:
+            if len([i for i in rss_items if i.metadata.get('source') == 'yahoo_finance']) < per_site:
+                yf_links = await _gather_domain('finance.yahoo.com', yahoo_starts, _is_yf_article, per_site * 2)
+            if len([i for i in rss_items if i.metadata.get('source') == 'marketwatch']) < per_site:
+                mw_links = await _gather_domain('www.marketwatch.com', marketwatch_starts, _is_mw_article, per_site * 2)
+            if len([i for i in rss_items if i.metadata.get('source') == 'cnn']) < per_site:
+                cnn_links = await _gather_domain('www.cnn.com', cnn_starts, _is_cnn_article, per_site * 2)
+        else:
+            logger.info("📰 Deep scrape: RSS-only mode (domain crawl disabled)")
 
         # Scraper les pages et filtrer
         items: List[ScrapedData] = list(rss_items)
