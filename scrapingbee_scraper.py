@@ -152,6 +152,162 @@ class ScrapingBeeScraper:
         
         return results
 
+    async def search_and_scrape_deep(self, topic_query: str, per_site: int = 12, max_age_hours: int = 48, min_chars: int = 25000) -> List[ScrapedData]:
+        """Scrape en profondeur uniquement Yahoo Finance, MarketWatch et CNN, en retenant les articles récents.
+
+        - Sites: finance.yahoo.com, marketwatch.com, cnn.com (world/business)
+        - Filtre: published_at dans les dernières max_age_hours
+        - Objectif: total contenu >= min_chars (sinon tente d'élargir le nombre de liens)
+        """
+        if not self._initialized:
+            await self.initialize()
+
+        def _is_recent_dt(dt: Optional[datetime]) -> bool:
+            try:
+                if not dt:
+                    return False
+                return (datetime.now() - dt) <= timedelta(hours=max_age_hours)
+            except Exception:
+                return False
+
+        async def _gather_domain(domain: str, start_urls: List[str], link_predicate, max_links: int) -> List[str]:
+            links: List[str] = []
+            seen: set = set()
+            for start in start_urls:
+                try:
+                    html = await self._scrape_with_params(start, {
+                        'render_js': 'true',
+                        'premium_proxy': 'false',
+                        'wait': '2000',
+                        'country_code': 'us',
+                    })
+                    if not html:
+                        continue
+                    from bs4 import BeautifulSoup  # type: ignore
+                    soup = BeautifulSoup(html or '', 'lxml')
+                    for a in soup.find_all('a'):
+                        href = a.get('href') or ''
+                        if not href:
+                            continue
+                        if href.startswith('/'):
+                            href = f"https://{domain}{href}"
+                        if (domain in href) and link_predicate(href) and href not in seen:
+                            seen.add(href)
+                            links.append(href)
+                        if len(links) >= max_links:
+                            break
+                except Exception:
+                    continue
+                if len(links) >= max_links:
+                    break
+            return links
+
+        # Heuristiques de liens d'articles par domaine
+        def _is_yf_article(url: str) -> bool:
+            u = url.lower()
+            return ('finance.yahoo.com' in u) and ('/news/' in u or '/video/' in u or '/topic/' in u)
+        def _is_mw_article(url: str) -> bool:
+            u = url.lower()
+            return ('marketwatch.com' in u) and ('/story/' in u or '/press-release/' not in u) and ('/videos/' not in u)
+        def _is_cnn_article(url: str) -> bool:
+            u = url.lower()
+            return ('cnn.com' in u) and ('/world/' in u or '/business/' in u) and ('/live-news/' not in u)
+
+        # Points d'entrée par site
+        yahoo_starts = [
+            'https://finance.yahoo.com/topic/stock-market-news/',
+            'https://finance.yahoo.com/news/',
+        ]
+        marketwatch_starts = [
+            'https://www.marketwatch.com/',
+            'https://www.marketwatch.com/markets',
+            'https://www.marketwatch.com/economy-politics',
+        ]
+        cnn_starts = [
+            'https://www.cnn.com/world',
+            'https://www.cnn.com/business',
+        ]
+
+        # Collecter des liens
+        yf_links = await _gather_domain('finance.yahoo.com', yahoo_starts, _is_yf_article, per_site * 2)
+        mw_links = await _gather_domain('www.marketwatch.com', marketwatch_starts, _is_mw_article, per_site * 2)
+        cnn_links = await _gather_domain('www.cnn.com', cnn_starts, _is_cnn_article, per_site * 2)
+
+        # Scraper les pages et filtrer
+        items: List[ScrapedData] = []
+        async def _scrape_links(links: List[str], source_name: str):
+            for url in links[:per_site]:
+                try:
+                    details = await self._scrape_page_with_metadata(url)
+                    if not details or not details.get('text'):
+                        continue
+                    published_at = details.get('published_at')
+                    if not _is_recent_dt(published_at):
+                        continue
+                    text = details.get('text') or ''
+                    # Filtrer grossièrement sur la requête si précisée
+                    if topic_query and isinstance(topic_query, str):
+                        q = topic_query.lower().strip()
+                        if q and (q not in (text.lower() or '')):
+                            # garder quand même si c'est du market summary générique
+                            pass
+                    items.append(ScrapedData(
+                        url=url,
+                        title=url[:120],
+                        content=text[:8000],
+                        timestamp=published_at or datetime.now(),
+                        metadata={'source': source_name, 'scraped_at': datetime.now().isoformat()}
+                    ))
+                except Exception:
+                    continue
+
+        await _scrape_links(yf_links, 'yahoo_finance')
+        await _scrape_links(mw_links, 'marketwatch')
+        await _scrape_links(cnn_links, 'cnn')
+
+        # Assurer un minimum de caractères
+        def _total_chars(data: List[ScrapedData]) -> int:
+            return sum(len((d.content or '')) for d in data)
+
+        total_chars = _total_chars(items)
+        if total_chars < min_chars:
+            # Essayer d'élargir le nombre de liens (jusqu'à 2x per_site)
+            extra_items: List[ScrapedData] = []
+            async def _scrape_more(links: List[str], source_name: str):
+                for url in links[per_site:per_site*2]:
+                    try:
+                        details = await self._scrape_page_with_metadata(url)
+                        if not details or not details.get('text'):
+                            continue
+                        published_at = details.get('published_at')
+                        if not _is_recent_dt(published_at):
+                            continue
+                        text = details.get('text') or ''
+                        extra_items.append(ScrapedData(
+                            url=url,
+                            title=url[:120],
+                            content=text[:8000],
+                            timestamp=published_at or datetime.now(),
+                            metadata={'source': source_name, 'scraped_at': datetime.now().isoformat()}
+                        ))
+                        if _total_chars(items + extra_items) >= min_chars:
+                            break
+                    except Exception:
+                        continue
+
+            await _scrape_more(yf_links, 'yahoo_finance')
+            if _total_chars(items + extra_items) < min_chars:
+                await _scrape_more(mw_links, 'marketwatch')
+            if _total_chars(items + extra_items) < min_chars:
+                await _scrape_more(cnn_links, 'cnn')
+            items.extend(extra_items)
+
+        # Trier par fraîcheur, limiter au besoin
+        items = [it for it in items if it and it.content]
+        items.sort(key=lambda x: (x.timestamp or datetime.min), reverse=True)
+        logger.info(f"📰 Deep scrape: {len(items)} articles récents | chars={sum(len(i.content) for i in items)}")
+        return items
+
     async def search_x_recent(self, topic_query: str, max_items: int = 6, max_age_hours: int = 2) -> List[ScrapedData]:
         """Scrape X (Twitter) search results for recent posts on a topic.
 
@@ -934,8 +1090,9 @@ Contenu: {data.content[:8000]}
         try:
             logger.info(f"🚀 Début exécution tâche: {task_id}")
             
-            # Scraping - Utiliser 8 sources (sites financiers)
-            scraped_data = await self.search_and_scrape(task.prompt, num_results=8)
+            # Scraping - Deep sur YF, MW, CNN uniquement (min 25k chars)
+            min_chars = int(os.getenv('LLM_MIN_CONTEXT_CHARS', '25000'))
+            scraped_data = await self.search_and_scrape_deep(task.prompt, per_site=12, max_age_hours=48, min_chars=min_chars)
 
             # Ajouter X.com (tweets récents ≤2h) sur la même thématique
             try:
