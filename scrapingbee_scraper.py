@@ -676,12 +676,28 @@ class ScrapingBeeScraper:
             
             client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
             
-            # Préparer le contexte
-            context = self._prepare_context(scraped_data)
-            logger.info(f"🧠 Contexte préparé pour OpenAI ({len(context)} caractères).")
-            logger.info(f"📊 Nombre de sources: {len(scraped_data)}")
-            logger.info(f"📈 Market snapshot disponible: {'Oui' if market_snapshot else 'Non'}")
-            logger.debug(f"Contexte complet pour OpenAI: {context}")
+            # Préparer le contexte (avec limitation stricte)
+            context_complete = self._prepare_context(scraped_data)
+            max_context_chars = int(os.getenv('LLM_CONTEXT_MAX_CHARS', '150000'))
+            if len(context_complete) > max_context_chars:
+                context = context_complete[:max_context_chars]
+                truncated = True
+            else:
+                context = context_complete
+                truncated = False
+            try:
+                snapshot_str = json.dumps(market_snapshot or {}, ensure_ascii=False)
+            except Exception:
+                snapshot_str = '{}'
+            max_snapshot_chars = int(os.getenv('LLM_SNAPSHOT_MAX_CHARS', '60000'))
+            if len(snapshot_str) > max_snapshot_chars:
+                snapshot_str = snapshot_str[:max_snapshot_chars]
+                snapshot_truncated = True
+            else:
+                snapshot_truncated = False
+            logger.info(
+                f"🧠 Contexte OpenAI: context_len={len(context)} (truncated={truncated}) | snapshot_len={len(snapshot_str)} (truncated={snapshot_truncated}) | sources={len(scraped_data)}"
+            )
 
             # Prompt système optimisé (GPT‑5) — verbosité/raisonnement renforcés, géopolitique à jour, indicateurs extraits du scrap
             system_prompt = """
@@ -743,7 +759,7 @@ Contraintes générales:
                         {"role": "system", "content": [{"type": "input_text", "text": system_prompt}]},
                         {"role": "user", "content": [{
                             "type": "input_text",
-                            "text": f"Demande: {prompt}\n\nDONNÉES FACTUELLES (snapshot):\n{json.dumps(market_snapshot, indent=2)}\n\nDONNÉES COLLECTÉES (articles):\n{context}"
+                            "text": f"Demande: {prompt}\n\nDONNÉES FACTUELLES (snapshot):\n{snapshot_str}\n\nDONNÉES COLLECTÉES (articles):\n{context}"
                         }]}
                     ]
                     # Préparer l'appel Responses API avec fallbacks robustes (GPT‑5 par défaut)
@@ -761,16 +777,39 @@ Contraintes générales:
 
                     # Utiliser exclusivement Responses API (JSON garanti)
                     from gpt5_compat import from_responses_simple, extract_output_text
+                    # Schéma JSON strict pour garantir les sections
+                    json_schema = {
+                        "name": "MarketAnalysis",
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "executive_summary": {"type": "array", "items": {"type": "string"}},
+                                "summary": {"type": "string"},
+                                "key_points": {"type": "array", "items": {"type": "string"}},
+                                "structured_data": {"type": "object"},
+                                "geopolitical_analysis": {"type": "object"},
+                                "economic_indicators": {"type": "object"},
+                                "insights": {"type": "array", "items": {"type": "string"}},
+                                "risks": {"type": "array", "items": {"type": "string"}},
+                                "opportunities": {"type": "array", "items": {"type": "string"}},
+                                "sources": {"type": "array"},
+                                "confidence_score": {"type": "number"}
+                            },
+                            "required": ["executive_summary", "summary", "key_points"],
+                            "additionalProperties": True
+                        }
+                    }
+
                     resp = from_responses_simple(
                         client=client,
                         model=os.getenv("AI_MODEL", "gpt-5"),
                         messages=[
                             {"role": "system", "content": [{"type": "input_text", "text": system_prompt}]},
-                            {"role": "user", "content": [{"type": "input_text", "text": f"Demande: {prompt}\n\nDONNÉES FACTUELLES (snapshot):\n{json.dumps(market_snapshot, indent=2)}\n\nDONNÉES COLLECTÉES (articles):\n{context}"}]}
+                            {"role": "user", "content": [{"type": "input_text", "text": f"Demande: {prompt}\n\nDONNÉES FACTUELLES (snapshot):\n{snapshot_str}\n\nDONNÉES COLLECTÉES (articles):\n{context}"}]}
                         ],
                         max_output_tokens=15000,
                         reasoning_effort=os.getenv("AI_REASONING_EFFORT", "medium"),
-                        response_format={"type": "json_object"}
+                        response_format={"type": "json_schema", "json_schema": json_schema}
                     )
                     raw = extract_output_text(resp) or ""
 
@@ -824,8 +863,33 @@ Contraintes générales:
                             "confidence_score": 0.0,
                         }
 
+                    # Normaliser les champs attendus si manquants
+                    if not isinstance(parsed.get("executive_summary"), list):
+                        parsed["executive_summary"] = []
+                    if not isinstance(parsed.get("key_points"), list):
+                        parsed["key_points"] = []
+                    if not isinstance(parsed.get("insights"), list):
+                        parsed["insights"] = []
+                    if not isinstance(parsed.get("risks"), list):
+                        parsed["risks"] = []
+                    if not isinstance(parsed.get("opportunities"), list):
+                        parsed["opportunities"] = []
+                    if parsed.get("summary") is None:
+                        parsed["summary"] = ""
+
+                    # Dériver un executive_summary minimal si vide
+                    if not parsed["executive_summary"]:
+                        if parsed["key_points"]:
+                            parsed["executive_summary"] = parsed["key_points"][:10]
+                        elif parsed["summary"]:
+                            try:
+                                sents = [p.strip() for p in str(parsed["summary"]).split('.') if p.strip()]
+                                parsed["executive_summary"] = [x + '.' for x in sents[:8]]
+                            except Exception:
+                                parsed["executive_summary"] = []
+
                     result = parsed
-                    logger.info(f"✅ OpenAI a retourné une réponse complète")
+                    logger.info(f"✅ OpenAI a retourné une réponse complète (exec={len(result.get('executive_summary', []))}, key={len(result.get('key_points', []))}, summary_len={len(result.get('summary',''))})")
                     return result
                     
                 except Exception as e:
