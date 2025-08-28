@@ -388,51 +388,30 @@ class StockAPIManager:
         self.yfinance = YFinanceAPI()
         self.fred = FredAPI()
         self.cache = {}
-        self.cache_duration = 300  # 5 minutes
+        # Toujours à jour: désactiver le cache par défaut
+        self.cache_duration = 0
     
     def get_stock_price(self, symbol: str, force_refresh=False) -> Optional[Dict[str, Any]]:
         """
-        Récupère le prix d'une action en essayant les APIs en séquence
-        Alpha Vantage -> EODHD -> Finnhub
+        Récupère le prix d'une action en utilisant EXCLUSIVEMENT yfinance.
+        Retourne: price, change, change_percent, volume, currency, timestamp, source.
         """
-        # Vérifier le cache
-        if not force_refresh and symbol in self.cache:
+        # Vérifier le cache (désactivé si cache_duration=0)
+        if self.cache_duration > 0 and not force_refresh and symbol in self.cache:
             cached_data = self.cache[symbol]
             if time.time() - cached_data['timestamp'] < self.cache_duration:
                 logger.info(f"📋 Données en cache pour {symbol}")
                 return cached_data['data']
-        
-        logger.info(f"🔍 Récupération prix pour {symbol}")
-        
-        # Essayer Alpha Vantage en premier
-        result = self.alpha_vantage.get_stock_price(symbol)
-        if result and result.get('price', 0) > 0:
+
+        logger.info(f"🔍 Récupération prix (yfinance) pour {symbol}")
+        result = self.yfinance.get_stock_price(symbol)
+        if result and result.get('price', 0) is not None and float(result.get('price', 0)) > 0:
             result = self._adjust_currency_for_swiss_stocks(symbol, result)
-            self._cache_result(symbol, result)
-            return result
-        
-        # Essayer EODHD
-        result = self.eodhd.get_stock_price(symbol)
-        if result and result.get('price', 0) > 0:
-            result = self._adjust_currency_for_swiss_stocks(symbol, result)
-            self._cache_result(symbol, result)
-            return result
-        
-        # Essayer Finnhub
-        result = self.finnhub.get_stock_price(symbol)
-        if result and result.get('price', 0) > 0:
-            result = self._adjust_currency_for_swiss_stocks(symbol, result)
-            self._cache_result(symbol, result)
+            if self.cache_duration > 0:
+                self._cache_result(symbol, result)
             return result
 
-        # Essayer yfinance en dernier
-        result = self.yfinance.get_stock_price(symbol)
-        if result and result.get('price', 0) > 0:
-            result = self._adjust_currency_for_swiss_stocks(symbol, result)
-            self._cache_result(symbol, result)
-            return result
-        
-        logger.error(f"❌ Toutes les APIs ont échoué pour {symbol}")
+        logger.error(f"❌ yfinance indisponible pour {symbol}")
         return None
     
     def _cache_result(self, symbol: str, data: Dict[str, Any]):
