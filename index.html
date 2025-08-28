@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="fr" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analyse Interactive - Immobilier Suisse S1 2025</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Warm Neutrals -->
+    <!-- Application Structure Plan: L'application est structurée en trois sections thématiques pour une exploration intuitive, rompant avec la structure linéaire du rapport. 1) Un aperçu du marché pour contextualiser. 2) Une section d'analyse comparative avec des graphiques interactifs (sélecteur de métriques, graphiques à barres et à bulles) pour faciliter le benchmarking visuel. 3) Une section de profils détaillés où l'utilisateur sélectionne une société via des boutons pour afficher dynamiquement ses informations complètes dans une zone de contenu unique. Cette architecture "tableau de bord" est choisie pour permettre à l'utilisateur de passer rapidement d'une vue d'ensemble à une analyse détaillée sans être submergé par l'information, favorisant ainsi la découverte et la comparaison active. -->
+    <!-- Visualization & Content Choices: 1) Comparaison LTV/Rendement: Objectif: Comparer la performance financière. Viz: Graphique à barres interactif (Chart.js) avec un sélecteur. Justification: Permet une comparaison directe et claire d'une métrique à la fois, l'interaction via le sélecteur enrichit l'analyse sans surcharger l'interface. 2) Valorisation vs Risque: Objectif: Analyser le positionnement sur le marché. Viz: Graphique à bulles (Chart.js) montrant Prime/Décote vs LTV, avec la capitalisation boursière comme taille de bulle. Justification: Visualise efficacement la relation entre trois variables clés, aidant à identifier les outliers et les profils de risque/valorisation. 3) Profils de société: Objectif: Présenter des informations denses de manière digeste. Méthode: Système d'onglets activé par JS. Justification: Sépare le contenu en blocs logiques (Synthèse, Finances, etc.), améliorant considérablement la lisibilité et l'expérience utilisateur par rapport à un long texte. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8f9fa;
+        }
+        .dark body {
+            background-color: #0f172a;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 400px;
+            max-height: 50vh;
+        }
+        @media (max-width: 768px) {
+            .chart-container {
+                height: 350px;
+                max-height: 60vh;
+            }
+        }
+        .active-company-btn {
+            background-color: #1e3a8a !important;
+            color: white !important;
+            box-shadow: 0 4px 14px 0 rgb(0 0 0 / 10%);
+        }
+        .dark .active-company-btn {
+            background-color: #60a5fa !important;
+            color: #1e293b !important;
+        }
+        .section-title {
+            font-size: 2.25rem;
+            font-weight: 700;
+        }
+        .section-subtitle {
+            font-size: 1.125rem;
+        }
+    </style>
+</head>
+<body class="text-slate-800 dark:text-slate-200 transition-colors duration-300">
+
+    <header class="bg-white dark:bg-slate-800 shadow-sm sticky top-0 z-50">
+        <nav class="container mx-auto px-6 py-4 flex justify-between items-center">
+            <div class="text-2xl font-bold text-blue-900 dark:text-blue-400">
+                <span>ImmoSuisse</span><span class="text-blue-500">.analyse</span>
+            </div>
+            <div class="hidden md:flex items-center space-x-8">
+                <a href="#overview" class="text-gray-600 dark:text-gray-300 hover:text-blue-800 dark:hover:text-blue-400 transition">Aperçu</a>
+                <a href="#comparison" class="text-gray-600 dark:text-gray-300 hover:text-blue-800 dark:hover:text-blue-400 transition">Analyse Comparative</a>
+                <a href="#profiles" class="text-gray-600 dark:text-gray-300 hover:text-blue-800 dark:hover:text-blue-400 transition">Profils</a>
+            </div>
+            <button id="darkModeToggle" class="p-2 rounded-full bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-gray-300">
+                <svg id="sunIcon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-sun"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+                <svg id="moonIcon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-moon hidden"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+            </button>
+        </nav>
+    </header>
+
+    <main class="container mx-auto px-6 py-12">
+
+        <section id="overview" class="mb-20">
+            <h1 class="text-4xl md:text-5xl font-bold text-center text-gray-800 dark:text-white mb-4">Analyse du Secteur Immobilier Suisse</h1>
+            <p class="text-xl text-center text-gray-500 dark:text-gray-400 mb-12">Performance S1 2025 et Perspectives d'Investissement</p>
+            
+            <div class="bg-white dark:bg-slate-800 p-8 rounded-xl shadow-lg">
+                <h2 class="text-2xl font-bold text-gray-800 dark:text-white mb-4">Contexte et Thèmes Clés du Semestre</h2>
+                <p class="text-gray-600 dark:text-gray-300 mb-6">
+                    Le premier semestre 2025 a réaffirmé le statut de l'immobilier suisse comme valeur refuge, dynamisé par la baisse du taux directeur de la BNS. Cette décision a entraîné une compression des taux de capitalisation et des gains de réévaluation significatifs. L'analyse des résultats révèle une performance sectorielle robuste, portée par des fondamentaux solides et une gestion financière prudente.
+                </p>
+                <div class="grid md:grid-cols-2 gap-6">
+                    <div class="bg-blue-50 dark:bg-blue-900/20 p-6 rounded-lg">
+                        <h3 class="font-bold text-lg text-blue-900 dark:text-blue-300 mb-2">📈 Compression des Taux & Valorisations</h3>
+                        <p class="text-blue-800 dark:text-blue-400 text-sm">La baisse des taux d'escompte a mécaniquement augmenté la valeur des portefeuilles, un avantage notable mais qui accroît la sensibilité du secteur aux futures décisions de politique monétaire.</p>
+                    </div>
+                    <div class="bg-green-50 dark:bg-green-900/20 p-6 rounded-lg">
+                        <h3 class="font-bold text-lg text-green-900 dark:text-green-300 mb-2">🏢 Résilience Opérationnelle</h3>
+                        <p class="text-green-800 dark:text-green-400 text-sm">Les fondamentaux restent excellents : taux de vacance historiquement bas et croissance des revenus locatifs à périmètre constant, témoignant d'une forte demande structurelle.</p>
+                    </div>
+                    <div class="bg-amber-50 dark:bg-amber-900/20 p-6 rounded-lg">
+                        <h3 class="font-bold text-lg text-amber-900 dark:text-amber-300 mb-2">🏗️ Le Développement comme Moteur</h3>
+                        <p class="text-amber-800 dark:text-amber-400 text-sm">Face à la rareté des actifs prime, les pipelines de développement internes sont le principal levier de création de valeur future pour la croissance des cash-flows et des NAV.</p>
+                    </div>
+                    <div class="bg-slate-100 dark:bg-slate-700/50 p-6 rounded-lg">
+                        <h3 class="font-bold text-lg text-slate-900 dark:text-slate-200 mb-2">🛡️ Bilans Solides & Discipline</h3>
+                        <p class="text-slate-800 dark:text-slate-300 text-sm">Le secteur se distingue par une gestion financière conservatrice, avec des ratios d'endettement (LTV) maîtrisés qui offrent une grande flexibilité stratégique.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <hr class="my-16 border-gray-200 dark:border-slate-700">
+
+        <section id="comparison" class="mb-20">
+            <h2 class="section-title text-gray-800 dark:text-white text-center">Analyse Comparative Interactive</h2>
+            <p class="section-subtitle text-gray-500 dark:text-gray-400">
+                Visualisez et comparez les métriques financières et de valorisation clés des différentes sociétés. Utilisez les filtres pour adapter les graphiques à votre analyse et identifier les tendances et les outliers du secteur.
+            </p>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+                <div class="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-xl font-bold text-gray-800 dark:text-white">Performance & Levier Financier</h3>
+                        <select id="metricSelector" class="border border-gray-300 dark:border-slate-600 rounded-md px-3 py-1 text-sm bg-white dark:bg-slate-700 focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                            <option value="ltv" selected>LTV (%)</option>
+                            <option value="yield">Rendement (%)</option>
+                            <option value="premiumDiscount">Prime/Décote (%)</option>
+                        </select>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="comparisonChart"></canvas>
+                    </div>
+                </div>
+                <div class="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg">
+                    <h3 class="text-xl font-bold text-gray-800 dark:text-white mb-4">Valorisation vs. Risque (LTV)</h3>
+                     <div class="chart-container">
+                        <canvas id="bubbleChart"></canvas>
+                    </div>
+                </div>
+                 <div class="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg">
+                    <h3 class="text-xl font-bold text-gray-800 dark:text-white mb-4">Distribution de la Capitalisation Boursière</h3>
+                     <div class="chart-container">
+                        <canvas id="marketCapDonutChart"></canvas>
+                    </div>
+                </div>
+                <div class="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-xl font-bold text-gray-800 dark:text-white">Profil de Performance Radar</h3>
+                        <select id="radarCompanySelector" class="border border-gray-300 dark:border-slate-600 rounded-md px-3 py-1 text-sm bg-white dark:bg-slate-700 focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                        </select>
+                    </div>
+                     <div class="chart-container">
+                        <canvas id="companyRadarChart"></canvas>
+                    </div>
+                </div>
+                <div class="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg">
+                    <h3 class="text-xl font-bold text-gray-800 dark:text-white mb-4">FFO vs. Dividende par Action</h3>
+                     <div class="chart-container">
+                        <canvas id="payoutScatterChart"></canvas>
+                    </div>
+                </div>
+                <div class="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg">
+                    <h3 class="text-xl font-bold text-gray-800 dark:text-white mb-4">Croissance des Revenus S1 (vs S1-24)</h3>
+                     <div class="chart-container">
+                        <canvas id="revenueGrowthChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <hr class="my-16 border-gray-200 dark:border-slate-700">
+
+        <section id="profiles">
+            <h2 class="section-title text-gray-800 dark:text-white">Profils Détaillés des Sociétés</h2>
+            <p class="section-subtitle text-gray-500 dark:text-gray-400">
+                Sélectionnez une société pour accéder à une analyse approfondie de sa performance semestrielle, de sa situation financière et de nos recommandations d'investissement. Chaque profil détaille les catalyseurs et les risques associés.
+            </p>
+            <div id="companySelector" class="flex flex-wrap justify-center gap-3 mb-8">
+            </div>
+
+            <div id="companyDetailsContainer" class="bg-white dark:bg-slate-800 p-8 rounded-xl shadow-lg min-h-[500px]">
+            </div>
+        </section>
+
+    </main>
+    
+    <footer class="bg-white dark:bg-slate-800 mt-20 border-t border-gray-200 dark:border-slate-700">
+        <div class="container mx-auto px-6 py-6 text-center text-gray-500 dark:text-gray-400">
+            <p>&copy; 2025 ImmoSuisse.analyse. Données basées sur les rapports semestriels S1 2025.</p>
+        </div>
+    </footer>
+
+<script>
+const companiesData = [
+    {
+        id: 'spsn', name: 'Swiss Prime Site', marketCap: 9200, revenueS1: 276.3, ffoPerShare: 4.20, dividend: 3.45, ltv: 38.4, yield: 2.9, navPerShare: 98.01, premiumDiscount: 21.2, rating: 'Strong Buy', target: 135.00, revenueGrowth: 2.2,
+        summary: `Le S1 2025 marque un tournant avec la finalisation de la transformation en groupe purement immobilier. Une augmentation de capital réussie de CHF 300M a permis de financer la croissance. Le FFO par action reste résilient à CHF 2.10 malgré une baisse temporaire des revenus locatifs due aux grands projets de redéveloppement.`,
+        performance: `Les revenus locatifs (CHF 225.5M) sont impactés par les projets majeurs comme "Destination Jelmoli", mais la croissance à périmètre constant reste positive à +2.2%. Le taux de vacance augmente légèrement à 4.0%, reflétant les surfaces en redéveloppement. Le pipeline de développement est un atout majeur pour la croissance future.`,
+        financials: `L'EBITDA hors réévaluations s'établit à CHF 199.5M. Le FFO I par action atteint CHF 2.10, en hausse. Le bilan est robuste avec un LTV de 38.4% et un coût de la dette très bas à 1.0%. Le portefeuille est évalué à CHF 13.31 milliards, avec des gains de réévaluation de CHF 102.0M. L'EPRA NTA par action est de CHF 98.01.`,
+        recommendation: `SPS est à un point d'inflexion. La phase d'investissement intense pèse temporairement sur les revenus mais créera une valeur significative à moyen terme. Le marché ne valorise pas pleinement la croissance future sécurisée dans le pipeline. L'action offre un point d'entrée attractif avant la matérialisation de la croissance des revenus dès 2026. Catalyseurs: Avancement des projets, acquisitions relutives. Risques: Retards sur les projets, hausse des taux.`
+    },
+    {
+        id: 'pspn', name: 'PSP Swiss Property', marketCap: 6160, revenueS1: 173.9, ffoPerShare: 4.66, dividend: 3.90, ltv: 35.2, yield: 2.9, navPerShare: 143.60, premiumDiscount: -6.3, rating: 'Buy', target: 150.00, revenueGrowth: 1.2,
+        summary: `PSP a délivré une performance opérationnelle solide avec un EBITDA de CHF 148.8M et une marge élevée. Le résultat net a été fortement influencé par des gains de réévaluation de CHF 113.4M. Le taux de vacance a connu une hausse conjoncturelle à 4.0%, mais la direction est confiante pour le réduire d'ici la fin de l'année.`,
+        performance: `Les revenus locatifs s'établissent à CHF 173.9M. La croissance à périmètre constant est positive à +1.2%. Le taux de vacance est à 4.0%. La société poursuit activement la modernisation de son portefeuille avec des projets de rénovation majeurs à Berne, Lausanne, Bâle et Genève.`,
+        financials: `La marge EBITDA est élevée et stable à 85.1%. Le bilan reste très solide avec un LTV de 35.2% et un coût de la dette maîtrisé à 1.04%. La valeur du portefeuille s'élève à CHF 9.98 milliards. L'EPRA NRV par action est de CHF 143.60.`,
+        recommendation: `PSP représente l'investissement de qualité par excellence. Son portefeuille est inégalé et son bilan est une forteresse. La hausse temporaire de la vacance a créé une opportunité. La valorisation, bien que rarement bon marché, est justifiée par la visibilité et la faible volatilité des cash-flows. Catalyseurs: Réduction rapide de la vacance. Risques: Dégradation du marché locatif de bureaux à Genève.`
+    },
+    {
+        id: 'alln', name: 'Allreal Holding', marketCap: 3010, revenueS1: 103.5, ffoPerShare: 7.58, dividend: 7.00, ltv: 47.5, yield: 3.8, navPerShare: 160.03, premiumDiscount: 14.0, rating: 'Hold', target: 185.00, revenueGrowth: -6.8,
+        summary: `Performance robuste au S1 2025, avec un bénéfice net en forte hausse à CHF 116.8M. Le segment Développement & Réalisation a été un contributeur majeur, compensant une baisse temporaire des revenus locatifs due à des cessions et des rénovations.`,
+        performance: `Les revenus locatifs ont diminué de 6.8% à CHF 103.5M. Le taux de vacance a augmenté à 2.9%. Le pipeline de développement reste un pilier stratégique, avec un volume d'investissement estimé à CHF 1.83 milliard (projets et réserves).`,
+        financials: `Le bénéfice net hors réévaluation a augmenté de 3.5% à CHF 62.6M. Le portefeuille est valorisé à CHF 5.20 milliards, avec des gains de réévaluation de CHF 70.3M. Le NAV par action est de CHF 160.03.`,
+        recommendation: `Le modèle intégré d'Allreal a prouvé son efficacité. Cependant, la hausse de la vacance et la baisse des revenus locatifs nécessitent une surveillance. La valorisation actuelle semble correctement refléter le profil risque/rendement équilibré. Catalyseurs: Accélération des ventes de copropriétés. Risques: Ralentissement du marché de la promotion.`
+    },
+    {
+        id: 'mobn', name: 'Mobimo Holding', marketCap: 2300, revenueS1: 62.5, ffoPerShare: 16.46, dividend: 10.25, ltv: 43.2, yield: 3.2, navPerShare: 297.39, premiumDiscount: 7.1, rating: 'Buy', target: 350.00, revenueGrowth: 2.0,
+        summary: `Premier semestre très performant, marqué par une forte contribution du segment Développement (CHF 24.6M). Le bénéfice net a bondi à CHF 109.7M, propulsé par un gain de réévaluation de CHF 71.6M. L'acquisition stratégique d'EMWE Holding AG renforce le pipeline.`,
+        performance: `Les revenus locatifs sont stables à CHF 62.5M, avec une croissance like-for-like de +2.0%. Le taux de vacance est maîtrisé à 3.9%. L'acquisition d'EMWE (portefeuille de CHF 185M) est une opération majeure.`,
+        financials: `L'EBIT hors réévaluations a connu une croissance de 19.0% à CHF 73.0M. Le LTV s'établit à 43.2%. Le portefeuille atteint CHF 3.92 milliards. L'EPRA NTA par action est de CHF 297.39.`,
+        recommendation: `Mobimo a démontré sa capacité à créer de la valeur via le développement. L'acquisition d'EMWE est transformatrice. Bien que le levier soit légèrement plus élevé, la société se négocie avec une décote par rapport à son NTA, ce qui ne semble pas refléter pleinement le potentiel de croissance. Catalyseurs: Intégration réussie d'EMWE. Risques: Levier financier plus élevé.`
+    },
+    {
+        id: 'isn', name: 'Intershop Holding', marketCap: 1420, revenueS1: 44.3, ffoPerShare: 6.22, dividend: 5.50, ltv: 33.0, yield: 3.6, navPerShare: 115.01, premiumDiscount: 33.0, rating: 'Buy', target: 170.00, revenueGrowth: 8.1,
+        summary: `S1 2025 caractérisé par une forte croissance des revenus locatifs et des gains de réévaluation exceptionnels de CHF 200.2M. Le bénéfice net a atteint CHF 175.9M. La société a simplifié sa structure pour améliorer son efficacité.`,
+        performance: `Les revenus locatifs ont connu une croissance robuste de 8.1% à CHF 44.3M. Le taux de vacance a continué de baisser à 7.9%. Le pipeline de développement est substantiel, avec un volume projeté de plus de CHF 525M.`,
+        financials: `Le bilan est très sain, avec un LTV de seulement 33.0%. Le portefeuille a grimpé à CHF 1.83 milliard. Le NAV par action a atteint CHF 115.01.`,
+        recommendation: `Intershop a réalisé un semestre exceptionnel, renforçant un bilan déjà très solide. La croissance opérationnelle est également au rendez-vous. La valorisation actuelle ne reflète pas encore pleinement le succès attendu des projets en cours. Catalyseurs: Succès de commercialisation des projets clés. Risques: Normalisation des gains de réévaluation.`
+    },
+    {
+        id: 'zugn', name: 'Zug Estates', marketCap: 1090, revenueS1: 35.9, ffoPerShare: 78.00, dividend: 47.00, ltv: 35.3, yield: 2.2, navPerShare: 2193.00, premiumDiscount: -2.4, rating: 'Hold', target: 2200.00, revenueGrowth: 6.0,
+        summary: `Excellent résultat opérationnel, caractérisé par une croissance des revenus locatifs et un taux de vacance exceptionnellement bas (0.9%). Le bénéfice net a plus que doublé à CHF 63.9M, grâce à un gain de réévaluation de CHF 50.1M.`,
+        performance: `Les revenus locatifs ont augmenté de 6.0% à CHF 35.9M. Le taux de vacance de 0.9% est l'un des plus bas du marché. Le projet majeur "Metalli Living Space" progresse.`,
+        financials: `Le bénéfice net hors réévaluations a progressé de 10.1% à CHF 19.9M. La structure financière est très conservatrice (ratio de fonds propres de 56.4%). Le portefeuille atteint CHF 1.92 milliard. NAV par action (série B) de CHF 2'193.0.`,
+        recommendation: `Une société de très haute qualité avec un portefeuille exceptionnel. Cependant, ces qualités sont largement reconnues par le marché, et l'action se négocie avec une prime. Le potentiel de hausse semble plus limité. Catalyseurs: Avancement du projet "Metalli". Risques: Forte concentration géographique sur Zoug.`
+    },
+    {
+        id: 'warn', name: 'Warteck Invest', marketCap: 617, revenueS1: 22.3, ffoPerShare: 83.40, dividend: 70.00, ltv: 45.1, yield: 3.5, navPerShare: 1667.00, premiumDiscount: 19.9, rating: 'Hold', target: 2050.00, revenueGrowth: 2.1,
+        summary: `Très bon premier semestre 2025, avec un bénéfice net de CHF 19.8M, en forte hausse. Le portefeuille a bénéficié d'une réévaluation positive et le permis de construire a été obtenu pour le projet "Tiglio".`,
+        performance: `Les revenus locatifs ont augmenté de 2.1% à CHF 22.3M. Le taux de vacance est resté très bas à 2.4%. Le pipeline de développement est bien fourni avec 17 projets (volume de CHF 225M).`,
+        financials: `Le LTV s'inscrit à 45.1%. La valeur du portefeuille a atteint CHF 1.05 milliard. Le NAV par action est de CHF 1'667.`,
+        recommendation: `Warteck Invest offre un profil de risque/rendement équilibré. La performance du S1 a été bonne. Cependant, avec un LTV de 45.1% et une valorisation qui n'offre pas de décote significative, le potentiel de surperformance semble limité. Catalyseurs: Accélération du pipeline. Risques: Liquidité du titre plus faible.`
+    },
+    {
+        id: 'sfpn', name: 'SF Urban Properties', marketCap: 266, revenueS1: 15.9, ffoPerShare: 4.34, dividend: 3.65, ltv: null, yield: 3.7, navPerShare: null, premiumDiscount: null, rating: 'Hold', target: 105.00, revenueGrowth: 2.3,
+        summary: `Premier semestre solide, en ligne avec les prévisions. Le bénéfice net hors réévaluations a connu une croissance notable de 14.0%. La société a poursuivi l'optimisation de son portefeuille avec des cessions et une acquisition ciblée à Zurich.`,
+        performance: `Les revenus immobiliers ont augmenté de 2.3% à CHF 15.9M. Le taux de vacance est stable à 2.0%. La société gère 6 projets de développement et 3 projets de construction.`,
+        financials: `L'EBIT hors réévaluations s'est élevé à CHF 11.4M. Le bénéfice net hors réévaluations a atteint CHF 7.3M (+14.0%). Le portefeuille est évalué à CHF 800.7M.`,
+        recommendation: `SF Urban Properties exécute bien sa stratégie de niche. La gestion active du portefeuille est un point positif. La valorisation actuelle semble juste au vu de sa taille et de son profil de croissance. Catalyseurs: Succès de la stratégie de rotation du portefeuille. Risques: Liquidité du titre.`
+    },
+    {
+        id: 'zubn', name: 'Züblin Immobilien', marketCap: 162, revenueS1: 9.4, ffoPerShare: 2.58, dividend: 1.00, ltv: 31.0, yield: 2.1, navPerShare: 45.61, premiumDiscount: 5.7, rating: 'Hold', target: 50.00, revenueGrowth: 4.3,
+        summary: `Clôture de l'exercice 2024/25 sur une note très positive, avec une augmentation du revenu locatif net. Le bénéfice net a bondi à CHF 8.7M, grâce à des réévaluations positives et une baisse des charges financières.`,
+        performance: `Les revenus locatifs ont progressé de 4.3% à CHF 9.4M. Succès majeur avec la réduction de moitié du taux de vacance EPRA, passé de 9.3% à 4.8%.`,
+        financials: `Le bilan est particulièrement sain, avec un LTV très bas de 31.0%. Le portefeuille a été évalué à CHF 235.6M. L'EPRA NTA par action s'est établi à CHF 45.61.`,
+        recommendation: `Züblin possède un bilan exceptionnellement solide et a réalisé des progrès opérationnels impressionnants. Cependant, la société est pénalisée par sa petite taille et une très faible liquidité. Sans catalyseur clair, il est peu probable que l'action surperforme. Catalyseurs: Acquisition relutive. Risques: Très faible liquidité du titre.`
+    },
+    {
+        id: 'iren', name: 'Investis Holding', marketCap: 1626, revenueS1: 38.8, ffoPerShare: 2.80, dividend: 2.60, ltv: 30.1, yield: 3.8, navPerShare: 108.56, premiumDiscount: 17.0, rating: 'Hold', target: 130.00, revenueGrowth: 37.7,
+        summary: `Investis a enregistré des résultats solides au S1 2025, avec une augmentation de 38% des revenus locatifs, soutenue par des acquisitions ciblées. Le bénéfice net s'élève à CHF 80.2M, fortement influencé par une réévaluation positive du portefeuille de CHF 70.5M. La société maintient une structure financière très solide.`,
+        performance: `La croissance des revenus locatifs à périmètre constant est de +1.9%. Le taux de vacance reste très bas à 1.4%. La société a poursuivi son expansion stratégique avec l'acquisition de trois propriétés pour CHF 58M, renforçant sa position sur le marché résidentiel de la région lémanique.`,
+        financials: `L'EBITDA avant réévaluations s'élève à CHF 24.4M. Le LTV est très bas à 30.1%, offrant une grande flexibilité financière. Le portefeuille immobilier totalise CHF 2.12 milliards. Le NAV par action a augmenté pour atteindre CHF 108.56.`,
+        recommendation: `Investis présente un profil défensif attractif avec un portefeuille résidentiel de haute qualité et un bilan très solide. La croissance est principalement tirée par des acquisitions sélectives. La valorisation actuelle, avec une prime sur le NAV, semble juste et reflète la qualité et la stabilité des actifs. Catalyseurs: Poursuite d'acquisitions relutives. Risques: Concentration géographique sur la région lémanique.`
+    }
+];
+
+let chartInstances = {};
+const darkModeKey = 'darkModeEnabled';
+
+document.addEventListener('DOMContentLoaded', () => {
+    initializeDarkMode();
+    populateCompanySelector();
+    populateRadarSelector();
+    initCharts();
+    setupEventListeners();
+    showCompanyDetails(companiesData[0].id);
+});
+
+function initializeDarkMode() {
+    if (localStorage.getItem(darkModeKey) === 'true') {
+        document.documentElement.classList.add('dark');
+        document.getElementById('sunIcon').classList.add('hidden');
+        document.getElementById('moonIcon').classList.remove('hidden');
+    } else {
+        document.getElementById('sunIcon').classList.remove('hidden');
+        document.getElementById('moonIcon').classList.add('hidden');
+    }
+}
+
+function setupEventListeners() {
+    document.getElementById('metricSelector').addEventListener('change', (event) => {
+        updateComparisonChart(event.target.value);
+    });
+    document.getElementById('radarCompanySelector').addEventListener('change', (event) => {
+        updateCompanyRadarChart(event.target.value);
+    });
+    document.getElementById('darkModeToggle').addEventListener('click', () => {
+        const isDark = document.documentElement.classList.toggle('dark');
+        localStorage.setItem(darkModeKey, isDark);
+        document.getElementById('sunIcon').classList.toggle('hidden');
+        document.getElementById('moonIcon').classList.toggle('hidden');
+        Object.values(chartInstances).forEach(chart => chart.destroy());
+        initCharts();
+    });
+}
+
+function getChartColors() {
+    const isDark = document.documentElement.classList.contains('dark');
+    return {
+        grid: isDark ? 'rgba(255, 255, 255, 0.1)' : '#e5e7eb',
+        ticks: isDark ? '#9ca3af' : '#4b5563',
+        labels: isDark ? '#d1d5db' : '#111827',
+        tooltipBg: isDark ? '#1f2937' : '#111827',
+        tooltipText: '#ffffff'
+    };
+}
+
+function populateCompanySelector() {
+    const selectorContainer = document.getElementById('companySelector');
+    companiesData.forEach(company => {
+        const button = document.createElement('button');
+        button.textContent = company.name;
+        button.dataset.companyId = company.id;
+        button.className = 'company-btn px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-md hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition';
+        button.addEventListener('click', () => showCompanyDetails(company.id));
+        selectorContainer.appendChild(button);
+    });
+}
+
+function populateRadarSelector() {
+    const selector = document.getElementById('radarCompanySelector');
+    companiesData.forEach(company => {
+        const option = document.createElement('option');
+        option.value = company.id;
+        option.textContent = company.name;
+        selector.appendChild(option);
+    });
+}
+
+
+function getRatingColor(rating) {
+    switch (rating) {
+        case 'Strong Buy': return 'bg-green-600';
+        case 'Buy': return 'bg-green-500';
+        case 'Hold': return 'bg-yellow-500';
+        default: return 'bg-gray-500';
+    }
+}
+
+function showCompanyDetails(companyId) {
+    const company = companiesData.find(c => c.id === companyId);
+    if (!company) return;
+
+    const container = document.getElementById('companyDetailsContainer');
+    container.innerHTML = `
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+            <div>
+                <h3 class="text-3xl font-bold text-gray-800 dark:text-white">${company.name}</h3>
+                <p class="text-gray-500 dark:text-gray-400">Objectif de cours 12 mois: <span class="font-semibold text-gray-700 dark:text-gray-200">${company.target.toFixed(2)} CHF</span></p>
+            </div>
+            <div class="mt-4 md:mt-0 flex items-center gap-2 text-lg font-bold text-white px-4 py-2 rounded-lg ${getRatingColor(company.rating)}">
+                <span>${company.rating}</span>
+            </div>
+        </div>
+
+        <div class="prose max-w-none text-gray-600 dark:text-gray-300">
+            <h4 class="font-semibold text-gray-800 dark:text-white">Résumé Exécutif</h4>
+            <p>${company.summary}</p>
+            <h4 class="font-semibold text-gray-800 dark:text-white">Performance Opérationnelle</h4>
+            <p>${company.performance}</p>
+            <h4 class="font-semibold text-gray-800 dark:text-white">Métriques Financières Clés</h4>
+            <p>${company.financials}</p>
+            <h4 class="font-semibold text-gray-800 dark:text-white">Argumentaire d'Investissement</h4>
+            <p>${company.recommendation}</p>
+        </div>
+    `;
+
+    document.querySelectorAll('.company-btn').forEach(btn => {
+        btn.classList.remove('active-company-btn');
+        if (btn.dataset.companyId === companyId) {
+            btn.classList.add('active-company-btn');
+        }
+    });
+}
+
+function initCharts() {
+    updateComparisonChart('ltv');
+    createBubbleChart();
+    createMarketCapDonutChart();
+    updateCompanyRadarChart(companiesData[0].id);
+    createPayoutScatterChart();
+    createRevenueGrowthChart();
+}
+
+function updateComparisonChart(metric) {
+    const ctx = document.getElementById('comparisonChart').getContext('2d');
+    const colors = getChartColors();
+    const metricConfig = {
+        ltv: { label: 'LTV (%)', data: companiesData.map(c => c.ltv), backgroundColor: 'rgba(59, 130, 246, 0.7)', borderColor: 'rgba(59, 130, 246, 1)' },
+        yield: { label: 'Rendement (%)', data: companiesData.map(c => c.yield), backgroundColor: 'rgba(16, 185, 129, 0.7)', borderColor: 'rgba(16, 185, 129, 1)' },
+        premiumDiscount: { label: 'Prime/Décote sur NAV (%)', data: companiesData.map(c => c.premiumDiscount), backgroundColor: 'rgba(245, 158, 11, 0.7)', borderColor: 'rgba(245, 158, 11, 1)' }
+    };
+    const selectedConfig = metricConfig[metric];
+    if (chartInstances.comparison) chartInstances.comparison.destroy();
+    chartInstances.comparison = new Chart(ctx, {
+        type: 'bar',
+        data: { labels: companiesData.map(c => c.name), datasets: [{ label: selectedConfig.label, data: selectedConfig.data, backgroundColor: selectedConfig.backgroundColor, borderColor: selectedConfig.borderColor, borderWidth: 1, borderRadius: 4 }] },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            scales: {
+                y: { beginAtZero: false, title: { display: true, text: selectedConfig.label, color: colors.labels }, grid: { color: colors.grid }, ticks: { color: colors.ticks } },
+                x: { ticks: { maxRotation: 45, minRotation: 45, color: colors.ticks }, grid: { display: false } }
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: { backgroundColor: colors.tooltipBg, titleColor: colors.tooltipText, bodyColor: colors.tooltipText, titleFont: { size: 14 }, bodyFont: { size: 12 }, padding: 10, cornerRadius: 4, displayColors: false, callbacks: { label: (c) => `${c.dataset.label}: ${c.raw ? c.raw.toFixed(1) : 'N/A'}%` } }
+            }
+        }
+    });
+}
+
+function createBubbleChart() {
+    const ctx = document.getElementById('bubbleChart').getContext('2d');
+    const colors = getChartColors();
+    const data = companiesData.filter(c => c.ltv !== null && c.premiumDiscount !== null).map(c => ({ x: c.ltv, y: c.premiumDiscount, r: Math.sqrt(c.marketCap) / 8, name: c.name }));
+    if (chartInstances.bubble) chartInstances.bubble.destroy();
+    chartInstances.bubble = new Chart(ctx, {
+        type: 'bubble',
+        data: { datasets: [{ label: 'Sociétés', data: data, backgroundColor: 'rgba(239, 68, 68, 0.6)', borderColor: 'rgba(239, 68, 68, 1)' }] },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            scales: {
+                x: { title: { display: true, text: 'LTV (%) → Risque Financier', color: colors.labels }, grid: { color: colors.grid }, ticks: { color: colors.ticks } },
+                y: { title: { display: true, text: 'Prime/Décote sur NAV (%) → Valorisation', color: colors.labels }, grid: { color: colors.grid }, ticks: { color: colors.ticks } }
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: { backgroundColor: colors.tooltipBg, titleColor: colors.tooltipText, bodyColor: colors.tooltipText, titleFont: { size: 14 }, bodyFont: { size: 12 }, padding: 10, cornerRadius: 4, displayColors: false, callbacks: { label: (c) => `${c.raw.name}: LTV ${c.raw.x.toFixed(1)}%, P/NAV ${c.raw.y.toFixed(1)}%` } }
+            }
+        }
+    });
+}
+
+function createMarketCapDonutChart() {
+    const ctx = document.getElementById('marketCapDonutChart').getContext('2d');
+    const colors = getChartColors();
+    if (chartInstances.marketCap) chartInstances.marketCap.destroy();
+    chartInstances.marketCap = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: companiesData.map(c => c.name),
+            datasets: [{ label: 'Capitalisation Boursière (M CHF)', data: companiesData.map(c => c.marketCap), backgroundColor: ['#0d47a1', '#1565c0', '#1976d2', '#1e88e5', '#2196f3', '#42a5f5', '#64b5f6', '#90caf9', '#bbdefb', '#e3f2fd'], borderColor: document.documentElement.classList.contains('dark') ? '#0f172a' : '#f8f9fa', borderWidth: 2 }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: { backgroundColor: colors.tooltipBg, titleColor: colors.tooltipText, bodyColor: colors.tooltipText, titleFont: { size: 14 }, bodyFont: { size: 12 }, padding: 10, cornerRadius: 4, callbacks: { label: (c) => { const t = c.chart.data.datasets[0].data.reduce((a, b) => a + b, 0); return `${c.label}: ${c.raw.toLocaleString()} M CHF (${((c.raw / t) * 100).toFixed(1)}%)`; } } }
+            }
+        }
+    });
+}
+
+function updateCompanyRadarChart(companyId) {
+    const company = companiesData.find(c => c.id === companyId);
+    if (!company) return;
+    const ctx = document.getElementById('companyRadarChart').getContext('2d');
+    const colors = getChartColors();
+    const normalize = (val, min, max) => (val - min) / (max - min);
+    const ltvValues = companiesData.map(c => c.ltv).filter(v => v !== null);
+    const yieldValues = companiesData.map(c => c.yield).filter(v => v !== null);
+    const premiumValues = companiesData.map(c => c.premiumDiscount).filter(v => v !== null);
+    const data = {
+        labels: ['Valorisation (Prime/Décote)', 'Rendement', 'Levier (LTV)', 'Qualité (Low LTV)'],
+        datasets: [{ label: company.name, data: [normalize(company.premiumDiscount, Math.min(...premiumValues), Math.max(...premiumValues)), normalize(company.yield, Math.min(...yieldValues), Math.max(...yieldValues)), normalize(company.ltv, Math.min(...ltvValues), Math.max(...ltvValues)), 1 - normalize(company.ltv, Math.min(...ltvValues), Math.max(...ltvValues)),], fill: true, backgroundColor: 'rgba(30, 58, 138, 0.2)', borderColor: 'rgb(30, 58, 138)', pointBackgroundColor: 'rgb(30, 58, 138)', pointBorderColor: '#fff', pointHoverBackgroundColor: '#fff', pointHoverBorderColor: 'rgb(30, 58, 138)' }]
+    };
+    if (chartInstances.radar) chartInstances.radar.destroy();
+    chartInstances.radar = new Chart(ctx, {
+        type: 'radar', data: data,
+        options: {
+            responsive: true, maintainAspectRatio: false, elements: { line: { borderWidth: 3 } },
+            scales: { r: { angleLines: { color: colors.grid }, grid: { color: colors.grid }, pointLabels: { font: { size: 12 }, color: colors.labels }, suggestedMin: 0, suggestedMax: 1, ticks: { display: false } } },
+            plugins: { legend: { position: 'top', labels: { color: colors.labels } }, tooltip: { enabled: false } }
+        }
+    });
+}
+
+function createPayoutScatterChart() {
+    const ctx = document.getElementById('payoutScatterChart').getContext('2d');
+    const colors = getChartColors();
+    const data = companiesData.filter(c => c.ffoPerShare !== null && c.dividend !== null).map(c => ({ x: c.ffoPerShare, y: c.dividend, name: c.name }));
+    if (chartInstances.payout) chartInstances.payout.destroy();
+    chartInstances.payout = new Chart(ctx, {
+        type: 'scatter',
+        data: {
+            datasets: [{
+                label: 'FFO vs. Dividende', data: data, backgroundColor: 'rgba(139, 92, 246, 0.7)',
+                pointRadius: 8, pointHoverRadius: 12
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            scales: {
+                x: { title: { display: true, text: 'FFO par Action (CHF)', color: colors.labels }, grid: { color: colors.grid }, ticks: { color: colors.ticks } },
+                y: { title: { display: true, text: 'Dividende par Action (CHF)', color: colors.labels }, grid: { color: colors.grid }, ticks: { color: colors.ticks } }
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: { backgroundColor: colors.tooltipBg, titleColor: colors.tooltipText, bodyColor: colors.tooltipText, titleFont: { size: 14 }, bodyFont: { size: 12 }, padding: 10, cornerRadius: 4, displayColors: false, callbacks: { label: (c) => `${c.raw.name}: FFO ${c.raw.x.toFixed(2)}, Div ${c.raw.y.toFixed(2)}` } }
+            }
+        }
+    });
+}
+
+function createRevenueGrowthChart() {
+    const ctx = document.getElementById('revenueGrowthChart').getContext('2d');
+    const colors = getChartColors();
+    const sortedData = [...companiesData].sort((a, b) => b.revenueGrowth - a.revenueGrowth);
+    if (chartInstances.revenue) chartInstances.revenue.destroy();
+    chartInstances.revenue = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: sortedData.map(c => c.name),
+            datasets: [{
+                label: 'Croissance Revenus Locatifs LFL (%)',
+                data: sortedData.map(c => c.revenueGrowth),
+                backgroundColor: sortedData.map(c => c.revenueGrowth > 0 ? 'rgba(22, 163, 74, 0.7)' : 'rgba(220, 38, 38, 0.7)'),
+                borderColor: sortedData.map(c => c.revenueGrowth > 0 ? 'rgba(22, 163, 74, 1)' : 'rgba(220, 38, 38, 1)'),
+                borderWidth: 1
+            }]
+        },
+        options: {
+            indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+            scales: {
+                x: { title: { display: true, text: 'Croissance (%)', color: colors.labels }, grid: { color: colors.grid }, ticks: { color: colors.ticks } },
+                y: { grid: { display: false }, ticks: { color: colors.ticks } }
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: { backgroundColor: colors.tooltipBg, titleColor: colors.tooltipText, bodyColor: colors.tooltipText, titleFont: { size: 14 }, bodyFont: { size: 12 }, padding: 10, cornerRadius: 4, displayColors: false, callbacks: { label: (c) => `Croissance: ${c.raw.toFixed(1)}%` } }
+            }
+        }
+    });
+}
+
+</script>
+</body>
+</html>

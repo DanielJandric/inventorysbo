@@ -5823,35 +5823,60 @@ def send_market_report_email():
                 "error": "Configuration email non disponible"
             }), 400
         
-        # Récupérer le dernier rapport de marché
+        # Récupérer de préférence la DERNIÈRE analyse structurée (executive_summary, etc.).
         try:
-            response = supabase.table('market_reports').select('*').order('created_at', desc=True).limit(1).execute()
-            
-            if not response.data:
-                # Aucun rapport trouvé, en générer un nouveau
-                logger.info("Aucun rapport trouvé, génération d'un nouveau rapport...")
-                briefing = generate_market_briefing()
-                
-                if briefing.get('status') == 'success':
-                    # Créer les données du rapport
-                    market_report_data = {
-                        'date': datetime.now().strftime('%d/%m/%Y'),
-                        'time': datetime.now().strftime('%H:%M'),
-                        'content': briefing.get('briefing', {}).get('content', 'Contenu non disponible')
+            market_report_data = None
+            try:
+                from market_analysis_db import get_market_analysis_db
+                db = get_market_analysis_db()
+                recent = db.get_recent_analyses(limit=1)
+                if recent:
+                    a = recent[0]
+                    ts = (a.timestamp or a.created_at or datetime.utcnow().isoformat())
+                    # Construire un contenu JSON structuré pour l'email robuste
+                    structured_payload = {
+                        "executive_summary": getattr(a, 'executive_summary', []) or [],
+                        "summary": getattr(a, 'summary', '') or '',
+                        "key_points": getattr(a, 'key_points', []) or [],
+                        "insights": getattr(a, 'insights', []) or [],
+                        "risks": getattr(a, 'risks', []) or [],
+                        "opportunities": getattr(a, 'opportunities', []) or [],
+                        "sources": getattr(a, 'sources', []) or [],
+                        "confidence_score": float(getattr(a, 'confidence_score', 0.0) or 0.0)
                     }
+                    market_report_data = {
+                        'date': ts[:10],
+                        'time': ts[11:16] if len(ts) >= 16 else datetime.now().strftime('%H:%M'),
+                        'content': json.dumps(structured_payload, ensure_ascii=False)
+                    }
+            except Exception as _e:
+                # Pas d'analyse structurée dispo → fallback legacy
+                market_report_data = None
+
+            if not market_report_data:
+                # Fallback: ancien rapport texte depuis market_reports
+                response = supabase.table('market_reports').select('*').order('created_at', desc=True).limit(1).execute()
+                if not response.data:
+                    logger.info("Aucun rapport trouvé, génération d'un nouveau rapport...")
+                    briefing = generate_market_briefing()
+                    if briefing.get('status') == 'success':
+                        market_report_data = {
+                            'date': datetime.now().strftime('%d/%m/%Y'),
+                            'time': datetime.now().strftime('%H:%M'),
+                            'content': briefing.get('briefing', {}).get('content', 'Contenu non disponible')
+                        }
+                    else:
+                        return jsonify({
+                            "success": False,
+                            "error": "Impossible de générer un nouveau rapport de marché"
+                        }), 500
                 else:
-                    return jsonify({
-                        "success": False,
-                        "error": "Impossible de générer un nouveau rapport de marché"
-                    }), 500
-            else:
-                # Utiliser le dernier rapport de la base de données
-                latest_report = response.data[0]
-                market_report_data = {
-                    'date': latest_report.get('date', 'Date inconnue'),
-                    'time': latest_report.get('time', 'Heure inconnue'),
-                    'content': latest_report.get('content', 'Contenu non disponible')
-                }
+                    latest_report = response.data[0]
+                    market_report_data = {
+                        'date': latest_report.get('date', 'Date inconnue'),
+                        'time': latest_report.get('time', 'Heure inconnue'),
+                        'content': latest_report.get('content', 'Contenu non disponible')
+                    }
             
             # Envoyer l'email
             success = gmail_manager.send_market_report_email(market_report_data)
