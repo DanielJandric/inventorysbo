@@ -204,9 +204,6 @@ class ScrapingBeeScraper:
             return links
 
         # Heuristiques de liens d'articles par domaine
-        def _is_yf_article(url: str) -> bool:
-            u = url.lower()
-            return ('finance.yahoo.com' in u) and ('/news/' in u or '/video/' in u or '/topic/' in u)
         def _is_mw_article(url: str) -> bool:
             u = url.lower()
             return ('marketwatch.com' in u) and ('/story/' in u or '/press-release/' not in u) and ('/videos/' not in u)
@@ -215,10 +212,6 @@ class ScrapingBeeScraper:
             return ('cnn.com' in u) and ('/world/' in u or '/business/' in u) and ('/live-news/' not in u)
 
         # Points d'entrée par site
-        yahoo_starts = [
-            'https://finance.yahoo.com/topic/stock-market-news/',
-            'https://finance.yahoo.com/news/',
-        ]
         marketwatch_starts = [
             'https://www.marketwatch.com/',
             'https://www.marketwatch.com/markets',
@@ -293,7 +286,10 @@ class ScrapingBeeScraper:
                                 
                                 if not link:
                                     continue
-                                if not _is_recent_dt(ts):
+                                
+                                # Pour RSS, être plus permissif sur la date (articles jusqu'à 7 jours)
+                                if ts and (datetime.now() - ts) > timedelta(days=7):
+                                    logger.debug(f"📰 Article trop ancien ignoré: {title[:50]}... ({ts})")
                                     continue
                                 
                                 # Content depuis description (fallback)
@@ -304,6 +300,7 @@ class ScrapingBeeScraper:
                                     timestamp=ts or datetime.now(),
                                     metadata={'source': source_name, 'from': 'rss'}
                                 ))
+                                logger.info(f"📰 Article RSS ajouté: {title[:60]}... ({source_name})")
                                 if len(items) >= max_items:
                                     break
                             except Exception as e:
@@ -320,10 +317,7 @@ class ScrapingBeeScraper:
             return items
 
         # Collecter des liens/articles via RSS en priorité
-        yf_rss = [
-            'https://finance.yahoo.com/news/rssindex',
-            'https://finance.yahoo.com/rss/topstories',
-        ]
+        # Yahoo Finance retiré pour éviter les plantages
         mw_rss = [
             'https://feeds.marketwatch.com/marketwatch/topstories/',
             'https://feeds.marketwatch.com/marketwatch/marketpulse/',
@@ -345,7 +339,6 @@ class ScrapingBeeScraper:
         ]
 
         rss_items: List[ScrapedData] = []
-        rss_items += await _fetch_rss_items(yf_rss, 'yahoo_finance', per_site * 3)
         rss_items += await _fetch_rss_items(mw_rss, 'marketwatch', per_site * 3)
         rss_items += await _fetch_rss_items(cnn_rss, 'cnn', per_site * 3)
         # Fallback vers des flux alternatifs si les principaux échouent
@@ -355,15 +348,12 @@ class ScrapingBeeScraper:
         logger.info(f"📰 Total RSS collecté: {len(rss_items)} articles")
 
         # Fallback domain crawl SI explicitement autorisé
-        yf_links = []
         mw_links = []
         cnn_links = []
         # Autoriser le crawl si RSS insuffisant OU si explicitement configuré
         allow_crawl = (len(rss_items) < per_site * 2) or (os.getenv('ALLOW_DOMAIN_CRAWL', 'false').lower() == 'true')
         if allow_crawl:
             logger.info(f"📰 Domain crawl activé (RSS insuffisant: {len(rss_items)} < {per_site * 2})")
-            if len([i for i in rss_items if i.metadata.get('source') == 'yahoo_finance']) < per_site:
-                yf_links = await _gather_domain('finance.yahoo.com', yahoo_starts, _is_yf_article, per_site * 2)
             if len([i for i in rss_items if i.metadata.get('source') == 'marketwatch']) < per_site:
                 mw_links = await _gather_domain('www.marketwatch.com', marketwatch_starts, _is_mw_article, per_site * 2)
             if len([i for i in rss_items if i.metadata.get('source') == 'cnn']) < per_site:
@@ -374,7 +364,6 @@ class ScrapingBeeScraper:
         # Scraper les pages et filtrer
         items: List[ScrapedData] = list(rss_items)
         # Préparer les URLs issues des RSS pour enrichir le contenu (sans domain crawl)
-        rss_yf_links = [i.url for i in rss_items if i.metadata.get('source') == 'yahoo_finance']
         rss_mw_links = [i.url for i in rss_items if i.metadata.get('source') == 'marketwatch']
         rss_cnn_links = [i.url for i in rss_items if i.metadata.get('source') == 'cnn']
         
@@ -447,12 +436,9 @@ class ScrapingBeeScraper:
                     continue
 
         # Enrichir d'abord à partir des liens RSS (texte complet)
-        await _scrape_links(rss_yf_links, 'yahoo_finance')
         await _scrape_links(rss_mw_links, 'marketwatch')
         await _scrape_links(rss_cnn_links, 'cnn')
 
-        if yf_links:
-            await _scrape_links(yf_links, 'yahoo_finance')
         if mw_links:
             await _scrape_links(mw_links, 'marketwatch')
         if cnn_links:
@@ -489,14 +475,10 @@ class ScrapingBeeScraper:
                         continue
 
             # Essayer d'abord plus d'articles depuis les liens RSS
-            await _scrape_more(rss_yf_links, 'yahoo_finance')
-            if _total_chars(items + extra_items) < min_chars:
-                await _scrape_more(rss_mw_links, 'marketwatch')
+            await _scrape_more(rss_mw_links, 'marketwatch')
             if _total_chars(items + extra_items) < min_chars:
                 await _scrape_more(rss_cnn_links, 'cnn')
             # Si autorisé, compléter via un crawl léger
-            if allow_crawl and _total_chars(items + extra_items) < min_chars:
-                await _scrape_more(yf_links, 'yahoo_finance')
             if allow_crawl and _total_chars(items + extra_items) < min_chars:
                 await _scrape_more(mw_links, 'marketwatch')
             if allow_crawl and _total_chars(items + extra_items) < min_chars:
@@ -728,10 +710,6 @@ class ScrapingBeeScraper:
                 stock_symbol = query.split()[0].upper()
                 sites_financiers = [
                     {
-                        'url': f"https://finance.yahoo.com/quote/{stock_symbol}",
-                        'title': f"Yahoo Finance - {stock_symbol}"
-                    },
-                    {
                         'url': f"https://www.marketwatch.com/investing/stock/{stock_symbol.lower()}",
                         'title': f"MarketWatch - {stock_symbol}"
                     },
@@ -882,36 +860,9 @@ class ScrapingBeeScraper:
         """Scrape une page et renvoie le texte + date de publication si détectable.
 
         Optimisations:
-        - Pour Yahoo JSON (query1.finance.yahoo.com/...), préfère récupérer directement le JSON (sans JS)
         - Pour HTML nécessitant consent/hydratation, active JS + premium proxy US + blocage des ressources + petit scénario si besoin
         """
         try:
-            # Fast‑path: Yahoo JSON endpoints (pas de JS)
-            if 'query1.finance.yahoo.com' in (url or '').lower():
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(self.base_url, params={
-                        'api_key': self.api_key,
-                        'url': url,
-                        'render_js': 'false'
-                    }) as rj:
-                        if rj.status != 200:
-                            return None
-                        try:
-                            data = await rj.json()
-                        except Exception:
-                            text = await rj.text()
-                            try:
-                                data = json.loads(text)
-                            except Exception:
-                                return None
-                        # Aplatir quelques champs utiles
-                        text_blob = json.dumps(data, ensure_ascii=False)
-                        return {
-                            'text': self._clean_content(text_blob)[:8000],
-                            'published_at': None,
-                            'published_at_raw': None
-                        }
-
             # Heuristique: certaines pages exigent JS (consent/hydratation)
             u = (url or '').lower()
             needs_js = any(k in u for k in ['marketwatch.com', 'cnn.com', '/quote/', '/key-statistics'])
