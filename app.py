@@ -1603,7 +1603,8 @@ Ce rapport a été généré automatiquement par votre système de gestion
             econ_html = _render_econ(econ)
 
             structured = parsed.get('structured_data') or {}
-            deep = structured.get('deep_analysis') or {}
+            # Supporter aussi les sections au niveau racine si non présentes dans structured_data
+            deep = (structured.get('deep_analysis') or parsed.get('deep_analysis') or {})
             geo_chess = deep.get('geopolitical_chess') or {}
             legacy_geo = parsed.get('geopolitical_analysis') or {}
             geo = geo_chess if geo_chess else legacy_geo
@@ -1670,7 +1671,7 @@ Ce rapport a été généré automatiquement par votre système de gestion
                     return ''.join(parts)
                 except Exception:
                     return ''
-            exec_dash_html = _render_exec_dash(structured.get('executive_dashboard') or {})
+            exec_dash_html = _render_exec_dash(structured.get('executive_dashboard') or parsed.get('executive_dashboard') or {})
 
             # Meta / quant / risk / actionable (light renderers)
             def _render_meta(meta):
@@ -1699,7 +1700,7 @@ Ce rapport a été généré automatiquement par votre système de gestion
                     return ''.join(blocks)
                 except Exception:
                     return ''
-            meta_html = _render_meta(structured.get('meta_analysis') or {})
+            meta_html = _render_meta(structured.get('meta_analysis') or parsed.get('meta_analysis') or {})
 
             def _render_list_section(title, arr):
                 try:
@@ -1709,7 +1710,7 @@ Ce rapport a été généré automatiquement par votre système de gestion
                 except Exception:
                     return ''
             quant_html = ''
-            q = structured.get('quantitative_signals') or {}
+            q = (structured.get('quantitative_signals') or parsed.get('quantitative_signals') or {})
             if isinstance(q, dict) and q:
                 # flatten a few keys if present
                 for k in ['technical_matrix','options_flow','smart_money_tracking']:
@@ -1725,7 +1726,7 @@ Ce rapport a été généré automatiquement par votre système de gestion
                     quant_html += _render_list_section(k.replace('_',' ').title(), arr or [])
 
             risk_html = ''
-            r = structured.get('risk_management') or {}
+            r = (structured.get('risk_management') or parsed.get('risk_management') or {})
             if isinstance(r, dict) and r:
                 risk_html += _render_list_section('Ajustements de Portefeuille', r.get('portfolio_adjustments') or [])
                 risk_html += _render_list_section('Hedges', r.get('tail_risk_hedges') or [])
@@ -1733,7 +1734,7 @@ Ce rapport a été généré automatiquement par votre système de gestion
                     risk_html += _render_list_section('Stress Tests', [str(k)+': '+str(v) for k,v in r['stress_test_results'].items()])
 
             act_html = ''
-            asec = structured.get('actionable_summary') or {}
+            asec = (structured.get('actionable_summary') or parsed.get('actionable_summary') or {})
             if isinstance(asec, dict) and asec:
                 act_html += _render_list_section('Actions immédiates', asec.get('immediate_actions') or [])
                 act_html += _render_list_section('Watchlist', asec.get('watchlist') or [])
