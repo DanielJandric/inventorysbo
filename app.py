@@ -1540,6 +1540,174 @@ Ce rapport a été généré automatiquement par votre système de gestion
                         src_items.append(f'<li>{txt}</li>')
             if src_items:
                 sources_html = '<ul>' + ''.join(src_items) + '</ul>'
+            
+            # Sections optionnelles (éco / géopolitique / structured_data)
+            econ = parsed.get('economic_indicators') or {}
+            def _render_econ(ind):
+                try:
+                    parts = []
+                    infl = ind.get('inflation') or {}
+                    if infl:
+                        us = infl.get('US', 'N/D'); eu = infl.get('EU', 'N/D')
+                        parts.append('<div class="economic-card"><h4>Inflation</h4><div class="value">' + str(us) + ' 🇺🇸</div><div style="font-size:12px;color:#64748b;">Europe: ' + str(eu) + '</div></div>')
+                    cb = ind.get('central_banks') or []
+                    if cb:
+                        primary = cb[0] if len(cb) > 0 else 'N/D'
+                        secondary = cb[1] if len(cb) > 1 else 'N/D'
+                        parts.append('<div class="economic-card"><h4>Taux Directeurs</h4><div class="value">Fed: ' + str(primary) + '</div><div style="font-size:12px;color:#64748b;">BCE: ' + str(secondary) + '</div></div>')
+                    gdp = ind.get('gdp_growth') or {}
+                    if gdp:
+                        parts.append('<div class="economic-card"><h4>Croissance PIB</h4><div class="value">' + str(gdp.get('US','N/D')) + ' 🇺🇸</div><div style="font-size:12px;color:#64748b;">Chine: ' + str(gdp.get('China','N/D')) + '</div></div>')
+                    unemp = ind.get('unemployment') or {}
+                    if unemp:
+                        parts.append('<div class="economic-card"><h4>Chômage</h4><div class="value">' + str(unemp.get('US','N/D')) + ' 🇺🇸</div><div style="font-size:12px;color:#64748b;">Europe: ' + str(unemp.get('EU','N/D')) + '</div></div>')
+                    return ''.join(parts)
+                except Exception:
+                    return ''
+            econ_html = _render_econ(econ)
+
+            structured = parsed.get('structured_data') or {}
+            deep = structured.get('deep_analysis') or {}
+            geo_chess = deep.get('geopolitical_chess') or {}
+            legacy_geo = parsed.get('geopolitical_analysis') or {}
+            geo = geo_chess if geo_chess else legacy_geo
+            def _render_geo(g):
+                try:
+                    if not isinstance(g, dict):
+                        return ''
+                    parts = []
+                    if g.get('immediate_impacts'):
+                        parts.append('<h4 style="margin-top:0;">🧨 Impacts Immédiats</h4><ul>')
+                        for it in g['immediate_impacts']:
+                            if isinstance(it, dict):
+                                title = str(it.get('event',''))
+                                affected = ', '.join(it.get('affected_assets') or [])
+                                magnitude = str(it.get('magnitude',''))
+                                duration = str(it.get('duration',''))
+                                parts.append('<li><strong>' + title + '</strong> — ' + affected + ' (' + magnitude + ', ' + duration + ')</li>')
+                            else:
+                                parts.append('<li>' + str(it) + '</li>')
+                        parts.append('</ul>')
+                    if g.get('second_order_effects'):
+                        parts.append('<h4>🔁 Effets de Second Ordre</h4><ul>')
+                        for it in g['second_order_effects']:
+                            if isinstance(it, dict):
+                                trig = str(it.get('trigger','')); casc = str(it.get('cascade','')); p = str(it.get('probability',''))
+                                parts.append('<li><strong>' + trig + '</strong> — ' + casc + ' (p=' + p + ')</li>')
+                            else:
+                                parts.append('<li>' + str(it) + '</li>')
+                        parts.append('</ul>')
+                    if g.get('black_swans'):
+                        parts.append('<h4>🦢 Black Swans</h4><ul>')
+                        for it in g['black_swans']:
+                            if isinstance(it, dict):
+                                scen = str(it.get('scenario','')); impact = str(it.get('impact','')); p = str(it.get('probability',''))
+                                parts.append('<li><strong>' + scen + '</strong> — impact: ' + impact + ' (p=' + p + ')</li>')
+                            else:
+                                parts.append('<li>' + str(it) + '</li>')
+                        parts.append('</ul>')
+                    return ''.join(parts)
+                except Exception:
+                    return ''
+            geo_html = _render_geo(geo)
+
+            # Executive dashboard (light)
+            def _render_exec_dash(d):
+                try:
+                    if not isinstance(d, dict):
+                        return ''
+                    parts = []
+                    alert = d.get('alert_level')
+                    if alert:
+                        parts.append('<div class="card"><strong>Niveau d\'alerte:</strong> ' + str(alert) + '</div>')
+                    trades = d.get('top_trades') or []
+                    if trades:
+                        items = []
+                        for t in trades:
+                            if isinstance(t, dict):
+                                items.append('<li><strong>' + str(t.get('action','')) + '</strong> ' + str(t.get('instrument','')) + ' — ' + str(t.get('rationale','')) + '</li>')
+                        if items:
+                            parts.append('<div class="card"><h4>Top Trades</h4><ul>' + ''.join(items) + '</ul></div>')
+                    snaps = d.get('snapshot_metrics') or []
+                    if snaps:
+                        parts.append('<div class="card"><h4>Snapshot</h4><ul>' + ''.join('<li>' + str(x) + '</li>' for x in snaps) + '</ul></div>')
+                    return ''.join(parts)
+                except Exception:
+                    return ''
+            exec_dash_html = _render_exec_dash(structured.get('executive_dashboard') or {})
+
+            # Meta / quant / risk / actionable (light renderers)
+            def _render_meta(meta):
+                try:
+                    if not isinstance(meta, dict):
+                        return ''
+                    blocks = []
+                    reg = meta.get('regime_detection') or {}
+                    if isinstance(reg, dict) and reg:
+                        kv = []
+                        for k,v in reg.items():
+                            kv.append('<li><strong>' + str(k).replace('_',' ').title() + '</strong>: ' + str(v) + '</li>')
+                        if kv:
+                            blocks.append('<div class="card"><h4>Détection de Régime</h4><ul>' + ''.join(kv) + '</ul></div>')
+                    drivers = meta.get('key_drivers') or {}
+                    if isinstance(drivers, dict) and drivers:
+                        segs = []
+                        if drivers.get('primary'):
+                            segs.append('<p><strong>Primaires:</strong> ' + str(drivers.get('primary')) + '</p>')
+                        for lbl in ['secondary','emerging']:
+                            arr = drivers.get(lbl) or []
+                            if arr:
+                                segs.append('<p><strong>' + lbl.title() + ':</strong> ' + ', '.join([str(x) for x in arr]) + '</p>')
+                        if segs:
+                            blocks.append('<div class="card"><h4>Facteurs Clés</h4>' + ''.join(segs) + '</div>')
+                    return ''.join(blocks)
+                except Exception:
+                    return ''
+            meta_html = _render_meta(structured.get('meta_analysis') or {})
+
+            def _render_list_section(title, arr):
+                try:
+                    if not arr:
+                        return ''
+                    return '<div class="card"><h4>' + title + '</h4><ul>' + ''.join('<li>' + str(x) + '</li>' for x in arr) + '</ul></div>'
+                except Exception:
+                    return ''
+            quant_html = ''
+            q = structured.get('quantitative_signals') or {}
+            if isinstance(q, dict) and q:
+                # flatten a few keys if present
+                for k in ['technical_matrix','options_flow','smart_money_tracking']:
+                    arr = None
+                    v = q.get(k)
+                    if isinstance(v, dict):
+                        arr = []
+                        for kk, vv in v.items():
+                            if isinstance(vv, list):
+                                arr += [kk.title() + ': ' + ', '.join([str(x) for x in vv])]
+                            else:
+                                arr.append(kk.title() + ': ' + str(vv))
+                    quant_html += _render_list_section(k.replace('_',' ').title(), arr or [])
+
+            risk_html = ''
+            r = structured.get('risk_management') or {}
+            if isinstance(r, dict) and r:
+                risk_html += _render_list_section('Ajustements de Portefeuille', r.get('portfolio_adjustments') or [])
+                risk_html += _render_list_section('Hedges', r.get('tail_risk_hedges') or [])
+                if isinstance(r.get('stress_test_results'), dict):
+                    risk_html += _render_list_section('Stress Tests', [str(k)+': '+str(v) for k,v in r['stress_test_results'].items()])
+
+            act_html = ''
+            asec = structured.get('actionable_summary') or {}
+            if isinstance(asec, dict) and asec:
+                act_html += _render_list_section('Actions immédiates', asec.get('immediate_actions') or [])
+                act_html += _render_list_section('Watchlist', asec.get('watchlist') or [])
+                km = asec.get('key_metrics_alerts') or {}
+                if isinstance(km, dict) and km:
+                    flat = []
+                    for kk in ['if_breaks','if_holds','calendar']:
+                        if kk in km and km[kk]:
+                            flat.append(kk.replace('_',' ').title() + ': ' + ', '.join([str(x) for x in km[kk]]))
+                    act_html += _render_list_section('Alerts', flat)
 
             def _render_paragraphs(t: str) -> str:
                 if not t:
@@ -1603,6 +1771,20 @@ Ce rapport a été généré automatiquement par votre système de gestion
                         {'<ul>' + ''.join(f'<li>{p}</li>' for p in insights) + '</ul>' if insights else '<p>N/D</p>'}
                     </div>
                 </div>
+
+                {('<div class="section"><h3>📊 Indicateurs Économiques</h3><div class="economic-grid">' + econ_html + '</div></div>') if econ_html else ''}
+
+                {('<div class="section"><h3>🌍 Analyse Géopolitique</h3><div class="geopolitical card">' + geo_html + '</div></div>') if geo_html else ''}
+
+                {('<div class="section"><h3>🧭 Tableau de Bord Exécutif</h3>' + exec_dash_html + '</div>') if exec_dash_html else ''}
+
+                {('<div class="section"><h3>🧠 Analyse Méta & Régimes</h3>' + meta_html + '</div>') if meta_html else ''}
+
+                {('<div class="section"><h3>📈 Signaux Quantitatifs</h3>' + quant_html + '</div>') if quant_html else ''}
+
+                {('<div class="section"><h3>🛡️ Gestion des Risques</h3>' + risk_html + '</div>') if risk_html else ''}
+
+                {('<div class="section"><h3>✅ Synthèse Actionnable</h3>' + act_html + '</div>') if act_html else ''}
 
                 <div class=\"section grid grid-2\">
                     <div>
