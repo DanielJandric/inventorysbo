@@ -1511,6 +1511,10 @@ Ce rapport a été généré automatiquement par votre système de gestion
 
         parsed = _safe_parse_json(report_content)
         has_structured = isinstance(parsed, dict) and (parsed.get('executive_summary') is not None or parsed.get('summary') is not None)
+        try:
+            logger.info(f"email_v2: parsed_json={bool(parsed)} has_structured={has_structured}")
+        except Exception:
+            pass
 
         if has_structured:
             executive_summary = _normalize_list(parsed.get('executive_summary'))
@@ -1519,6 +1523,17 @@ Ce rapport a été généré automatiquement par votre système de gestion
             risks = _normalize_list(parsed.get('risks'))
             opportunities = _normalize_list(parsed.get('opportunities'))
             summary_text = str(parsed.get('summary') or '').strip()
+            # Si pas de bullets, tenter de dériver un mini exec summary depuis key_points/summary
+            if not executive_summary:
+                if key_points:
+                    executive_summary = key_points[:10]
+                elif summary_text:
+                    try:
+                        # découpes naïves: phrases séparées par '.'
+                        pts = [p.strip() for p in summary_text.split('.') if p.strip()]
+                        executive_summary = [x + '.' for x in pts[:8]]
+                    except Exception:
+                        executive_summary = []
 
             # Sources
             sources_html = ''
@@ -1718,6 +1733,10 @@ Ce rapport a été généré automatiquement par votre système de gestion
                     parts = [p.strip() for p in raw.split('\n') if p.strip()]
                 return '\n'.join([f'<p style="font-size:14px;line-height:1.8;">{p}</p>' for p in parts])
 
+            try:
+                logger.info(f"email_v2 sections: exec={len(executive_summary)} key={len(key_points)} ins={len(insights)} risk={len(risks)} opp={len(opportunities)}")
+            except Exception:
+                pass
             return f"""
         <!DOCTYPE html>
         <html lang=\"fr\">
