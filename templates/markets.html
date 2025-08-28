@@ -271,11 +271,25 @@
                     container.innerHTML = data.items.map((a) => {
                         const id = a.id;
                         // Helpers: normalize lists and pick narrative
+                        const sanitize = (s) => {
+                            try {
+                                let t = String(s == null ? '' : s);
+                                // Trim whitespace
+                                t = t.trim();
+                                // Remove leading/trailing lone JSON punctuation
+                                t = t.replace(/^[}\]\),\s]+/, '').replace(/[\[{(,\s]+$/, '');
+                                // If still wrapped by single pair of braces, strip once
+                                if ((t.startsWith('{') && t.endsWith('}')) || (t.startsWith('[') && t.endsWith(']'))) {
+                                    t = t.slice(1, -1).trim();
+                                }
+                                return t;
+                            } catch { return String(s || ''); }
+                        };
                         const normalizeList = (val) => {
                             if (!val) return [];
-                            if (Array.isArray(val)) return val.map(x => String(x)).filter(Boolean);
+                            if (Array.isArray(val)) return val.map(x => sanitize(x)).filter(Boolean);
                             const s = String(val || '').replace(/\r/g, '\n');
-                            return s.split(/\n+/).map(p => p.trim().replace(/^[-•*]\s*/, '')).filter(Boolean);
+                            return s.split(/\n+/).map(p => sanitize(p.replace(/^[-•*]\s*/, ''))).filter(Boolean);
                         };
                         const pickSummary = (obj) => {
                             const s = (obj.summary || '').trim();
@@ -285,7 +299,7 @@
                             return '';
                         };
                         // Summary with minimal markdown and emojis retained
-                        let htmlSummary = pickSummary(a)
+                        let htmlSummary = sanitize(pickSummary(a))
                           .replace(/\*\*(.*?)\*\*/g, '<strong>$1<\/strong>')
                           .replace(/\n/g, '<br\/>' )
                           .replace(/↑/g, '<span class="text-green-400">↑<\/span>')
