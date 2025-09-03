@@ -1016,7 +1016,7 @@ Contraintes générales:
                     # For gpt-5 strict JSON/reporting, omit temperature for determinism
                     if not str(chosen_model).startswith("gpt-5"):
                         req_kwargs["temperature"] = 0.3
-                    effort = os.getenv("AI_REASONING_EFFORT", "medium")
+                    effort = os.getenv("AI_REASONING_EFFORT", "high")
                     if effort:
                         req_kwargs["reasoning"] = {"effort": effort}
 
@@ -1053,7 +1053,7 @@ Contraintes générales:
                             {"role": "user", "content": [{"type": "input_text", "text": f"Demande: {prompt}\n\nDONNÉES FACTUELLES (snapshot):\n{snapshot_str}\n\nDONNÉES COLLECTÉES (articles):\n{context}"}]}
                         ],
                         max_output_tokens=15000,
-                        reasoning_effort=os.getenv("AI_REASONING_EFFORT", "medium"),
+                        reasoning_effort=os.getenv("AI_REASONING_EFFORT", "high"),
                         response_format={"type": "json_schema", "json_schema": json_schema}
                     )
                     raw = extract_output_text(resp) or ""
