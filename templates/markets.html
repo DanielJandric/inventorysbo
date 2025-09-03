@@ -298,8 +298,23 @@
                             try { return (obj.deep_analysis && obj.deep_analysis.narrative) || ''; } catch {}
                             return '';
                         };
-                        // Summary with minimal markdown and emojis retained
-                        let htmlSummary = sanitize(pickSummary(a))
+                        // Summary with minimal markdown and emojis retained, plus JSON-like extraction
+                        const tryExtractSummary = (s) => {
+                            try {
+                                const t = String(s || '').trim();
+                                if (t.startsWith('{') || t.includes('"meta_analysis"') || t.includes('"deep_analysis"')) {
+                                    const obj = JSON.parse(t);
+                                    if (obj && typeof obj === 'object') {
+                                        return (obj.summary || (obj.deep_analysis && obj.deep_analysis.narrative) || '').trim();
+                                    }
+                                }
+                            } catch {}
+                            return '';
+                        };
+                        let rawSummary = pickSummary(a);
+                        const extracted = tryExtractSummary(rawSummary);
+                        if (extracted) rawSummary = extracted;
+                        let htmlSummary = sanitize(rawSummary)
                           .replace(/\*\*(.*?)\*\*/g, '<strong>$1<\/strong>')
                           .replace(/\n/g, '<br\/>' )
                           .replace(/↑/g, '<span class="text-green-400">↑<\/span>')

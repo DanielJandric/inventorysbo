@@ -1436,13 +1436,15 @@ L'objet "<strong>{item_data.get('name', 'N/A')}</strong>" de la catégorie "<str
         </html>
         """
     
-    def _create_market_report_text(self, report_date: str, report_time: str, report_content: str) -> str:
+    def _create_market_report_text(self, report_date: str, report_time: str, report_content: Any) -> str:
         """Crée le contenu texte pour le rapport de marché"""
         timestamp = datetime.now().strftime("%d/%m/%Y à %H:%M")
         
         # Essayer d'interpréter le contenu comme JSON structuré pour un rendu texte propre
-        def _safe_parse_json(text: str):
+        def _safe_parse_json(text: Any):
             try:
+                if isinstance(text, (dict, list)):
+                    return text
                 s = (text or '').strip()
                 import re as _re
                 s = _re.sub(r"```\s*json\s*", "", s, flags=_re.IGNORECASE)
@@ -1539,21 +1541,23 @@ Date: {report_date}
 Heure: {report_time}
 Généré le: {timestamp}
 📝 Résumé
-{(report_content or '').strip()}
+{str(report_content or '').strip()}
 
 ---
 BONVIN Collection - Gestion de portefeuille d'investissement
 Ce rapport a été généré automatiquement par votre système de gestion
         """
 
-    def _create_market_report_html_v2(self, report_date: str, report_time: str, report_content: str) -> str:
+    def _create_market_report_html_v2(self, report_date: str, report_time: str, report_content: Any) -> str:
         """Version robuste du HTML: parse JSON si présent et rend Executive Summary et sections.
         Fallback vers rendu <pre> si non-structuré.
         """
         timestamp = datetime.now().strftime("%d/%m/%Y à %H:%M")
 
-        def _safe_parse_json(text: str):
+        def _safe_parse_json(text: Any):
             try:
+                if isinstance(text, (dict, list)):
+                    return text
                 s = (text or '').strip()
                 import re as _re
                 s = _re.sub(r"```\s*json\s*", "", s, flags=_re.IGNORECASE)
@@ -1944,7 +1948,7 @@ Ce rapport a été généré automatiquement par votre système de gestion
         </html>
             """
 
-        # Fallback: rendu texte en <pre>
+        # Fallback: rendu minimal sans exposer le JSON brut
         return f"""
         <!DOCTYPE html>
         <html lang=\"fr\">
@@ -1957,7 +1961,6 @@ Ce rapport a été généré automatiquement par votre système de gestion
                 .container {{ max-width: 700px; margin: 0 auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,.1); overflow: hidden; }}
                 .header {{ background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); color: white; padding: 30px; text-align: center; }}
                 .content {{ padding: 30px; }}
-                pre {{ white-space: pre-wrap; background:#f8f9fa; border:1px solid #e1e5e9; padding:15px; border-radius:4px; }}
                 .footer {{ background:#f8fafc; padding:20px; text-align:center; border-top:1px solid #e1e5e9; }}
             </style>
         </head>
@@ -1968,7 +1971,7 @@ Ce rapport a été généré automatiquement par votre système de gestion
                     <div>{report_date} • {report_time} • Généré le {timestamp}</div>
                 </div>
                 <div class=\"content\">
-                    <pre>{(report_content or '').replace('<','&lt;').replace('>','&gt;')}</pre>
+                    <p>Contenu non structuré disponible pour ce rapport. Les sections détaillées ne sont pas fournies.</p>
                 </div>
                 <div class=\"footer\"><p><strong>BONVIN Collection</strong> — Rapport généré automatiquement</p></div>
             </div>
@@ -6179,7 +6182,8 @@ def send_market_report_email():
                         market_report_data = {
                             'date': ts[:10] if len(ts) >= 10 else datetime.now().strftime('%d/%m/%Y'),
                             'time': ts[11:16] if len(ts) >= 16 else datetime.now().strftime('%H:%M'),
-                            'content': json.dumps(structured_payload, ensure_ascii=False)
+                            # Passer le payload structuré directement (dict)
+                            'content': structured_payload
                         }
                         logger.info(f"✅ Utilisation analyse structurée ID {a.id} avec {len(a.executive_summary or [])} points exec")
         except Exception as e:
