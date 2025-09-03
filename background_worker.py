@@ -451,7 +451,7 @@ class MarketAnalysisWorker:
             
             # Optionnel: image header CID (avec overlay texte titre+timestamp)
             try:
-                header_path = os.getenv('EMAIL_HEADER_IMAGE_PATH', 'assets/email/header.png')
+                header_path = os.getenv('EMAIL_HEADER_IMAGE_PATH', 'static/Market_report_header_email.png')
                 cid_name = os.getenv('EMAIL_HEADER_CID', 'market-header')
                 if header_path and os.path.exists(header_path):
                     with open(header_path, 'rb') as f:
