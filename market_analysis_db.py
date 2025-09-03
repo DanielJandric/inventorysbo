@@ -327,6 +327,54 @@ class MarketAnalysisDB:
                     data['processing_time_seconds'] = int(data['processing_time_seconds'])
                 except Exception:
                     data.pop('processing_time_seconds', None)
+
+            # Uniformiser les champs JSON (éviter le stockage de repr Python non valide)
+            try:
+                json_list_fields = ['executive_summary', 'key_points', 'insights', 'risks', 'opportunities', 'sources']
+                json_dict_fields = ['structured_data', 'geopolitical_analysis', 'economic_indicators']
+                for field in json_list_fields:
+                    if field in data:
+                        val = data[field]
+                        if isinstance(val, (list, dict)):
+                            # Forcer un JSON string valide
+                            data[field] = json.dumps(val, ensure_ascii=False)
+                        elif isinstance(val, str):
+                            s = val.strip()
+                            if not s:
+                                data[field] = json.dumps([], ensure_ascii=False)
+                            else:
+                                # Tenter de valider; si invalide, fallback en liste vide
+                                try:
+                                    parsed = json.loads(s)
+                                    if not isinstance(parsed, list):
+                                        parsed = []
+                                    data[field] = json.dumps(parsed, ensure_ascii=False)
+                                except Exception:
+                                    data[field] = json.dumps([], ensure_ascii=False)
+                        else:
+                            data[field] = json.dumps([], ensure_ascii=False)
+
+                for field in json_dict_fields:
+                    if field in data:
+                        val = data[field]
+                        if isinstance(val, dict):
+                            data[field] = json.dumps(val, ensure_ascii=False)
+                        elif isinstance(val, str):
+                            s = val.strip()
+                            if not s:
+                                data[field] = json.dumps({}, ensure_ascii=False)
+                            else:
+                                try:
+                                    parsed = json.loads(s)
+                                    if not isinstance(parsed, dict):
+                                        parsed = {}
+                                    data[field] = json.dumps(parsed, ensure_ascii=False)
+                                except Exception:
+                                    data[field] = json.dumps({}, ensure_ascii=False)
+                        else:
+                            data[field] = json.dumps({}, ensure_ascii=False)
+            except Exception as _e:
+                logger.warning(f"⚠️ Normalisation des champs JSON échouée (fallbacks appliqués): {_e}")
             
             # Effectuer la mise à jour; le SDK Python ne supporte pas .select() après update
             self.supabase.table('market_analyses') \
