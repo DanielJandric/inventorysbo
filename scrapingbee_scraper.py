@@ -966,6 +966,7 @@ FORMAT DE SORTIE CRITIQUE:
 - TOUTES les chaînes de caractères doivent être correctement échappées.
 - TOUTES les accolades et crochets doivent être équilibrés.
 - Vérifie que le JSON est syntaxiquement correct avant de le retourner.
+- IMPORTANT: La réponse DOIT être un seul objet JSON COMPLET ET FERMÉ (aucune troncature). Si tu détectes un risque de coupure, corrige et renvoie un objet complet.
 
 Sortie STRICTEMENT en JSON unique. Compatibilité requise avec notre backend:
 - Fournis AUSSI les champs legacy: 
@@ -1073,6 +1074,11 @@ Contraintes générales:
                         response_format={"type": "json_schema", "json_schema": json_schema}
                     )
                     raw = extract_output_text(resp) or ""
+                    try:
+                        logger.info(f"llm_raw_len={len(raw)} attempt={attempt+1}")
+                        logger.debug(f"llm_raw_head={raw[:1000]}")
+                    except Exception:
+                        pass
 
                     # Validation stricte du schéma JSON
                     def validate_llm_response(data: dict) -> bool:
@@ -1185,6 +1191,11 @@ Contraintes générales:
                             if open_braces > close_braces:
                                 repaired.extend(['}'] * (open_braces - close_braces))
                                 logger.info(f"Ajout de {open_braces - close_braces} accolades fermantes")
+                            open_brk = repaired.count('[')
+                            close_brk = repaired.count(']')
+                            if open_brk > close_brk:
+                                repaired.extend([']'] * (open_brk - close_brk))
+                                logger.info(f"Ajout de {open_brk - close_brk} crochets fermants")
                             
                             return ''.join(repaired)
                             
@@ -1224,17 +1235,35 @@ Contraintes générales:
 
                     parsed = _safe_parse_json(raw)
                     if parsed is None:
-                        # fallback structuré au lieu d'échouer (évite retry inutile)
-                        parsed = {
-                            "summary": raw[:10000],
-                            "key_points": [],
-                            "structured_data": {},
-                            "insights": [],
-                            "risks": [],
-                            "opportunities": [],
-                            "sources": [],
-                            "confidence_score": 0.0,
-                        }
+                        # Retry avec instruction de correction si tentative restante
+                        if attempt < 2:
+                            logger.info("Retry LLM avec instruction de correction JSON…")
+                            correction_prompt = system_prompt + "\n\nATTENTION: La réponse précédente n'était pas un JSON valide. Renvoie le MÊME CONTENU sous forme d'un SEUL objet JSON complet et fermé, sans texte hors JSON."
+                            resp = from_responses_simple(
+                                client=client,
+                                model=os.getenv("AI_MODEL", "gpt-5"),
+                                messages=[
+                                    {"role": "system", "content": [{"type": "input_text", "text": correction_prompt}]},
+                                    {"role": "user", "content": [{"type": "input_text", "text": f"Demande: {prompt}\n\nDONNÉES FACTUELLES (snapshot):\n{snapshot_str}\n\nDONNÉES COLLECTÉES (articles):\n{context}"}]}
+                                ],
+                                max_output_tokens=15000,
+                                reasoning_effort=os.getenv("AI_REASONING_EFFORT", "high"),
+                                response_format={"type": "json_schema", "json_schema": json_schema}
+                            )
+                            raw = extract_output_text(resp) or ""
+                            parsed = _safe_parse_json(raw)
+                        if parsed is None:
+                            # fallback structuré au lieu d'échouer (évite retry inutile)
+                            parsed = {
+                                "summary": raw[:10000],
+                                "key_points": [],
+                                "structured_data": {},
+                                "insights": [],
+                                "risks": [],
+                                "opportunities": [],
+                                "sources": [],
+                                "confidence_score": 0.0,
+                            }
 
                     # Normaliser les champs attendus si manquants
                     if not isinstance(parsed.get("executive_summary"), list):

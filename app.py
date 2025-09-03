@@ -1286,6 +1286,12 @@ L'objet "<strong>{item_data.get('name', 'N/A')}</strong>" de la catégorie "<str
     def _create_market_report_html(self, report_date: str, report_time: str, report_content: str) -> str:
         """Crée un HTML professionnel pour le rapport de marché"""
         timestamp = datetime.now().strftime("%d/%m/%Y à %H:%M")
+        # Assainir le contenu brut (fallback simple)
+        try:
+            import html as _html
+            safe_content = _html.escape(str(report_content if report_content is not None else ""))
+        except Exception:
+            safe_content = str(report_content if report_content is not None else "")
         
         return f"""
         <!DOCTYPE html>
@@ -1422,7 +1428,7 @@ L'objet "<strong>{item_data.get('name', 'N/A')}</strong>" de la catégorie "<str
                     
                     <div class="report-content">
                         <h3>📊 Analyse de Marché</h3>
-                        <pre>{report_content}</pre>
+                        <pre>{safe_content}</pre>
                     </div>
                 </div>
                 
@@ -1532,7 +1538,21 @@ L'objet "<strong>{item_data.get('name', 'N/A')}</strong>" de la catégorie "<str
             text_sections.append("---\nBONVIN Collection - Gestion de portefeuille d'investissement\nCe rapport a été généré automatiquement par votre système de gestion\n")
             return ''.join([s for s in text_sections if s])
 
-        # Fallback: contenu brut si non-JSON
+        # Fallback: éviter d'insérer du JSON brut en texte
+        try:
+            import re as _re
+            raw_fallback = str(report_content or '').strip()
+            looks_json = raw_fallback.startswith('{') or ('"meta_analysis"' in raw_fallback or '"deep_analysis"' in raw_fallback or '"executive_summary"' in raw_fallback)
+            if looks_json:
+                # Retirer la ponctuation JSON la plus commune pour garder un texte lisible
+                cleaned = _re.sub(r'[\{\}\[\]\\\"\,]', ' ', raw_fallback)
+                cleaned = _re.sub(r'\s+', ' ', cleaned).strip()
+                safe_fallback = cleaned
+            else:
+                safe_fallback = raw_fallback
+        except Exception:
+            safe_fallback = str(report_content or '').strip()
+
         return f"""
 BONVIN Collection - Rapport de Marché
 ====================================
@@ -1541,7 +1561,7 @@ Date: {report_date}
 Heure: {report_time}
 Généré le: {timestamp}
 📝 Résumé
-{str(report_content or '').strip()}
+{safe_fallback}
 
 ---
 BONVIN Collection - Gestion de portefeuille d'investissement
