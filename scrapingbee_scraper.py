@@ -919,11 +919,10 @@ class ScrapingBeeScraper:
             
             client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
             
-            # Prompt système chargé depuis l'environnement (aucun fallback embarqué)
-            system_prompt_env = os.getenv('MARKET_PROMPT')
-            if not system_prompt_env:
-                raise RuntimeError("MARKET_PROMPT environment variable is required for LLM prompt.")
-            system_prompt = system_prompt_env
+            # Prompt système chargé depuis un fichier (aucun fallback embarqué)
+            prompt_path = os.path.join(os.path.dirname(__file__), 'prompts', 'market_analysis_fr.txt')
+            with open(prompt_path, 'r', encoding='utf-8') as _pf:
+                system_prompt = _pf.read()
             
             # Préparer le contexte (avec limitation stricte)
             context_complete = self._prepare_context(scraped_data)
