@@ -340,6 +340,33 @@ class MarketAnalysisWorker:
 
             summary_text = _clean_summary_for_storage(summary_text)
 
+            # Sécurité supplémentaire: assurer le miroir legacy structured_data
+            def _ensure_structured_data_mirror(obj: dict) -> dict:
+                try:
+                    if not isinstance(obj, dict):
+                        return obj
+                    sections = [
+                        'executive_dashboard',
+                        'deep_analysis',
+                        'quantitative_signals',
+                        'risk_management',
+                        'actionable_summary',
+                        'economic_indicators',
+                    ]
+                    sd = obj.get('structured_data')
+                    needs_build = not isinstance(sd, dict) or any(k not in sd for k in sections)
+                    if needs_build:
+                        mirrored = {}
+                        for key in sections:
+                            if key in obj and obj.get(key) is not None:
+                                mirrored[key] = obj.get(key)
+                        obj['structured_data'] = mirrored
+                except Exception:
+                    pass
+                return obj
+
+            result = _ensure_structured_data_mirror(result)
+
             update_data = {
                 'executive_summary': exec_summary,
                 'summary': summary_text,

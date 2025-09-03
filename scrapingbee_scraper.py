@@ -1238,6 +1238,34 @@ class ScrapingBeeScraper:
                             logger.error(f"Erreur extraction JSON partiel: {e}")
                             return None
 
+                    def _ensure_structured_data_mirror(obj: dict) -> dict:
+                        """Complète automatiquement structured_data en copiant les 6 sections avancées.
+                        Si structured_data est manquant/vide ou incomplet, on reconstruit à partir des sections racine.
+                        """
+                        try:
+                            if not isinstance(obj, dict):
+                                return obj
+                            sections = [
+                                "executive_dashboard",
+                                "deep_analysis",
+                                "quantitative_signals",
+                                "risk_management",
+                                "actionable_summary",
+                                "economic_indicators",
+                            ]
+                            sd = obj.get("structured_data")
+                            needs_build = not isinstance(sd, dict) or any(k not in sd for k in sections)
+                            if needs_build:
+                                mirrored = {}
+                                for key in sections:
+                                    if key in obj and obj.get(key) is not None:
+                                        mirrored[key] = obj.get(key)
+                                obj["structured_data"] = mirrored
+                        except Exception:
+                            # En cas d'erreur on ne bloque pas le flux
+                            pass
+                        return obj
+
                     parsed = _safe_parse_json(raw)
                     if parsed is None:
                         # Retry avec instruction de correction si tentative restante
@@ -1294,6 +1322,9 @@ class ScrapingBeeScraper:
                                 parsed["executive_summary"] = [x + '.' for x in sents[:8]]
                             except Exception:
                                 parsed["executive_summary"] = []
+
+                    # Assurer le miroir legacy automatiquement
+                    parsed = _ensure_structured_data_mirror(parsed)
 
                     result = parsed
                     logger.info(f"✅ OpenAI a retourné une réponse complète (exec={len(result.get('executive_summary', []))}, key={len(result.get('key_points', []))}, summary_len={len(result.get('summary',''))})")
