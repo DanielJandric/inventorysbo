@@ -435,7 +435,7 @@ class MarketAnalysisWorker:
             html_content = self._generate_market_analysis_html(analysis, analysis_result)
             
             # Créer et envoyer l'email (horodatage CET/CEST par défaut: Europe/Zurich)
-            msg = MIMEMultipart('alternative')
+            msg = MIMEMultipart('related')
             msg['From'] = email_user
             msg['To'] = ", ".join(recipients)
             try:
@@ -449,6 +449,25 @@ class MarketAnalysisWorker:
                 ts_str = datetime.utcnow().strftime('%d/%m/%Y %H:%M UTC')
             msg['Subject'] = f"[BONVIN] Rapport d'Analyse de Marché - {ts_str}"
             
+            # Optionnel: image header CID
+            try:
+                header_path = os.getenv('EMAIL_HEADER_IMAGE_PATH', 'assets/email/header.png')
+                cid_name = os.getenv('EMAIL_HEADER_CID', 'market-header')
+                if header_path and os.path.exists(header_path):
+                    with open(header_path, 'rb') as f:
+                        img_data = f.read()
+                    from email.mime.image import MIMEImage
+                    img = MIMEImage(img_data)
+                    img.add_header('Content-ID', f'<{cid_name}>')
+                    img.add_header('Content-Disposition', 'inline', filename=os.path.basename(header_path))
+                    msg.attach(img)
+                    # Injecter l'image dans l'HTML si non présente
+                    if 'cid:' + cid_name not in html_content:
+                        html_header = f"<div style=\"text-align:center;margin-bottom:12px\"><img src=\"cid:{cid_name}\" alt=\"Market Header\" style=\"max-width:100%;height:auto\"/></div>"
+                        html_content = html_header + html_content
+            except Exception as _e_img:
+                logger.warning(f"Image CID non ajoutée: {_e_img}")
+
             msg.attach(MIMEText(html_content, 'html', 'utf-8'))
             
             with smtplib.SMTP(email_host, email_port) as server:
