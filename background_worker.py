@@ -449,15 +449,70 @@ class MarketAnalysisWorker:
                 ts_str = datetime.utcnow().strftime('%d/%m/%Y %H:%M UTC')
             msg['Subject'] = f"[BONVIN] Rapport d'Analyse de Marché - {ts_str}"
             
-            # Optionnel: image header CID
+            # Optionnel: image header CID (avec overlay texte titre+timestamp)
             try:
                 header_path = os.getenv('EMAIL_HEADER_IMAGE_PATH', 'assets/email/header.png')
                 cid_name = os.getenv('EMAIL_HEADER_CID', 'market-header')
                 if header_path and os.path.exists(header_path):
                     with open(header_path, 'rb') as f:
-                        img_data = f.read()
+                        base_img_bytes = f.read()
+
+                    # Overlay dynamique (best-effort)
+                    overlay_enabled = str(os.getenv('EMAIL_HEADER_OVERLAY', '1')).lower() in ('1','true','yes')
+                    img_bytes_to_send = base_img_bytes
+                    if overlay_enabled:
+                        try:
+                            from PIL import Image, ImageDraw, ImageFont  # type: ignore
+                            from io import BytesIO
+                            im = Image.open(BytesIO(base_img_bytes)).convert('RGBA')
+                            draw = ImageDraw.Draw(im)
+                            W, H = im.size
+                            title = os.getenv('EMAIL_HEADER_TITLE', 'RAPPORT D\'ANALYSE DE MARCHÉ')
+                            subtitle = os.getenv('EMAIL_HEADER_SUBTITLE', f'Généré le {ts_str}')
+
+                            # Choix tailles police relatifs à la largeur
+                            title_size = max(24, int(W * 0.05))
+                            sub_size = max(16, int(W * 0.025))
+                            try:
+                                font_path = os.getenv('EMAIL_HEADER_FONT_PATH', '')
+                                if font_path and os.path.exists(font_path):
+                                    font_title = ImageFont.truetype(font_path, title_size)
+                                    font_sub = ImageFont.truetype(font_path, sub_size)
+                                else:
+                                    font_title = ImageFont.load_default()
+                                    font_sub = ImageFont.load_default()
+                            except Exception:
+                                font_title = ImageFont.load_default()
+                                font_sub = ImageFont.load_default()
+
+                            # Calcul dimensions texte
+                            title_w, title_h = draw.textbbox((0,0), title, font=font_title)[2:4]
+                            sub_w, sub_h = draw.textbbox((0,0), subtitle, font=font_sub)[2:4]
+                            pad = int(H * 0.04)
+                            block_w = max(title_w, sub_w) + 2*pad
+                            block_h = title_h + sub_h + 3*pad//2
+                            x = pad
+                            y = pad
+
+                            # Fond semi-opaque pour lisibilité
+                            bg = Image.new('RGBA', (block_w, block_h), (0,0,0,120))
+                            im.alpha_composite(bg, dest=(x, y))
+                            # Ombre légère
+                            shadow_offset = 2
+                            draw.text((x+pad+shadow_offset, y+pad+shadow_offset), title, font=font_title, fill=(0,0,0,180))
+                            draw.text((x+pad, y+pad), title, font=font_title, fill=(255,255,255,230))
+                            draw.text((x+pad+shadow_offset, y+pad+title_h+pad//2+shadow_offset), subtitle, font=font_sub, fill=(0,0,0,160))
+                            draw.text((x+pad, y+pad+title_h+pad//2), subtitle, font=font_sub, fill=(230,230,230,230))
+
+                            # Export PNG
+                            out = BytesIO()
+                            im.convert('RGB').save(out, format='PNG', optimize=True)
+                            img_bytes_to_send = out.getvalue()
+                        except Exception as _e_overlay:
+                            logger.warning(f"Overlay header image désactivé (fallback image originale): {_e_overlay}")
+
                     from email.mime.image import MIMEImage
-                    img = MIMEImage(img_data)
+                    img = MIMEImage(img_bytes_to_send, _subtype='png')
                     img.add_header('Content-ID', f'<{cid_name}>')
                     img.add_header('Content-Disposition', 'inline', filename=os.path.basename(header_path))
                     msg.attach(img)
