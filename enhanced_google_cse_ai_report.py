@@ -263,7 +263,7 @@ Format JSON:
             from gpt5_compat import from_chat_completions_compat
             response = from_chat_completions_compat(
                 client=self.openai_client,
-                model=os.getenv("AI_MODEL", "gpt-5-thinking"),
+                model=os.getenv("AI_MODEL", "gpt-5"),
                 messages=[
                     {"role": "system", "content": "Tu es un analyste financier expert avec 20 ans d'expérience. Tu utilises Google CSE comme source principale pour tes analyses."},
                     {"role": "user", "content": prompt}

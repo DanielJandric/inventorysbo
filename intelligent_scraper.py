@@ -336,7 +336,7 @@ class IntelligentScraper:
             """
             
             from os import getenv
-            model_name = getenv("AI_MODEL", "gpt-5-thinking")
+            model_name = getenv("AI_MODEL", "gpt-5")
             from gpt5_compat import from_chat_completions_compat
             response = from_chat_completions_compat(
                 client=self.openai_client,

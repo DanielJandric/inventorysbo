@@ -2184,7 +2184,6 @@ except Exception as _e:
 # Configuration du dépôt de PDF marché
 app.config.setdefault('MARKET_PDF_UPLOAD_FOLDER', os.path.join(app.root_path, 'static', 'market_pdfs'))
 app.config.setdefault('MARKET_PDF_ALLOWED_EXTENSIONS', {'.pdf'})
-
 # Créer le dossier si nécessaire
 os.makedirs(app.config['MARKET_PDF_UPLOAD_FOLDER'], exist_ok=True)
 # Gestionnaire de données sophistiqué
@@ -2766,7 +2765,7 @@ class PureOpenAIEngineWithRAG:
             res = chat_tools_messages(
                 messages=loop_messages,
                 tools=tools,
-                model=os.getenv("AI_MODEL","gpt-5-thinking"),
+                model=os.getenv("AI_MODEL","gpt-5"),
                 max_output_tokens=900,
                 reasoning_effort="high",
                 client=self.client
@@ -2790,7 +2789,7 @@ class PureOpenAIEngineWithRAG:
 
                         # Send tool output back using previous_response_id
                         res = self.client.responses.create(
-                            model=os.getenv("AI_MODEL","gpt-5-thinking"),
+                            model=os.getenv("AI_MODEL","gpt-5"),
                             previous_response_id=res.id,
                             input=[{
                                 "role":"tool",
@@ -2915,7 +2914,7 @@ Si la question fait référence à des éléments mentionnés précédemment, ut
 
             # Responses API only
             resp = from_responses_simple(
-client=self.client, model=os.getenv("AI_MODEL", "gpt-5-thinking"),
+client=self.client, model=os.getenv("AI_MODEL", "gpt-5"),
                 messages=[
                     {"role": m["role"], "content": [{"type": "input_text", "text": m["content"]}]} if isinstance(m.get("content"), str) else m
                     for m in messages
@@ -2985,7 +2984,7 @@ Réponds de manière concise et directe."""
             if not ai_response:
                 # Fallback to Responses API (no Completions)
                 resp = from_responses_simple(
-client=self.client, model=os.getenv("AI_MODEL", "gpt-5-thinking"),
+client=self.client, model=os.getenv("AI_MODEL", "gpt-5"),
                     messages=[
                         {"role": m["role"], "content": [{"type": "input_text", "text": m["content"]}]} if isinstance(m.get("content"), str) else m
                         for m in messages
@@ -3073,7 +3072,7 @@ Réponds de manière concise et directe."""
             messages.append({"role": "user", "content": user_prompt})
 
             resp = from_responses_simple(
-client=self.client, model=os.getenv("AI_MODEL", "gpt-5-thinking"),
+client=self.client, model=os.getenv("AI_MODEL", "gpt-5"),
                 messages=[
                     {"role": m["role"], "content": [{"type": "input_text", "text": m["content"]}]} if isinstance(m.get("content"), str) else m
                     for m in messages
@@ -3774,7 +3773,6 @@ def delete_item(item_id):
     except Exception as e:
         logger.error(f"Erreur delete_item: {e}")
         return jsonify({"error": str(e)}), 500
-
 def format_stock_value(value, is_price=False, is_percent=False, is_volume=False):
     """
     Formate les valeurs des actions avec gestion des valeurs manquantes
@@ -4445,7 +4443,7 @@ Réponds en JSON avec:
 - price_range (objet avec min et max basés sur le marché)"""
 
         response = from_responses_simple(
-client=openai_client, model=os.getenv("AI_MODEL", "gpt-5-thinking"),
+client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"),
             messages=[
                 {"role": "system", "content": [{"type": "input_text", "text": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."}]},
                 {"role": "user", "content": [{"type": "input_text", "text": prompt}]}
@@ -4492,7 +4490,7 @@ client=openai_client, model=os.getenv("AI_MODEL", "gpt-5-thinking"),
         if result is None:
             try:
                 cc = from_chat_completions_compat(
-client=openai_client, model=os.getenv("AI_MODEL", "gpt-5-thinking"),
+client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"),
                     messages=[
                         {"role": "system", "content": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."},
                         {"role": "user", "content": prompt}
@@ -4554,7 +4552,6 @@ client=openai_client, model=os.getenv("AI_MODEL", "gpt-5-thinking"),
     except Exception as e:
         logger.error(f"Erreur market_price: {e}")
         return jsonify({"error": "Moteur IA Indisponible"}), 500
-
 @app.route("/api/ai-update-price/<int:item_id>", methods=["POST"])
 def ai_update_price(item_id):
     """Mise à jour automatique du prix via IA et sauvegarde en base"""
@@ -4633,7 +4630,7 @@ Réponds en JSON avec:
 - market_trend (hausse/stable/baisse)"""
 
             response = from_responses_simple(
-client=openai_client, model=os.getenv("AI_MODEL", "gpt-5-thinking"),
+client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"),
                 messages=[
                     {"role": "system", "content": [{"type": "input_text", "text": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."}]},
                     {"role": "user", "content": [{"type": "input_text", "text": prompt}]}
@@ -4833,8 +4830,7 @@ Réponds en JSON avec:
 - market_trend (hausse/stable/baisse)"""
 
                 response = from_chat_completions_compat(
-client=openai_client, model=os.getenv("AI_MODEL", "gpt-5-thinking"
-),
+client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"),
                     messages=[
                         {"role": "system", "content": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."},
                         {"role": "user", "content": prompt}
@@ -5828,7 +5824,7 @@ def get_chatbot_metrics():
     try:
         return jsonify({"success": True, "metrics": chatbot_metrics})
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/chatbot/stream", methods=["POST"])
 def chatbot_stream():
@@ -7496,8 +7492,7 @@ Recherche les données de marché actuelles pour :
 Si une classe d'actif n'a pas bougé, dis-le clairement sans meubler. Génère un briefing pour aujourd'hui basé sur les données de marché réelles trouvées."""
 
         response = from_chat_completions_compat(
-client=openai_client, model=os.getenv("AI_MODEL", "gpt-5-thinking"
-),
+client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"),
             messages=[
                 {"role": "system", "content": "Tu es un expert en marchés financiers. Utilise la recherche web pour des données actuelles."},
                 {"role": "user", "content": prompt}
@@ -8833,7 +8828,6 @@ def markets_chat():
     except Exception as e:
         logger.error(f"Erreur markets_chat: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
-
 @app.route("/api/markets/chat/stream", methods=["POST"])
 def markets_chat_stream():
     """Streaming text (plain) pour le chatbot marchés, basé sur Responses API.
@@ -8895,7 +8889,7 @@ def markets_chat_stream():
         prefix_ctx = "".join([report_ctx, (f"Contexte (utilisateur):\n{extra_context}\n---\n" if extra_context else "")])
         user_prompt_final = f"{prefix_ctx}Question: {user_message}" if prefix_ctx else user_message
 
-        model_name = os.getenv("AI_MODEL", "gpt-5-thinking")
+        model_name = os.getenv("AI_MODEL", "gpt-5")
         kwargs = {
             "model": model_name,
             "instructions": system_prompt,

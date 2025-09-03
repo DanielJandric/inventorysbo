@@ -35,8 +35,8 @@ class MarketsChatWorker:
                 pass
 
         # Enforce GPT-5 only (ignore non GPT-5 env values)
-        env_model = (os.getenv("AI_MODEL") or "gpt-5-thinking").strip()
-        self.model = env_model if env_model.startswith("gpt-5") else "gpt-5-thinking"
+        env_model = (os.getenv("AI_MODEL") or "gpt-5").strip()
+        self.model = env_model if env_model.startswith("gpt-5") else "gpt-5"
         # Autoriser jusqu'à 30000 tokens (par défaut), configurable via MAX_OUTPUT_TOKENS
         try:
             self.max_output_tokens = min(30000, int(os.getenv("MAX_OUTPUT_TOKENS", "30000")))
