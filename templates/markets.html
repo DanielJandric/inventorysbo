@@ -230,7 +230,17 @@
             }
 
             function renderAnalysis(analysis) {
-                // Helpers (local) to sanitize and normalize possible JSON-like fields
+                // Helpers (local) to sanitize, escape and normalize possible JSON-like fields
+                const escapeHtml = (s) => {
+                    try {
+                        return String(s == null ? '' : s)
+                            .replace(/&/g, '&amp;')
+                            .replace(/</g, '&lt;')
+                            .replace(/>/g, '&gt;')
+                            .replace(/"/g, '&quot;')
+                            .replace(/'/g, '&#39;');
+                    } catch { return String(s || ''); }
+                };
                 const sanitize = (s) => {
                     try {
                         let t = String(s == null ? '' : s).trim();
@@ -268,18 +278,19 @@
                     try { return (obj.deep_analysis && obj.deep_analysis.narrative) || ''; } catch {}
                     return '';
                 };
-
-                // Build sanitized summary
-                let rawSummary = pickSummary(analysis);
-                const extracted = tryExtractSummary(rawSummary);
-                if (extracted) rawSummary = extracted;
-                let htmlSummary = sanitize(rawSummary)
+                const formatText = (txt) => escapeHtml(String(txt || ''))
                   .replace(/\*\*(.*?)\*\*/g, '<strong>$1<\/strong>')
                   .replace(/\n/g, '<br\/>')
                   .replace(/↑/g, '<span class="text-green-400">↑<\/span>')
                   .replace(/↓/g, '<span class="text-red-400">↓<\/span>')
                   .replace(/🟢/g, '<span class="text-green-400">🟢<\/span>')
                   .replace(/🔴/g, '<span class="text-red-400">🔴<\/span>');
+
+                // Build sanitized summary
+                let rawSummary = pickSummary(analysis);
+                const extracted = tryExtractSummary(rawSummary);
+                if (extracted) rawSummary = extracted;
+                let htmlSummary = formatText(sanitize(rawSummary));
 
                 // Normalize lists
                 const execArr = normalizeList(analysis.executive_summary);
@@ -300,15 +311,15 @@
                         <div class="glass p-4 rounded-xl lg:col-span-2 bg-gradient-to-r from-cyan-900/20 to-blue-900/20 border border-cyan-400/30">
                             <h5 class="font-bold mb-3 text-cyan-200"><i class="fas fa-chart-bar mr-2"></i>EXECUTIVE SUMMARY</h5>
                             <div class="space-y-2 text-cyan-100 font-medium break-any">
-                                ${execArr.map(point => `<div class="pl-2 break-any">${point}</div>`).join('')}
+                                ${execArr.map(point => `<div class="pl-2 break-any">${escapeHtml(point)}</div>`).join('')}
                             </div>
                         </div>
                         ` : ''}
                         <div class="glass p-4 rounded-xl bg-indigo-500/10 border border-indigo-400/30"><h6 class="font-medium mb-2"><i class="fas fa-chart-line mr-2"></i>Résumé</h6><p class="text-indigo-100/80 text-sm break-any wrap-pre">${htmlSummary || 'N/A'}</p></div>
-                        <div class="glass p-4 rounded-xl bg-fuchsia-500/10 border border-fuchsia-400/30"><h6 class="font-medium mb-2"><i class="fas fa-list mr-2"></i>Points Clés</h6><ul class="list-disc list-inside text-fuchsia-100/90 text-sm break-any">${keyArr.map(p => `<li class='break-any'>${p}</li>`).join('')}</ul></div>
-                        <div class="glass p-4 rounded-xl bg-amber-500/10 border border-amber-400/30"><h6 class="font-medium mb-2"><i class="fas fa-lightbulb mr-2"></i>Insights</h6><ul class="list-disc list-inside text-amber-100/90 text-sm break-any">${insArr.map(p => `<li class='break-any'>${p}</li>`).join('')}</ul></div>
-                        <div class="glass p-4 rounded-xl bg-rose-500/10 border border-rose-400/30"><h6 class="font-medium mb-2"><i class="fas fa-exclamation-triangle mr-2"></i>Risques</h6><ul class="list-disc list-inside text-rose-100/90 text-sm break-any">${riskArr.map(p => `<li class='break-any'>${p}</li>`).join('')}</ul></div>
-                        <div class="glass p-4 rounded-xl lg:col-span-2 bg-emerald-500/10 border border-emerald-400/30"><h6 class="font-medium mb-2"><i class="fas fa-star mr-2"></i>Opportunités</h6><ul class="list-disc list-inside text-emerald-100/90 text-sm break-any">${oppArr.map(p => `<li class='break-any'>${p}</li>`).join('')}</ul></div>
+                        <div class="glass p-4 rounded-xl bg-fuchsia-500/10 border border-fuchsia-400/30"><h6 class="font-medium mb-2"><i class="fas fa-list mr-2"></i>Points Clés</h6><ul class="list-disc list-inside text-fuchsia-100/90 text-sm break-any">${keyArr.map(p => `<li class='break-any'>${escapeHtml(p)}</li>`).join('')}</ul></div>
+                        <div class="glass p-4 rounded-xl bg-amber-500/10 border border-amber-400/30"><h6 class="font-medium mb-2"><i class="fas fa-lightbulb mr-2"></i>Insights</h6><ul class="list-disc list-inside text-amber-100/90 text-sm break-any">${insArr.map(p => `<li class='break-any'>${escapeHtml(p)}</li>`).join('')}</ul></div>
+                        <div class="glass p-4 rounded-xl bg-rose-500/10 border border-rose-400/30"><h6 class="font-medium mb-2"><i class="fas fa-exclamation-triangle mr-2"></i>Risques</h6><ul class="list-disc list-inside text-rose-100/90 text-sm break-any">${riskArr.map(p => `<li class='break-any'>${escapeHtml(p)}</li>`).join('')}</ul></div>
+                        <div class="glass p-4 rounded-xl lg:col-span-2 bg-emerald-500/10 border border-emerald-400/30"><h6 class="font-medium mb-2"><i class="fas fa-star mr-2"></i>Opportunités</h6><ul class="list-disc list-inside text-emerald-100/90 text-sm break-any">${oppArr.map(p => `<li class='break-any'>${escapeHtml(p)}</li>`).join('')}</ul></div>
                     </div>`;
             }
 
@@ -373,23 +384,40 @@
                         let rawSummary = pickSummary(a);
                         const extracted = tryExtractSummary(rawSummary);
                         if (extracted) rawSummary = extracted;
-                        let htmlSummary = sanitize(rawSummary)
-                          .replace(/\*\*(.*?)\*\*/g, '<strong>$1<\/strong>')
-                          .replace(/\n/g, '<br\/>' )
-                          .replace(/↑/g, '<span class="text-green-400">↑<\/span>')
-                          .replace(/↓/g, '<span class="text-red-400">↓<\/span>')
-                          .replace(/🟢/g, '<span class="text-green-400">🟢<\/span>')
-                          .replace(/🔴/g, '<span class="text-red-400">🔴<\/span>');
+                        const htmlSummary = (function(){
+                            const escapeHtml = (s) => {
+                                try { return String(s == null ? '' : s)
+                                    .replace(/&/g, '&amp;')
+                                    .replace(/</g, '&lt;')
+                                    .replace(/>/g, '&gt;')
+                                    .replace(/\"/g, '&quot;')
+                                    .replace(/'/g, '&#39;');
+                                } catch { return String(s || ''); }
+                            };
+                            return escapeHtml(sanitize(rawSummary))
+                              .replace(/\*\*(.*?)\*\*/g, '<strong>$1<\/strong>')
+                              .replace(/\n/g, '<br\/>')
+                              .replace(/↑/g, '<span class="text-green-400">↑<\/span>')
+                              .replace(/↓/g, '<span class="text-red-400">↓<\/span>')
+                              .replace(/🟢/g, '<span class="text-green-400">🟢<\/span>')
+                              .replace(/🔴/g, '<span class="text-red-400">🔴<\/span>');
+                        })();
                         const execArr = normalizeList(a.executive_summary);
                         const keyArr = normalizeList(a.key_points);
                         const insArr = normalizeList(a.insights);
                         const riskArr = normalizeList(a.risks);
                         const oppArr = normalizeList(a.opportunities);
-                        const execHtml = execArr.map(p => `<li class='break-any'>${p}</li>`).join('');
-                        const keyHtml = keyArr.map(p => `<li class='break-any'>${p}</li>`).join('');
-                        const insHtml = insArr.map(p => `<li class='break-any'>${p}</li>`).join('');
-                        const riskHtml = riskArr.map(p => `<li class='break-any'>${p}</li>`).join('');
-                        const oppHtml = oppArr.map(p => `<li class='break-any'>${p}</li>`).join('');
+                        const esc = (x) => (x == null ? '' : String(x))
+                            .replace(/&/g, '&amp;')
+                            .replace(/</g, '&lt;')
+                            .replace(/>/g, '&gt;')
+                            .replace(/\"/g, '&quot;')
+                            .replace(/'/g, '&#39;');
+                        const execHtml = execArr.map(p => `<li class='break-any'>${esc(p)}</li>`).join('');
+                        const keyHtml = keyArr.map(p => `<li class='break-any'>${esc(p)}</li>`).join('');
+                        const insHtml = insArr.map(p => `<li class='break-any'>${esc(p)}</li>`).join('');
+                        const riskHtml = riskArr.map(p => `<li class='break-any'>${esc(p)}</li>`).join('');
+                        const oppHtml = oppArr.map(p => `<li class='break-any'>${esc(p)}</li>`).join('');
                         const fullHtml = `
                           <article class="glass p-4 rounded-2xl">
                             <header class="flex items-center justify-between gap-3">

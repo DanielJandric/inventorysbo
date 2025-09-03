@@ -8,6 +8,7 @@ import asyncio
 import time
 import logging
 import json
+import html
 from datetime import datetime, timezone, timedelta
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -315,6 +316,30 @@ class MarketAnalysisWorker:
                 logger.info(f"🔄 Opportunités générées par fallback: {len(opportunities)} éléments")
 
             # 4. Mettre à jour la tâche avec les résultats directs du LLM
+            # Nettoyer summary si JSON-like (ne pas tronquer pour email)
+            def _clean_summary_for_storage(s: str) -> str:
+                try:
+                    txt = str(s or '').strip()
+                    if not txt:
+                        return ''
+                    # Si le texte ressemble à un objet JSON complet, tenter d'en extraire la narrative
+                    if txt.startswith('{') and ('"deep_analysis"' in txt or '"meta_analysis"' in txt):
+                        try:
+                            obj = json.loads(txt)
+                            if isinstance(obj, dict):
+                                cand = obj.get('summary') or (
+                                    (obj.get('deep_analysis') or {}).get('narrative') if isinstance(obj.get('deep_analysis'), dict) else ''
+                                )
+                                if cand:
+                                    return str(cand)
+                        except Exception:
+                            pass
+                    return txt
+                except Exception:
+                    return str(s or '')
+
+            summary_text = _clean_summary_for_storage(summary_text)
+
             update_data = {
                 'executive_summary': exec_summary,
                 'summary': summary_text,
@@ -843,9 +868,9 @@ class MarketAnalysisWorker:
             parts = [p.strip() for p in raw.split('\n\n') if p.strip()]
             if len(parts) == 1:
                 parts = [p.strip() for p in raw.split('\n') if p.strip()]
-            return chr(10).join([f'<p style="font-size: 14px; line-height: 1.8;">{p}</p>' for p in parts])
+            return chr(10).join([f'<p style="font-size: 14px; line-height: 1.8;">{html.escape(p)}</p>' for p in parts])
         except Exception:
-            return f'<p style="font-size: 14px; line-height: 1.8;">{text}</p>'
+            return f'<p style="font-size: 14px; line-height: 1.8;">{html.escape(str(text))}</p>'
 
     def _generate_executive_dashboard(self, dashboard: Dict) -> str:
         """Rend le tableau de bord exécutif: alert_level, top_trades, snapshot_metrics."""
@@ -1364,11 +1389,11 @@ class MarketAnalysisWorker:
             # Utiliser directement les données du snapshot sans validation stricte
             rendered = []
             for point in summary_points:
-                rendered.append(f"<li>{point}</li>")
+                rendered.append(f"<li>{html.escape(str(point))}</li>")
             return chr(10).join(rendered)
         except Exception:
             # En cas de doute, retourner brut sans bloquer l'envoi
-            return chr(10).join([f"<li>{p}</li>" for p in (summary_points or [])])
+            return chr(10).join([f"<li>{html.escape(str(p))}</li>" for p in (summary_points or [])])
 
     def _process_monthly_payload_file(self) -> None:
         """Traite un fichier monthly_report_payload.json s'il est présent (post-déploiement)."""
