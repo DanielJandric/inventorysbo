@@ -150,11 +150,11 @@ class MarketAnalysisWorker:
 
             processing_time = int(time.time() - start_time)
 
-            logger.info(f"📊 Résultats obtenus:")
+            logger.info(f"📊 Résultats obtenus (brut LLM):")
             logger.info(f"   - Executive Summary: {len(result.get('executive_summary', []))} points")
             logger.info(f"   - Résumé: {len(result.get('summary', ''))} caractères")
-            logger.info(f"   - Points clés: {len(result.get('key_points', []))} points")
-            logger.info(f"   - Insights: {len(result.get('insights', []))} insights")
+            logger.info(f"   - Points clés (brut): {len(result.get('key_points', []))} points")
+            logger.info(f"   - Insights (brut): {len(result.get('insights', []))} insights")
             logger.info(f"   - Sources: {len(result.get('sources', []))} sources")
 
             # Derivations for missing sections (frontend/UI completeness)
@@ -197,6 +197,35 @@ class MarketAnalysisWorker:
             key_points = _norm_list(result.get('key_points', []))
             insights = _norm_list(result.get('insights', []))
 
+            # Préparer un summary propre (éviter les JSON bruts dans 'summary')
+            def _safe_json_load(text: str):
+                try:
+                    s = (text or '').strip()
+                    if not (s.startswith('{') or s.startswith('[')):
+                        return None
+                    return json.loads(s)
+                except Exception:
+                    return None
+
+            structured_for_summary = result.get('structured_data') if isinstance(result.get('structured_data'), dict) else {}
+            summary_text = str(result.get('summary') or '').strip()
+            # Si le summary ressemble à un JSON, tenter d'en extraire la narrative
+            if summary_text and (summary_text.startswith('{') or '"meta_analysis"' in summary_text or '"deep_analysis"' in summary_text):
+                parsed_summary_obj = _safe_json_load(summary_text)
+                if isinstance(parsed_summary_obj, dict):
+                    try:
+                        summary_text2 = str(parsed_summary_obj.get('summary') or '').strip()
+                        if not summary_text2:
+                            summary_text2 = str(((parsed_summary_obj.get('deep_analysis') or {}).get('narrative')) or '').strip()
+                        summary_text = summary_text2 or summary_text
+                    except Exception:
+                        pass
+            if not summary_text:
+                try:
+                    summary_text = str(((structured_for_summary.get('deep_analysis') or {}).get('narrative')) or '').strip()
+                except Exception:
+                    summary_text = ''
+
             # Derive key_points from exec summary or summary if empty
             if not key_points:
                 if exec_summary:
@@ -220,10 +249,28 @@ class MarketAnalysisWorker:
                 except Exception:
                     pass
 
+            # Fallbacks supplémentaires si toujours vide (utiliser actionable_summary / top_trades)
+            if not insights:
+                try:
+                    act = (result.get('structured_data') or {}).get('actionable_summary') or result.get('actionable_summary') or {}
+                    ia = act.get('immediate_actions') or []
+                    if isinstance(ia, list) and ia:
+                        insights = [str(x).strip() for x in ia if str(x).strip()][:8]
+                except Exception:
+                    pass
+            if not insights:
+                try:
+                    ed = (result.get('structured_data') or {}).get('executive_dashboard') or result.get('executive_dashboard') or {}
+                    tt = ed.get('top_trades') or []
+                    if isinstance(tt, list) and tt:
+                        insights = [str(t.get('rationale','')).strip() for t in tt if isinstance(t, dict) and str(t.get('rationale','')).strip()][:6]
+                except Exception:
+                    pass
+
             # 4. Mettre à jour la tâche avec les résultats complets (avec dérivations)
             update_data = {
                 'executive_summary': exec_summary,
-                'summary': result.get('summary'),
+                'summary': summary_text,
                 'key_points': key_points,
                 'structured_data': result.get('structured_data', {}),
                 'geopolitical_analysis': result.get('geopolitical_analysis', {}),
@@ -236,6 +283,16 @@ class MarketAnalysisWorker:
                 'worker_status': 'completed',
                 'processing_time_seconds': processing_time
             }
+
+            # Log après normalisation/dérivations (valeurs réellement sauvegardées)
+            try:
+                logger.info("📊 Résultats normalisés (sauvegardés):")
+                logger.info(f"   - Executive Summary (norm.): {len(exec_summary)} points")
+                logger.info(f"   - Résumé (norm.): {len(update_data.get('summary') or '')} caractères")
+                logger.info(f"   - Points clés (norm.): {len(key_points)} points")
+                logger.info(f"   - Insights (norm.): {len(insights)} insights")
+            except Exception:
+                pass
             
             logger.info(f"💾 Sauvegarde des résultats dans la base de données...")
             self.db.update_analysis(task_id, update_data)
