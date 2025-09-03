@@ -947,6 +947,13 @@ class ScrapingBeeScraper:
                 f"🧠 Contexte OpenAI: context_len={len(context)} (truncated={truncated}) | snapshot_len={len(snapshot_str)} (truncated={snapshot_truncated}) | sources={len(scraped_data)}"
             )
 
+            # Paramètres adaptatifs (rate limit/429)
+            current_max_tokens = int(os.getenv('LLM_MAX_OUTPUT_TOKENS', '30000'))
+            context_shrink = 1.0
+            snapshot_shrink = 1.0
+            base_context = context
+            base_snapshot = snapshot_str
+
             # Prompt système optimisé (GPT‑5) — verbosité/raisonnement renforcés, géopolitique à jour, indicateurs extraits du scrap
             # system_prompt = """
             # Tu es un Directeur de Recherche Senior (finance quantitative, géopolitique appliquée, IA). Audience: C‑Suite, gérants institutionnels, trading floor. Mission: produire une analyse EXHAUSTIVE, TRÈS DÉTAILLÉE et rigoureusement argumentée. Ne sois pas permissif ni paresseux.
@@ -1021,12 +1028,18 @@ class ScrapingBeeScraper:
             # Essayer jusqu'à 3 fois en cas d'erreur
             for attempt in range(3):
                 try:
+                    # Ajuster contexte/snapshot par tentative (en cas de 429)
+                    attempt_context_len = max(1000, int(len(base_context) * context_shrink))
+                    attempt_snapshot_len = max(500, int(len(base_snapshot) * snapshot_shrink))
+                    attempt_context = base_context[:attempt_context_len]
+                    attempt_snapshot = base_snapshot[:attempt_snapshot_len]
+                    logger.info(f"🔁 Tentative {attempt+1}/3: max_tokens={current_max_tokens}, ctx={len(attempt_context)}, snap={len(attempt_snapshot)}")
                     # Responses API (reasoning ready)
                     input_messages = [
                         {"role": "system", "content": [{"type": "input_text", "text": system_prompt}]},
                         {"role": "user", "content": [{
                             "type": "input_text",
-                            "text": f"Demande: {prompt}\n\nDONNÉES FACTUELLES (snapshot):\n{snapshot_str}\n\nDONNÉES COLLECTÉES (articles):\n{context}"
+                            "text": f"Demande: {prompt}\n\nDONNÉES FACTUELLES (snapshot):\n{attempt_snapshot}\n\nDONNÉES COLLECTÉES (articles):\n{attempt_context}"
                         }]}
                     ]
                     # Préparer l'appel Responses API avec fallbacks robustes (GPT‑5 par défaut)
@@ -1072,9 +1085,9 @@ class ScrapingBeeScraper:
                         model=os.getenv("AI_MODEL", "gpt-5"),
                         messages=[
                             {"role": "system", "content": [{"type": "input_text", "text": system_prompt}]},
-                            {"role": "user", "content": [{"type": "input_text", "text": f"Demande: {prompt}\n\nDONNÉES FACTUELLES (snapshot):\n{snapshot_str}\n\nDONNÉES COLLECTÉES (articles):\n{context}"}]}
+                            {"role": "user", "content": [{"type": "input_text", "text": f"Demande: {prompt}\n\nDONNÉES FACTUELLES (snapshot):\n{attempt_snapshot}\n\nDONNÉES COLLECTÉES (articles):\n{attempt_context}"}]}
                         ],
-                        max_output_tokens=30000,
+                        max_output_tokens=current_max_tokens,
                         reasoning_effort=os.getenv("AI_REASONING_EFFORT", "high"),
                         response_format={"type": "json_schema", "json_schema": json_schema}
                     )
@@ -1117,9 +1130,14 @@ class ScrapingBeeScraper:
                             # retirer les fences ```json ... ``` si présents
                             s = re.sub(r"```\s*json\s*", "", s, flags=re.IGNORECASE)
                             s = s.replace('```', '').strip()
+                            # retirer éventuel BOM
+                            if s.startswith('\ufeff'):
+                                s = s.lstrip('\ufeff')
                             # normaliser guillemets typographiques
                             trans = {ord('\u201c'): '"', ord('\u201d'): '"', ord('\u2019'): "'", ord('\u2013'): '-', ord('\u2014'): '-'}
                             s = s.translate(trans)
+                            # supprimer virgules traînantes avant } ou ]
+                            s = re.sub(r",(\s*[}\]])", r"\\1", s)
                             
                             # Tentative de parse direct
                             try:
@@ -1277,9 +1295,9 @@ class ScrapingBeeScraper:
                                 model=os.getenv("AI_MODEL", "gpt-5"),
                                 messages=[
                                     {"role": "system", "content": [{"type": "input_text", "text": correction_prompt}]},
-                                    {"role": "user", "content": [{"type": "input_text", "text": f"Demande: {prompt}\n\nDONNÉES FACTUELLES (snapshot):\n{snapshot_str}\n\nDONNÉES COLLECTÉES (articles):\n{context}"}]}
+                                    {"role": "user", "content": [{"type": "input_text", "text": f"Demande: {prompt}\n\nDONNÉES FACTUELLES (snapshot):\n{attempt_snapshot}\n\nDONNÉES COLLECTÉES (articles):\n{attempt_context}"}]}
                                 ],
-                                max_output_tokens=30000,
+                                max_output_tokens=current_max_tokens,
                                 reasoning_effort=os.getenv("AI_REASONING_EFFORT", "high"),
                                 response_format={"type": "json_schema", "json_schema": json_schema}
                             )
@@ -1331,9 +1349,32 @@ class ScrapingBeeScraper:
                     return result
                     
                 except Exception as e:
-                    logger.warning(f"⚠️ Tentative {attempt + 1}/3 échouée: {e}")
+                    err = str(e)
+                    logger.warning(f"⚠️ Tentative {attempt + 1}/3 échouée: {err}")
+                    # Gestion spécifique 429 (rate limit): réduire tokens et contexte, backoff adapté
+                    if '429' in err or 'rate limit' in err.lower():
+                        wait_seconds = 6.0
+                        try:
+                            m = re.search(r'try again in\s+([0-9\.]+)s', err, flags=re.IGNORECASE)
+                            if m:
+                                wait_seconds = float(m.group(1)) + 0.5
+                        except Exception:
+                            pass
+                        # Réduire la charge pour la prochaine tentative
+                        new_tokens = max(int(current_max_tokens * 0.8), 12000)
+                        if new_tokens < current_max_tokens:
+                            current_max_tokens = new_tokens
+                        context_shrink *= 0.85
+                        snapshot_shrink *= 0.85
+                        logger.warning(f"🔧 Rate limit: next attempt with max_tokens={current_max_tokens}, context~{int(context_shrink*100)}%, snapshot~{int(snapshot_shrink*100)}%; wait {wait_seconds:.1f}s")
+                        if attempt < 2:
+                            await asyncio.sleep(wait_seconds)
+                            continue
+                        else:
+                            raise
+                    # Autres erreurs: backoff simple
                     if attempt < 2:
-                        await asyncio.sleep(2)  # Attendre 2 secondes avant de réessayer
+                        await asyncio.sleep(2)
                     else:
                         raise
             
