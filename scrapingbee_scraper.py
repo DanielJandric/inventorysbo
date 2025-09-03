@@ -973,7 +973,14 @@ Sortie STRICTEMENT en JSON unique. Compatibilité requise avec notre backend:
   - summary: narrative approfondie (≥4000 caractères) avec raisonnement structuré,
   - key_points: ≥12 points à haut signal,
   - structured_data: inclut les sections avancées ci‑dessous,
-  - insights, risks, opportunities, sources, confidence_score (0.0–1.0).
+  - insights: ≥3 insights actionnables (OBLIGATOIRE, jamais vide),
+  - risks: ≥3 risques identifiés (OBLIGATOIRE, jamais vide),
+  - opportunities: ≥3 opportunités (OBLIGATOIRE, jamais vide),
+  - sources: liste des sources utilisées,
+  - confidence_score: score de confiance (0.0–1.0).
+
+IMPORTANT: Les champs insights, risks, et opportunities ne doivent JAMAIS être des listes vides.
+Si tu n'as pas d'informations spécifiques, génère du contenu pertinent basé sur l'analyse.
 
 Schéma attendu (extrait):
 {

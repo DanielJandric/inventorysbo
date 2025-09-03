@@ -184,7 +184,7 @@ class MarketAnalysisWorker:
                 else:
                     return default
 
-            # Extraction directe des champs sans normalisation complexe
+            # Extraction directe des champs avec fallbacks intelligents
             exec_summary = _ensure_list_field(result, 'executive_summary')
             key_points = _ensure_list_field(result, 'key_points')
             insights = _ensure_list_field(result, 'insights')
@@ -192,6 +192,127 @@ class MarketAnalysisWorker:
             opportunities = _ensure_list_field(result, 'opportunities')
             sources = _ensure_list_field(result, 'sources')
             summary_text = _ensure_string_field(result, 'summary')
+
+            # Fallbacks intelligents pour les champs vides
+            def _generate_fallback_insights():
+                """Génère des insights depuis d'autres champs si la liste est vide"""
+                fallbacks = []
+                
+                # Depuis structured_data.meta_analysis.key_drivers
+                try:
+                    meta = result.get('structured_data', {}).get('meta_analysis', {})
+                    drivers = meta.get('key_drivers', {})
+                    if drivers.get('primary'):
+                        fallbacks.append(f"Facteur clé: {drivers['primary']}")
+                    for label in ['secondary', 'emerging']:
+                        arr = drivers.get(label, [])
+                        if isinstance(arr, list):
+                            fallbacks.extend([f"Facteur {label}: {item}" for item in arr[:2]])
+                except Exception:
+                    pass
+                
+                # Depuis executive_dashboard.top_trades
+                try:
+                    dashboard = result.get('structured_data', {}).get('executive_dashboard', {})
+                    trades = dashboard.get('top_trades', [])
+                    if isinstance(trades, list):
+                        for trade in trades[:3]:
+                            if isinstance(trade, dict) and trade.get('rationale'):
+                                fallbacks.append(f"Trade insight: {trade['rationale']}")
+                except Exception:
+                    pass
+                
+                # Depuis key_points si pas d'insights
+                if not fallbacks and key_points:
+                    fallbacks = [f"Point clé: {point}" for point in key_points[:3]]
+                
+                return fallbacks[:5]  # Limiter à 5 insights
+
+            def _generate_fallback_risks():
+                """Génère des risques depuis d'autres champs si la liste est vide"""
+                fallbacks = []
+                
+                # Depuis geopolitical_chess
+                try:
+                    geo = result.get('structured_data', {}).get('deep_analysis', {}).get('geopolitical_chess', {})
+                    if geo.get('immediate_impacts'):
+                        for impact in geo['immediate_impacts'][:2]:
+                            if isinstance(impact, dict) and impact.get('event'):
+                                fallbacks.append(f"Risque géopolitique: {impact['event']}")
+                except Exception:
+                    pass
+                
+                # Depuis risk_management
+                try:
+                    risk_mgmt = result.get('structured_data', {}).get('risk_management', {})
+                    hedges = risk_mgmt.get('tail_risk_hedges', [])
+                    if isinstance(hedges, list):
+                        for hedge in hedges[:2]:
+                            if isinstance(hedge, dict) and hedge.get('risk'):
+                                fallbacks.append(f"Risque de queue: {hedge['risk']}")
+                except Exception:
+                    pass
+                
+                # Fallback générique si pas de risques spécifiques
+                if not fallbacks:
+                    fallbacks = [
+                        "Volatilité des marchés",
+                        "Risques géopolitiques",
+                        "Inflation persistante"
+                    ]
+                
+                return fallbacks[:4]  # Limiter à 4 risques
+
+            def _generate_fallback_opportunities():
+                """Génère des opportunités depuis d'autres champs si la liste est vide"""
+                fallbacks = []
+                
+                # Depuis executive_dashboard.top_trades (trades positifs)
+                try:
+                    dashboard = result.get('structured_data', {}).get('executive_dashboard', {})
+                    trades = dashboard.get('top_trades', [])
+                    if isinstance(trades, list):
+                        for trade in trades[:3]:
+                            if isinstance(trade, dict) and trade.get('action') in ['LONG', 'BUY']:
+                                instrument = trade.get('instrument', 'Actif')
+                                fallbacks.append(f"Opportunité: {instrument}")
+                except Exception:
+                    pass
+                
+                # Depuis sector_rotation_matrix
+                try:
+                    deep = result.get('structured_data', {}).get('deep_analysis', {})
+                    rotation = deep.get('sector_rotation_matrix', {})
+                    outperformers = rotation.get('outperformers', [])
+                    if isinstance(outperformers, list):
+                        for sector in outperformers[:2]:
+                            if isinstance(sector, dict) and sector.get('sector'):
+                                fallbacks.append(f"Secteur performant: {sector['sector']}")
+                except Exception:
+                    pass
+                
+                # Fallback générique si pas d'opportunités spécifiques
+                if not fallbacks:
+                    fallbacks = [
+                        "Secteur technologique",
+                        "Marchés émergents",
+                        "Énergies renouvelables"
+                    ]
+                
+                return fallbacks[:4]  # Limiter à 4 opportunités
+
+            # Appliquer les fallbacks si les champs sont vides
+            if not insights:
+                insights = _generate_fallback_insights()
+                logger.info(f"🔄 Insights générés par fallback: {len(insights)} éléments")
+            
+            if not risks:
+                risks = _generate_fallback_risks()
+                logger.info(f"🔄 Risques générés par fallback: {len(risks)} éléments")
+            
+            if not opportunities:
+                opportunities = _generate_fallback_opportunities()
+                logger.info(f"🔄 Opportunités générées par fallback: {len(opportunities)} éléments")
 
             # 4. Mettre à jour la tâche avec les résultats directs du LLM
             update_data = {
