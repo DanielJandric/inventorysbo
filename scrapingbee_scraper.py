@@ -918,6 +918,7 @@ class ScrapingBeeScraper:
             from openai import OpenAI
             
             client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+            strict_mode = str(os.getenv('STRICT_LLM_JSON', '0')).strip() in ('1', 'true', 'True')
             
             # Prompt système chargé depuis un fichier (aucun fallback embarqué)
             prompt_path = os.path.join(os.path.dirname(__file__), 'prompts', 'market_analysis_fr.txt')
@@ -1304,7 +1305,9 @@ class ScrapingBeeScraper:
                             raw = extract_output_text(resp) or ""
                             parsed = _safe_parse_json(raw)
                         if parsed is None:
-                            # fallback structuré au lieu d'échouer (évite retry inutile)
+                            if strict_mode:
+                                raise RuntimeError("LLM JSON invalide après réparations/retry (mode strict activé)")
+                            # fallback structuré (mode non strict)
                             parsed = {
                                 "summary": raw[:10000],
                                 "key_points": [],
@@ -1380,6 +1383,10 @@ class ScrapingBeeScraper:
             
         except Exception as e:
             logger.error(f"❌ Erreur traitement LLM: {e}")
+            if str(os.getenv('STRICT_LLM_JSON', '0')).strip() in ('1', 'true', 'True'):
+                # Mode strict: remonter l'erreur pour annuler sauvegarde/email
+                raise
+            # Mode non strict: retourner un objet sûr
             return {
                 "summary": f"Erreur lors du traitement: {str(e)}",
                 "key_points": [],
