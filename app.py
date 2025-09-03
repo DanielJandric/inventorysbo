@@ -1440,6 +1440,97 @@ L'objet "<strong>{item_data.get('name', 'N/A')}</strong>" de la catégorie "<str
         """Crée le contenu texte pour le rapport de marché"""
         timestamp = datetime.now().strftime("%d/%m/%Y à %H:%M")
         
+        # Essayer d'interpréter le contenu comme JSON structuré pour un rendu texte propre
+        def _safe_parse_json(text: str):
+            try:
+                s = (text or '').strip()
+                import re as _re
+                s = _re.sub(r"```\s*json\s*", "", s, flags=_re.IGNORECASE)
+                s = s.replace('```', '').strip()
+                trans = {ord('\u201c'): '"', ord('\u201d'): '"', ord('\u2019'): "'", ord('\u2013'): '-', ord('\u2014'): '-'}
+                s = s.translate(trans)
+                try:
+                    return json.loads(s)
+                except Exception:
+                    # Extraire JSON équilibré si du texte entoure l'objet
+                    depth = 0
+                    start_idx = None
+                    for i, ch in enumerate(s):
+                        if ch == '{':
+                            if depth == 0:
+                                start_idx = i
+                            depth += 1
+                        elif ch == '}' and depth > 0:
+                            depth -= 1
+                            if depth == 0 and start_idx is not None:
+                                cand = s[start_idx:i+1]
+                                try:
+                                    return json.loads(cand)
+                                except Exception:
+                                    start_idx = None
+                                    continue
+                return None
+            except Exception:
+                return None
+
+        parsed = _safe_parse_json(report_content)
+        if isinstance(parsed, dict):
+            def _norm_list(val):
+                try:
+                    if val is None:
+                        return []
+                    if isinstance(val, list):
+                        return [str(x).strip() for x in val if str(x).strip()]
+                    if isinstance(val, str):
+                        raw = val.replace('\r', '\n')
+                        for b in ['\n- ', '\n• ', '\n* ']:
+                            raw = raw.replace(b, '\n')
+                        parts = [p.strip(' -•*\t') for p in raw.split('\n')]
+                        return [p for p in parts if p]
+                    return [str(val)] if str(val).strip() else []
+                except Exception:
+                    return []
+
+            exec_summary = _norm_list(parsed.get('executive_summary'))
+            key_points = _norm_list(parsed.get('key_points'))
+            insights = _norm_list(parsed.get('insights'))
+            risks = _norm_list(parsed.get('risks'))
+            opportunities = _norm_list(parsed.get('opportunities'))
+            # Fallback summary depuis deep_analysis si nécessaire
+            try:
+                deep_narr = str(((parsed.get('structured_data') or {}).get('deep_analysis') or {}).get('narrative') or '').strip()
+            except Exception:
+                deep_narr = ''
+            try:
+                deep_narr2 = str((parsed.get('deep_analysis') or {}).get('narrative') or '').strip()
+            except Exception:
+                deep_narr2 = ''
+            summary_text = str(parsed.get('summary') or deep_narr or deep_narr2 or '').strip()
+            # Dérivations minimales si listes vides
+            if not exec_summary and key_points:
+                exec_summary = key_points[:8]
+            if not key_points and exec_summary:
+                key_points = exec_summary[:10]
+
+            def _render_section(title: str, arr: list[str]) -> str:
+                if not arr:
+                    return ''
+                return title + '\n' + '\n'.join([f"- {p}" for p in arr]) + '\n\n'
+
+            text_sections = []
+            text_sections.append("BONVIN Collection - Rapport de Marché\n====================================\n")
+            text_sections.append("📋 INFORMATIONS DU RAPPORT\n" + f"Date: {report_date}\nHeure: {report_time}\nGénéré le: {timestamp}\n\n")
+            if summary_text:
+                text_sections.append("📝 Résumé\n" + summary_text + "\n\n")
+            text_sections.append(_render_section("🎯 Executive Summary", exec_summary))
+            text_sections.append(_render_section("🔑 Points Clés", key_points))
+            text_sections.append(_render_section("💡 Insights", insights))
+            text_sections.append(_render_section("⚠️ Risques", risks))
+            text_sections.append(_render_section("🚀 Opportunités", opportunities))
+            text_sections.append("---\nBONVIN Collection - Gestion de portefeuille d'investissement\nCe rapport a été généré automatiquement par votre système de gestion\n")
+            return ''.join([s for s in text_sections if s])
+
+        # Fallback: contenu brut si non-JSON
         return f"""
 BONVIN Collection - Rapport de Marché
 ====================================
@@ -1447,8 +1538,8 @@ BONVIN Collection - Rapport de Marché
 Date: {report_date}
 Heure: {report_time}
 Généré le: {timestamp}
-📊 ANALYSE DE MARCHÉ
-{report_content}
+📝 Résumé
+{(report_content or '').strip()}
 
 ---
 BONVIN Collection - Gestion de portefeuille d'investissement
