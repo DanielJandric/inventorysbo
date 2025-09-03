@@ -1074,7 +1074,7 @@ class ScrapingBeeScraper:
                             {"role": "system", "content": [{"type": "input_text", "text": system_prompt}]},
                             {"role": "user", "content": [{"type": "input_text", "text": f"Demande: {prompt}\n\nDONNÉES FACTUELLES (snapshot):\n{snapshot_str}\n\nDONNÉES COLLECTÉES (articles):\n{context}"}]}
                         ],
-                        max_output_tokens=15000,
+                        max_output_tokens=30000,
                         reasoning_effort=os.getenv("AI_REASONING_EFFORT", "high"),
                         response_format={"type": "json_schema", "json_schema": json_schema}
                     )
@@ -1279,7 +1279,7 @@ class ScrapingBeeScraper:
                                     {"role": "system", "content": [{"type": "input_text", "text": correction_prompt}]},
                                     {"role": "user", "content": [{"type": "input_text", "text": f"Demande: {prompt}\n\nDONNÉES FACTUELLES (snapshot):\n{snapshot_str}\n\nDONNÉES COLLECTÉES (articles):\n{context}"}]}
                                 ],
-                                max_output_tokens=15000,
+                                max_output_tokens=30000,
                                 reasoning_effort=os.getenv("AI_REASONING_EFFORT", "high"),
                                 response_format={"type": "json_schema", "json_schema": json_schema}
                             )
