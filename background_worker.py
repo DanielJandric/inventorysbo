@@ -356,15 +356,17 @@ class MarketAnalysisWorker:
             except Exception:
                 return []
 
-        exec_summary = _normalize_to_list(result.get('executive_summary', []))
-        econ_indicators = result.get('economic_indicators', {})
+        # Préférer les champs normalisés de l'analyse en base, fallback vers le résultat brut
+        exec_summary = _normalize_to_list(getattr(analysis, 'executive_summary', None) or result.get('executive_summary', []))
+        econ_indicators = getattr(analysis, 'economic_indicators', None) or result.get('economic_indicators', {})
         if not isinstance(econ_indicators, dict):
             econ_indicators = {}
         # Extraire la géopolitique depuis structured_data.deep_analysis.geopolitical_chess si dispo
-        structured_data = result.get('structured_data', {}) if isinstance(result.get('structured_data', {}), dict) else {}
+        structured_data = getattr(analysis, 'structured_data', None) or result.get('structured_data', {})
+        structured_data = structured_data if isinstance(structured_data, dict) else {}
         deep_analysis = structured_data.get('deep_analysis', {}) if isinstance(structured_data.get('deep_analysis', {}), dict) else {}
         geo_chess = deep_analysis.get('geopolitical_chess', {}) if isinstance(deep_analysis.get('geopolitical_chess', {}), dict) else {}
-        legacy_geo = result.get('geopolitical_analysis', {})
+        legacy_geo = getattr(analysis, 'geopolitical_analysis', None) or result.get('geopolitical_analysis', {})
         geo_analysis = geo_chess if geo_chess else (legacy_geo if isinstance(legacy_geo, dict) else {})
         analytics_data = market_snapshot.get('analytics', {}) if isinstance(market_snapshot, dict) else {}
 
@@ -372,7 +374,7 @@ class MarketAnalysisWorker:
         sources_html = ""
 
         # Calculer un pourcentage de confiance sûr pour l'affichage
-        _score_raw = result.get('confidence_score', 0)
+        _score_raw = getattr(analysis, 'confidence_score', None) if getattr(analysis, 'confidence_score', None) is not None else result.get('confidence_score', 0)
         try:
             _score_num = float(_score_raw) if _score_raw is not None else 0.0
         except Exception:
@@ -387,20 +389,38 @@ class MarketAnalysisWorker:
         else:
             geo_html = self._generate_geopolitical_analysis(geo_analysis if isinstance(geo_analysis, dict) else {})
         analytics_html = self._generate_analytics_section(analytics_data if isinstance(analytics_data, dict) else {})
-        summary_html = self._render_summary_paragraphs(result.get('summary', ''))
+        # Résumé: préférer analysis.summary, puis result.summary, puis deep_analysis.narrative
+        summary_text = getattr(analysis, 'summary', None) or ''
+        if not summary_text:
+            summary_text = str(result.get('summary', '') or '')
+            if not summary_text:
+                try:
+                    summary_text = str((deep_analysis.get('narrative') or '')).strip()
+                except Exception:
+                    summary_text = ''
+        summary_html = self._render_summary_paragraphs(summary_text)
 
         # Rendu des sections structured_data (si présentes)
         meta_html = self._generate_meta_analysis(structured_data.get('meta_analysis', {}) if isinstance(structured_data.get('meta_analysis', {}), dict) else {})
         exec_dash_html = self._generate_executive_dashboard(structured_data.get('executive_dashboard', {}) if isinstance(structured_data.get('executive_dashboard', {}), dict) else {})
-        quant_sd_html = self._generate_structured_quant_signals(structured_data.get('quantitative_signals', {}) if isinstance(structured_data.get('quantitative_signals', {}), dict) else {})
-        risk_mgt_html = self._generate_risk_management(structured_data.get('risk_management', {}) if isinstance(structured_data.get('risk_management', {}), dict) else {})
-        actionable_html = self._generate_actionable_summary(structured_data.get('actionable_summary', {}) if isinstance(structured_data.get('actionable_summary', {}), dict) else {})
+        _qs = structured_data.get('quantitative_signals', {})
+        if not isinstance(_qs, dict):
+            _qs = result.get('quantitative_signals', {}) if isinstance(result.get('quantitative_signals', {}), dict) else {}
+        quant_sd_html = self._generate_structured_quant_signals(_qs)
+        _rm = structured_data.get('risk_management', {})
+        if not isinstance(_rm, dict):
+            _rm = result.get('risk_management', {}) if isinstance(result.get('risk_management', {}), dict) else {}
+        risk_mgt_html = self._generate_risk_management(_rm)
+        _as = structured_data.get('actionable_summary', {})
+        if not isinstance(_as, dict):
+            _as = result.get('actionable_summary', {}) if isinstance(result.get('actionable_summary', {}), dict) else {}
+        actionable_html = self._generate_actionable_summary(_as)
 
         # Normaliser toutes les listes legacy
-        key_points_list = _normalize_to_list(result.get('key_points', []))
-        insights_list = _normalize_to_list(result.get('insights', []))
-        risks_list = _normalize_to_list(result.get('risks', []))
-        opps_list = _normalize_to_list(result.get('opportunities', []))
+        key_points_list = _normalize_to_list(getattr(analysis, 'key_points', None) or result.get('key_points', []))
+        insights_list = _normalize_to_list(getattr(analysis, 'insights', None) or result.get('insights', []))
+        risks_list = _normalize_to_list(getattr(analysis, 'risks', None) or result.get('risks', []))
+        opps_list = _normalize_to_list(getattr(analysis, 'opportunities', None) or result.get('opportunities', []))
 
         # Générer le HTML optimisé pour mobile
         html = f"""
