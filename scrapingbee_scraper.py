@@ -963,6 +963,9 @@ FORMAT DE SORTIE CRITIQUE:
 - Le champ 'summary' doit être une STRING, pas un JSON stringifié.
 - Tous les champs de type array doivent être des listes Python valides.
 - Aucun champ ne doit contenir de JSON imbriqué stringifié.
+- TOUTES les chaînes de caractères doivent être correctement échappées.
+- TOUTES les accolades et crochets doivent être équilibrés.
+- Vérifie que le JSON est syntaxiquement correct avant de le retourner.
 
 Sortie STRICTEMENT en JSON unique. Compatibilité requise avec notre backend:
 - Fournis AUSSI les champs legacy: 
@@ -1089,7 +1092,7 @@ Contraintes générales:
                             
                         return True
 
-                    # Parsing JSON simplifié et robuste
+                    # Parsing JSON robuste avec réparation automatique
                     def _safe_parse_json(text: str):
                         try:
                             s = (text or "").strip()
@@ -1100,17 +1103,116 @@ Contraintes générales:
                             trans = {ord('\u201c'): '"', ord('\u201d'): '"', ord('\u2019'): "'", ord('\u2013'): '-', ord('\u2014'): '-'}
                             s = s.translate(trans)
                             
-                            # Parse direct
-                            parsed = json.loads(s)
-                            
-                            # Validation stricte
-                            if not validate_llm_response(parsed):
-                                logger.error("Réponse LLM ne respecte pas le schéma attendu")
-                                return None
+                            # Tentative de parse direct
+                            try:
+                                parsed = json.loads(s)
+                                if validate_llm_response(parsed):
+                                    return parsed
+                            except json.JSONDecodeError as e:
+                                logger.warning(f"JSON malformé détecté: {e}")
                                 
-                            return parsed
+                                # Tentative de réparation automatique
+                                repaired = _repair_json(s)
+                                if repaired:
+                                    try:
+                                        parsed = json.loads(repaired)
+                                        if validate_llm_response(parsed):
+                                            logger.info("JSON réparé avec succès")
+                                            return parsed
+                                    except Exception as repair_error:
+                                        logger.error(f"Échec de réparation JSON: {repair_error}")
+                                
+                                # Fallback: extraction de JSON partiel
+                                partial_json = _extract_partial_json(s)
+                                if partial_json:
+                                    try:
+                                        parsed = json.loads(partial_json)
+                                        if validate_llm_response(parsed):
+                                            logger.info("JSON partiel extrait avec succès")
+                                            return parsed
+                                    except Exception as partial_error:
+                                        logger.error(f"Échec extraction JSON partiel: {partial_error}")
+                            
+                            logger.error("Impossible de parser le JSON, même avec réparation")
+                            return None
+                            
                         except Exception as e:
                             logger.error(f"Erreur parsing JSON: {e}")
+                            return None
+
+                    def _repair_json(json_str: str) -> str:
+                        """Tente de réparer un JSON malformé"""
+                        try:
+                            # Réparer les chaînes non terminées
+                            # Compter les guillemets pour détecter les chaînes non fermées
+                            quote_count = 0
+                            in_string = False
+                            escape_next = False
+                            repaired = []
+                            
+                            for i, char in enumerate(json_str):
+                                if escape_next:
+                                    repaired.append(char)
+                                    escape_next = False
+                                    continue
+                                    
+                                if char == '\\':
+                                    repaired.append(char)
+                                    escape_next = True
+                                    continue
+                                    
+                                if char == '"' and not escape_next:
+                                    in_string = not in_string
+                                    quote_count += 1
+                                
+                                repaired.append(char)
+                            
+                            # Si on est encore dans une chaîne à la fin, la fermer
+                            if in_string:
+                                repaired.append('"')
+                                logger.info("Chaîne non terminée détectée et fermée")
+                            
+                            # Réparer les accolades non fermées
+                            open_braces = repaired.count('{')
+                            close_braces = repaired.count('}')
+                            if open_braces > close_braces:
+                                repaired.extend(['}'] * (open_braces - close_braces))
+                                logger.info(f"Ajout de {open_braces - close_braces} accolades fermantes")
+                            
+                            return ''.join(repaired)
+                            
+                        except Exception as e:
+                            logger.error(f"Erreur lors de la réparation JSON: {e}")
+                            return None
+
+                    def _extract_partial_json(json_str: str) -> str:
+                        """Extrait un JSON partiel valide depuis un JSON malformé"""
+                        try:
+                            # Chercher le premier objet JSON complet
+                            depth = 0
+                            start_idx = None
+                            end_idx = None
+                            
+                            for i, char in enumerate(json_str):
+                                if char == '{':
+                                    if depth == 0:
+                                        start_idx = i
+                                    depth += 1
+                                elif char == '}' and depth > 0:
+                                    depth -= 1
+                                    if depth == 0 and start_idx is not None:
+                                        end_idx = i
+                                        break
+                            
+                            if start_idx is not None and end_idx is not None:
+                                partial = json_str[start_idx:end_idx + 1]
+                                logger.info(f"Extraction JSON partiel: {len(partial)} caractères")
+                                return partial
+                            
+                            return None
+                            
+                        except Exception as e:
+                            logger.error(f"Erreur extraction JSON partiel: {e}")
                             return None
 
                     parsed = _safe_parse_json(raw)
