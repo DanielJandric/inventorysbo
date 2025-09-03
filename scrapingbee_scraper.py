@@ -946,7 +946,7 @@ class ScrapingBeeScraper:
             system_prompt = """
 Tu es un Directeur de Recherche Senior (finance quantitative, géopolitique appliquée, IA). Audience: C‑Suite, gérants institutionnels, trading floor. Mission: produire une analyse EXHAUSTIVE, TRÈS DÉTAILLÉE et rigoureusement argumentée. Ne sois pas permissif ni paresseux.
 
-LANGUE: Français (fr-FR). Rédige TOUT le contenu en français (executive_summary, summary, key_points, insights, risks, opportunities, structured_data, geopolitical, economic_indicators). Si les sources sont en anglais, TRADUIS fidèlement en français sans insérer de phrases en anglais. N’insère AUCUNE URL/citation ni section “Sources” dans le narratif.
+LANGUE: Français (fr-FR). Rédige TOUT le contenu en français (executive_summary, summary, key_points, insights, risks, opportunities, structured_data, geopolitical, economic_indicators). Si les sources sont en anglais, TRADUIS fidèlement en français sans insérer de phrases en anglais. N'insère AUCUNE URL/citation ni section "Sources" dans le narratif.
 
 Cadre analytique:
 - Hiérarchie cognitive (Micro/Méso/Macro/Méta), intégration temporelle (T‑1/T0/T+1), analyse causale (catalyst → effets 2e ordre → chaînes).
@@ -957,6 +957,12 @@ Règles de données:
 - Exploite STRICTEMENT les articles scrappés (contexte fourni) et privilégie les nouvelles récentes (≤ 48–72h; <24h si dispo). Ignore les extrapolations non sourcées.
 - Jamais inventer. Si absent → "N/D" avec explication. Chiffres systématiquement sourcés (titre+URL) quand issus du scrap.
 - Signale divergences prix/volume (>20% 20j), sectorielles (z>2), géographiques (>1σ).
+
+FORMAT DE SORTIE CRITIQUE:
+- Retourne UNIQUEMENT un objet JSON valide, sans texte avant/après.
+- Le champ 'summary' doit être une STRING, pas un JSON stringifié.
+- Tous les champs de type array doivent être des listes Python valides.
+- Aucun champ ne doit contenir de JSON imbriqué stringifié.
 
 Sortie STRICTEMENT en JSON unique. Compatibilité requise avec notre backend:
 - Fournis AUSSI les champs legacy: 
@@ -1058,7 +1064,32 @@ Contraintes générales:
                     )
                     raw = extract_output_text(resp) or ""
 
-                    # Parsing JSON robuste (tolère ```json fences, guillemets typographiques, texte avant/après)
+                    # Validation stricte du schéma JSON
+                    def validate_llm_response(data: dict) -> bool:
+                        """Valide que la réponse LLM respecte le schéma attendu"""
+                        if not isinstance(data, dict):
+                            return False
+                        
+                        required_fields = ['executive_summary', 'summary', 'key_points']
+                        for field in required_fields:
+                            if field not in data:
+                                logger.error(f"Champ manquant: {field}")
+                                return False
+                            if field in ['executive_summary', 'key_points'] and not isinstance(data[field], list):
+                                logger.error(f"Champ {field} doit être une liste, reçu: {type(data[field])}")
+                                return False
+                            if field == 'summary' and not isinstance(data[field], str):
+                                logger.error(f"Champ {field} doit être une string, reçu: {type(data[field])}")
+                                return False
+                        
+                        # Vérifier que summary n'est pas du JSON stringifié
+                        if isinstance(data.get('summary'), str) and data['summary'].strip().startswith('{'):
+                            logger.error("Le champ 'summary' contient du JSON stringifié au lieu d'une string")
+                            return False
+                            
+                        return True
+
+                    # Parsing JSON simplifié et robuste
                     def _safe_parse_json(text: str):
                         try:
                             s = (text or "").strip()
@@ -1068,30 +1099,18 @@ Contraintes générales:
                             # normaliser guillemets typographiques
                             trans = {ord('\u201c'): '"', ord('\u201d'): '"', ord('\u2019'): "'", ord('\u2013'): '-', ord('\u2014'): '-'}
                             s = s.translate(trans)
-                            # tentative directe
-                            try:
-                                return json.loads(s)
-                            except Exception:
-                                pass
-                            # extraire un objet JSON équilibré naïvement
-                            depth = 0
-                            start_idx = None
-                            for i, ch in enumerate(s):
-                                if ch == '{':
-                                    if depth == 0:
-                                        start_idx = i
-                                    depth += 1
-                                elif ch == '}' and depth > 0:
-                                    depth -= 1
-                                    if depth == 0 and start_idx is not None:
-                                        candidate = s[start_idx:i+1]
-                                        try:
-                                            return json.loads(candidate)
-                                        except Exception:
-                                            start_idx = None
-                                            continue
-                            return None
-                        except Exception:
+                            
+                            # Parse direct
+                            parsed = json.loads(s)
+                            
+                            # Validation stricte
+                            if not validate_llm_response(parsed):
+                                logger.error("Réponse LLM ne respecte pas le schéma attendu")
+                                return None
+                                
+                            return parsed
+                        except Exception as e:
+                            logger.error(f"Erreur parsing JSON: {e}")
                             return None
 
                     parsed = _safe_parse_json(raw)

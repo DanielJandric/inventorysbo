@@ -157,117 +157,43 @@ class MarketAnalysisWorker:
             logger.info(f"   - Insights (brut): {len(result.get('insights', []))} insights")
             logger.info(f"   - Sources: {len(result.get('sources', []))} sources")
 
-            # Derivations for missing sections (frontend/UI completeness)
-            def _norm_list(val):
-                try:
-                    if val is None:
-                        return []
-                    if isinstance(val, list):
-                        return [str(x).strip() for x in val if str(x).strip()]
-                    s = str(val or '').replace('\r', '\n')
-                    parts = [p.strip(' -•*\t') for p in s.split('\n')]
-                    return [p for p in parts if p]
-                except Exception:
-                    return []
-
-            def _derive_from_summary(text: str, max_items: int = 8) -> list:
-                try:
-                    if not text:
-                        return []
-                    s = str(text).replace('\r', '\n')
-                    # Split by sentence-ish separators
-                    for sep in ['\n\n', '\n', '. ']:
-                        parts = [p.strip() for p in s.split(sep) if p.strip()]
-                        if len(parts) >= 2:
-                            break
-                    else:
-                        parts = [s]
-                    # Keep concise bullets
-                    bullets = []
-                    for p in parts:
-                        if len(p) > 2:
-                            bullets.append(p if p.endswith('.') else p + '.')
-                        if len(bullets) >= max_items:
-                            break
-                    return bullets
-                except Exception:
-                    return []
-
-            exec_summary = _norm_list(result.get('executive_summary', []))
-            key_points = _norm_list(result.get('key_points', []))
-            insights = _norm_list(result.get('insights', []))
-
-            # Préparer un summary propre (éviter les JSON bruts dans 'summary')
-            def _safe_json_load(text: str):
-                try:
-                    s = (text or '').strip()
-                    if not (s.startswith('{') or s.startswith('[')):
-                        return None
-                    return json.loads(s)
-                except Exception:
-                    return None
-
-            structured_for_summary = result.get('structured_data') if isinstance(result.get('structured_data'), dict) else {}
-            summary_text = str(result.get('summary') or '').strip()
-            # Si le summary ressemble à un JSON, tenter d'en extraire la narrative
-            if summary_text and (summary_text.startswith('{') or '"meta_analysis"' in summary_text or '"deep_analysis"' in summary_text):
-                parsed_summary_obj = _safe_json_load(summary_text)
-                if isinstance(parsed_summary_obj, dict):
-                    try:
-                        summary_text2 = str(parsed_summary_obj.get('summary') or '').strip()
-                        if not summary_text2:
-                            summary_text2 = str(((parsed_summary_obj.get('deep_analysis') or {}).get('narrative')) or '').strip()
-                        summary_text = summary_text2 or summary_text
-                    except Exception:
-                        pass
-            if not summary_text:
-                try:
-                    summary_text = str(((structured_for_summary.get('deep_analysis') or {}).get('narrative')) or '').strip()
-                except Exception:
-                    summary_text = ''
-
-            # Derive key_points from exec summary or summary if empty
-            if not key_points:
-                if exec_summary:
-                    key_points = exec_summary[:10]
+            # Utiliser directement les données du LLM sans normalisation excessive
+            # Le LLM est maintenant configuré pour retourner des données correctement formatées
+            
+            # Validation basique des champs requis
+            def _ensure_list_field(data, field_name, default=None):
+                """S'assure qu'un champ est une liste valide"""
+                if default is None:
+                    default = []
+                val = data.get(field_name, default)
+                if isinstance(val, list):
+                    return val
+                elif isinstance(val, str) and val.strip():
+                    # Si c'est une string, la convertir en liste d'un élément
+                    return [val.strip()]
                 else:
-                    key_points = _derive_from_summary(result.get('summary', ''), max_items=8)
+                    return default
 
-            # Derive insights from meta_analysis.key_drivers if empty
-            if not insights:
-                try:
-                    meta = (result.get('structured_data') or {}).get('meta_analysis') or result.get('meta_analysis') or {}
-                    kd = meta.get('key_drivers') or {}
-                    cand = []
-                    if isinstance(kd.get('primary'), str) and kd.get('primary').strip():
-                        cand.append(kd.get('primary').strip())
-                    for lbl in ['secondary', 'emerging']:
-                        arr = kd.get(lbl) or []
-                        if isinstance(arr, list):
-                            cand += [str(x).strip() for x in arr if str(x).strip()]
-                    insights = cand[:8] if cand else insights
-                except Exception:
-                    pass
+            def _ensure_string_field(data, field_name, default=""):
+                """S'assure qu'un champ est une string valide"""
+                val = data.get(field_name, default)
+                if isinstance(val, str):
+                    return val.strip()
+                elif val is not None:
+                    return str(val).strip()
+                else:
+                    return default
 
-            # Fallbacks supplémentaires si toujours vide (utiliser actionable_summary / top_trades)
-            if not insights:
-                try:
-                    act = (result.get('structured_data') or {}).get('actionable_summary') or result.get('actionable_summary') or {}
-                    ia = act.get('immediate_actions') or []
-                    if isinstance(ia, list) and ia:
-                        insights = [str(x).strip() for x in ia if str(x).strip()][:8]
-                except Exception:
-                    pass
-            if not insights:
-                try:
-                    ed = (result.get('structured_data') or {}).get('executive_dashboard') or result.get('executive_dashboard') or {}
-                    tt = ed.get('top_trades') or []
-                    if isinstance(tt, list) and tt:
-                        insights = [str(t.get('rationale','')).strip() for t in tt if isinstance(t, dict) and str(t.get('rationale','')).strip()][:6]
-                except Exception:
-                    pass
+            # Extraction directe des champs sans normalisation complexe
+            exec_summary = _ensure_list_field(result, 'executive_summary')
+            key_points = _ensure_list_field(result, 'key_points')
+            insights = _ensure_list_field(result, 'insights')
+            risks = _ensure_list_field(result, 'risks')
+            opportunities = _ensure_list_field(result, 'opportunities')
+            sources = _ensure_list_field(result, 'sources')
+            summary_text = _ensure_string_field(result, 'summary')
 
-            # 4. Mettre à jour la tâche avec les résultats complets (avec dérivations)
+            # 4. Mettre à jour la tâche avec les résultats directs du LLM
             update_data = {
                 'executive_summary': exec_summary,
                 'summary': summary_text,
@@ -276,21 +202,23 @@ class MarketAnalysisWorker:
                 'geopolitical_analysis': result.get('geopolitical_analysis', {}),
                 'economic_indicators': result.get('economic_indicators', {}),
                 'insights': insights,
-                'risks': result.get('risks', []),
-                'opportunities': result.get('opportunities', []),
-                'sources': result.get('sources', []),
+                'risks': risks,
+                'opportunities': opportunities,
+                'sources': sources,
                 'confidence_score': result.get('confidence_score', 0.0),
                 'worker_status': 'completed',
                 'processing_time_seconds': processing_time
             }
 
-            # Log après normalisation/dérivations (valeurs réellement sauvegardées)
+            # Log des données finales sauvegardées
             try:
-                logger.info("📊 Résultats normalisés (sauvegardés):")
-                logger.info(f"   - Executive Summary (norm.): {len(exec_summary)} points")
-                logger.info(f"   - Résumé (norm.): {len(update_data.get('summary') or '')} caractères")
-                logger.info(f"   - Points clés (norm.): {len(key_points)} points")
-                logger.info(f"   - Insights (norm.): {len(insights)} insights")
+                logger.info("📊 Données finales sauvegardées:")
+                logger.info(f"   - Executive Summary: {len(exec_summary)} points")
+                logger.info(f"   - Résumé: {len(summary_text)} caractères")
+                logger.info(f"   - Points clés: {len(key_points)} points")
+                logger.info(f"   - Insights: {len(insights)} insights")
+                logger.info(f"   - Risques: {len(risks)} risques")
+                logger.info(f"   - Opportunités: {len(opportunities)} opportunités")
             except Exception:
                 pass
             

@@ -230,26 +230,85 @@
             }
 
             function renderAnalysis(analysis) {
+                // Helpers (local) to sanitize and normalize possible JSON-like fields
+                const sanitize = (s) => {
+                    try {
+                        let t = String(s == null ? '' : s).trim();
+                        // Remove leading/trailing stray JSON punctuation
+                        t = t.replace(/^[}\]\),\s]+/, '').replace(/[\[{(,\s]+$/, '');
+                        // If still wrapped in single braces/brackets, strip once
+                        if ((t.startsWith('{') && t.endsWith('}')) || (t.startsWith('[') && t.endsWith(']'))) {
+                            t = t.slice(1, -1).trim();
+                        }
+                        return t;
+                    } catch { return String(s || ''); }
+                };
+                const normalizeList = (val) => {
+                    if (!val) return [];
+                    if (Array.isArray(val)) return val.map(x => sanitize(x)).filter(Boolean);
+                    const s = String(val || '').replace(/\r/g, '\n');
+                    return s.split(/\n+/).map(p => sanitize(p.replace(/^[−–—-•*]\s*/, ''))).filter(Boolean);
+                };
+                const tryExtractSummary = (s) => {
+                    try {
+                        const t = String(s || '').trim();
+                        if (t.startsWith('{') || t.includes('"meta_analysis"') || t.includes('"deep_analysis"')) {
+                            const obj = JSON.parse(t);
+                            if (obj && typeof obj === 'object') {
+                                return (obj.summary || (obj.deep_analysis && obj.deep_analysis.narrative) || '').trim();
+                            }
+                        }
+                    } catch {}
+                    return '';
+                };
+                const pickSummary = (obj) => {
+                    const s = (obj.summary || '').trim();
+                    if (s) return s;
+                    try { return (obj.structured_data && obj.structured_data.deep_analysis && obj.structured_data.deep_analysis.narrative) || ''; } catch {}
+                    try { return (obj.deep_analysis && obj.deep_analysis.narrative) || ''; } catch {}
+                    return '';
+                };
+
+                // Build sanitized summary
+                let rawSummary = pickSummary(analysis);
+                const extracted = tryExtractSummary(rawSummary);
+                if (extracted) rawSummary = extracted;
+                let htmlSummary = sanitize(rawSummary)
+                  .replace(/\*\*(.*?)\*\*/g, '<strong>$1<\/strong>')
+                  .replace(/\n/g, '<br\/>')
+                  .replace(/↑/g, '<span class="text-green-400">↑<\/span>')
+                  .replace(/↓/g, '<span class="text-red-400">↓<\/span>')
+                  .replace(/🟢/g, '<span class="text-green-400">🟢<\/span>')
+                  .replace(/🔴/g, '<span class="text-red-400">🔴<\/span>');
+
+                // Normalize lists
+                const execArr = normalizeList(analysis.executive_summary);
+                let keyArr = normalizeList(analysis.key_points);
+                let insArr = normalizeList(analysis.insights);
+                const riskArr = normalizeList(analysis.risks);
+                const oppArr = normalizeList(analysis.opportunities);
+                if (keyArr.length === 0 && execArr.length > 0) keyArr = execArr.slice(0, 10);
+                if (insArr.length === 0 && analysis.executive_dashboard && Array.isArray(analysis.executive_dashboard.top_trades)) {
+                    insArr = analysis.executive_dashboard.top_trades.map(t => (t && t.rationale) ? String(t.rationale).trim() : '').filter(Boolean).slice(0,6);
+                }
+
                 resultDiv.classList.remove('hidden');
                 resultDiv.innerHTML = `
                     <h3 class="text-xl font-semibold mb-4">Résultats de l'Analyse</h3>
                     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <!-- Executive Summary -->
-                        ${analysis.executive_summary ? `
+                        ${execArr.length ? `
                         <div class="glass p-4 rounded-xl lg:col-span-2 bg-gradient-to-r from-cyan-900/20 to-blue-900/20 border border-cyan-400/30">
                             <h5 class="font-bold mb-3 text-cyan-200"><i class="fas fa-chart-bar mr-2"></i>EXECUTIVE SUMMARY</h5>
                             <div class="space-y-2 text-cyan-100 font-medium break-any">
-                                ${(analysis.executive_summary || []).map(point => `<div class="pl-2 break-any">${point}</div>`).join('')}
+                                ${execArr.map(point => `<div class="pl-2 break-any">${point}</div>`).join('')}
                             </div>
                         </div>
                         ` : ''}
-                        <!-- Analyse IA (cartes colorées sobres) -->
-                        <div class="glass p-4 rounded-xl bg-indigo-500/10 border border-indigo-400/30"><h6 class="font-medium mb-2"><i class="fas fa-chart-line mr-2"></i>Résumé</h6><p class="text-indigo-100/80 text-sm break-any wrap-pre">${analysis.summary || 'N/A'}</p></div>
-                        <div class="glass p-4 rounded-xl bg-fuchsia-500/10 border border-fuchsia-400/30"><h6 class="font-medium mb-2"><i class="fas fa-list mr-2"></i>Points Clés</h6><ul class="list-disc list-inside text-fuchsia-100/90 text-sm break-any">${(analysis.key_points || []).map(p => `<li class='break-any'>${p}</li>`).join('')}</ul></div>
-                        <div class="glass p-4 rounded-xl bg-amber-500/10 border border-amber-400/30"><h6 class="font-medium mb-2"><i class="fas fa-lightbulb mr-2"></i>Insights</h6><ul class="list-disc list-inside text-amber-100/90 text-sm break-any">${(analysis.insights || []).map(p => `<li class='break-any'>${p}</li>`).join('')}</ul></div>
-                        <div class="glass p-4 rounded-xl bg-rose-500/10 border border-rose-400/30"><h6 class="font-medium mb-2"><i class="fas fa-exclamation-triangle mr-2"></i>Risques</h6><ul class="list-disc list-inside text-rose-100/90 text-sm break-any">${(analysis.risks || []).map(p => `<li class='break-any'>${p}</li>`).join('')}</ul></div>
-                        <div class="glass p-4 rounded-xl lg:col-span-2 bg-emerald-500/10 border border-emerald-400/30"><h6 class="font-medium mb-2"><i class="fas fa-star mr-2"></i>Opportunités</h6><ul class="list-disc list-inside text-emerald-100/90 text-sm break-any">${(analysis.opportunities || []).map(p => `<li class='break-any'>${p}</li>`).join('')}</ul></div>
-                        
+                        <div class="glass p-4 rounded-xl bg-indigo-500/10 border border-indigo-400/30"><h6 class="font-medium mb-2"><i class="fas fa-chart-line mr-2"></i>Résumé</h6><p class="text-indigo-100/80 text-sm break-any wrap-pre">${htmlSummary || 'N/A'}</p></div>
+                        <div class="glass p-4 rounded-xl bg-fuchsia-500/10 border border-fuchsia-400/30"><h6 class="font-medium mb-2"><i class="fas fa-list mr-2"></i>Points Clés</h6><ul class="list-disc list-inside text-fuchsia-100/90 text-sm break-any">${keyArr.map(p => `<li class='break-any'>${p}</li>`).join('')}</ul></div>
+                        <div class="glass p-4 rounded-xl bg-amber-500/10 border border-amber-400/30"><h6 class="font-medium mb-2"><i class="fas fa-lightbulb mr-2"></i>Insights</h6><ul class="list-disc list-inside text-amber-100/90 text-sm break-any">${insArr.map(p => `<li class='break-any'>${p}</li>`).join('')}</ul></div>
+                        <div class="glass p-4 rounded-xl bg-rose-500/10 border border-rose-400/30"><h6 class="font-medium mb-2"><i class="fas fa-exclamation-triangle mr-2"></i>Risques</h6><ul class="list-disc list-inside text-rose-100/90 text-sm break-any">${riskArr.map(p => `<li class='break-any'>${p}</li>`).join('')}</ul></div>
+                        <div class="glass p-4 rounded-xl lg:col-span-2 bg-emerald-500/10 border border-emerald-400/30"><h6 class="font-medium mb-2"><i class="fas fa-star mr-2"></i>Opportunités</h6><ul class="list-disc list-inside text-emerald-100/90 text-sm break-any">${oppArr.map(p => `<li class='break-any'>${p}</li>`).join('')}</ul></div>
                     </div>`;
             }
 
