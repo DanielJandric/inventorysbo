@@ -116,7 +116,7 @@ class ChatbotManager:
 
             response = from_responses_simple(
                 client=self.ai_engine.openai_client,
-                model=os.getenv("AI_MODEL", "gpt-5"),
+                model=os.getenv("AI_MODEL", "gpt-5-thinking"),
                 messages=[{"role": "user", "content": prompt}],
             )
             extracted_json = extract_output_text(response)
@@ -166,7 +166,7 @@ class ChatbotManager:
 
             response = from_responses_simple(
                 client=self.ai_engine.openai_client,
-                model=os.getenv("AI_MODEL", "gpt-5"),
+                model=os.getenv("AI_MODEL", "gpt-5-thinking"),
                 messages=[{"role": "user", "content": prompt}],
             )
             extracted_json = extract_output_text(response)

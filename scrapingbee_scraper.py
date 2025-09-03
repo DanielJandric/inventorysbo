@@ -993,7 +993,7 @@ Contraintes générales:
 - Répondre en UN SEUL objet JSON valide.
 """
             
-            chosen_model = os.getenv("AI_MODEL", "gpt-5")
+            chosen_model = os.getenv("AI_MODEL", "gpt-5-reasoning")
             logger.info(f"🤖 Appel à l'API OpenAI ({chosen_model}) en cours pour une analyse exhaustive (prompt renforcé)...")
             
             # Essayer jusqu'à 3 fois en cas d'erreur
@@ -1047,7 +1047,7 @@ Contraintes générales:
 
                     resp = from_responses_simple(
                         client=client,
-                        model=os.getenv("AI_MODEL", "gpt-5"),
+                        model=os.getenv("AI_MODEL", "gpt-5-reasoning"),
                         messages=[
                             {"role": "system", "content": [{"type": "input_text", "text": system_prompt}]},
                             {"role": "user", "content": [{"type": "input_text", "text": f"Demande: {prompt}\n\nDONNÉES FACTUELLES (snapshot):\n{snapshot_str}\n\nDONNÉES COLLECTÉES (articles):\n{context}"}]}
