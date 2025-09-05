@@ -77,6 +77,18 @@ Application de gestion d'inventaire sophistiquée avec **IA avancée**, **recher
 - **Notifications automatiques** pour événements importants
 - **Templates email** professionnels
 
+### Entête Email avec Image CID (optionnel)
+- Image locale jointe en CID et affichée dans l’email
+- Fichier par défaut: `static/Market_report_header_email.png`
+- Overlay texte (titre + timestamp) via Pillow si disponible
+- Variables d’environnement:
+  - `EMAIL_HEADER_IMAGE_PATH`: chemin image (défaut ci-dessus)
+  - `EMAIL_HEADER_CID`: identifiant CID (défaut `market-header`)
+  - `EMAIL_HEADER_OVERLAY`: `1`/`0` pour activer/désactiver l’overlay (défaut `1`)
+  - `EMAIL_HEADER_TITLE`: titre affiché (défaut "RAPPORT D'ANALYSE DE MARCHÉ")
+  - `EMAIL_HEADER_SUBTITLE`: sous-titre (défaut `Généré le <timestamp>`) 
+  - `EMAIL_HEADER_FONT_PATH`: police TTF optionnelle
+
 ### 📝 CRUD Complet avec Validation
 - **Créer** de nouveaux objets avec formulaire intelligent
 - **Modifier** les objets existants en un clic
@@ -119,6 +131,19 @@ Application de gestion d'inventaire sophistiquée avec **IA avancée**, **recher
 - **Yahoo Finance API** - Prix temps réel des actions
 - **Gmail API** - Notifications email
 - **Render** - Déploiement cloud
+
+## 🧠 Pipeline d’Analyse de Marché (LLM)
+- Prompt externalisé: `prompts/market_analysis_fr.txt` (FR, JSON strict, longueurs minimales)
+- Appel LLM via Responses API avec schéma JSON (sections clés)
+- Parsing robuste: suppression fences Markdown, normalisation guillemets, retrait BOM, fix virgules traînantes, réparation JSON et extraction partielle
+- Mirroring `structured_data`: le backend recopie automatiquement `executive_dashboard`, `deep_analysis`, `quantitative_signals`, `risk_management`, `actionable_summary`, `economic_indicators` si manquants
+- Mode strict (fail-hard): activer avec `STRICT_LLM_JSON=1` pour rejeter toute sortie non conforme (aucune sauvegarde/email)
+- Gestion des 429 (rate limit): backoff automatique, réduction adaptative du contexte et de `max_output_tokens`
+- Paramètres clés:
+  - `AI_MODEL` (défaut `gpt-5`)
+  - `LLM_MAX_OUTPUT_TOKENS` (défaut 30000)
+  - `LLM_CONTEXT_MAX_CHARS` (défaut 150000)
+  - `LLM_SNAPSHOT_MAX_CHARS` (défaut 60000)
 
 ## 🏗 Installation et Configuration
 
@@ -324,6 +349,8 @@ services:
 - `GMAIL_USER` : Email Gmail pour notifications
 - `GMAIL_PASSWORD` : Mot de passe d'application Gmail
 - `GMAIL_RECIPIENTS` : Destinataires séparés par virgules
+- `STRICT_LLM_JSON` : `1` pour activer le mode strict (optionnel)
+- `EMAIL_HEADER_IMAGE_PATH`, `EMAIL_HEADER_OVERLAY`, etc. (voir section entête email)
 
 ## 📊 Fonctionnalités Avancées
 
