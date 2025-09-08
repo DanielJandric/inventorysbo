@@ -2402,6 +2402,12 @@ async function handleChatSubmit(event) {
         }
         
         const data = await response.json();
+
+        // Mode asynchrone: si le serveur renvoie un task_id, démarrer le flux SSE
+        if (response.status === 202 && data && data.task_id) {
+            startAsyncChatStream(data.task_id);
+            return;
+        }
         
         if (response.ok && data.reply) {
             // Utiliser le streaming pour la réponse
@@ -2482,6 +2488,53 @@ function addChatMessage(message, sender, useStreaming = false) {
         messageDiv.innerHTML = formattedMessage;
         smoothScrollToBottom(messagesContainer);
     }
+}
+
+// SSE pour traitement asynchrone via Celery
+function startAsyncChatStream(taskId) {
+    let typingIndicator;
+    try {
+        typingIndicator = addTypingIndicator();
+    } catch (e) { /* ignore */ }
+
+    const es = new EventSource(`/api/chatbot/stream/${taskId}`);
+
+    es.addEventListener('state', (e) => {
+        try {
+            const data = JSON.parse(e.data || '{}');
+            // Optionnel: afficher la progression si disponible
+            if (data && data.info && typeof data.info.pct === 'number') {
+                // Vous pouvez relayer la progression dans l'UI si désiré
+            }
+            if (data && data.state === 'FAILURE') {
+                if (typingIndicator && typingIndicator.parentNode) typingIndicator.remove();
+                addChatMessage('Erreur: la tâche a échoué.', 'bot');
+                es.close();
+            }
+        } catch (err) { /* ignore parse errors */ }
+    });
+
+    es.addEventListener('result', (e) => {
+        try {
+            const payload = JSON.parse(e.data || '{}');
+            const result = payload.result || {};
+            const answer = result.answer || 'Terminé.';
+            if (typingIndicator && typingIndicator.parentNode) typingIndicator.remove();
+            addChatMessage(answer, 'bot', true);
+            conversationHistory.push({ role: 'assistant', content: answer });
+        } catch (err) {
+            if (typingIndicator && typingIndicator.parentNode) typingIndicator.remove();
+            addChatMessage('Réponse prête, mais erreur d\'affichage.', 'bot');
+        } finally {
+            es.close();
+        }
+    });
+
+    es.onerror = () => {
+        if (typingIndicator && typingIndicator.parentNode) typingIndicator.remove();
+        addChatMessage('Perte de connexion au flux. Réessayez.', 'bot');
+        es.close();
+    };
 }
 
 function addSmartSuggestions(botReply, userMessage) {

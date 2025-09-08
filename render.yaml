@@ -19,3 +19,71 @@ services:
         sync: false  # À définir dans les variables d'environnement Render
       - key: OPENAI_API_KEY
         sync: false  # À définir dans les variables d'environnement Render
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: inventorysbo-redis
+          property: connectionString
+      - key: LLM_QUEUE
+        value: "celery"
+      - key: ASYNC_CHAT
+        value: "1"
+      - key: GUNICORN_THREADS
+        value: "8"
+      - key: GUNICORN_WORKERS
+        value: "2"
+      - key: GUNICORN_TIMEOUT
+        value: "120"
+      - key: REDIS_USE_SSL
+        value: "0"
+
+  - type: worker
+    name: inventorysbo-llm-worker
+    env: python
+    plan: starter
+    buildCommand: "./build.sh"
+    startCommand: "celery -A celery_app.celery worker -Q celery --loglevel=INFO"
+    envVars:
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: inventorysbo-redis
+          property: connectionString
+      - key: ASYNC_CHAT
+        value: "1"
+      - key: REDIS_USE_SSL
+        value: "0"
+      - key: CELERY_BROKER_URL
+        sync: false
+      - key: CELERY_RESULT_BACKEND
+        sync: false
+
+  - type: worker
+    name: inventorysbo-pdf-worker
+    env: python
+    plan: starter
+    buildCommand: "./build.sh"
+    startCommand: "celery -A celery_app.celery worker -Q pdf --loglevel=INFO"
+    envVars:
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: inventorysbo-redis
+          property: connectionString
+      - key: ASYNC_CHAT
+        value: "1"
+      - key: REDIS_USE_SSL
+        value: "0"
+      - key: CELERY_BROKER_URL
+        sync: false
+      - key: CELERY_RESULT_BACKEND
+        sync: false
+
+databases:
+  - name: inventorysbo-redis
+    plan: free
+
+cronJobs:
+  - name: precompute-snapshots
+    schedule: "*/15 * * * *"
+    command: "bash -lc 'python - <<PY\nfrom tasks import chat_task\nprint(\"cron ok\")\nPY'"

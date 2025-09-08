@@ -23,6 +23,9 @@ import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.feature_extraction.text import TfidfVectorizer
 from dotenv import load_dotenv
+from celery.result import AsyncResult
+from celery_app import celery
+from tasks import chat_task, pdf_task
 import requests
 import schedule
 import uuid
@@ -77,6 +80,13 @@ try:
     print("✅ Configuration locale chargée")
     # Utiliser les variables du fichier config.py
     SUPABASE_URL = getattr(config, 'SUPABASE_URL', os.getenv("SUPABASE_URL"))
+    # Prefer pooled URL if provided (PgBouncer)
+    try:
+        SUPABASE_POOLED_URL = getattr(config, 'SUPABASE_POOLED_URL', os.getenv("SUPABASE_POOLED_URL"))
+    except Exception:
+        SUPABASE_POOLED_URL = os.getenv("SUPABASE_POOLED_URL")
+    if SUPABASE_POOLED_URL:
+        SUPABASE_URL = SUPABASE_POOLED_URL
     SUPABASE_KEY = getattr(config, 'SUPABASE_KEY', os.getenv("SUPABASE_KEY"))
     OPENAI_API_KEY = getattr(config, 'OPENAI_API_KEY', os.getenv("OPENAI_API_KEY"))
     # Propager dans l'environnement pour les modules qui lisent os.getenv directement
@@ -91,7 +101,7 @@ try:
         pass
 except ImportError:
     print("⚠️ Fichier config.py non trouvé, utilisation des variables d'environnement")
-    SUPABASE_URL = os.getenv("SUPABASE_URL")
+    SUPABASE_URL = os.getenv("SUPABASE_POOLED_URL") or os.getenv("SUPABASE_URL")
     SUPABASE_KEY = os.getenv("SUPABASE_KEY")
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
@@ -5149,6 +5159,11 @@ def chatbot():
         query = data.get("message", "").strip()
         if not query:
             return jsonify({"error": "Message requis"}), 400
+
+        # Feature flag: bascule vers file d'attente Celery pour traitement asynchrone
+        if os.getenv("ASYNC_CHAT", "1") == "1":
+            task = chat_task.apply_async(args=[data], queue=os.getenv("LLM_QUEUE", "celery"))
+            return jsonify({"task_id": task.id}), 202
         
         # Guardrails
         blocked = _should_block_query(query)
@@ -5989,6 +6004,45 @@ def chatbot_stream():
     except Exception as e:
         logger.error(f"Erreur chatbot_stream: {e}")
         return jsonify({"error": str(e)}), 500
+
+@app.route("/api/chatbot/stream/<task_id>", methods=["GET"])
+def stream_chat_task(task_id):
+    """
+    SSE: envoie l'avancement Celery et le résultat final.
+    """
+    def event_stream():
+        seen_states = set()
+        while True:
+            ar = AsyncResult(task_id, app=celery)
+            state = ar.state
+            info = ar.info if isinstance(ar.info, dict) else {}
+            if state not in seen_states and state not in ("PENDING",):
+                yield f"event: state\ndata: {json.dumps({'state': state, 'info': info})}\n\n"
+                seen_states.add(state)
+            if state in ("SUCCESS", "FAILURE", "REVOKED"):
+                if state == "SUCCESS":
+                    try:
+                        result_payload = ar.result
+                        yield f"event: result\ndata: {json.dumps({'result': result_payload})}\n\n"
+                    except Exception:
+                        pass
+                break
+            time.sleep(0.4)
+    headers = {"Content-Type": "text/event-stream", "Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+    return Response(event_stream(), headers=headers)
+
+@app.route("/api/reports/pdf", methods=["POST"])
+def submit_pdf_task():
+    payload = request.get_json() or {}
+    task = pdf_task.apply_async(args=[payload], queue="pdf")
+    return jsonify({"task_id": task.id}), 202
+
+@app.route("/api/tasks/<task_id>", methods=["GET"])
+def get_task_result(task_id):
+    ar = AsyncResult(task_id, app=celery)
+    if ar.successful():
+        return jsonify({"state": ar.state, "result": ar.result}), 200
+    return jsonify({"state": ar.state, "info": ar.info}), 200
 
 @app.route("/api/embeddings/status")
 def embeddings_status():
