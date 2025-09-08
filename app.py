@@ -25,7 +25,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from dotenv import load_dotenv
 from celery.result import AsyncResult
 from celery_app import celery
-from tasks import chat_task, pdf_task
+from tasks import chat_task, pdf_task, markets_chat_task
 import requests
 import schedule
 import uuid
@@ -8936,9 +8936,10 @@ def get_recent_market_analyses():
 
 @app.route("/api/markets/chat", methods=["POST"])
 def markets_chat():
-    """Chatbot marchés: worker minimal et stable (sans RAG ni web).
+    """Chatbot marchés.
+    Si ASYNC_MARKETS_CHAT=1, enfile une tâche Celery et retourne 202 + task_id.
+    Sinon, traite en ligne (comportement existant).
     Entrée JSON: { message: str, context?: str, session_id?: str }
-    Sortie JSON: { success: bool, reply?: str, error?: str, metadata?: { session_id } }
     """
     try:
         import uuid
@@ -8948,6 +8949,17 @@ def markets_chat():
             return jsonify({"success": False, "error": "Message vide"}), 400
         extra_context = (data.get("context") or "").strip()
         session_id = (data.get("session_id") or "").strip() or str(uuid.uuid4())
+
+        # Async path via Celery
+        if os.getenv("ASYNC_MARKETS_CHAT", "0") == "1":
+            payload = {"message": user_message, "context": extra_context, "session_id": session_id}
+            try:
+                from tasks import markets_chat_task
+                from celery_app import celery
+                task = markets_chat_task.apply_async(args=[payload], queue=os.getenv("LLM_QUEUE", "celery"))
+                return jsonify({"task_id": task.id, "session_id": session_id}), 202
+            except Exception as e:
+                return jsonify({"success": False, "error": str(e)}), 500
 
         # Ajouter le dernier rapport comme contexte (si disponible)
         try:
@@ -8999,9 +9011,8 @@ def markets_chat():
         return jsonify({"success": False, "error": str(e)}), 500
 @app.route("/api/markets/chat/stream", methods=["POST"])
 def markets_chat_stream():
-    """Streaming text (plain) pour le chatbot marchés, basé sur Responses API.
-    Entrée JSON: { message: str, context?: str, session_id?: str, previous_response_id?: str }
-    Sortie: flux text/plain de chunks, puis footer "\n\n[END:<response_id>]".
+    """Streaming texte pour le chatbot marchés.
+    Si ASYNC_MARKETS_CHAT=1, expose aussi un flux SSE par tâche via /api/markets/chat/stream/<task_id>.
     """
     try:
         data = request.get_json(silent=True) or {}
@@ -9160,6 +9171,38 @@ def markets_chat_stream():
             yield "\u200b"
             yield f"[ERROR:{str(e)}]"
         return Response(stream_with_context(_err_gen2()), mimetype="text/plain", headers={'X-Accel-Buffering': 'no', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive'})
+
+@app.route("/api/markets/chat/stream/task/<task_id>", methods=["GET"])
+def markets_chat_stream_task(task_id: str):
+    """SSE pour le chatbot marchés lorsqu'il est traité via Celery."""
+    if os.getenv("ASYNC_MARKETS_CHAT", "0") != "1":
+        return jsonify({"error": "ASYNC_MARKETS_CHAT=0"}), 400
+
+    from celery.result import AsyncResult
+    from celery_app import celery
+    import json as _json
+
+    def event_stream():
+        seen = set()
+        while True:
+            ar = AsyncResult(task_id, app=celery)
+            state = ar.state
+            info = ar.info if isinstance(ar.info, dict) else {}
+            if state not in seen and state not in ("PENDING",):
+                yield f"event: state\ndata: {_json.dumps({'state': state, 'info': info})}\n\n"
+                seen.add(state)
+            if state in ("SUCCESS", "FAILURE", "REVOKED"):
+                if state == "SUCCESS":
+                    try:
+                        res = ar.result
+                        yield f"event: result\ndata: {_json.dumps({'result': res})}\n\n"
+                    except Exception:
+                        pass
+                break
+            time.sleep(0.4)
+
+    headers = {"Content-Type": "text/event-stream", "Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+    return Response(event_stream(), headers=headers)
 @app.route("/api/markets/chat/export-pdf", methods=["POST"])
 def markets_chat_export_pdf():
     """Export serveur de la discussion chat au format PDF (Puppeteer, fallback WeasyPrint)."""

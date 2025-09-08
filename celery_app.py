@@ -3,9 +3,20 @@ import ssl
 from celery import Celery
 
 
+def _coerce_rediss(url: str) -> str:
+    try:
+        if os.getenv("REDIS_USE_SSL", "0") == "1" and url and url.startswith("redis://"):
+            return "rediss://" + url[len("redis://"):]
+    except Exception:
+        pass
+    return url
+
+
 def make_celery() -> Celery:
     broker = os.getenv("CELERY_BROKER_URL") or os.getenv("REDIS_URL", "redis://localhost:6379/0")
     backend = os.getenv("CELERY_RESULT_BACKEND") or os.getenv("REDIS_URL", "redis://localhost:6379/0")
+    broker = _coerce_rediss(broker)
+    backend = _coerce_rediss(backend)
 
     app = Celery("inventorysbo", broker=broker, backend=backend, include=["tasks"])
     app.conf.update(

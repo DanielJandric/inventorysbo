@@ -28,6 +28,8 @@ services:
         value: "celery"
       - key: ASYNC_CHAT
         value: "1"
+      - key: ASYNC_MARKETS_CHAT
+        value: "1"
       - key: GUNICORN_THREADS
         value: "8"
       - key: GUNICORN_WORKERS
@@ -51,6 +53,8 @@ services:
           property: connectionString
       - key: ASYNC_CHAT
         value: "1"
+      - key: ASYNC_MARKETS_CHAT
+        value: "1"
       - key: REDIS_USE_SSL
         value: "0"
       - key: CELERY_BROKER_URL
@@ -71,6 +75,8 @@ services:
           name: inventorysbo-redis
           property: connectionString
       - key: ASYNC_CHAT
+        value: "1"
+      - key: ASYNC_MARKETS_CHAT
         value: "1"
       - key: REDIS_USE_SSL
         value: "0"
