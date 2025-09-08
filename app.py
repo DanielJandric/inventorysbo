@@ -6026,6 +6026,12 @@ def stream_chat_task(task_id):
                         yield f"event: result\ndata: {json.dumps({'result': result_payload})}\n\n"
                     except Exception:
                         pass
+                elif state in ("FAILURE", "REVOKED"):
+                    try:
+                        tb = getattr(ar, 'traceback', None)
+                    except Exception:
+                        tb = None
+                    yield f"event: error\ndata: {json.dumps({'state': state, 'info': info, 'traceback': tb})}\n\n"
                 break
             time.sleep(0.4)
     headers = {"Content-Type": "text/event-stream", "Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
@@ -6042,7 +6048,13 @@ def get_task_result(task_id):
     ar = AsyncResult(task_id, app=celery)
     if ar.successful():
         return jsonify({"state": ar.state, "result": ar.result}), 200
-    return jsonify({"state": ar.state, "info": ar.info}), 200
+    # Include traceback on failures to aid debugging
+    tb = None
+    try:
+        tb = ar.traceback
+    except Exception:
+        tb = None
+    return jsonify({"state": ar.state, "info": ar.info, "traceback": tb}), 200
 
 @app.route("/api/embeddings/status")
 def embeddings_status():
@@ -6069,6 +6081,34 @@ def embeddings_status():
     except Exception as e:
         logger.error(f"Erreur statut embeddings: {e}")
         return jsonify({"error": str(e)}), 500
+
+@app.route("/api/celery/status", methods=["GET"])
+def celery_status():
+    """Diagnostic Celery: montre le broker, backend et l'état de connection basique."""
+    try:
+        status = {
+            "broker_url": str(celery.connection().as_uri_hide_password()),
+            "backend": str(getattr(celery.backend, 'as_uri', lambda: str(celery.backend))()),
+            "queues_expected": os.getenv("LLM_QUEUE", "celery") + ",pdf",
+        }
+        # Essayer un ping au broker
+        try:
+            with celery.connection() as conn:
+                status["broker_connected"] = conn.connected
+        except Exception as e:
+            status["broker_connected"] = False
+            status["broker_error"] = str(e)
+        # Inspect si des workers répondent
+        try:
+            insp = celery.control.inspect(timeout=2)
+            status["active_queues"] = insp.active_queues() or {}
+            status["registered"] = list((insp.registered() or {}).keys())
+            status["stats_present"] = bool(insp.stats())
+        except Exception as e:
+            status["inspect_error"] = str(e)
+        return jsonify({"ok": True, "celery": status})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 @app.route("/api/embeddings/generate", methods=["POST"])
 def generate_embeddings():
@@ -9198,6 +9238,12 @@ def markets_chat_stream_task(task_id: str):
                         yield f"event: result\ndata: {_json.dumps({'result': res})}\n\n"
                     except Exception:
                         pass
+                else:
+                    try:
+                        tb = getattr(ar, 'traceback', None)
+                    except Exception:
+                        tb = None
+                    yield f"event: error\ndata: {_json.dumps({'state': state, 'info': info, 'traceback': tb})}\n\n"
                 break
             time.sleep(0.4)
 
