@@ -1,6 +1,7 @@
 import os
 import ssl
 from celery import Celery
+from kombu import Queue
 
 
 def _coerce_rediss(url: str) -> str:
@@ -29,6 +30,14 @@ def make_celery() -> Celery:
         worker_prefetch_multiplier=1,
         broker_transport_options={"visibility_timeout": 3600},
         result_expires=3600,
+        broker_connection_retry_on_startup=True,
+        task_default_queue=os.getenv("LLM_QUEUE", "celery"),
+    )
+    # Declare queues explicitly
+    default_q = os.getenv("LLM_QUEUE", "celery")
+    app.conf.task_queues = (
+        Queue(default_q),
+        Queue("pdf"),
     )
 
     # Enable SSL for Render external Redis (rediss://) or when forced by env
