@@ -5167,6 +5167,42 @@ def chatbot():
         if os.getenv("CHAT_V2", "0") == "1" and not _force_sync:
             task = chat_v2_task.apply_async(args=[data], queue=os.getenv("LLM_QUEUE", "celery"))
             return jsonify({"task_id": task.id}), 202
+@app.route("/api/v2/chatbot", methods=["POST"])
+def chatbot_v2():
+    try:
+        data = request.get_json() or {}
+        msg = (data.get("message") or "").strip()
+        if not msg:
+            return jsonify({"error": "Message requis"}), 400
+        _force_sync = (os.getenv("ALLOW_FORCE_SYNC", "0") == "1") and (request.args.get("force_sync") == "1")
+        if not _force_sync:
+            t = chat_v2_task.apply_async(args=[data], queue=os.getenv("LLM_QUEUE", "celery"))
+            return jsonify({"task_id": t.id}), 202
+        # Force sync: deterministic first
+        items = AdvancedDataManager.fetch_all_items()
+        analytics = AdvancedDataManager.calculate_advanced_analytics(items)
+        low = msg.lower()
+        if "vaisseau amiral" in low or "flagship" in low:
+            best = None; best_v = -1.0
+            for it in items:
+                try:
+                    if is_item_available(it):
+                        v = float(it.current_value or 0)
+                        if it.category == 'Actions' and it.current_price and it.stock_quantity:
+                            v = float(it.current_price) * float(it.stock_quantity)
+                        if v > best_v:
+                            best_v = v; best = it
+                except Exception:
+                    continue
+            if best:
+                return jsonify({"reply": f"Ton vaisseau amiral est {best.name} ({best.category}) à ~{best_v:,.0f} CHF."})
+        # Minimal AI
+        if ai_engine:
+            txt = ai_engine.generate_response_with_history(msg, items, analytics, conversation_history=[])
+            return jsonify({"reply": txt})
+        return jsonify({"reply": "IA indisponible"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
         if os.getenv("ASYNC_CHAT", "1") == "1" and not _force_sync:
             task = chat_task.apply_async(args=[data], queue=os.getenv("LLM_QUEUE", "celery"))
             return jsonify({"task_id": task.id}), 202
@@ -9018,6 +9054,34 @@ def markets_chat():
                 return jsonify({"task_id": task.id, "session_id": session_id}), 202
             except Exception as e:
                 return jsonify({"success": False, "error": str(e)}), 500
+@app.route("/api/v2/markets/chat", methods=["POST"])
+def markets_chat_v2():
+    try:
+        data = request.get_json() or {}
+        msg = (data.get("message") or "").strip()
+        if not msg:
+            return jsonify({"error": "Message requis"}), 400
+        _force_sync = (os.getenv("ALLOW_FORCE_SYNC", "0") == "1") and (request.args.get("force_sync") == "1")
+        if not _force_sync:
+            t = markets_chat_v2_task.apply_async(args=[data], queue=os.getenv("LLM_QUEUE", "celery"))
+            return jsonify({"task_id": t.id}), 202
+        # Minimal sync call using existing openai client
+        from openai import OpenAI
+        timeout_s = int(os.getenv('TIMEOUT_S', '45'))
+        client = openai_client.with_options(timeout=timeout_s) if openai_client else OpenAI(api_key=os.getenv("OPENAI_API_KEY"), timeout=timeout_s)
+        model = os.getenv("AI_MODEL", "gpt-5")
+        prompt = f"Question marchés: {msg}"
+        try:
+            with client.responses.stream(model=model, input=prompt, max_output_tokens=300) as stream:
+                text = ""
+                for ev in stream:
+                    if getattr(ev, 'type', None) == 'response.output_text.delta':
+                        text += getattr(ev, 'delta', '') or ''
+                return jsonify({"success": True, "reply": text})
+        except Exception:
+            return jsonify({"success": True, "reply": "Résumé indisponible pour l'instant."})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
         if os.getenv("ASYNC_MARKETS_CHAT", "0") == "1" and not _force_sync:
             payload = {"message": user_message, "context": extra_context, "session_id": session_id}
             try:
