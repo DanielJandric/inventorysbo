@@ -570,6 +570,47 @@
                     return delta < 80; // n'auto-scroll que si l'utilisateur est proche du bas
                 } catch { return true; }
             }
+            function openMarketsTaskStream(taskId, assistantEl) {
+                try {
+                    let es = new EventSource(`/api/v2/markets/chat/stream/task/${encodeURIComponent(taskId)}`);
+                    const cleanup = () => { try { es && es.close(); } catch {} };
+                    es.addEventListener('result', (e) => {
+                        try {
+                            const payload = JSON.parse(e.data || '{}');
+                            const res = payload.result || {};
+                            const reply = res.reply || res.answer || '';
+                            if (assistantEl) {
+                                assistantEl.innerHTML = '<strong>Assistant:<\/strong> ' + String(reply)
+                                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1<\/strong>')
+                                    .replace(/\n/g, '<br\/>');
+                                if (shouldAutoScroll()) { messagesDiv.scrollTop = messagesDiv.scrollHeight; }
+                            }
+                        } catch {}
+                        cleanup();
+                    });
+                    es.onerror = () => {
+                        cleanup();
+                        try {
+                            es = new EventSource(`/api/markets/chat/stream/task/${encodeURIComponent(taskId)}`);
+                            es.addEventListener('result', (e2) => {
+                                try {
+                                    const payload2 = JSON.parse(e2.data || '{}');
+                                    const res2 = payload2.result || {};
+                                    const reply2 = res2.reply || res2.answer || '';
+                                    if (assistantEl) {
+                                        assistantEl.innerHTML = '<strong>Assistant:<\/strong> ' + String(reply2)
+                                            .replace(/\*\*(.*?)\*\*/g, '<strong>$1<\/strong>')
+                                            .replace(/\n/g, '<br\/>');
+                                        if (shouldAutoScroll()) { messagesDiv.scrollTop = messagesDiv.scrollHeight; }
+                                    }
+                                } catch {}
+                                try { es && es.close(); } catch {}
+                            });
+                            es.onerror = () => { try { es && es.close(); } catch {} };
+                        } catch {}
+                    };
+                } catch {}
+            }
             async function sendChat() {
                 const msg = (inputEl.value || '').trim();
                 if (!msg) return;
@@ -604,6 +645,11 @@
                             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(reqBody)
                         });
                         const dSync = await rSync.json();
+                        if (rSync.status === 202 && dSync && dSync.task_id) {
+                            const assistantEl = createAssistantLine();
+                            openMarketsTaskStream(dSync.task_id, assistantEl);
+                            return;
+                        }
                         if (!dSync.success) throw new Error(dSync.error || 'Erreur API');
                         addMsg('assistant', dSync.reply);
                         return;
@@ -694,6 +740,10 @@
                             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(reqBody)
                         });
                         const d2 = await r2.json();
+                        if (r2.status === 202 && d2 && d2.task_id) {
+                            openMarketsTaskStream(d2.task_id, assistantEl);
+                            return;
+                        }
                         if (!d2.success) throw new Error(d2.error || 'Erreur API');
                         assistantEl.innerHTML = '<strong>Assistant:<\/strong> ' + String(d2.reply || '')
                             .replace(/\*\*(.*?)\*\*/g, '<strong>$1<\/strong>')
@@ -712,6 +762,11 @@
                             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(reqBody)
                         });
                         const d2 = await r2.json();
+                        if (r2.status === 202 && d2 && d2.task_id) {
+                            const assistantEl2 = createAssistantLine();
+                            openMarketsTaskStream(d2.task_id, assistantEl2);
+                            return;
+                        }
                         if (d2 && d2.success) { addMsg('assistant', d2.reply); return; }
                     } catch {}
                     addMsg('assistant', `❌ ${e && e.message ? e.message : 'Erreur réseau'}`);
