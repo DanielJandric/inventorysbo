@@ -38,10 +38,49 @@ def chat_v2_task(self, payload: dict):
             timeout_s = int(os.getenv("TIMEOUT_S", "45"))
             model = os.getenv("AI_MODEL", "gpt-5")
             client = OpenAI(api_key=api_key, timeout=timeout_s)
+            # Contexte minimal: récupère un aperçu des items via l'API web (évite dépendance directe à Supabase ici)
+            compact_ctx = ""
+            try:
+                url_items = base.rstrip("/") + "/api/items"
+                r_items = requests.get(url_items, timeout=min(12, timeout_s))
+                if r_items.status_code == 200:
+                    data_items = r_items.json()
+                    if isinstance(data_items, list):
+                        # Catégories & top valeurs (disponibles)
+                        def _is_av(it: Dict[str, Any]) -> bool:
+                            st = str(it.get("status", "")).strip().lower()
+                            return st not in ("sold", "vendu", "vendue")
+                        def _val(it: Dict[str, Any]) -> float:
+                            try:
+                                if str(it.get("category", "")) == 'Actions' and it.get("current_price") and it.get("stock_quantity"):
+                                    return float(it["current_price"]) * float(it["stock_quantity"]) if _is_av(it) else 0.0
+                                return float(it.get("current_value") or 0) if _is_av(it) else 0.0
+                            except Exception:
+                                return 0.0
+                        cats: Dict[str, int] = {}
+                        for it in data_items:
+                            c = str(it.get("category", "")).strip() or "Autres"
+                            cats[c] = cats.get(c, 0) + 1
+                        top = sorted(data_items, key=_val, reverse=True)[:5]
+                        top_lines = []
+                        for it in top:
+                            v = _val(it)
+                            if v <= 0:
+                                continue
+                            top_lines.append(f"- {it.get('name','?')} ({it.get('category','?')}) ~{int(v):,} CHF".replace(',', ' '))
+                        cats_line = ", ".join([f"{k}:{v}" for k,v in cats.items()])
+                        compact_ctx = (
+                            f"Contexte Collection: catégories= [{cats_line}]\n"
+                            f"Top par valeur:\n" + ("\n".join(top_lines) or "(n/a)")
+                        )
+            except Exception:
+                compact_ctx = ""
+
             prompt = (
                 "Tu es l'assistant BONVIN. Réponds en français, concis, structuré. "
                 "Si tu n'as pas assez de contexte, propose une clarification en 1 phrase.\n\n"
-                f"Question: {message}"
+                + (f"{compact_ctx}\n\n" if compact_ctx else "")
+                + f"Question: {message}"
             )
             resp = from_responses_simple(
                 client=client,
