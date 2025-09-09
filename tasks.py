@@ -4,6 +4,7 @@ import json
 import re
 import requests
 from typing import Optional, Any, Dict, List
+from gpt5_compat import from_responses_simple, extract_output_text
 from celery_app import celery
 @celery.task(bind=True)
 def chat_v2_task(self, payload: dict):
@@ -28,6 +29,30 @@ def chat_v2_task(self, payload: dict):
         except Exception:
             return None
 
+    def _direct_ai_or_none(message: str) -> Optional[str]:
+        try:
+            from openai import OpenAI  # lazy import
+            api_key = os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                return None
+            timeout_s = int(os.getenv("TIMEOUT_S", "45"))
+            model = os.getenv("AI_MODEL", "gpt-5")
+            client = OpenAI(api_key=api_key, timeout=timeout_s)
+            prompt = (
+                "Tu es l'assistant BONVIN. Réponds en français, concis, structuré. "
+                "Si tu n'as pas assez de contexte, propose une clarification en 1 phrase.\n\n"
+                f"Question: {message}"
+            )
+            resp = from_responses_simple(
+                client=client,
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            text = (extract_output_text(resp) or "").strip()
+            return text or None
+        except Exception:
+            return None
+
     base = _coerce_base(os.getenv("API_BASE_URL") or os.getenv("APP_URL") or "https://inventorysbo.onrender.com")
     fb = _fast_or_none(msg, base)
     if fb:
@@ -39,8 +64,8 @@ def chat_v2_task(self, payload: dict):
     self.update_state(state="PROGRESS", meta={"step": steps[2], "pct": 80})
     try:
         url = base.rstrip("/") + "/api/chatbot?force_sync=1"
-        # Budget court pour éviter les timeouts côté worker
-        timeout_s = int(os.getenv("CHATBOT_API_TIMEOUT", "20"))
+        # Timeout plus large sur worker pour questions complexes
+        timeout_s = int(os.getenv("CHATBOT_API_TIMEOUT", "45"))
         r = requests.post(url, headers={"Content-Type": "application/json"}, data=json.dumps(data), timeout=timeout_s)
         if r.status_code == 200:
             body = r.json()
@@ -51,12 +76,12 @@ def chat_v2_task(self, payload: dict):
             reply = ""
         if not reply:
             # Dernier filet de sécurité
-            reply = _fast_or_none(msg, base) or "Réessayez dans un instant."
+            reply = _fast_or_none(msg, base) or _direct_ai_or_none(msg) or "Réessayez dans un instant."
         self.update_state(state="PROGRESS", meta={"step": steps[3], "pct": 100})
         return {"ok": True, "answer": reply}
     except requests.exceptions.RequestException as e:
-        # Ne jamais planter: renvoyer une réponse courte plutôt qu'une erreur
-        fb_msg = _fast_or_none(msg, base) or "Réponse indisponible pour l'instant. Réessayez dans un instant."
+        # Ne jamais planter: tenter IA directe, sinon réponse courte
+        fb_msg = _fast_or_none(msg, base) or _direct_ai_or_none(msg) or "Réponse indisponible pour l'instant. Réessayez dans un instant."
         return {"ok": True, "answer": fb_msg, "warning": str(e)}
 
 
@@ -76,14 +101,42 @@ def markets_chat_v2_task(self, payload: dict):
     try:
         base = _coerce_base(os.getenv("API_BASE_URL") or os.getenv("APP_URL") or "https://inventorysbo.onrender.com")
         url = base.rstrip("/") + "/api/markets/chat?force_sync=1"
-        timeout_s = int(os.getenv("CHATBOT_API_TIMEOUT", "35"))
+        timeout_s = int(os.getenv("CHATBOT_API_TIMEOUT", "45"))
         r = requests.post(url, headers={"Content-Type": "application/json"}, data=json.dumps(data), timeout=timeout_s)
         if r.status_code == 200:
             body = r.json()
             reply = body.get("reply") or body.get("message") or ""
             return {"ok": True, "reply": reply}
+        # Fallback IA directe marchés (réponse courte)
+        from openai import OpenAI
+        api_key = os.getenv("OPENAI_API_KEY")
+        if api_key:
+            try:
+                client = OpenAI(api_key=api_key, timeout=int(os.getenv("TIMEOUT_S", "45")))
+                model = os.getenv("AI_MODEL", "gpt-5")
+                prompt = f"Question marchés: {msg}. Réponds brièvement (<=6 lignes)."
+                resp = from_responses_simple(client=client, model=model, messages=[{"role":"user","content": prompt}])
+                text = (extract_output_text(resp) or "").strip()
+                if text:
+                    return {"ok": True, "reply": text, "note": "direct_ai_fallback"}
+            except Exception:
+                pass
         return {"ok": False, "error": f"web returned {r.status_code}: {r.text}"}
     except requests.exceptions.RequestException as e:
+        # Last resort
+        from openai import OpenAI
+        api_key = os.getenv("OPENAI_API_KEY")
+        if api_key:
+            try:
+                client = OpenAI(api_key=api_key, timeout=int(os.getenv("TIMEOUT_S", "45")))
+                model = os.getenv("AI_MODEL", "gpt-5")
+                prompt = f"Question marchés: {msg}. Réponds brièvement (<=6 lignes)."
+                resp = from_responses_simple(client=client, model=model, messages=[{"role":"user","content": prompt}])
+                text = (extract_output_text(resp) or "").strip()
+                if text:
+                    return {"ok": True, "reply": text, "warning": str(e), "note": "direct_ai_fallback"}
+            except Exception:
+                pass
         return {"ok": False, "error": str(e)}
 
 
