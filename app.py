@@ -8978,8 +8978,8 @@ def get_recent_market_analyses():
 @app.route("/api/markets/chat", methods=["POST"])
 def markets_chat():
     """Chatbot marchés.
-    Si ASYNC_MARKETS_CHAT=1, enfile une tâche Celery et retourne 202 + task_id.
-    Sinon, traite en ligne (comportement existant).
+    Si ASYNC_MARKETS_CHAT=1, enfile une tâche Celery et retourne 202 + task_id,
+    sauf si force_sync (ALLOW_FORCE_SYNC=1 et ?force_sync=1) auquel cas traite en ligne.
     Entrée JSON: { message: str, context?: str, session_id?: str }
     """
     try:
@@ -8991,8 +8991,11 @@ def markets_chat():
         extra_context = (data.get("context") or "").strip()
         session_id = (data.get("session_id") or "").strip() or str(uuid.uuid4())
 
-        # Async path via Celery
-        if os.getenv("ASYNC_MARKETS_CHAT", "0") == "1":
+        # Force sync toggle
+        _force_sync = (os.getenv("ALLOW_FORCE_SYNC", "0") == "1") and (request.args.get("force_sync") == "1")
+
+        # Async path via Celery (unless force_sync)
+        if os.getenv("ASYNC_MARKETS_CHAT", "0") == "1" and not _force_sync:
             payload = {"message": user_message, "context": extra_context, "session_id": session_id}
             try:
                 from tasks import markets_chat_task
@@ -9119,7 +9122,6 @@ def markets_chat_stream():
             "store": True,
             "reasoning": {"effort": "high"},
             "max_output_tokens": min(30000, int(os.getenv("STREAM_MAX_OUTPUT_TOKENS", "30000"))),
-            "response_format": {"type": "text"},
             }
         if prev_id:
             kwargs["previous_response_id"] = prev_id

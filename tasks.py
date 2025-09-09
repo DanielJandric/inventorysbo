@@ -70,52 +70,36 @@ def pdf_task(self, payload: dict):
 @celery.task(bind=True)
 def markets_chat_task(self, payload: dict):
     """
-    Tâche chatbot marchés: assemble le contexte et génère une réponse via le worker marchés.
+    Tâche chatbot marchés: délègue au web (force_sync) pour générer la réponse.
     """
-    data = payload or {}
-    user_message = (data.get("message") or "").strip()
-    extra_context = (data.get("context") or "").strip()
-    session_id = (data.get("session_id") or "").strip()
-
-    steps = ["prepare_context", "llm_call", "postprocess"]
+    steps = ["prepare_request", "call_web", "postprocess"]
     result = {"events": []}
-
-    # Étape 1: contexte (dernier rapport marchés)
+    data = (payload or {}).copy()
     self.update_state(state="PROGRESS", meta={"step": steps[0], "pct": 20})
-    try:
-        from market_analysis_db import get_market_analysis_db
-        db = get_market_analysis_db()
-        latest = db.get_recent_analyses(limit=1)
-        if latest:
-            a = latest[0]
-            exec_summary = "\n".join([f"- {p}" for p in (a.executive_summary or [])]) if getattr(a, 'executive_summary', None) else ""
-            summary_compact = (a.summary or "")[:800]
-            ts = a.timestamp or a.created_at or ""
-            latest_txt = (
-                f"[Dernier rapport | {a.analysis_type or 'auto'} | {ts}]\n"
-                f"Executive Summary:\n{exec_summary}\n"
-                f"Résumé:\n{summary_compact}"
-            )
-            extra_context = (extra_context + "\n---\n" + latest_txt).strip() if extra_context else latest_txt
-    except Exception:
-        pass
+    msg = (data.get("message") or "").strip()
+    if not msg:
+        return {"ok": False, "error": "Message vide", "meta": result}
     result["events"].append({"step": steps[0], "ok": True})
 
-    # Étape 2: appel LLM via worker marchés
     self.update_state(state="PROGRESS", meta={"step": steps[1], "pct": 70})
-    reply_text = ""
     try:
-        from markets_chat_worker import get_markets_chat_worker
-        worker = get_markets_chat_worker()
-        reply_text = worker.generate_reply(user_message, extra_context, history=[])
-    except Exception as e:
+        base = os.getenv("API_BASE_URL") or os.getenv("APP_URL") or "https://inventorysbo.onrender.com"
+        if not (base.startswith("http://") or base.startswith("https://")):
+            base = "https://" + base
+        url = base.rstrip("/") + "/api/markets/chat?force_sync=1"
+        timeout_s = int(os.getenv("CHATBOT_API_TIMEOUT", "60"))
+        headers = {"Content-Type": "application/json"}
+        resp = requests.post(url, headers=headers, data=json.dumps(data), timeout=timeout_s)
+        if resp.status_code == 200:
+            body = resp.json()
+            reply = body.get("reply") or body.get("message") or ""
+            result["events"].append({"step": steps[1], "ok": True})
+            self.update_state(state="PROGRESS", meta={"step": steps[2], "pct": 100})
+            result["events"].append({"step": steps[2], "ok": True})
+            return {"ok": True, "reply": reply, "meta": result}
+        else:
+            return {"ok": False, "error": f"web returned {resp.status_code}: {resp.text}", "meta": result}
+    except requests.exceptions.RequestException as e:
         return {"ok": False, "error": str(e), "meta": result}
-    result["events"].append({"step": steps[1], "ok": True})
-
-    # Étape 3: post-traitement léger
-    self.update_state(state="PROGRESS", meta={"step": steps[2], "pct": 100})
-    result["events"].append({"step": steps[2], "ok": True})
-
-    return {"ok": True, "reply": reply_text, "meta": result, "session_id": session_id}
 
 
