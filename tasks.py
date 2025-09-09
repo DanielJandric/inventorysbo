@@ -38,7 +38,7 @@ def chat_v2_task(self, payload: dict):
     # Fallback court via web v2
     self.update_state(state="PROGRESS", meta={"step": steps[2], "pct": 80})
     try:
-        url = base.rstrip("/") + "/api/v2/chatbot?force_sync=1"
+        url = base.rstrip("/") + "/api/chatbot?force_sync=1"
         timeout_s = int(os.getenv("CHATBOT_API_TIMEOUT", "35"))
         r = requests.post(url, headers={"Content-Type": "application/json"}, data=json.dumps(data), timeout=timeout_s)
         if r.status_code == 200:
@@ -72,7 +72,7 @@ def markets_chat_v2_task(self, payload: dict):
         return url
     try:
         base = _coerce_base(os.getenv("API_BASE_URL") or os.getenv("APP_URL") or "https://inventorysbo.onrender.com")
-        url = base.rstrip("/") + "/api/v2/markets/chat?force_sync=1"
+        url = base.rstrip("/") + "/api/markets/chat?force_sync=1"
         timeout_s = int(os.getenv("CHATBOT_API_TIMEOUT", "35"))
         r = requests.post(url, headers={"Content-Type": "application/json"}, data=json.dumps(data), timeout=timeout_s)
         if r.status_code == 200:
