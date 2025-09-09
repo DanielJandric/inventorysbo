@@ -3,11 +3,13 @@
 
 echo "🎯 Démarrage de l'application BONVIN..."
 
-# Démarrer avec Gunicorn (I/O friendly)
+# Démarrer avec Gunicorn (gevent pour SSE/streaming)
 exec gunicorn app:app \
-  --worker-class gthread \
-  --threads ${GUNICORN_THREADS:-8} \
+  --worker-class gevent \
   --workers ${GUNICORN_WORKERS:-2} \
+  --worker-connections ${GUNICORN_WORKER_CONNECTIONS:-1000} \
   --timeout ${GUNICORN_TIMEOUT:-120} \
-  --keep-alive 2 \
+  --graceful-timeout 30 \
+  --keep-alive 65 \
+  --preload \
   --bind 0.0.0.0:${PORT:-5000}
