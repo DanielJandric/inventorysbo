@@ -6088,7 +6088,7 @@ def celery_status():
     """Diagnostic Celery: montre le broker, backend et l'état de connection basique."""
     try:
         status = {
-            "broker_url": str(celery.connection().as_uri_hide_password()),
+            "broker_url": str(celery.conf.get("broker_url") or os.getenv("CELERY_BROKER_URL") or os.getenv("REDIS_URL")),
             "backend": str(getattr(celery.backend, 'as_uri', lambda: str(celery.backend))()),
             "queues_expected": os.getenv("LLM_QUEUE", "celery") + ",pdf",
         }
