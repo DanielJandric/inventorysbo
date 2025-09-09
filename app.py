@@ -9147,6 +9147,8 @@ def markets_chat_stream_task(task_id: str):
 
     def event_stream():
         seen = set()
+        hb_every = int(os.getenv("STREAM_HEARTBEAT_S", "10"))
+        last_hb = time.monotonic()
         while True:
             ar = AsyncResult(task_id, app=celery)
             state = ar.state
@@ -9168,9 +9170,13 @@ def markets_chat_stream_task(task_id: str):
                         tb = None
                     yield f"event: error\ndata: {_json.dumps({'state': state, 'info': info, 'traceback': tb})}\n\n"
                 break
+            now = time.monotonic()
+            if now - last_hb >= hb_every:
+                yield ":keepalive\n\n"
+                last_hb = now
             time.sleep(0.4)
 
-    headers = {"Content-Type": "text/event-stream", "Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+    headers = {"Content-Type": "text/event-stream", "Cache-Control": "no-cache", "X-Accel-Buffering": "no", "Connection": "keep-alive"}
     return Response(event_stream(), headers=headers)
 @app.route("/api/markets/chat/export-pdf", methods=["POST"])
 def markets_chat_export_pdf():

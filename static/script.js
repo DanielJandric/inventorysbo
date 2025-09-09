@@ -2530,7 +2530,29 @@ function startAsyncChatStream(taskId) {
         }
     });
 
-    es.onerror = () => {
+    es.onerror = async () => {
+        try {
+            // Tentative de récupération du résultat final en cas de coupure SSE
+            const r = await fetch(`/api/tasks/${encodeURIComponent(taskId)}`);
+            if (r.ok) {
+                const d = await r.json();
+                if (d && d.state === 'SUCCESS') {
+                    const res = d.result || {};
+                    const answer = res.answer || 'Terminé.';
+                    if (typingIndicator && typingIndicator.parentNode) typingIndicator.remove();
+                    addChatMessage(answer, 'bot', true);
+                    conversationHistory.push({ role: 'assistant', content: answer });
+                    es.close();
+                    return;
+                }
+                if (d && (d.state === 'FAILURE' || d.state === 'REVOKED')) {
+                    if (typingIndicator && typingIndicator.parentNode) typingIndicator.remove();
+                    addChatMessage('Erreur: la tâche a échoué.', 'bot');
+                    es.close();
+                    return;
+                }
+            }
+        } catch (e) { /* ignore errors and fall through */ }
         if (typingIndicator && typingIndicator.parentNode) typingIndicator.remove();
         addChatMessage('Perte de connexion au flux. Réessayez.', 'bot');
         es.close();
