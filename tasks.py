@@ -270,9 +270,15 @@ def chat_task(self, payload: dict):
             if "vaisseau amiral" in m or "flagship" in m:
                 if items is None:
                     items = _fetch_items(api_base_url, timeout_s)
+                # Si le message cible les bateaux/navires/yachts, restreindre à la catégorie Bateaux
+                boat_tokens = ("bateau", "bateaux", "navire", "navires", "yacht", "sunseeker", "axopar", "feadship")
+                focus_boats = any(tok in m for tok in boat_tokens)
+                pool = items
+                if focus_boats:
+                    pool = [it for it in items if str(it.get("category", "")).strip().lower() == "bateaux"]
                 best = None
                 best_v = -1.0
-                for it in items:
+                for it in pool:
                     v = _item_value(it)
                     if v > best_v:
                         best_v = v
@@ -280,6 +286,8 @@ def chat_task(self, payload: dict):
                 if best:
                     name = best.get("name") or "Actif principal"
                     cat = best.get("category") or ""
+                    if focus_boats:
+                        return f"Ton vaisseau amiral (bateaux) est {name} ({cat}) à ~{best_v:,.0f} CHF."
                     return f"Ton vaisseau amiral est {name} ({cat}) à ~{best_v:,.0f} CHF."
         except Exception:
             pass
