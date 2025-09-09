@@ -5,6 +5,83 @@ import re
 import requests
 from typing import Optional, Any, Dict, List
 from celery_app import celery
+@celery.task(bind=True)
+def chat_v2_task(self, payload: dict):
+    """
+    V2: Réponse rapide avec chemins déterministes; fallback court vers web v2 (force_sync).
+    """
+    steps = ["validate", "maybe_fast", "web_call", "finish"]
+    self.update_state(state="PROGRESS", meta={"step": steps[0], "pct": 10})
+    data = payload or {}
+    msg = (data.get("message") or "").strip()
+    if not msg:
+        return {"ok": False, "error": "Message requis"}
+
+    def _coerce_base(url: str) -> str:
+        if not (url.startswith("http://") or url.startswith("https://")):
+            return "https://" + url
+        return url
+
+    def _fast_or_none(message: str, api_base_url: str) -> str | None:
+        try:
+            return _compute_basic_answer_or_none(message, api_base_url, timeout_s=8)
+        except Exception:
+            return None
+
+    base = _coerce_base(os.getenv("API_BASE_URL") or os.getenv("APP_URL") or "https://inventorysbo.onrender.com")
+    fb = _fast_or_none(msg, base)
+    if fb:
+        self.update_state(state="PROGRESS", meta={"step": steps[1], "pct": 60})
+        self.update_state(state="PROGRESS", meta={"step": steps[3], "pct": 100})
+        return {"ok": True, "answer": fb}
+
+    # Fallback court via web v2
+    self.update_state(state="PROGRESS", meta={"step": steps[2], "pct": 80})
+    try:
+        url = base.rstrip("/") + "/api/v2/chatbot?force_sync=1"
+        timeout_s = int(os.getenv("CHATBOT_API_TIMEOUT", "35"))
+        r = requests.post(url, headers={"Content-Type": "application/json"}, data=json.dumps(data), timeout=timeout_s)
+        if r.status_code == 200:
+            body = r.json()
+            reply = body.get("reply") or body.get("answer") or ""
+            if not reply:
+                reply = body.get("message") or ""
+        else:
+            reply = ""
+        if not reply:
+            # Dernier filet de sécurité
+            reply = _fast_or_none(msg, base) or "Réessayez dans un instant."
+        self.update_state(state="PROGRESS", meta={"step": steps[3], "pct": 100})
+        return {"ok": True, "answer": reply}
+    except requests.exceptions.RequestException as e:
+        return {"ok": False, "error": str(e)}
+
+
+@celery.task(bind=True)
+def markets_chat_v2_task(self, payload: dict):
+    """
+    V2 marchés: délègue au web v2 (force_sync) avec budget court.
+    """
+    data = (payload or {}).copy()
+    msg = (data.get("message") or "").strip()
+    if not msg:
+        return {"ok": False, "error": "Message vide"}
+    def _coerce_base(url: str) -> str:
+        if not (url.startswith("http://") or url.startswith("https://")):
+            return "https://" + url
+        return url
+    try:
+        base = _coerce_base(os.getenv("API_BASE_URL") or os.getenv("APP_URL") or "https://inventorysbo.onrender.com")
+        url = base.rstrip("/") + "/api/v2/markets/chat?force_sync=1"
+        timeout_s = int(os.getenv("CHATBOT_API_TIMEOUT", "35"))
+        r = requests.post(url, headers={"Content-Type": "application/json"}, data=json.dumps(data), timeout=timeout_s)
+        if r.status_code == 200:
+            body = r.json()
+            reply = body.get("reply") or body.get("message") or ""
+            return {"ok": True, "reply": reply}
+        return {"ok": False, "error": f"web returned {r.status_code}: {r.text}"}
+    except requests.exceptions.RequestException as e:
+        return {"ok": False, "error": str(e)}
 
 
 @celery.task(bind=True)
@@ -119,7 +196,7 @@ def chat_task(self, payload: dict):
         base = _coerce_base(os.getenv("API_BASE_URL") or os.getenv("APP_URL") or "https://inventorysbo.onrender.com")
 
         # Fallback déterministe avant l'appel lourd
-        fb = _compute_basic_answer_or_none(msg, base, timeout_s=20)
+        fb = _compute_basic_answer_or_none(msg, base, timeout_s=10)
         if fb:
             self.update_state(state="PROGRESS", meta={"step": steps[2], "pct": 70})
             result["events"].append({"step": steps[1], "ok": True})
@@ -130,9 +207,24 @@ def chat_task(self, payload: dict):
             result["events"].append({"step": steps[4], "ok": True})
             return {"ok": True, "answer": fb, "meta": result}
 
+        # Si question "rapide" (vaisseau amiral / combien / valeur nette) et fallback non disponible,
+        # répondre brièvement sans appeler le chemin AI lourd.
+        m = (msg or "").lower()
+        is_fast_intent = ("vaisseau amiral" in m) or ("flagship" in m) or ("combien" in m) or ("valeur" in m and "nette" in m)
+        if is_fast_intent:
+            brief = "Je ne peux pas déterminer cela rapidement pour l'instant. Réessayez dans un instant."
+            self.update_state(state="PROGRESS", meta={"step": steps[2], "pct": 70})
+            result["events"].append({"step": steps[1], "ok": True})
+            result["events"].append({"step": steps[2], "ok": True})
+            self.update_state(state="PROGRESS", meta={"step": steps[3], "pct": 90})
+            result["events"].append({"step": steps[3], "ok": True})
+            self.update_state(state="PROGRESS", meta={"step": steps[4], "pct": 100})
+            result["events"].append({"step": steps[4], "ok": True})
+            return {"ok": True, "answer": brief, "meta": result}
+
         url = base.rstrip("/") + "/api/chatbot?force_sync=1"
         # Respecter un timeout raisonnable
-        timeout_s = int(os.getenv("CHATBOT_API_TIMEOUT", "60"))
+        timeout_s = int(os.getenv("CHATBOT_API_TIMEOUT", "35"))
         headers = {"Content-Type": "application/json"}
         resp = requests.post(url, headers=headers, data=json.dumps(data), timeout=timeout_s)
         self.update_state(state="PROGRESS", meta={"step": steps[2], "pct": 70})

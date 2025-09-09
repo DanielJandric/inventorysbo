@@ -27,6 +27,7 @@ from dotenv import load_dotenv
 from celery.result import AsyncResult
 from celery_app import celery
 from tasks import chat_task, pdf_task, markets_chat_task
+from tasks import chat_v2_task, markets_chat_v2_task
 import requests
 import schedule
 import uuid
@@ -5163,6 +5164,9 @@ def chatbot():
 
         # Feature flag: bascule vers file d'attente Celery pour traitement asynchrone
         _force_sync = (os.getenv("ALLOW_FORCE_SYNC", "0") == "1") and (request.args.get("force_sync") == "1")
+        if os.getenv("CHAT_V2", "0") == "1" and not _force_sync:
+            task = chat_v2_task.apply_async(args=[data], queue=os.getenv("LLM_QUEUE", "celery"))
+            return jsonify({"task_id": task.id}), 202
         if os.getenv("ASYNC_CHAT", "1") == "1" and not _force_sync:
             task = chat_task.apply_async(args=[data], queue=os.getenv("LLM_QUEUE", "celery"))
             return jsonify({"task_id": task.id}), 202
@@ -9006,7 +9010,14 @@ def markets_chat():
         # Force sync toggle
         _force_sync = (os.getenv("ALLOW_FORCE_SYNC", "0") == "1") and (request.args.get("force_sync") == "1")
 
-        # Async path via Celery (unless force_sync)
+        # Async path via Celery or V2
+        if os.getenv("MARKETS_CHAT_V2", "0") == "1" and not _force_sync:
+            payload = {"message": user_message, "context": extra_context, "session_id": session_id}
+            try:
+                task = markets_chat_v2_task.apply_async(args=[payload], queue=os.getenv("LLM_QUEUE", "celery"))
+                return jsonify({"task_id": task.id, "session_id": session_id}), 202
+            except Exception as e:
+                return jsonify({"success": False, "error": str(e)}), 500
         if os.getenv("ASYNC_MARKETS_CHAT", "0") == "1" and not _force_sync:
             payload = {"message": user_message, "context": extra_context, "session_id": session_id}
             try:

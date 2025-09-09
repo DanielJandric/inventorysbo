@@ -28,7 +28,11 @@ services:
         value: "celery"
       - key: ASYNC_CHAT
         value: "1"
+      - key: CHAT_V2
+        value: "1"
       - key: ASYNC_MARKETS_CHAT
+        value: "1"
+      - key: MARKETS_CHAT_V2
         value: "1"
       - key: GUNICORN_THREADS
         value: "8"
