@@ -2552,6 +2552,30 @@ function startAsyncChatStream(taskId) {
                     return;
                 }
             }
+            // Poll quelques secondes si encore PENDING (proxy peut couper avant l'event final)
+            const deadline = Date.now() + 4000;
+            while (Date.now() < deadline) {
+                await new Promise(res => setTimeout(res, 500));
+                const r2 = await fetch(`/api/tasks/${encodeURIComponent(taskId)}`);
+                if (r2.ok) {
+                    const d2 = await r2.json();
+                    if (d2 && d2.state === 'SUCCESS') {
+                        const res2 = d2.result || {};
+                        const answer2 = res2.answer || 'Terminé.';
+                        if (typingIndicator && typingIndicator.parentNode) typingIndicator.remove();
+                        addChatMessage(answer2, 'bot', true);
+                        conversationHistory.push({ role: 'assistant', content: answer2 });
+                        es.close();
+                        return;
+                    }
+                    if (d2 && (d2.state === 'FAILURE' || d2.state === 'REVOKED')) {
+                        if (typingIndicator && typingIndicator.parentNode) typingIndicator.remove();
+                        addChatMessage('Erreur: la tâche a échoué.', 'bot');
+                        es.close();
+                        return;
+                    }
+                }
+            }
         } catch (e) { /* ignore errors and fall through */ }
         if (typingIndicator && typingIndicator.parentNode) typingIndicator.remove();
         addChatMessage('Perte de connexion au flux. Réessayez.', 'bot');

@@ -6016,6 +6016,10 @@ def stream_chat_task(task_id):
         seen_states = set()
         hb_every = int(os.getenv("STREAM_HEARTBEAT_S", "10"))
         last_hb = time.monotonic()
+        # Inform client the stream is open and set retry interval
+        yield "event: open\ndata: {}\n\n"
+        retry_ms = int(os.getenv("STREAM_RETRY_MS", "3000"))
+        yield f"retry: {retry_ms}\n\n"
         while True:
             ar = AsyncResult(task_id, app=celery)
             state = ar.state
