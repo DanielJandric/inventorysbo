@@ -9056,44 +9056,12 @@ def markets_chat():
         return jsonify({"success": False, "error": str(e)}), 500
 @app.route("/api/markets/chat/stream", methods=["POST"])
 def markets_chat_stream():
-    """Streaming texte pour le chatbot marchés.
-    Si ASYNC_MARKETS_CHAT=1, expose aussi un flux SSE par tâche via /api/markets/chat/stream/<task_id>.
-    """
+    """SSE stable pour marchés: heartbeat, budget temps, fin propre."""
     try:
         data = request.get_json(silent=True) or {}
-        user_message = (data.get("message") or "").strip()
-        if not user_message:
-            return jsonify({"success": False, "error": "Message vide"}), 400
+        user_msg = (data.get("message") or "").strip() or "Résumé des marchés."
         extra_context = (data.get("context") or "").strip()
-        session_id = (data.get("session_id") or "").strip() or str(uuid.uuid4())
-        # Nettoyer previous_response_id transmis par le client
-        _prev_raw = str(data.get("previous_response_id") or "").strip()
-        prev_id = responses_prev_ids.get(session_id)
-        if _prev_raw and _prev_raw.lower() not in ("none", "null", "undefined"):
-            prev_id = _prev_raw
-        # Valider la forme de l'ID (Responses commence généralement par 'resp')
-        if prev_id and not str(prev_id).startswith("resp"):
-            prev_id = None
-
-        # Client OpenAI avec timeout (augmenté pour reasoning=high)
-        try:
-            from openai import OpenAI
-            timeout_s = int(os.getenv('TIMEOUT_S', '120'))
-            client = openai_client.with_options(timeout=timeout_s) if openai_client else OpenAI(api_key=os.getenv("OPENAI_API_KEY"), timeout=timeout_s)
-        except Exception as e:
-            logger.error(f"OpenAI init error (stream): {e}")
-            def _err_gen():
-                yield "\u200b"
-                yield f"[ERROR:{str(e)}]"
-            return Response(stream_with_context(_err_gen()), mimetype="text/plain", headers={'X-Accel-Buffering': 'no', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive'})
-
-        # Prompt et input utilisateur (verbosity low; add latest report context)
-        system_prompt = (
-            "Tu es un analyste marchés. Réponds en français, concis (verbosité faible), actionnable et contextuel. "
-            "N'invente pas de chiffres. Mets en **gras** les points critiques."
-        )
-
-        # Injecter le dernier rapport comme contexte si disponible
+        # Contexte rapport (best-effort)
         report_ctx = ""
         try:
             from market_analysis_db import get_market_analysis_db
@@ -9111,104 +9079,48 @@ def markets_chat_stream():
         except Exception:
             report_ctx = ""
 
+        system_prompt = (
+            "Tu es un analyste marchés. Réponds en français, concis (verbosité faible), structuré, actionnable. "
+            "N'invente pas de chiffres. Mets en **gras** les points clés."
+        )
         prefix_ctx = "".join([report_ctx, (f"Contexte (utilisateur):\n{extra_context}\n---\n" if extra_context else "")])
-        user_prompt_final = f"{prefix_ctx}Question: {user_message}" if prefix_ctx else user_message
+        user_input = f"{prefix_ctx}Question: {user_msg}" if prefix_ctx else user_msg
 
-        model_name = os.getenv("AI_MODEL", "gpt-5")
-        kwargs = {
-            "model": model_name,
-            "instructions": system_prompt,
-            "input": user_prompt_final,
-            "stream": True,
-            "store": True,
-            "reasoning": {"effort": "high"},
-            "max_output_tokens": min(30000, int(os.getenv("STREAM_MAX_OUTPUT_TOKENS", "30000"))),
-            }
-        if prev_id:
-            kwargs["previous_response_id"] = prev_id
+        from openai import OpenAI
+        timeout_s = int(os.getenv('TIMEOUT_S', '110'))
+        client = openai_client.with_options(timeout=timeout_s) if openai_client else OpenAI(api_key=os.getenv("OPENAI_API_KEY"), timeout=timeout_s)
+        model = os.getenv("AI_MODEL", "gpt-5")
+        max_tokens = int(os.getenv("MAX_OUTPUT_TOKENS", "8000"))
+        budget_s = int(os.getenv("STREAM_BUDGET_S", "110"))
+        hb_every = int(os.getenv("STREAM_HEARTBEAT_S", "10"))
 
-        def gen():
-            full_chunks: list[str] = []
-            response_id = None
-            # Préférence: API streaming dédiée; fallback create(stream=True)
+        def _gen():
+            start = time.monotonic()
+            last_hb = start
+            # ouvrir le flux
+            yield "event: open\ndata: {}\n\n"
             try:
-                # SSE heartbeat initial
-                yield ":heartbeat\n\n"
-                try:
-                    streamer = client.responses.stream(**kwargs)
-                    ctx = streamer
-                    use_cm = True
-                except Exception:
-                    streamer = client.responses.create(**kwargs)
-                    ctx = streamer
-                    use_cm = False
-
-                if use_cm:
-                    with ctx as stream:
-                        for event in stream:
-                            etype = getattr(event, 'type', None)
-                            if etype == "response.created":
-                                response_id = getattr(getattr(event, 'data', None), 'id', None) or getattr(event, 'id', None)
-                            elif etype == "response.output_text.delta":
-                                chunk = getattr(event, 'delta', None)
-                                if chunk:
-                                    full_chunks.append(str(chunk))
-                                    try:
-                                        payload = json.dumps({"delta": str(chunk), "done": False}, ensure_ascii=False)
-                                    except Exception:
-                                        payload = '{"delta":"" , "done": false}'
-                                    yield f"data: {payload}\n\n"
-                            elif etype == "response.completed":
-                                # Persist mappings & memory best-effort
-                                try:
-                                    if response_id:
-                                        responses_prev_ids[session_id] = response_id
-                                    if full_chunks:
-                                        conversation_memory.add_message(session_id, 'user', user_message)
-                                        conversation_memory.add_message(session_id, 'assistant', "".join(full_chunks))
-                                except Exception:
-                                    pass
-                                rid = response_id if isinstance(response_id, str) else ""
-                                yield f"data: {{\"done\": true, \"id\": \"{rid}\"}}\n\n"
-                            elif etype == "error":
-                                err_text = str(getattr(event, 'error', 'unknown'))
-                                err_payload = json.dumps({"error": err_text, "done": False})
-                                yield f"data: {err_payload}\n\n"
-                else:
-                    # Iterator fallback
-                    for event in ctx:
-                        etype = getattr(event, 'type', None)
-                        if etype == "response.created":
-                            response_id = getattr(getattr(event, 'data', None), 'id', None) or getattr(event, 'id', None)
-                        elif etype == "response.output_text.delta":
+                with client.responses.stream(model=model, instructions=system_prompt, input=user_input, max_output_tokens=max_tokens) as stream:
+                    for event in stream:
+                        now = time.monotonic()
+                        if getattr(event, 'type', None) == "response.output_text.delta":
                             chunk = getattr(event, 'delta', None)
                             if chunk:
-                                full_chunks.append(str(chunk))
-                                try:
-                                    payload = json.dumps({"delta": str(chunk), "done": False}, ensure_ascii=False)
-                                except Exception:
-                                    payload = '{"delta":"" , "done": false}'
-                                yield f"data: {payload}\n\n"
-                        elif etype == "response.completed":
-                            try:
-                                if response_id:
-                                    responses_prev_ids[session_id] = response_id
-                                if full_chunks:
-                                    conversation_memory.add_message(session_id, 'user', user_message)
-                                    conversation_memory.add_message(session_id, 'assistant', "".join(full_chunks))
-                            except Exception:
-                                pass
-                            rid = response_id if isinstance(response_id, str) else ""
-                            yield f"data: {{\"done\": true, \"id\": \"{rid}\"}}\n\n"
-                        elif etype == "error":
-                            err_text = str(getattr(event, 'error', 'unknown'))
-                            err_payload = json.dumps({"error": err_text, "done": False})
-                            yield f"data: {err_payload}\n\n"
+                                yield f"data: {json.dumps({'text': str(chunk)}, ensure_ascii=False)}\n\n"
+                        if now - last_hb >= hb_every:
+                            yield ":keepalive\n\n"
+                            last_hb = now
+                        if now - start > budget_s:
+                            yield 'data: {"notice":"[truncated due to time budget]"}\n\n'
+                            yield "event: done\ndata: {}\n\n"
+                            return
+                yield "event: done\ndata: {}\n\n"
             except Exception as e:
-                err_payload = json.dumps({"error": str(e), "done": False})
-                yield f"data: {err_payload}\n\n"
+                yield f"event: error\ndata: {json.dumps({'error': str(e)[:500]}, ensure_ascii=False)}\n\n"
+                yield "event: done\ndata: {}\n\n"
 
-        return Response(stream_with_context(gen()), mimetype="text/event-stream", headers={'X-Accel-Buffering': 'no', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive'})
+        headers = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no", "Connection": "keep-alive"}
+        return Response(stream_with_context(_gen()), mimetype="text/event-stream", headers=headers)
     except Exception as e:
         logger.error(f"Erreur markets_chat_stream: {e}")
         def _err_gen2():
