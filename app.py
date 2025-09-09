@@ -2891,12 +2891,12 @@ class PureOpenAIEngineWithRAG:
                 messages=loop_messages,
                 tools=tools,
                 model=os.getenv("AI_MODEL","gpt-5"),
-                max_output_tokens=900,
+                max_output_tokens=400,
                 reasoning_effort="high",
                 client=self.client
             )
 
-            for _ in range(2):  # up to 3 turns total
+            for _ in range(1):  # up to 2 turns total
                 made_call = False
                 for item in getattr(res, "output", []) or []:
                     if getattr(item, "type", None) == "tool_call":
@@ -3044,7 +3044,7 @@ client=self.client, model=os.getenv("AI_MODEL", "gpt-5"),
                     {"role": m["role"], "content": [{"type": "input_text", "text": m["content"]}]} if isinstance(m.get("content"), str) else m
                     for m in messages
                 ],
-                max_output_tokens=1000,
+                max_output_tokens=400,
                 reasoning_effort="medium"
             )
             ai_response = (extract_output_text(resp) or "").strip()

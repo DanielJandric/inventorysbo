@@ -37,7 +37,11 @@ services:
       - key: GUNICORN_TIMEOUT
         value: "300"
       - key: TIMEOUT_S
-        value: "110"
+        value: "45"
+      - key: STREAM_BUDGET_S
+        value: "40"
+      - key: STREAM_HEARTBEAT_S
+        value: "5"
       - key: REDIS_USE_SSL
         value: "0"
 
