@@ -39,7 +39,8 @@ def chat_v2_task(self, payload: dict):
     self.update_state(state="PROGRESS", meta={"step": steps[2], "pct": 80})
     try:
         url = base.rstrip("/") + "/api/chatbot?force_sync=1"
-        timeout_s = int(os.getenv("CHATBOT_API_TIMEOUT", "35"))
+        # Budget court pour éviter les timeouts côté worker
+        timeout_s = int(os.getenv("CHATBOT_API_TIMEOUT", "20"))
         r = requests.post(url, headers={"Content-Type": "application/json"}, data=json.dumps(data), timeout=timeout_s)
         if r.status_code == 200:
             body = r.json()
@@ -54,7 +55,9 @@ def chat_v2_task(self, payload: dict):
         self.update_state(state="PROGRESS", meta={"step": steps[3], "pct": 100})
         return {"ok": True, "answer": reply}
     except requests.exceptions.RequestException as e:
-        return {"ok": False, "error": str(e)}
+        # Ne jamais planter: renvoyer une réponse courte plutôt qu'une erreur
+        fb_msg = _fast_or_none(msg, base) or "Réponse indisponible pour l'instant. Réessayez dans un instant."
+        return {"ok": True, "answer": fb_msg, "warning": str(e)}
 
 
 @celery.task(bind=True)
