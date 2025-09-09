@@ -25,7 +25,6 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from dotenv import load_dotenv
 from celery.result import AsyncResult
 from celery_app import celery
-from tasks import chat_task, pdf_task, markets_chat_task
 import requests
 import schedule
 import uuid
@@ -5161,7 +5160,8 @@ def chatbot():
             return jsonify({"error": "Message requis"}), 400
 
         # Feature flag: bascule vers file d'attente Celery pour traitement asynchrone
-        if os.getenv("ASYNC_CHAT", "1") == "1":
+        _force_sync = (os.getenv("ALLOW_FORCE_SYNC", "0") == "1") and (request.args.get("force_sync") == "1")
+        if os.getenv("ASYNC_CHAT", "1") == "1" and not _force_sync:
             task = chat_task.apply_async(args=[data], queue=os.getenv("LLM_QUEUE", "celery"))
             return jsonify({"task_id": task.id}), 202
         

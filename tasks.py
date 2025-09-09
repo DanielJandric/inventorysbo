@@ -1,4 +1,7 @@
+import os
 import time
+import json
+import requests
 from celery_app import celery
 
 
@@ -16,15 +19,43 @@ def chat_task(self, payload: dict):
         "format_output",
     ]
     result = {"events": []}
-    for i, step in enumerate(steps, start=1):
-        self.update_state(
-            state="PROGRESS",
-            meta={"step": step, "pct": int(i / len(steps) * 100)},
-        )
-        time.sleep(0.2)  # remplace par le vrai travail
-        result["events"].append({"step": step, "ok": True})
-    # TODO: brancher ici la logique existante de /api/chatbot
-    return {"ok": True, "answer": "Réponse de démonstration", "meta": result}
+    # Étape 1: validation input
+    self.update_state(state="PROGRESS", meta={"step": steps[0], "pct": 20})
+    data = payload or {}
+    msg = (data.get("message") or "").strip()
+    if not msg:
+        return {"ok": False, "error": "Message requis", "meta": result}
+    result["events"].append({"step": steps[0], "ok": True})
+
+    # Étape 2-4: déléguer au web en mode synchrone pour vraie réponse (force_sync)
+    self.update_state(state="PROGRESS", meta={"step": steps[1], "pct": 40})
+    try:
+        base = os.getenv("API_BASE_URL") or os.getenv("APP_URL") or "https://inventorysbo.onrender.com"
+        if not (base.startswith("http://") or base.startswith("https://")):
+            base = "https://" + base
+        url = base.rstrip("/") + "/api/chatbot?force_sync=1"
+        # Respecter un timeout raisonnable
+        timeout_s = int(os.getenv("CHATBOT_API_TIMEOUT", "60"))
+        headers = {"Content-Type": "application/json"}
+        resp = requests.post(url, headers=headers, data=json.dumps(data), timeout=timeout_s)
+        self.update_state(state="PROGRESS", meta={"step": steps[2], "pct": 70})
+        if resp.status_code == 200:
+            body = resp.json()
+            reply = body.get("reply") or body.get("answer") or ""
+            if not reply:
+                reply = body.get("message") or ""
+            result["events"].append({"step": steps[1], "ok": True})
+            result["events"].append({"step": steps[2], "ok": True})
+            self.update_state(state="PROGRESS", meta={"step": steps[3], "pct": 90})
+            result["events"].append({"step": steps[3], "ok": True})
+            self.update_state(state="PROGRESS", meta={"step": steps[4], "pct": 100})
+            result["events"].append({"step": steps[4], "ok": True})
+            return {"ok": True, "answer": reply, "meta": result}
+        else:
+            err = resp.text
+            return {"ok": False, "error": f"web returned {resp.status_code}: {err}", "meta": result}
+    except requests.exceptions.RequestException as e:
+        return {"ok": False, "error": str(e), "meta": result}
 
 
 @celery.task(bind=True, queue="pdf")
