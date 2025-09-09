@@ -28,7 +28,19 @@ def make_celery() -> Celery:
         worker_concurrency=int(os.getenv("CELERY_CONCURRENCY", "2")),
         task_acks_late=True,
         worker_prefetch_multiplier=1,
-        broker_transport_options={"visibility_timeout": 3600},
+        broker_transport_options={
+            "visibility_timeout": int(os.getenv("CELERY_VISIBILITY_TIMEOUT", "3600")),
+            # Keepalive and health options for Redis/kombu
+            "socket_keepalive": True,
+            "socket_keepalive_options": {  # values in seconds
+                # Platform defaults if not provided
+            },
+            "retry_on_timeout": True,
+            "max_retries": int(os.getenv("CELERY_BROKER_MAX_RETRIES", "100")),
+            "interval_start": float(os.getenv("CELERY_BROKER_RETRY_START", "0")),
+            "interval_step": float(os.getenv("CELERY_BROKER_RETRY_STEP", "0.2")),
+            "interval_max": float(os.getenv("CELERY_BROKER_RETRY_MAX", "5")),
+        },
         result_expires=3600,
         broker_connection_retry_on_startup=True,
         task_default_queue=os.getenv("LLM_QUEUE", "celery"),
