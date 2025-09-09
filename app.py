@@ -6014,6 +6014,8 @@ def stream_chat_task(task_id):
     """
     def event_stream():
         seen_states = set()
+        hb_every = int(os.getenv("STREAM_HEARTBEAT_S", "10"))
+        last_hb = time.monotonic()
         while True:
             ar = AsyncResult(task_id, app=celery)
             state = ar.state
@@ -6035,8 +6037,13 @@ def stream_chat_task(task_id):
                         tb = None
                     yield f"event: error\ndata: {json.dumps({'state': state, 'info': info, 'traceback': tb})}\n\n"
                 break
+            now = time.monotonic()
+            if now - last_hb >= hb_every:
+                # Heartbeat to keep intermediaries from closing idle connections
+                yield ":keepalive\n\n"
+                last_hb = now
             time.sleep(0.4)
-    headers = {"Content-Type": "text/event-stream", "Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+    headers = {"Content-Type": "text/event-stream", "Cache-Control": "no-cache", "X-Accel-Buffering": "no", "Connection": "keep-alive"}
     return Response(event_stream(), headers=headers)
 
 @app.route("/api/reports/pdf", methods=["POST"])
