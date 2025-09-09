@@ -5167,42 +5167,6 @@ def chatbot():
         if os.getenv("CHAT_V2", "0") == "1" and not _force_sync:
             task = chat_v2_task.apply_async(args=[data], queue=os.getenv("LLM_QUEUE", "celery"))
             return jsonify({"task_id": task.id}), 202
-@app.route("/api/v2/chatbot", methods=["POST"])
-def chatbot_v2():
-    try:
-        data = request.get_json() or {}
-        msg = (data.get("message") or "").strip()
-        if not msg:
-            return jsonify({"error": "Message requis"}), 400
-        _force_sync = (os.getenv("ALLOW_FORCE_SYNC", "0") == "1") and (request.args.get("force_sync") == "1")
-        if not _force_sync:
-            t = chat_v2_task.apply_async(args=[data], queue=os.getenv("LLM_QUEUE", "celery"))
-            return jsonify({"task_id": t.id}), 202
-        # Force sync: deterministic first
-        items = AdvancedDataManager.fetch_all_items()
-        analytics = AdvancedDataManager.calculate_advanced_analytics(items)
-        low = msg.lower()
-        if "vaisseau amiral" in low or "flagship" in low:
-            best = None; best_v = -1.0
-            for it in items:
-                try:
-                    if is_item_available(it):
-                        v = float(it.current_value or 0)
-                        if it.category == 'Actions' and it.current_price and it.stock_quantity:
-                            v = float(it.current_price) * float(it.stock_quantity)
-                        if v > best_v:
-                            best_v = v; best = it
-                except Exception:
-                    continue
-            if best:
-                return jsonify({"reply": f"Ton vaisseau amiral est {best.name} ({best.category}) à ~{best_v:,.0f} CHF."})
-        # Minimal AI
-        if ai_engine:
-            txt = ai_engine.generate_response_with_history(msg, items, analytics, conversation_history=[])
-            return jsonify({"reply": txt})
-        return jsonify({"reply": "IA indisponible"}), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
         if os.getenv("ASYNC_CHAT", "1") == "1" and not _force_sync:
             task = chat_task.apply_async(args=[data], queue=os.getenv("LLM_QUEUE", "celery"))
             return jsonify({"task_id": task.id}), 202
