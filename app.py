@@ -6090,6 +6090,47 @@ def stream_chat_task(task_id):
     headers = {"Content-Type": "text/event-stream", "Cache-Control": "no-cache", "X-Accel-Buffering": "no", "Connection": "keep-alive"}
     return Response(event_stream(), headers=headers)
 
+@app.route("/api/v2/chatbot/stream/<task_id>", methods=["GET"])
+def stream_chat_task_v2(task_id):
+    if os.getenv("CHAT_V2", "0") != "1":
+        return jsonify({"error": "CHAT_V2=0"}), 400
+    def event_stream():
+        seen_states = set()
+        hb_every = int(os.getenv("STREAM_HEARTBEAT_S", "10"))
+        last_hb = time.monotonic()
+        # signaler l'ouverture + retry
+        yield "event: open\ndata: {}\n\n"
+        retry_ms = int(os.getenv("STREAM_RETRY_MS", "3000"))
+        yield f"retry: {retry_ms}\n\n"
+        while True:
+            ar = AsyncResult(task_id, app=celery)
+            state = ar.state
+            info = ar.info if isinstance(ar.info, dict) else {}
+            if state not in seen_states and state not in ("PENDING",):
+                yield f"event: state\ndata: {json.dumps({'state': state, 'info': info})}\n\n"
+                seen_states.add(state)
+            if state in ("SUCCESS", "FAILURE", "REVOKED"):
+                if state == "SUCCESS":
+                    try:
+                        result_payload = ar.result
+                        yield f"event: result\ndata: {json.dumps({'result': result_payload})}\n\n"
+                    except Exception:
+                        pass
+                else:
+                    try:
+                        tb = getattr(ar, 'traceback', None)
+                    except Exception:
+                        tb = None
+                    yield f"event: error\ndata: {json.dumps({'state': state, 'info': info, 'traceback': tb})}\n\n"
+                break
+            now = time.monotonic()
+            if now - last_hb >= hb_every:
+                yield ":keepalive\n\n"
+                last_hb = now
+            time.sleep(0.4)
+    headers = {"Content-Type": "text/event-stream", "Cache-Control": "no-cache", "X-Accel-Buffering": "no", "Connection": "keep-alive"}
+    return Response(event_stream(), headers=headers)
+
 @app.route("/api/reports/pdf", methods=["POST"])
 def submit_pdf_task():
     payload = request.get_json() or {}
@@ -9255,6 +9296,50 @@ def markets_chat_stream_task(task_id: str):
                 last_hb = now
             time.sleep(0.4)
 
+    headers = {"Content-Type": "text/event-stream", "Cache-Control": "no-cache", "X-Accel-Buffering": "no", "Connection": "keep-alive"}
+    return Response(event_stream(), headers=headers)
+
+@app.route("/api/v2/markets/chat/stream/task/<task_id>", methods=["GET"])
+def markets_chat_stream_task_v2(task_id: str):
+    if os.getenv("MARKETS_CHAT_V2", "0") != "1":
+        return jsonify({"error": "MARKETS_CHAT_V2=0"}), 400
+    from celery.result import AsyncResult
+    from celery_app import celery
+    import json as _json
+    def event_stream():
+        seen = set()
+        hb_every = int(os.getenv("STREAM_HEARTBEAT_S", "10"))
+        last_hb = time.monotonic()
+        # open + retry
+        yield "event: open\ndata: {}\n\n"
+        retry_ms = int(os.getenv("STREAM_RETRY_MS", "3000"))
+        yield f"retry: {retry_ms}\n\n"
+        while True:
+            ar = AsyncResult(task_id, app=celery)
+            state = ar.state
+            info = ar.info if isinstance(ar.info, dict) else {}
+            if state not in seen and state not in ("PENDING",):
+                yield f"event: state\ndata: {_json.dumps({'state': state, 'info': info})}\n\n"
+                seen.add(state)
+            if state in ("SUCCESS", "FAILURE", "REVOKED"):
+                if state == "SUCCESS":
+                    try:
+                        res = ar.result
+                        yield f"event: result\ndata: {_json.dumps({'result': res})}\n\n"
+                    except Exception:
+                        pass
+                else:
+                    try:
+                        tb = getattr(ar, 'traceback', None)
+                    except Exception:
+                        tb = None
+                    yield f"event: error\ndata: {_json.dumps({'state': state, 'info': info, 'traceback': tb})}\n\n"
+                break
+            now = time.monotonic()
+            if now - last_hb >= hb_every:
+                yield ":keepalive\n\n"
+                last_hb = now
+            time.sleep(0.4)
     headers = {"Content-Type": "text/event-stream", "Cache-Control": "no-cache", "X-Accel-Buffering": "no", "Connection": "keep-alive"}
     return Response(event_stream(), headers=headers)
 @app.route("/api/markets/chat/export-pdf", methods=["POST"])
