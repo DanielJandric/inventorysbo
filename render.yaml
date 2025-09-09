@@ -35,7 +35,9 @@ services:
       - key: GUNICORN_WORKERS
         value: "2"
       - key: GUNICORN_TIMEOUT
-        value: "120"
+        value: "300"
+      - key: TIMEOUT_S
+        value: "110"
       - key: REDIS_USE_SSL
         value: "0"
 
