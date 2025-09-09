@@ -25,6 +25,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from dotenv import load_dotenv
 from celery.result import AsyncResult
 from celery_app import celery
+from tasks import chat_task, pdf_task, markets_chat_task
 import requests
 import schedule
 import uuid
