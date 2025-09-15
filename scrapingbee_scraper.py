@@ -656,6 +656,9 @@ class ScrapingBeeScraper:
                                 continue
                         if len(items) >= max_items:
                             break
+                    except Exception as e:
+                        logger.warning(f"⚠️ Erreur RSS {f}: {e}")
+                        continue
             return items
 
         # Deep-crawl RTS (info)
