@@ -557,7 +557,7 @@ class ScrapingBeeScraper:
             try:
                 return datetime.now(timezone.utc)
             except Exception:
-                return datetime.utcnow().replace(tzinfo=None)
+                return datetime.utcnow().replace(tzinfo=timezone.utc)
 
         def _normalize_ts(dt_obj: Optional[datetime]) -> Optional[datetime]:
             if not dt_obj:
@@ -575,6 +575,10 @@ class ScrapingBeeScraper:
                     return False
                 dtz = _normalize_ts(dt)
                 nowz = _now_utc()
+                if dtz and dtz.tzinfo is None:
+                    dtz = dtz.replace(tzinfo=timezone.utc)
+                if nowz.tzinfo is None:
+                    nowz = nowz.replace(tzinfo=timezone.utc)
                 return (nowz - dtz) <= timedelta(hours=max_age_hours)
             except Exception:
                 return False
@@ -638,7 +642,9 @@ class ScrapingBeeScraper:
                                 async with session.get(self.base_url, params={
                                     'api_key': self.api_key,
                                     'url': f,
-                                    'render_js': 'false'
+                                    'render_js': 'false',
+                                    'premium_proxy': 'true',
+                                    'country_code': 'ch'
                                 }, timeout=15) as r2:
                                     if r2.status == 200:
                                         text = await r2.text()
@@ -717,6 +723,12 @@ class ScrapingBeeScraper:
                     if not details or not details.get('text'):
                         continue
                     published_at = details.get('published_at')
+                    # Normalize to aware UTC
+                    if published_at and getattr(published_at, 'tzinfo', None) is None:
+                        try:
+                            published_at = published_at.replace(tzinfo=timezone.utc)
+                        except Exception:
+                            pass
                     if not _is_recent_dt(published_at):
                         continue
                     text = details.get('text') or ''
@@ -724,7 +736,7 @@ class ScrapingBeeScraper:
                         url=url,
                         title=url[:120],
                         content=text[:8000],
-                        timestamp=published_at or datetime.now(),
+                        timestamp=published_at or _now_utc(),
                         metadata={'source': source_name, 'scraped_at': datetime.now().isoformat()}
                     ))
                 except Exception:
@@ -743,9 +755,17 @@ class ScrapingBeeScraper:
             if 'rts_links' in locals() and rts_links:
                 await _scrape_links(rts_links[per_site*2:per_site*3], 'rts')
 
-        # Trier et retourner
+        # Trier et retourner (assurer timestamps comparables UTC-aware)
         items = [it for it in items if it and it.content]
-        items.sort(key=lambda x: (x.timestamp or datetime.min), reverse=True)
+        def _key_ts(x: ScrapedData) -> datetime:
+            ts = x.timestamp or _now_utc()
+            try:
+                if getattr(ts, 'tzinfo', None) is None:
+                    ts = ts.replace(tzinfo=timezone.utc)
+            except Exception:
+                pass
+            return ts
+        items.sort(key=_key_ts, reverse=True)
         logger.info(f"🇨🇭 Swiss scrape: {len(items)} articles récents | chars={sum(len(i.content) for i in items)}")
         return items
 
@@ -962,16 +982,20 @@ class ScrapingBeeScraper:
             # Heuristique: certaines pages exigent JS (consent/hydratation)
             u = (url or '').lower()
             needs_js = any(k in u for k in ['marketwatch.com', 'cnn.com', '/quote/', '/key-statistics'])
+            # Pays par défaut: 'ch' pour domaines suisses connus sinon 'us'
+            is_swiss_domain = any(d in u for d in ['.ch', 'rts.ch', 'letemps.ch', 'snb.ch', 'nzz.ch', 'agefi.com'])
+            country = 'ch' if is_swiss_domain else 'us'
+            timeout_secs = int(os.getenv('SCRAPINGBEE_HTTP_TIMEOUT', '30'))
             params = {
                 'api_key': self.api_key,
                 'url': url,
                 'render_js': 'true' if needs_js else 'false',
                 'premium_proxy': 'true',
                 'block_resources': 'true' if needs_js else 'false',
-                'country_code': 'us',
+                'country_code': country,
                 'wait': '2000' if needs_js else '1200'
             }
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout_secs)) as session:
                 async with session.get(self.base_url, params=params) as response:
                     if response.status != 200:
                         logger.error(f"❌ Erreur ScrapingBee scraping: {response.status}")
@@ -1125,7 +1149,8 @@ class ScrapingBeeScraper:
             }
             final_params = {**base_params, **params}
 
-            async with aiohttp.ClientSession() as session:
+            timeout_secs = int(os.getenv('SCRAPINGBEE_HTTP_TIMEOUT', '30'))
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout_secs)) as session:
                 async with session.get(self.base_url, params=final_params) as response:
                     if response.status == 200:
                         return await response.text()
