@@ -738,23 +738,25 @@ class GmailNotificationManager:
     def _send_email(self, subject: str, content: str, item_data: Optional[Dict] = None):
         """Envoie effectivement l'email via Gmail"""
         try:
-            # Créer le message
-            msg = MIMEMultipart('alternative')
+            # Créer le message (optionnellement HTML seul pour éviter tout attachement .htm)
+            force_html_only = str(os.getenv('EMAIL_FORCE_HTML_ONLY', '0')).lower() in ('1','true','yes')
+            msg = MIMEText(html_content, 'html', 'utf-8') if force_html_only else MIMEMultipart('alternative')
             msg['From'] = self.email_user
             msg['To'] = ", ".join(self.recipients)
             msg['Subject'] = f"[BONVIN Collection] {subject}"
             
             # Contenu HTML avec style exact de la web app
             html_content = self._create_webapp_style_html(subject, content, item_data)
-            
-            # Contenu texte de secours (d'abord le texte, puis HTML pour multipart/alternative)
-            text_content = self._create_text_content(subject, content, item_data)
-            text_part = MIMEText(text_content, 'plain', 'utf-8')
-            msg.attach(text_part)
 
-            # Attacher le contenu HTML (doit être la dernière partie pour être préférée)
-            html_part = MIMEText(html_content, 'html', 'utf-8')
-            msg.attach(html_part)
+            if not force_html_only:
+                # Contenu texte de secours (d'abord le texte, puis HTML pour multipart/alternative)
+                text_content = self._create_text_content(subject, content, item_data)
+                text_part = MIMEText(text_content, 'plain', 'utf-8')
+                msg.attach(text_part)
+
+                # Attacher le contenu HTML (doit être la dernière partie pour être préférée)
+                html_part = MIMEText(html_content, 'html', 'utf-8')
+                msg.attach(html_part)
             
             # Envoyer l'email via Gmail
             with smtplib.SMTP(self.email_host, self.email_port) as server:
