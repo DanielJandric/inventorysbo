@@ -777,7 +777,7 @@ class ScrapingBeeScraper:
             if not scraped:
                 return { 'error': 'Aucune donnée suisse récente trouvée' }
             from stock_api_manager import stock_api_manager
-            snapshot = stock_api_manager.get_market_snapshot(region='CH') if hasattr(stock_api_manager, 'get_market_snapshot') else stock_api_manager.get_market_snapshot()
+            snapshot = stock_api_manager.get_market_snapshot()
             result = await self.process_with_llm(prompt, scraped, snapshot)
             return result
         except Exception as e:
