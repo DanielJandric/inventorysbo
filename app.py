@@ -3670,10 +3670,11 @@ def upload_market_pdf():
 # ──────────────────────────────────────────────────────────
 @app.route('/api/swiss-update/send', methods=['POST'])
 def send_swiss_market_update():
-    """Déclenche manuellement un rapport de marché Suisse.
+    """Mise en file d'attente (worker) d'un rapport de marché Suisse.
 
-    Scrape: Le Temps (RSS), SNB (RSS), RTS (deep-crawl) → LLM JSON strict →
-    sauvegarde Supabase dans market_updates (trigger_type=manual_swiss).
+    Crée une tâche 'swiss' avec worker_status='pending' que le Background Worker
+    traitera (ScrapingBee: Le Temps RSS, SNB RSS, deep-crawl RTS → LLM JSON).
+    Si la DB n'est pas disponible, fallback exécution immédiate (synchronisée).
     """
     try:
         body = request.get_json(silent=True) or {}
@@ -3690,35 +3691,46 @@ def send_swiss_market_update():
             except Exception:
                 prompt_text = "Analyse marchés Suisse aujourd'hui (SMI, BNS, USD/CHF, leaders suisses)."
 
-        # Exécuter le pipeline Suisse (asynchrone)
+        # Essayer de créer une tâche pour le worker
+        try:
+            from market_analysis_db import get_market_analysis_db, MarketAnalysis  # local import
+            db = get_market_analysis_db()
+            if db and db.is_connected():
+                analysis = MarketAnalysis(
+                    analysis_type='swiss',
+                    prompt=prompt_text,
+                    worker_status='pending'
+                )
+                analysis_id = db.save_analysis(analysis)
+                if analysis_id:
+                    return jsonify({'success': True, 'queued': True, 'analysis_id': analysis_id})
+        except Exception as e_queue:
+            logger.warning(f"Swiss queue fallback to immediate execution: {e_queue}")
+
+        # Fallback: exécution immédiate (évite l'échec si worker/DB indisponible)
         from scrapingbee_scraper import get_scrapingbee_scraper  # local import
         scraper = get_scrapingbee_scraper()
-
         import asyncio as _asyncio
         result = None
+        loop = _asyncio.new_event_loop()
         try:
-            loop = _asyncio.new_event_loop()
+            _asyncio.set_event_loop(loop)
+            result = loop.run_until_complete(scraper.execute_swiss_market_update(prompt_text))
+        finally:
             try:
-                _asyncio.set_event_loop(loop)
-                result = loop.run_until_complete(scraper.execute_swiss_market_update(prompt_text))
-            finally:
-                try:
-                    loop.close()
-                except Exception:
-                    pass
-                try:
-                    _asyncio.set_event_loop(None)
-                except Exception:
-                    pass
-        except Exception as e_exec:
-            raise e_exec
+                loop.close()
+            except Exception:
+                pass
+            try:
+                _asyncio.set_event_loop(None)
+            except Exception:
+                pass
 
         if not result or (isinstance(result, dict) and result.get('error')):
             err = result.get('error') if isinstance(result, dict) else 'Pipeline Suisse indisponible'
             return jsonify({'success': False, 'error': str(err)}), 500
 
-        # Sauvegarde dans Supabase (table market_updates)
-        saved = False
+        # Sauvegarde simple dans market_updates pour conserver une trace
         try:
             if supabase:
                 now = datetime.now()
@@ -3731,11 +3743,9 @@ def send_swiss_market_update():
                     'region': 'CH'
                 }
                 supabase.table('market_updates').insert(row).execute()
-                saved = True
         except Exception as e_db:
             logger.warning(f"Swiss update: sauvegarde Supabase échouée: {e_db}")
 
-        # Préparer l'aperçu pour l'UI
         preview = ''
         try:
             if isinstance(result, dict):
@@ -3747,11 +3757,7 @@ def send_swiss_market_update():
         except Exception:
             preview = ''
 
-        return jsonify({
-            'success': True,
-            'saved': saved,
-            'preview': preview
-        })
+        return jsonify({'success': True, 'queued': False, 'preview': preview})
     except Exception as e:
         logger.error(f"Erreur send_swiss_market_update: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
