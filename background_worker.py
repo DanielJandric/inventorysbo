@@ -518,6 +518,12 @@ class MarketAnalysisWorker:
         analysis_type = (getattr(analysis, 'analysis_type', '') or '').strip().lower()
         is_swiss = analysis_type in { 'swiss', 'suisse', 'ch', 'swiss_market' }
         market_snapshot = {} if is_swiss else stock_api_manager.get_market_snapshot()
+        header_title = "Swiss Market Update" if is_swiss else "📊 RAPPORT D'ANALYSE DE MARCHÉ"
+        header_style = (
+            "background-color:#b91c1c;background:linear-gradient(135deg,#7f1d1d 0%,#dc2626 60%,#ef4444 100%);"
+            if is_swiss else
+            "background-color:#1e3a8a;background:linear-gradient(135deg,#0f172a 0%,#1d4ed8 40%,#60a5fa 100%);"
+        )
         # Timestamp local pour affichage
         try:
             tz_name = os.getenv("REPORT_TIMEZONE", "Europe/Zurich")
@@ -830,8 +836,8 @@ class MarketAnalysisWorker:
         </head>
         <body>
             <div class="container">
-                <div class="header" style="background-color:#1e3a8a;background:linear-gradient(135deg,#0f172a 0%,#1d4ed8 40%,#60a5fa 100%);color:#ffffff;padding:24px 16px;text-align:center;">
-                    <h1 style="margin:0;font-size:22px;letter-spacing:1px;text-transform:uppercase;font-weight:800;color:#ffffff;">📊 RAPPORT D'ANALYSE DE MARCHÉ</h1>
+                <div class="header" style="{header_style}color:#ffffff;padding:24px 16px;text-align:center;">
+                    <h1 style="margin:0;font-size:22px;letter-spacing:1px;text-transform:uppercase;font-weight:800;color:#ffffff;">{header_title}</h1>
                     <div class="date" style="margin-top:6px;font-size:13px;font-weight:500;color:rgba(255,255,255,0.92);">Généré le {ts_str}</div>
                 </div>
                 
@@ -847,28 +853,13 @@ class MarketAnalysisWorker:
                 
                 
                 <!-- Aperçu du marché -->
-                <div class="section">
-                    <h3>📈 Aperçu du Marché</h3>
-                    <table class="market-table">
-                        <thead>
-                            <tr><th>Actif</th><th>Prix</th><th>Variation</th></tr>
-                        </thead>
-                        <tbody>
-                            {self._generate_market_snapshot_rows(market_snapshot)}
-                        </tbody>
-                    </table>
-                </div>
+                {'' if is_swiss else f'<div class="section"><h3>📈 Aperçu du Marché</h3><table class="market-table"><thead><tr><th>Actif</th><th>Prix</th><th>Variation</th></tr></thead><tbody>{self._generate_market_snapshot_rows(market_snapshot)}</tbody></table></div>'}
                 
                 <!-- Analytics Avancés -->
-                <div class="section">
-                    <h3>🔍 Analytics Avancés</h3>
-                    <div class="economic-grid">
-                        {analytics_html}
-                    </div>
-                </div>
+                {'' if is_swiss else f'<div class="section"><h3>🔍 Analytics Avancés</h3><div class="economic-grid">{analytics_html}</div></div>'}
 
                 <!-- Tableau de Bord Exécutif (structured_data) -->
-                {f'<div class="section"><h3>🧭 Tableau de Bord Exécutif</h3>{exec_dash_html}</div>' if exec_dash_html else ''}
+                {('' if is_swiss else (f'<div class="section"><h3>🧭 Tableau de Bord Exécutif</h3>{exec_dash_html}</div>' if exec_dash_html else ''))}
 
                 <!-- Analyse Méta / Régimes (structured_data) -->
                 {f'<div class="section"><h3>🧠 Analyse Méta & Régimes</h3>{meta_html}</div>' if meta_html else ''}
