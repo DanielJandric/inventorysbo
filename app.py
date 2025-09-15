@@ -1917,6 +1917,30 @@ Ce rapport a été généré automatiquement par votre système de gestion
                     parts = [p.strip() for p in raw.split('\n') if p.strip()]
                 return '\n'.join([f'<p style="font-size:14px;line-height:1.8;">{p}</p>' for p in parts])
 
+            # Métadonnées (horodatage, fraîcheur, confiance)
+            def _fmt_conf(v):
+                try:
+                    f = float(v)
+                    return f"{f:.2f}" if 0.0 <= f <= 1.0 else 'N/D'
+                except Exception:
+                    return 'N/D'
+
+            freshness_label = '≤72h' if (header_title == 'Swiss Market Update') else '≤48–72h'
+            conf_overall = parsed.get('confidence_score')
+            try:
+                conf_regime = (((parsed.get('meta_analysis') or {}).get('regime_detection') or {}).get('confidence'))
+            except Exception:
+                conf_regime = None
+            meta_block = (
+                '<div class="section"><h3>🧩 Métadonnées</h3>'
+                + '<ul>'
+                + f'<li>Horodatage: {timestamp}</li>'
+                + f'<li>Fraîcheur des données (par bloc): {freshness_label}</li>'
+                + f'<li>Niveau de confiance (global): {_fmt_conf(conf_overall)}</li>'
+                + f'<li>Niveau de confiance (régime): {_fmt_conf(conf_regime)}</li>'
+                + '</ul></div>'
+            )
+
             try:
                 logger.info(f"email_v2 sections: exec={len(executive_summary)} key={len(key_points)} ins={len(insights)} risk={len(risks)} opp={len(opportunities)}")
             except Exception:
@@ -1998,6 +2022,7 @@ Ce rapport a été généré automatiquement par votre système de gestion
                         {'<ul>' + ''.join(f'<li>{p}</li>' for p in opportunities) + '</ul>' if opportunities else '<p>N/D</p>'}
                     </div>
                 </div>
+                {meta_block}
                 
                 <div class=\"footer\"><p><strong>BONVIN Collection</strong> — Rapport généré automatiquement</p></div>
             </div>
@@ -2029,6 +2054,7 @@ Ce rapport a été généré automatiquement par votre système de gestion
                 </div>
                 <div class=\"content\">
                     <p>Contenu non structuré disponible pour ce rapport. Les sections détaillées ne sont pas fournies.</p>
+                    <div style=\"margin-top:16px;\"><strong>🧩 Métadonnées</strong><br/>Horodatage: {timestamp} • Fraîcheur des données (par bloc): {('≤72h' if header_title == 'Swiss Market Update' else '≤48–72h')}</div>
                 </div>
                 <div class=\"footer\"><p><strong>BONVIN Collection</strong> — Rapport généré automatiquement</p></div>
             </div>
