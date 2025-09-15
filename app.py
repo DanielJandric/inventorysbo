@@ -747,14 +747,14 @@ class GmailNotificationManager:
             # Contenu HTML avec style exact de la web app
             html_content = self._create_webapp_style_html(subject, content, item_data)
             
-            # Attacher le contenu HTML
-            html_part = MIMEText(html_content, 'html', 'utf-8')
-            msg.attach(html_part)
-            
-            # Contenu texte de secours
+            # Contenu texte de secours (d'abord le texte, puis HTML pour multipart/alternative)
             text_content = self._create_text_content(subject, content, item_data)
             text_part = MIMEText(text_content, 'plain', 'utf-8')
             msg.attach(text_part)
+
+            # Attacher le contenu HTML (doit être la dernière partie pour être préférée)
+            html_part = MIMEText(html_content, 'html', 'utf-8')
+            msg.attach(html_part)
             
             # Envoyer l'email via Gmail
             with smtplib.SMTP(self.email_host, self.email_port) as server:
@@ -1274,13 +1274,13 @@ L'objet "<strong>{item_data.get('name', 'N/A')}</strong>" de la catégorie "<str
             msg['To'] = ", ".join(self.recipients)
             msg['Subject'] = f"[BONVIN Collection] {subject}"
             
-            # Attacher le contenu HTML
-            html_part = MIMEText(html_content, 'html', 'utf-8')
-            msg.attach(html_part)
-            
-            # Contenu texte de secours
+            # Contenu texte de secours (doit précéder HTML dans multipart/alternative)
             text_part = MIMEText(text_content, 'plain', 'utf-8')
             msg.attach(text_part)
+
+            # Attacher le contenu HTML (placé en dernier pour être privilégié par les clients email)
+            html_part = MIMEText(html_content, 'html', 'utf-8')
+            msg.attach(html_part)
             
             # Envoyer l'email via Gmail
             with smtplib.SMTP(self.email_host, self.email_port) as server:
