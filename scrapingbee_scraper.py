@@ -776,9 +776,8 @@ class ScrapingBeeScraper:
             scraped = await self.search_and_scrape_swiss(topic_query='marché suisse', per_site=10, max_age_hours=72, min_chars=min_chars)
             if not scraped:
                 return { 'error': 'Aucune donnée suisse récente trouvée' }
-            from stock_api_manager import stock_api_manager
-            snapshot = stock_api_manager.get_market_snapshot()
-            result = await self.process_with_llm(prompt, scraped, snapshot)
+            # Rapport Suisse: pas de récupération de cours/bourse → pas de snapshot
+            result = await self.process_with_llm(prompt, scraped, {})
             return result
         except Exception as e:
             logger.error(f"❌ Erreur execute_swiss_market_update: {e}")
