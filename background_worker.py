@@ -641,21 +641,23 @@ class MarketAnalysisWorker:
                 
                 /* Header */
                 .header {{ 
-                    background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
-                    color: white;
-                    padding: 20px 15px;
+                    background: linear-gradient(135deg, #0f172a 0%, #1d4ed8 40%, #60a5fa 100%);
+                    color: #ffffff;
+                    padding: 24px 16px;
                     text-align: center;
                 }}
                 .header h1 {{ 
-                    margin: 0;
-                    font-size: 24px;
-                    font-weight: 700;
-                    letter-spacing: -0.5px;
+                    margin: 0; 
+                    font-size: 22px; 
+                    letter-spacing: 1px;
+                    text-transform: uppercase;
+                    font-weight: 800;
                 }}
-                .header .date {{ 
+                .header .date {{
+                    margin-top: 6px;
                     font-size: 13px;
-                    opacity: 0.9;
-                    margin-top: 5px;
+                    font-weight: 500;
+                    color: rgba(255,255,255,0.92);
                 }}
                 
                 /* Executive Summary */
