@@ -515,7 +515,9 @@ class MarketAnalysisWorker:
         """Génère le contenu HTML pour l'email."""
         # Récupérer les données du snapshot de marché (chiffres en quasi temps réel via yfinance)
         from stock_api_manager import stock_api_manager
-        market_snapshot = stock_api_manager.get_market_snapshot()
+        analysis_type = (getattr(analysis, 'analysis_type', '') or '').strip().lower()
+        is_swiss = analysis_type in { 'swiss', 'suisse', 'ch', 'swiss_market' }
+        market_snapshot = {} if is_swiss else stock_api_manager.get_market_snapshot()
         # Timestamp local pour affichage
         try:
             tz_name = os.getenv("REPORT_TIMEZONE", "Europe/Zurich")
