@@ -106,10 +106,13 @@
                         <button id="trigger-market-update" class="w-full bg-bonvin-gold hover:bg-yellow-600 text-black font-semibold py-3 px-4 rounded-lg transition-colors">
                             🚀 Générer Update Marchés (Web Scraping)
                         </button>
-                        
+                        <button id="trigger-swiss-update" class="w-full bg-red-500 hover:bg-red-600 text-white font-semibold py-3 px-4 rounded-lg transition-colors">
+                            🇨🇭 Générer Update Marchés Suisse
+                        </button>
                     </div>
                     
                     <div id="trigger-status" class="mt-3 text-sm text-gray-300"></div>
+                    <div id="trigger-status-swiss" class="mt-2 text-sm text-gray-300"></div>
                 </div>
 
                 <!-- Recent Updates -->
@@ -772,6 +775,38 @@
             } finally {
                 button.disabled = false;
                 button.textContent = '🚀 Générer Update Marchés (Web Scraping)';
+            }
+        });
+
+        // Manual Trigger Swiss Market Update
+        document.getElementById('trigger-swiss-update').addEventListener('click', async function() {
+            const button = this;
+            const statusDiv = document.getElementById('trigger-status-swiss');
+            
+            button.disabled = true;
+            button.textContent = '🔄 Génération Suisse en cours...';
+            statusDiv.textContent = 'Génération du rapport Marché Suisse en cours...';
+            
+            try {
+                const response = await fetch('/api/swiss-update/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    const preview = (data.preview || '').toString().slice(0, 180);
+                    statusDiv.innerHTML = '<span class="text-green-400">✅ Rapport Suisse généré et traité.</span>' + (preview ? `<div class="text-gray-400 text-xs mt-1">Aperçu: ${preview}…</div>` : '');
+                    await loadRecentUpdates();
+                } else {
+                    statusDiv.innerHTML = `<span class="text-red-400">❌ Erreur: ${data.error || 'Échec serveur'}</span>`;
+                }
+            } catch (error) {
+                statusDiv.innerHTML = '<span class="text-red-400">❌ Erreur de connexion</span>';
+            } finally {
+                button.disabled = false;
+                button.textContent = '🇨🇭 Générer Update Marchés Suisse';
             }
         });
 
