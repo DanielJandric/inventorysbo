@@ -3665,6 +3665,97 @@ def upload_market_pdf():
         logger.error(f"Erreur upload_market_pdf: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
+# ──────────────────────────────────────────────────────────
+#  Swiss Market Update (manuel)
+# ──────────────────────────────────────────────────────────
+@app.route('/api/swiss-update/send', methods=['POST'])
+def send_swiss_market_update():
+    """Déclenche manuellement un rapport de marché Suisse.
+
+    Scrape: Le Temps (RSS), SNB (RSS), RTS (deep-crawl) → LLM JSON strict →
+    sauvegarde Supabase dans market_updates (trigger_type=manual_swiss).
+    """
+    try:
+        body = request.get_json(silent=True) or {}
+        custom_prompt = (body.get('prompt') or '').strip() if isinstance(body, dict) else ''
+
+        # Charger le prompt strict par défaut si non fourni
+        prompt_text = custom_prompt
+        if not prompt_text:
+            try:
+                base_dir = os.path.dirname(__file__)
+                prompt_path = os.path.join(base_dir, 'prompts', 'swiss_market_analysis_fr.json')
+                with open(prompt_path, 'r', encoding='utf-8') as pf:
+                    prompt_text = pf.read()
+            except Exception:
+                prompt_text = "Analyse marchés Suisse aujourd'hui (SMI, BNS, USD/CHF, leaders suisses)."
+
+        # Exécuter le pipeline Suisse (asynchrone)
+        from scrapingbee_scraper import get_scrapingbee_scraper  # local import
+        scraper = get_scrapingbee_scraper()
+
+        import asyncio as _asyncio
+        result = None
+        try:
+            loop = _asyncio.new_event_loop()
+            try:
+                _asyncio.set_event_loop(loop)
+                result = loop.run_until_complete(scraper.execute_swiss_market_update(prompt_text))
+            finally:
+                try:
+                    loop.close()
+                except Exception:
+                    pass
+                try:
+                    _asyncio.set_event_loop(None)
+                except Exception:
+                    pass
+        except Exception as e_exec:
+            raise e_exec
+
+        if not result or (isinstance(result, dict) and result.get('error')):
+            err = result.get('error') if isinstance(result, dict) else 'Pipeline Suisse indisponible'
+            return jsonify({'success': False, 'error': str(err)}), 500
+
+        # Sauvegarde dans Supabase (table market_updates)
+        saved = False
+        try:
+            if supabase:
+                now = datetime.now()
+                content_str = json.dumps(result, ensure_ascii=False) if isinstance(result, dict) else str(result)
+                row = {
+                    'content': content_str,
+                    'date': now.strftime('%Y-%m-%d'),
+                    'time': now.strftime('%H:%M'),
+                    'trigger_type': 'manual_swiss',
+                    'region': 'CH'
+                }
+                supabase.table('market_updates').insert(row).execute()
+                saved = True
+        except Exception as e_db:
+            logger.warning(f"Swiss update: sauvegarde Supabase échouée: {e_db}")
+
+        # Préparer l'aperçu pour l'UI
+        preview = ''
+        try:
+            if isinstance(result, dict):
+                preview = (result.get('summary') or '')[:300]
+                if not preview and isinstance(result.get('executive_summary'), list):
+                    preview = ' • '.join([str(x) for x in result.get('executive_summary')[:3]])
+            else:
+                preview = str(result)[:300]
+        except Exception:
+            preview = ''
+
+        return jsonify({
+            'success': True,
+            'saved': saved,
+            'preview': preview
+        })
+    except Exception as e:
+        logger.error(f"Erreur send_swiss_market_update: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route("/health")
 def health():
     """Health check"""
