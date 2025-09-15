@@ -9155,11 +9155,11 @@ def markets_chat_stream():
             yield "event: open\ndata: {}\n\n"
             try:
                 with client.responses.stream(model=model, instructions=system_prompt, input=user_input, max_output_tokens=max_tokens) as stream:
-                    for event in stream:
+                        for event in stream:
                         now = time.monotonic()
                         if getattr(event, 'type', None) == "response.output_text.delta":
-                            chunk = getattr(event, 'delta', None)
-                            if chunk:
+                                chunk = getattr(event, 'delta', None)
+                                if chunk:
                                 yield f"data: {json.dumps({'text': str(chunk)}, ensure_ascii=False)}\n\n"
                         if now - last_hb >= hb_every:
                             yield ":keepalive\n\n"
@@ -9208,12 +9208,12 @@ def markets_chat_stream_task(task_id: str):
                     try:
                         res = ar.result
                         yield f"event: result\ndata: {_json.dumps({'result': res})}\n\n"
-                                except Exception:
-                                    pass
+                    except Exception:
+                        pass
                 else:
                     try:
                         tb = getattr(ar, 'traceback', None)
-                                except Exception:
+                    except Exception:
                         tb = None
                     yield f"event: error\ndata: {_json.dumps({'state': state, 'info': info, 'traceback': tb})}\n\n"
                 break
@@ -9253,8 +9253,8 @@ def markets_chat_stream_task_v2(task_id: str):
                     try:
                         res = ar.result
                         yield f"event: result\ndata: {_json.dumps({'result': res})}\n\n"
-                            except Exception:
-                                pass
+                    except Exception:
+                        pass
                 else:
                     try:
                         tb = getattr(ar, 'traceback', None)
