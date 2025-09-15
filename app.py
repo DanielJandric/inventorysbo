@@ -1280,7 +1280,7 @@ L'objet "<strong>{item_data.get('name', 'N/A')}</strong>" de la catégorie "<str
             
             # Utiliser systématiquement la version robuste (fallback en cas d'erreur)
             try:
-                html_content = self._create_market_report_html_v2(report_date, report_time, report_content, header_title=header_title, header_style=header_style)
+                html_content = self._create_market_report_html_v2(report_date, report_time, report_content, header_title=header_title, header_style=header_style, suppress_price_sections=is_swiss)
             except Exception as _e_html_v2:
                 logger.warning(f"email_v2: fallback vers rendu simple: {_e_html_v2}")
                 html_content = self._create_market_report_html(report_date, report_time, report_content, header_title=header_title, header_style=header_style)
@@ -1978,11 +1978,11 @@ Ce rapport a été généré automatiquement par votre système de gestion
                 
                 
 
-                {('<div class="section"><h3>🧭 Tableau de Bord Exécutif</h3>' + exec_dash_html + '</div>') if exec_dash_html else ''}
+                {('' if header_title == 'Swiss Market Update' else '<div class="section"><h3>🧭 Tableau de Bord Exécutif</h3>' + exec_dash_html + '</div>') if exec_dash_html else ''}
 
                 {('<div class="section"><h3>🧠 Analyse Méta & Régimes</h3>' + meta_html + '</div>') if meta_html else ''}
 
-                {('<div class="section"><h3>📈 Signaux Quantitatifs</h3>' + quant_html + '</div>') if quant_html else ''}
+                {('' if header_title == 'Swiss Market Update' else '<div class="section"><h3>📈 Signaux Quantitatifs</h3>' + quant_html + '</div>') if quant_html else ''}
 
                 {('<div class="section"><h3>🛡️ Gestion des Risques</h3>' + risk_html + '</div>') if risk_html else ''}
 
