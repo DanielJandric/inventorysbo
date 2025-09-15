@@ -1258,14 +1258,32 @@ L'objet "<strong>{item_data.get('name', 'N/A')}</strong>" de la catégorie "<str
             report_time = market_report_data.get('time', 'Heure inconnue')
             report_content = market_report_data.get('content', 'Contenu non disponible')
             
-            subject = f"📰 Rapport de Marché - {report_date}"
+            # Déterminer le titre/couleur d'en-tête (spécifique Suisse)
+            header_title = "📰 Rapport de Marché"
+            header_style = "background-color:#1e3a8a;background:linear-gradient(135deg,#1e3a8a,#3b82f6);color:#ffffff;"
+            try:
+                # Si le rapport provient de market_analyses, essayer d'en déduire le type
+                analysis_type = None
+                if isinstance(market_report_data.get('analysis_type'), str):
+                    analysis_type = market_report_data.get('analysis_type')
+                # Certaines intégrations stockent le type dans le contenu
+                if not analysis_type and isinstance(report_content, dict):
+                    analysis_type = str(report_content.get('analysis_type') or '').strip() or None
+                is_swiss = str(analysis_type or '').strip().lower() in { 'swiss', 'suisse', 'ch', 'swiss_market' }
+                if is_swiss:
+                    header_title = "Swiss Market Update"
+                    header_style = "background-color:#b91c1c;background:linear-gradient(135deg,#7f1d1d,#dc2626);color:#ffffff;"
+            except Exception:
+                pass
+
+            subject = f"{header_title} - {report_date}" if header_title != "📰 Rapport de Marché" else f"📰 Rapport de Marché - {report_date}"
             
             # Utiliser systématiquement la version robuste (fallback en cas d'erreur)
             try:
-                html_content = self._create_market_report_html_v2(report_date, report_time, report_content)
+                html_content = self._create_market_report_html_v2(report_date, report_time, report_content, header_title=header_title, header_style=header_style)
             except Exception as _e_html_v2:
                 logger.warning(f"email_v2: fallback vers rendu simple: {_e_html_v2}")
-                html_content = self._create_market_report_html(report_date, report_time, report_content)
+                html_content = self._create_market_report_html(report_date, report_time, report_content, header_title=header_title, header_style=header_style)
             
             # Créer le contenu texte
             text_content = self._create_market_report_text(report_date, report_time, report_content)
@@ -1587,7 +1605,7 @@ BONVIN Collection - Gestion de portefeuille d'investissement
 Ce rapport a été généré automatiquement par votre système de gestion
         """
 
-    def _create_market_report_html_v2(self, report_date: str, report_time: str, report_content: Any) -> str:
+    def _create_market_report_html_v2(self, report_date: str, report_time: str, report_content: Any, header_title: str = "📰 Rapport de Marché", header_style: str = "background-color:#1e3a8a;background:linear-gradient(135deg,#1e3a8a,#3b82f6);color:#ffffff;") -> str:
         """Version robuste du HTML: parse JSON si présent et rend Executive Summary et sections.
         Fallback vers rendu <pre> si non-structuré.
         """
@@ -1929,8 +1947,8 @@ Ce rapport a été généré automatiquement par votre système de gestion
         </head>
         <body>
             <div class=\"container\"> 
-                <div class=\"header\" style=\"background-color:#1e3a8a;background:linear-gradient(135deg,#1e3a8a,#3b82f6);color:#ffffff;padding:24px;text-align:center;\">
-                    <h1 style=\"margin:0;font-size:24px;color:#ffffff;\">📰 Rapport de Marché</h1>
+                <div class=\"header\" style=\"{header_style}padding:24px;text-align:center;\">
+                    <h1 style=\"margin:0;font-size:24px;color:#ffffff;\">{header_title}</h1>
                     <div class=\"subtitle\" style=\"margin-top:6px;opacity:.9;color:#ffffff;\">{report_date} • {report_time} • Généré le {timestamp}</div>
                 </div>
 
@@ -1998,15 +2016,15 @@ Ce rapport a été généré automatiquement par votre système de gestion
             <style>
                 body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; background-color: #f5f5f5; margin: 0; padding: 20px; }}
                 .container {{ max-width: 700px; margin: 0 auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,.1); overflow: hidden; }}
-                .header {{ background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); color: white; padding: 30px; text-align: center; }}
+                .header {{ color: white; padding: 30px; text-align: center; }}
                 .content {{ padding: 30px; }}
                 .footer {{ background:#f8fafc; padding:20px; text-align:center; border-top:1px solid #e1e5e9; }}
             </style>
         </head>
         <body>
             <div class=\"container\"> 
-                <div class=\"header\" style=\"background-color:#1e3a8a;background:linear-gradient(135deg,#1e3a8a,#3b82f6);color:#ffffff;padding:30px;text-align:center;\">
-                    <h1 style=\"margin:0;font-size:24px;color:#ffffff;\">📰 Rapport de Marché</h1>
+                <div class=\"header\" style=\"{header_style}padding:30px;text-align:center;\">
+                    <h1 style=\"margin:0;font-size:24px;color:#ffffff;\">{header_title}</h1>
                     <div style=\"margin-top:6px;color:#ffffff;\">{report_date} • {report_time} • Généré le {timestamp}</div>
                 </div>
                 <div class=\"content\">
