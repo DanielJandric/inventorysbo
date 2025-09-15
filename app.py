@@ -1246,7 +1246,7 @@ L'objet "<strong>{item_data.get('name', 'N/A')}</strong>" de la catégorie "<str
         
         self.send_notification_async(subject, content, item_data)
     
-    def send_market_report_email(self, market_report_data: Dict):
+    def send_market_report_email(self, market_report_data: Dict, recipients_override: Optional[List[str]] = None):
         """Envoie un email avec le rapport de marché"""
         if not self.enabled:
             logger.warning("Notifications Gmail désactivées")
@@ -1273,7 +1273,8 @@ L'objet "<strong>{item_data.get('name', 'N/A')}</strong>" de la catégorie "<str
             # Créer le message
             msg = MIMEMultipart('alternative')
             msg['From'] = self.email_user
-            msg['To'] = ", ".join(self.recipients)
+            to_list = recipients_override if (recipients_override and isinstance(recipients_override, list) and recipients_override) else self.recipients
+            msg['To'] = ", ".join(to_list)
             msg['Subject'] = f"[BONVIN Collection] {subject}"
             
             # Contenu texte de secours (doit précéder HTML dans multipart/alternative)
@@ -1288,7 +1289,11 @@ L'objet "<strong>{item_data.get('name', 'N/A')}</strong>" de la catégorie "<str
             with smtplib.SMTP(self.email_host, self.email_port) as server:
                 server.starttls()
                 server.login(self.email_user, self.email_password)
-                server.send_message(msg)
+                try:
+                    server.send_message(msg, to_addrs=to_list)
+                except TypeError:
+                    # Older Python versions may not support to_addrs in send_message
+                    server.send_message(msg)
             
             logger.info(f"✅ Email rapport de marché envoyé: {subject}")
             return True
@@ -6318,6 +6323,18 @@ def send_market_report_email():
                 "success": False,
                 "error": "Configuration email non disponible"
             }), 400
+        # Lecture éventuelle d'un destinataire de test
+        req = request.get_json(silent=True) or {}
+        recipients_override: Optional[List[str]] = None
+        try:
+            if isinstance(req.get('recipient'), str) and req['recipient'].strip():
+                recipients_override = [req['recipient'].strip()]
+            elif isinstance(req.get('recipients'), list) and req['recipients']:
+                recipients_override = [str(x).strip() for x in req['recipients'] if str(x).strip()]
+                if not recipients_override:
+                    recipients_override = None
+        except Exception:
+            recipients_override = None
         
         # Récupérer le dernier rapport de marché (priorité: market_analyses structuré, puis market_reports)
         market_report_data = None
@@ -6397,15 +6414,16 @@ def send_market_report_email():
                     "error": f"Erreur récupération rapport: {str(e)}"
                 }), 500
         
-        # Envoyer l'email
-        success = gmail_manager.send_market_report_email(market_report_data)
+        # Envoyer l'email (avec destinataires override si fourni)
+        success = gmail_manager.send_market_report_email(market_report_data, recipients_override=recipients_override)
         
         if success:
             logger.info(f"✅ Rapport de marché envoyé par email à {len(gmail_manager.recipients)} destinataires")
             return jsonify({
                 "success": True,
                 "message": f"Rapport de marché envoyé avec succès à {len(gmail_manager.recipients)} destinataires",
-                "recipients": gmail_manager.recipients,
+                "recipients": recipients_override if recipients_override else gmail_manager.recipients,
+                "recipients_count": len(recipients_override) if recipients_override else len(gmail_manager.recipients),
                 "report_date": market_report_data['date'],
                 "report_time": market_report_data['time']
             })
