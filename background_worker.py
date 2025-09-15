@@ -811,9 +811,9 @@ class MarketAnalysisWorker:
         </head>
         <body>
             <div class="container">
-                <div class="header">
-                    <h1>📊 RAPPORT D'ANALYSE DE MARCHÉ</h1>
-                    <div class="date">Généré le {ts_str}</div>
+                <div class="header" style="background-color:#1e3a8a;background:linear-gradient(135deg,#0f172a 0%,#1d4ed8 40%,#60a5fa 100%);color:#ffffff;padding:24px 16px;text-align:center;">
+                    <h1 style="margin:0;font-size:22px;letter-spacing:1px;text-transform:uppercase;font-weight:800;color:#ffffff;">📊 RAPPORT D'ANALYSE DE MARCHÉ</h1>
+                    <div class="date" style="margin-top:6px;font-size:13px;font-weight:500;color:rgba(255,255,255,0.92);">Généré le {ts_str}</div>
                 </div>
                 
                 <!-- Executive Summary avec valeurs (validées) -->

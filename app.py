@@ -1431,10 +1431,10 @@ L'objet "<strong>{item_data.get('name', 'N/A')}</strong>" de la catégorie "<str
         </head>
         <body>
             <div class="container">
-                <div class="header">
+                <div class="header" style="background-color:#1e3a8a;background:linear-gradient(135deg,#1e3a8a 0%,#3b82f6 100%);color:#ffffff;padding:30px;text-align:center;">
                     <img src="https://bonvin.ch/wp-content/uploads/2023/03/BONVIN_120x120.png" alt="BONVIN" class="logo">
-                    <h1>📰 Rapport de Marché</h1>
-                    <div class="subtitle">Analyse et insights des marchés financiers</div>
+                    <h1 style="margin:0;font-size:28px;font-weight:bold;color:#ffffff;">📰 Rapport de Marché</h1>
+                    <div class="subtitle" style="margin-top:10px;font-size:16px;opacity:.9;color:#ffffff;">Analyse et insights des marchés financiers</div>
                 </div>
                 
                 <div class="content">
@@ -1929,9 +1929,9 @@ Ce rapport a été généré automatiquement par votre système de gestion
         </head>
         <body>
             <div class=\"container\"> 
-                <div class=\"header\">
-                    <h1>📰 Rapport de Marché</h1>
-                    <div class=\"subtitle\">{report_date} • {report_time} • Généré le {timestamp}</div>
+                <div class=\"header\" style=\"background-color:#1e3a8a;background:linear-gradient(135deg,#1e3a8a,#3b82f6);color:#ffffff;padding:24px;text-align:center;\">
+                    <h1 style=\"margin:0;font-size:24px;color:#ffffff;\">📰 Rapport de Marché</h1>
+                    <div class=\"subtitle\" style=\"margin-top:6px;opacity:.9;color:#ffffff;\">{report_date} • {report_time} • Généré le {timestamp}</div>
                 </div>
 
                 <div class=\"section exec\">
@@ -2005,9 +2005,9 @@ Ce rapport a été généré automatiquement par votre système de gestion
         </head>
         <body>
             <div class=\"container\"> 
-                <div class=\"header\">
-                    <h1>📰 Rapport de Marché</h1>
-                    <div>{report_date} • {report_time} • Généré le {timestamp}</div>
+                <div class=\"header\" style=\"background-color:#1e3a8a;background:linear-gradient(135deg,#1e3a8a,#3b82f6);color:#ffffff;padding:30px;text-align:center;\">
+                    <h1 style=\"margin:0;font-size:24px;color:#ffffff;\">📰 Rapport de Marché</h1>
+                    <div style=\"margin-top:6px;color:#ffffff;\">{report_date} • {report_time} • Généré le {timestamp}</div>
                 </div>
                 <div class=\"content\">
                     <p>Contenu non structuré disponible pour ce rapport. Les sections détaillées ne sont pas fournies.</p>
