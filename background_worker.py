@@ -134,14 +134,31 @@ class MarketAnalysisWorker:
             logger.info(f"🔄 Mise à jour du statut de la tâche #{task_id} à 'processing'...")
             self.db.update_analysis_status(task_id, 'processing')
 
-            # 2. Préparer et exécuter l'analyse ScrapingBee
+            # 2. Préparer et exécuter l'analyse ScrapingBee (branche Suisse vs général)
             prompt = task.prompt or DEFAULT_PROMPT
-            logger.info(f"🕷️ Création de la tâche ScrapingBee avec prompt: {prompt[:100]}...")
-            
-            scraper_task_id = await self.scraper.create_scraping_task(prompt, MAX_SCRAPING_PAGES)
-            
-            logger.info(f"🚀 Exécution de la tâche ScrapingBee {scraper_task_id}...")
-            result = await self.scraper.execute_scraping_task(scraper_task_id)
+            is_swiss = str(task.analysis_type or '').strip().lower() in { 'swiss', 'ch', 'swiss_market', 'suisse' }
+            if is_swiss:
+                # Charger prompt strict depuis fichier si non fourni
+                if not task.prompt:
+                    try:
+                        import os
+                        base_dir = os.path.dirname(__file__)
+                        prompt_path = os.path.join(base_dir, 'prompts', 'swiss_market_analysis_fr.json')
+                        with open(prompt_path, 'r', encoding='utf-8') as pf:
+                            prompt = pf.read()
+                    except Exception as _:
+                        prompt = DEFAULT_PROMPT
+                logger.info("🇨🇭 Exécution pipeline Suisse (ScrapingBee → LLM JSON)")
+                try:
+                    result = await self.scraper.execute_swiss_market_update(prompt)
+                except Exception as e_swiss:
+                    logger.error(f"❌ Erreur pipeline Suisse: {e_swiss}")
+                    result = { 'error': str(e_swiss) }
+            else:
+                logger.info(f"🕷️ Création de la tâche ScrapingBee avec prompt: {prompt[:100]}...")
+                scraper_task_id = await self.scraper.create_scraping_task(prompt, MAX_SCRAPING_PAGES)
+                logger.info(f"🚀 Exécution de la tâche ScrapingBee {scraper_task_id}...")
+                result = await self.scraper.execute_scraping_task(scraper_task_id)
 
 
             # 3. Traiter le résultat

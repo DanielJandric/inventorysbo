@@ -521,6 +521,156 @@ class ScrapingBeeScraper:
         logger.info(f"📰 Deep scrape: {len(items)} articles récents | chars={sum(len(i.content) for i in items)}")
         return items
 
+    async def search_and_scrape_swiss(self, topic_query: str, per_site: int = 10, max_age_hours: int = 72, min_chars: int = 15000) -> List[ScrapedData]:
+        """Scrape ciblé des sources suisses (Agefi, SIX Newsroom) avec filtre fraîcheur.
+
+        - Sources principales: agefi.com (marchés/entreprises), six-group.com (media releases, news)
+        - Filtre: articles publiés dans les dernières max_age_hours
+        - Objectif: total contenu >= min_chars
+        """
+        if not self._initialized:
+            await self.initialize()
+
+        def _now_utc() -> datetime:
+            try:
+                return datetime.now(timezone.utc)
+            except Exception:
+                return datetime.utcnow().replace(tzinfo=None)
+
+        def _normalize_ts(dt_obj: Optional[datetime]) -> Optional[datetime]:
+            if not dt_obj:
+                return None
+            try:
+                if dt_obj.tzinfo is None:
+                    return dt_obj.replace(tzinfo=timezone.utc)
+                return dt_obj.astimezone(timezone.utc)
+            except Exception:
+                return dt_obj
+
+        def _is_recent_dt(dt: Optional[datetime]) -> bool:
+            try:
+                if not dt:
+                    return False
+                dtz = _normalize_ts(dt)
+                nowz = _now_utc()
+                return (nowz - dtz) <= timedelta(hours=max_age_hours)
+            except Exception:
+                return False
+
+        async def _gather_domain(domain: str, start_urls: List[str], link_predicate, max_links: int) -> List[str]:
+            links: List[str] = []
+            seen: set = set()
+            for start in start_urls:
+                try:
+                    html = await self._scrape_with_params(start, {
+                        'render_js': 'false',
+                        'premium_proxy': 'true',
+                        'block_resources': 'true',
+                        'wait': '1200',
+                        'country_code': 'ch',
+                    })
+                    if not html:
+                        continue
+                    from bs4 import BeautifulSoup  # type: ignore
+                    soup = BeautifulSoup(html or '', 'lxml')
+                    for a in soup.find_all('a'):
+                        href = a.get('href') or ''
+                        if not href:
+                            continue
+                        if href.startswith('/'):
+                            href = f"https://{domain}{href}"
+                        if (domain in href) and link_predicate(href) and href not in seen:
+                            seen.add(href)
+                            links.append(href)
+                        if len(links) >= max_links:
+                            break
+                except Exception:
+                    continue
+                if len(links) >= max_links:
+                    break
+            return links
+
+        def _is_agefi_article(url: str) -> bool:
+            u = url.lower()
+            return ('agefi.com' in u) and any(p in u for p in ['/marches', '/entreprises', '/article', '/actualites']) and ('/video' not in u)
+
+        def _is_six_article(url: str) -> bool:
+            u = url.lower()
+            return ('six-group.com' in u) and any(p in u for p in ['/newsroom/media-releases', '/newsroom/news', '/news'])
+
+        # Points d'entrée suisses
+        swiss_sources = {
+            'agefi.com': [
+                'https://agefi.com/marches',
+                'https://agefi.com/entreprises',
+                'https://agefi.com/'
+            ],
+            'www.six-group.com': [
+                'https://www.six-group.com/en/newsroom/media-releases.html',
+                'https://www.six-group.com/en/newsroom/news.html'
+            ],
+        }
+
+        # Collecter les liens
+        agefi_links = await _gather_domain('agefi.com', swiss_sources['agefi.com'], _is_agefi_article, per_site * 3)
+        six_links = await _gather_domain('www.six-group.com', swiss_sources['www.six-group.com'], _is_six_article, per_site * 3)
+
+        items: List[ScrapedData] = []
+
+        async def _scrape_links(links: List[str], source_name: str):
+            for url in links[:per_site*2]:
+                try:
+                    details = await self._scrape_page_with_metadata(url)
+                    if not details or not details.get('text'):
+                        continue
+                    published_at = details.get('published_at')
+                    if not _is_recent_dt(published_at):
+                        continue
+                    text = details.get('text') or ''
+                    items.append(ScrapedData(
+                        url=url,
+                        title=url[:120],
+                        content=text[:8000],
+                        timestamp=published_at or datetime.now(),
+                        metadata={'source': source_name, 'scraped_at': datetime.now().isoformat()}
+                    ))
+                except Exception:
+                    continue
+
+        await _scrape_links(agefi_links, 'agefi')
+        await _scrape_links(six_links, 'six')
+
+        # Assurer un minimum de caractères
+        def _total_chars(data: List[ScrapedData]) -> int:
+            return sum(len((d.content or '')) for d in data)
+
+        total_chars = _total_chars(items)
+        if total_chars < min_chars:
+            # Étendre si nécessaire
+            await _scrape_links(agefi_links[per_site*2:per_site*3], 'agefi')
+            await _scrape_links(six_links[per_site*2:per_site*3], 'six')
+
+        # Trier et retourner
+        items = [it for it in items if it and it.content]
+        items.sort(key=lambda x: (x.timestamp or datetime.min), reverse=True)
+        logger.info(f"🇨🇭 Swiss scrape: {len(items)} articles récents | chars={sum(len(i.content) for i in items)}")
+        return items
+
+    async def execute_swiss_market_update(self, prompt: str) -> Dict:
+        """Exécute le pipeline Suisse: scrape CH → snapshot → LLM JSON."""
+        try:
+            min_chars = int(os.getenv('LLM_MIN_CONTEXT_CHARS', '15000'))
+            scraped = await self.search_and_scrape_swiss(topic_query='marché suisse', per_site=10, max_age_hours=72, min_chars=min_chars)
+            if not scraped:
+                return { 'error': 'Aucune donnée suisse récente trouvée' }
+            from stock_api_manager import stock_api_manager
+            snapshot = stock_api_manager.get_market_snapshot(region='CH') if hasattr(stock_api_manager, 'get_market_snapshot') else stock_api_manager.get_market_snapshot()
+            result = await self.process_with_llm(prompt, scraped, snapshot)
+            return result
+        except Exception as e:
+            logger.error(f"❌ Erreur execute_swiss_market_update: {e}")
+            return { 'error': str(e) }
+
     # search_x_recent retiré (X.com désactivé)
     
     async def _search_google(self, query: str, num_results: int = 5) -> List[Dict]:
