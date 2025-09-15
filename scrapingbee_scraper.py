@@ -186,7 +186,12 @@ class ScrapingBeeScraper:
                 if not dt:
                     return False
                 dtz = _normalize_ts(dt)
+                # Force timezone-aware UTC for both sides to avoid naive/aware comparisons
+                if dtz and dtz.tzinfo is None:
+                    dtz = dtz.replace(tzinfo=timezone.utc)
                 nowz = _now_utc()
+                if nowz.tzinfo is None:
+                    nowz = nowz.replace(tzinfo=timezone.utc)
                 return (nowz - dtz) <= timedelta(hours=max_age_hours)
             except Exception:
                 return False
@@ -446,6 +451,12 @@ class ScrapingBeeScraper:
                     if not details or not details.get('text'):
                         continue
                     published_at = details.get('published_at')
+                    # Normalize to aware UTC
+                    if published_at and published_at.tzinfo is None:
+                        try:
+                            published_at = published_at.replace(tzinfo=timezone.utc)
+                        except Exception:
+                            pass
                     if not _is_recent_dt(published_at):
                         continue
                     text = details.get('text') or ''
@@ -459,7 +470,7 @@ class ScrapingBeeScraper:
                         url=url,
                         title=url[:120],
                         content=text[:8000],
-                        timestamp=published_at or datetime.now(),
+                        timestamp=published_at or _now_utc(),
                         metadata={'source': source_name, 'scraped_at': datetime.now().isoformat()}
                     ))
                 except Exception:
@@ -517,7 +528,16 @@ class ScrapingBeeScraper:
 
         # Trier par fraîcheur, limiter au besoin
         items = [it for it in items if it and it.content]
-        items.sort(key=lambda x: (x.timestamp or datetime.min), reverse=True)
+        # Ensure timestamps are comparable (aware UTC)
+        def _key_ts(x: ScrapedData) -> datetime:
+            ts = x.timestamp or _now_utc()
+            try:
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=timezone.utc)
+            except Exception:
+                pass
+            return ts
+        items.sort(key=_key_ts, reverse=True)
         logger.info(f"📰 Deep scrape: {len(items)} articles récents | chars={sum(len(i.content) for i in items)}")
         return items
 
@@ -647,7 +667,7 @@ class ScrapingBeeScraper:
                                     url=link,
                                     title=title[:120],
                                     content=desc[:4000] if desc else title[:200],
-                                    timestamp=ts or datetime.now(),
+                                    timestamp=ts or _now_utc(),
                                     metadata={'source': source_name, 'from': 'rss'}
                                 ))
                                 if len(items) >= max_items:
