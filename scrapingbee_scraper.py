@@ -699,6 +699,18 @@ class ScrapingBeeScraper:
             'https://www.rts.ch/info/monde/'
         ]
 
+        # Deep-crawl Immobilien Business (immobilier CH)
+        def _is_immobilien_article(url: str) -> bool:
+            u = url.lower()
+            return ('immobilienbusiness.ch' in u) and ('/de/' in u) and not any(x in u for x in ['/shop', '/kontakt', '/agb', '/datenschutz'])
+
+        immobilien_starts = [
+            'https://www.immobilienbusiness.ch/de/',
+            'https://www.immobilienbusiness.ch/de/residential/',
+            'https://www.immobilienbusiness.ch/de/regionen/',
+            'https://www.immobilienbusiness.ch/de/unternehmen/'
+        ]
+
         items: List[ScrapedData] = []
 
         # 1) RSS Le Temps + SNB
@@ -715,6 +727,12 @@ class ScrapingBeeScraper:
             rts_links = await _gather_domain('www.rts.ch', rts_starts, _is_rts_article, per_site * 4)
         except Exception:
             rts_links = []
+
+        # 3) Deep crawl Immobilien Business links and scrape
+        try:
+            immo_links = await _gather_domain('www.immobilienbusiness.ch', immobilien_starts, _is_immobilien_article, per_site * 3)
+        except Exception:
+            immo_links = []
 
         async def _scrape_links(links: List[str], source_name: str):
             for url in links[:per_site*2]:
@@ -744,6 +762,8 @@ class ScrapingBeeScraper:
 
         if 'rts_links' in locals() and rts_links:
             await _scrape_links(rts_links, 'rts')
+        if 'immo_links' in locals() and immo_links:
+            await _scrape_links(immo_links, 'immobilienbusiness')
 
         # Assurer un minimum de caractères
         def _total_chars(data: List[ScrapedData]) -> int:
@@ -754,6 +774,8 @@ class ScrapingBeeScraper:
             # Étendre si nécessaire
             if 'rts_links' in locals() and rts_links:
                 await _scrape_links(rts_links[per_site*2:per_site*3], 'rts')
+            if 'immo_links' in locals() and immo_links:
+                await _scrape_links(immo_links[per_site:per_site*2], 'immobilienbusiness')
 
         # Trier et retourner (assurer timestamps comparables UTC-aware)
         items = [it for it in items if it and it.content]
@@ -982,7 +1004,7 @@ class ScrapingBeeScraper:
             u = (url or '').lower()
             needs_js = any(k in u for k in ['marketwatch.com', 'cnn.com', '/quote/', '/key-statistics'])
             # Pays par défaut: 'ch' pour domaines suisses connus sinon 'us'
-            is_swiss_domain = any(d in u for d in ['.ch', 'rts.ch', 'letemps.ch', 'snb.ch', 'nzz.ch', 'agefi.com'])
+            is_swiss_domain = any(d in u for d in ['.ch', 'rts.ch', 'letemps.ch', 'snb.ch', 'nzz.ch', 'agefi.com', 'immobilienbusiness.ch'])
             country = 'ch' if is_swiss_domain else 'us'
             timeout_secs = int(os.getenv('SCRAPINGBEE_HTTP_TIMEOUT', '30'))
             params = {
