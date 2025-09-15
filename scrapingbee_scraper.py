@@ -522,9 +522,11 @@ class ScrapingBeeScraper:
         return items
 
     async def search_and_scrape_swiss(self, topic_query: str, per_site: int = 10, max_age_hours: int = 72, min_chars: int = 15000) -> List[ScrapedData]:
-        """Scrape ciblé des sources suisses (Agefi, SIX Newsroom) avec filtre fraîcheur.
+        """Scrape ciblé Suisse via Le Temps (RSS), SNB (RSS) et deep-crawl RTS.
 
-        - Sources principales: agefi.com (marchés/entreprises), six-group.com (media releases, news)
+        - Sources principales:
+          • RSS: https://www.letemps.ch/articles.rss, https://www.snb.ch/public/fr/rss/news
+          • Deep-crawl: https://www.rts.ch/info/ (ouvre les liens info)
         - Filtre: articles publiés dans les dernières max_age_hours
         - Objectif: total contenu >= min_chars
         """
@@ -590,32 +592,100 @@ class ScrapingBeeScraper:
                     break
             return links
 
-        def _is_agefi_article(url: str) -> bool:
+        # Helpers RSS (Le Temps, SNB)
+        async def _fetch_rss_items(feeds: List[str], source_name: str, max_items: int) -> List[ScrapedData]:
+            items: List[ScrapedData] = []
+            try:
+                import xml.etree.ElementTree as ET  # lightweight
+            except Exception:
+                return items
+
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119 Safari/537.36'
+            }
+            async with aiohttp.ClientSession(headers=headers) as session:
+                for f in feeds:
+                    try:
+                        text = None
+                        try:
+                            async with session.get(f, timeout=12) as resp:
+                                if resp.status == 200:
+                                    text = await resp.text()
+                        except Exception:
+                            text = None
+                        if not text and self.api_key and self.api_key != 'test_key_for_testing':
+                            try:
+                                async with session.get(self.base_url, params={
+                                    'api_key': self.api_key,
+                                    'url': f,
+                                    'render_js': 'false'
+                                }, timeout=15) as r2:
+                                    if r2.status == 200:
+                                        text = await r2.text()
+                            except Exception:
+                                pass
+                        if not text:
+                            continue
+                        try:
+                            root = ET.fromstring(text)
+                        except Exception:
+                            continue
+                        for item in root.findall('.//item'):
+                            try:
+                                link_el = item.find('link')
+                                title_el = item.find('title')
+                                desc_el = item.find('description')
+                                pub_el = item.find('pubDate')
+                                link = (link_el.text or '').strip() if link_el is not None else ''
+                                title = (title_el.text or '').strip() if title_el is not None else link[:120]
+                                desc = (desc_el.text or '').strip() if desc_el is not None else ''
+                                ts = self._parse_datetime_str(pub_el.text) if pub_el is not None else None
+                                ts = _normalize_ts(ts)
+                                if ts and (_now_utc() - ts) > timedelta(hours=max_age_hours):
+                                    continue
+                                items.append(ScrapedData(
+                                    url=link,
+                                    title=title[:120],
+                                    content=desc[:4000] if desc else title[:200],
+                                    timestamp=ts or datetime.now(),
+                                    metadata={'source': source_name, 'from': 'rss'}
+                                ))
+                                if len(items) >= max_items:
+                                    break
+                            except Exception:
+                                continue
+                        if len(items) >= max_items:
+                            break
+            return items
+
+        # Deep-crawl RTS (info)
+        def _is_rts_article(url: str) -> bool:
             u = url.lower()
-            return ('agefi.com' in u) and any(p in u for p in ['/marches', '/entreprises', '/article', '/actualites']) and ('/video' not in u)
+            return ('rts.ch' in u) and ('/info/' in u) and any(p in u for p in ['/article', '/monde', '/suisse', '/economie', '/politique'])
 
-        def _is_six_article(url: str) -> bool:
-            u = url.lower()
-            return ('six-group.com' in u) and any(p in u for p in ['/newsroom/media-releases', '/newsroom/news', '/news'])
-
-        # Points d'entrée suisses
-        swiss_sources = {
-            'agefi.com': [
-                'https://agefi.com/marches',
-                'https://agefi.com/entreprises',
-                'https://agefi.com/'
-            ],
-            'www.six-group.com': [
-                'https://www.six-group.com/en/newsroom/media-releases.html',
-                'https://www.six-group.com/en/newsroom/news.html'
-            ],
-        }
-
-        # Collecter les liens
-        agefi_links = await _gather_domain('agefi.com', swiss_sources['agefi.com'], _is_agefi_article, per_site * 3)
-        six_links = await _gather_domain('www.six-group.com', swiss_sources['www.six-group.com'], _is_six_article, per_site * 3)
+        rts_starts = [
+            'https://www.rts.ch/info/',
+            'https://www.rts.ch/info/suisse/',
+            'https://www.rts.ch/info/economie/',
+            'https://www.rts.ch/info/monde/'
+        ]
 
         items: List[ScrapedData] = []
+
+        # 1) RSS Le Temps + SNB
+        try:
+            rss_list: List[ScrapedData] = []
+            rss_list += await _fetch_rss_items(['https://www.letemps.ch/articles.rss'], 'letemps', per_site * 3)
+            rss_list += await _fetch_rss_items(['https://www.snb.ch/public/fr/rss/news'], 'snb', per_site * 2)
+            items.extend(rss_list)
+        except Exception:
+            pass
+
+        # 2) Deep crawl RTS links and scrape
+        try:
+            rts_links = await _gather_domain('www.rts.ch', rts_starts, _is_rts_article, per_site * 4)
+        except Exception:
+            rts_links = []
 
         async def _scrape_links(links: List[str], source_name: str):
             for url in links[:per_site*2]:
@@ -637,8 +707,8 @@ class ScrapingBeeScraper:
                 except Exception:
                     continue
 
-        await _scrape_links(agefi_links, 'agefi')
-        await _scrape_links(six_links, 'six')
+        if 'rts_links' in locals() and rts_links:
+            await _scrape_links(rts_links, 'rts')
 
         # Assurer un minimum de caractères
         def _total_chars(data: List[ScrapedData]) -> int:
@@ -647,8 +717,8 @@ class ScrapingBeeScraper:
         total_chars = _total_chars(items)
         if total_chars < min_chars:
             # Étendre si nécessaire
-            await _scrape_links(agefi_links[per_site*2:per_site*3], 'agefi')
-            await _scrape_links(six_links[per_site*2:per_site*3], 'six')
+            if 'rts_links' in locals() and rts_links:
+                await _scrape_links(rts_links[per_site*2:per_site*3], 'rts')
 
         # Trier et retourner
         items = [it for it in items if it and it.content]
