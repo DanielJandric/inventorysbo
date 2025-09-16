@@ -5333,10 +5333,15 @@ def chatbot():
                 items_cached = AdvancedDataManager.fetch_all_items()
                 smart_cache.set('items', items_cached)  # Pas de paramètre ttl !
             
-            # Valeur totale
+            # Valeur totale (utiliser les analytics pour éviter 0 CHF)
             if 'valeur total' in query_lower or 'combien vaut' in query_lower:
-                total = sum(getattr(item, 'current_value', 0) for item in items_cached)
-                available = len([i for i in items_cached if getattr(i, 'status', '') == 'Available'])
+                try:
+                    analytics_quick = AdvancedDataManager.calculate_advanced_analytics(items_cached)
+                    total = analytics_quick.get('total_value', 0) or 0
+                    available = analytics_quick.get('available_count', 0)
+                except Exception:
+                    total = sum((getattr(item, 'current_value', 0) or 0) for item in items_cached)
+                    available = len([i for i in items_cached if getattr(i, 'status', '') == 'Available'])
                 response = f"💰 **Valeur totale de votre collection**: {total:,.0f} CHF\n\n"
                 response += f"📦 **{len(items_cached)} objets** dont {available} disponibles"
                 return jsonify({
@@ -5362,6 +5367,81 @@ def chatbot():
                     "reply": response,
                     "metadata": {"mode": "ultra_quick", "response_time": time.time() - start_time}
                 })
+
+            # Voiture la plus rapide (détection simple)
+            if ('voiture' in query_lower or 'auto' in query_lower or 'car' in query_lower) and any(k in query_lower for k in ['plus rapide', 'rapide', 'vitesse', '0-100', '0 à 100']):
+                try:
+                    import re as _re
+                    cars = [i for i in items_cached if str(getattr(i, 'category', '')).lower().startswith('voiture') or str(getattr(i, 'category', '')).lower().startswith('voitures')]
+                    best_item = None
+                    best_score = -1.0
+                    best_speed = None
+                    best_metric = ''
+                    for it in cars:
+                        text = ' '.join(str(x) for x in [getattr(it, 'name', ''), getattr(it, 'description', '')]).lower()
+                        # 1) Top speed km/h
+                        speed = None
+                        for pat in [r"(\d{2,3})\s?km/?h", r"v\s?max\s?(\d{2,3})"]:
+                            m = _re.search(pat, text)
+                            if m:
+                                try:
+                                    val = int(m.group(1))
+                                    if 180 <= val <= 450:
+                                        speed = val
+                                        break
+                                except Exception:
+                                    pass
+                        # 2) 0-100 s (plus petit est meilleur)
+                        accel = None
+                        for pat in [r"0\s*[-àto]\s*100[^\d]*(\d{1,2}(?:[\.,]\d)?)\s?s"]:
+                            m = _re.search(pat, text)
+                            if m:
+                                try:
+                                    accel = float(m.group(1).replace(',', '.'))
+                                except Exception:
+                                    pass
+                        # 3) Puissance (hp/cv)
+                        power = None
+                        for pat in [r"(\d{3,4})\s?hp", r"(\d{3,4})\s?cv"]:
+                            m = _re.search(pat, text)
+                            if m:
+                                try:
+                                    power = int(m.group(1))
+                                    break
+                                except Exception:
+                                    pass
+                        # Scoring
+                        score = 0.0
+                        if speed:
+                            score = max(score, speed)  # higher is better
+                        if accel:
+                            score = max(score, 300 - accel * 30)  # lower accel => higher score
+                        if power:
+                            score = max(score, power * 0.8)
+                        # heuristic for known fast models
+                        if any(tag in text for tag in ['turbo s', 'gt3', 'gt2', 'pista', 'performante', 'superleggera', 'svj', 'senna', '765lt']):
+                            score += 50
+                        if score > best_score:
+                            best_score = score
+                            best_item = it
+                            best_speed = speed
+                            if speed:
+                                best_metric = f"vitesse max ~{speed} km/h"
+                            elif accel:
+                                best_metric = f"0–100 km/h en ~{accel:.1f}s"
+                            elif power:
+                                best_metric = f"~{power} hp"
+                    if best_item:
+                        name = getattr(best_item, 'name', 'Voiture (modèle inconnu)')
+                        response = f"🚀 **Voiture la plus rapide**: {name}"
+                        if best_metric:
+                            response += f"\n{best_metric}"
+                        return jsonify({
+                            "reply": response,
+                            "metadata": {"mode": "ultra_quick_fastest_car", "response_time": time.time() - start_time}
+                        })
+                except Exception:
+                    pass
         
         # Guardrails
         blocked = _should_block_query(query)
