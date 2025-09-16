@@ -6207,6 +6207,47 @@ def chatbot():
                             desc = str(getattr(it, 'description', ''))[:120]
                             return f"- {name} :: {desc}"
                         rag_context = "\n\n[APERCU_VOITURES]\n" + "\n".join(car_line(c) for c in cars)
+                        # Extraire des indices de performance pour guider la réponse
+                        perf_lines = []
+                        import re as _re
+                        for it in cars:
+                            name = str(getattr(it, 'name', ''))
+                            text = (name + ' ' + str(getattr(it, 'description', ''))).lower()
+                            speed = None
+                            accel = None
+                            power = None
+                            # top speed
+                            for pat in [r"(\d{2,3})\s?km/?h", r"v\s?max\s?(\d{2,3})"]:
+                                m = _re.search(pat, text)
+                                if m:
+                                    try:
+                                        val = int(m.group(1))
+                                        if 180 <= val <= 480:
+                                            speed = val
+                                            break
+                                    except Exception:
+                                        pass
+                            # 0-100
+                            for pat in [r"0\s*[-àto]\s*100[^\d]*(\d{1,2}(?:[\.,]\d)?)\s?s"]:
+                                m = _re.search(pat, text)
+                                if m:
+                                    try:
+                                        accel = float(m.group(1).replace(',', '.'))
+                                        break
+                                    except Exception:
+                                        pass
+                            # power
+                            for pat in [r"(\d{3,4})\s?hp", r"(\d{3,4})\s?cv"]:
+                                m = _re.search(pat, text)
+                                if m:
+                                    try:
+                                        power = int(m.group(1))
+                                        break
+                                    except Exception:
+                                        pass
+                            perf_lines.append(f"- {name} | speed_kmh:{'' if speed is None else speed} | accel_0_100_s:{'' if accel is None else accel} | power_hp:{'' if power is None else power}")
+                        if perf_lines:
+                            rag_context += "\n\n[PERF_VOITURES]\n" + "\n".join(perf_lines)
                     except Exception:
                         rag_context = ""
 
