@@ -5313,6 +5313,8 @@ def chatbot():
         # ===== FIX STABILITÉ CHATBOT v2.0 =====
         # FORCE traitement synchrone pour éviter timeouts et déconnexions
         USE_ASYNC = False  # Celery complètement désactivé
+        # LLM d'abord: si ALWAYS_LLM=1 (par défaut), on ignore le chemin ultra-rapide
+        ALWAYS_LLM = (os.getenv('ALWAYS_LLM', '1') == '1')
         
         # Détection d'intention rapide
         query_lower = query.lower()
@@ -5324,8 +5326,8 @@ def chatbot():
         elif any(word in query_lower for word in ['vendre', 'vente', 'sold']):
             intent = 'sales_analysis'
         
-        # ===== RÉPONSES ULTRA-RAPIDES pour questions simples =====
-        if len(query) < 60:  # Questions courtes = réponses immédiates
+        # ===== RÉPONSES ULTRA-RAPIDES pour questions simples (désactivées si ALWAYS_LLM=1) =====
+        if (not ALWAYS_LLM) and (len(query) < 60):  # Questions courtes = réponses immédiates
             
             # Cache pour performance (utilise le cache 'items' existant avec TTL=60s)
             items_cached = smart_cache.get('items')
@@ -6209,7 +6211,7 @@ def chatbot():
                         rag_context = ""
 
                 # Construire une question enrichie orientée sur vos données
-                query_simplified = (query if len(query) <= 200 else (query[:200] + '...')) + rag_context
+                query_simplified = (query if len(query) <= 400 else (query[:400] + '...')) + rag_context
                 
                 # Timeout avec threading (compatible avec tous les OS)
                 import threading
