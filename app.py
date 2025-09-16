@@ -6193,9 +6193,9 @@ def chatbot():
         if ai_engine:
             # ===== TIMEOUT STRICT ET OPTIMISATIONS =====
             try:
-                # Limiter les données pour performance
-                items_limited = items[:100] if len(items) > 100 else items
-                history_limited = conversation_history[-4:] if len(conversation_history) > 4 else conversation_history
+                # Mode web-like: ne pas limiter les items; conserver plus d'historique
+                items_limited = items  # pas de cap
+                history_limited = conversation_history[-10:] if len(conversation_history) > 10 else conversation_history
                 
                 # Contexte RAG minimal pour guider le modèle sur VOS données
                 # Inclure un aperçu des 30 voitures pour questions de performance
@@ -6204,7 +6204,7 @@ def chatbot():
                 if any(w in query.lower() for w in ['voiture', 'auto', 'car']):
                     try:
                         cars = [it for it in items_limited if str(getattr(it, 'category', '')).lower().startswith('voiture')]
-                        cars = cars[:30]
+                        # pas de cap (web-like); si très volumineux, le modèle tronquera
                         def car_line(it):
                             name = str(getattr(it, 'name', ''))
                             desc = str(getattr(it, 'description', ''))[:120]
@@ -6317,7 +6317,7 @@ def chatbot():
                 thread = threading.Thread(target=call_ai)
                 thread.daemon = True
                 thread.start()
-                thread.join(timeout=15.0)  # 15 secondes max pour laisser le LLM répondre
+                thread.join(timeout=30.0)  # 30 secondes pour aligner l'expérience "web"
                 
                 if thread.is_alive():
                     # Timeout dépassé
@@ -9626,7 +9626,7 @@ def markets_chat():
         def call_worker():
             nonlocal reply, error
             try:
-                reply = worker.generate_reply(user_message, extra_context, history=history)
+        reply = worker.generate_reply(user_message, extra_context, history=history)
             except Exception as e:
                 error = e
         
