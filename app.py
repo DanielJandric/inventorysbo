@@ -5333,8 +5333,14 @@ def chatbot():
                 items_cached = AdvancedDataManager.fetch_all_items()
                 smart_cache.set('items', items_cached)  # Pas de paramètre ttl !
             
+            # Détecter requête performance voitures pour laisser le LLM traiter
+            skip_fast = (
+                ('voiture' in query_lower or 'auto' in query_lower or 'car' in query_lower)
+                and any(k in query_lower for k in ['plus rapide', 'rapide', 'vitesse', '0-100', '0 à 100'])
+            )
+
             # Valeur totale (utiliser les analytics pour éviter 0 CHF)
-            if 'valeur total' in query_lower or 'combien vaut' in query_lower:
+            if (not skip_fast) and ('valeur total' in query_lower or 'combien vaut' in query_lower):
                 try:
                     analytics_quick = AdvancedDataManager.calculate_advanced_analytics(items_cached)
                     total = analytics_quick.get('total_value', 0) or 0
@@ -5350,7 +5356,7 @@ def chatbot():
                 })
             
             # Nombre d'objets
-            if 'combien' in query_lower and ('objet' in query_lower or 'item' in query_lower):
+            if (not skip_fast) and ('combien' in query_lower and ('objet' in query_lower or 'item' in query_lower)):
                 response = f"📦 Vous avez **{len(items_cached)} objets** dans votre collection"
                 return jsonify({
                     "reply": response,
@@ -5358,7 +5364,7 @@ def chatbot():
                 })
             
             # Top valeurs
-            if ('plus' in query_lower and 'cher' in query_lower) or 'top' in query_lower:
+            if (not skip_fast) and (("plus" in query_lower and 'cher' in query_lower) or 'top' in query_lower):
                 top_items = sorted(items_cached, key=lambda x: getattr(x, 'current_value', 0), reverse=True)[:3]
                 response = "🏆 **Top 3 des objets les plus précieux**:\n\n"
                 for i, item in enumerate(top_items, 1):
@@ -5368,8 +5374,8 @@ def chatbot():
                     "metadata": {"mode": "ultra_quick", "response_time": time.time() - start_time}
                 })
 
-            # Voiture la plus rapide (détection simple)
-            if ('voiture' in query_lower or 'auto' in query_lower or 'car' in query_lower) and any(k in query_lower for k in ['plus rapide', 'rapide', 'vitesse', '0-100', '0 à 100']):
+            # Voiture la plus rapide (détection simple - désactivée par défaut, activer avec QUICK_FASTEST_CAR=1)
+            if os.getenv('QUICK_FASTEST_CAR', '0') == '1' and ('voiture' in query_lower or 'auto' in query_lower or 'car' in query_lower) and any(k in query_lower for k in ['plus rapide', 'rapide', 'vitesse', '0-100', '0 à 100']):
                 try:
                     import re as _re
                     cars = [i for i in items_cached if str(getattr(i, 'category', '')).lower().startswith('voiture') or str(getattr(i, 'category', '')).lower().startswith('voitures')]
@@ -6187,11 +6193,23 @@ def chatbot():
                 items_limited = items[:100] if len(items) > 100 else items
                 history_limited = conversation_history[-4:] if len(conversation_history) > 4 else conversation_history
                 
-                # Créer un prompt simplifié si la question est complexe
-                if len(query) > 100:
-                    query_simplified = query[:100] + "..."
-                else:
-                    query_simplified = query
+                # Contexte RAG minimal pour guider le modèle sur VOS données
+                # Inclure un aperçu des 30 voitures pour questions de performance
+                rag_context = ""
+                if any(w in query.lower() for w in ['voiture', 'auto', 'car']):
+                    try:
+                        cars = [it for it in items_limited if str(getattr(it, 'category', '')).lower().startswith('voiture')]
+                        cars = cars[:30]
+                        def car_line(it):
+                            name = str(getattr(it, 'name', ''))
+                            desc = str(getattr(it, 'description', ''))[:120]
+                            return f"- {name} :: {desc}"
+                        rag_context = "\n\n[APERCU_VOITURES]\n" + "\n".join(car_line(c) for c in cars)
+                    except Exception:
+                        rag_context = ""
+
+                # Construire une question enrichie orientée sur vos données
+                query_simplified = (query if len(query) <= 200 else (query[:200] + '...')) + rag_context
                 
                 # Timeout avec threading (compatible avec tous les OS)
                 import threading
@@ -6202,9 +6220,9 @@ def chatbot():
                     nonlocal response, error
                     try:
                         response = ai_engine.generate_response_with_history(
-                            query_simplified, 
-                            items_limited, 
-                            analytics, 
+                            query_simplified,
+                            items_limited,
+                            analytics,
                             history_limited
                         )
                     except Exception as e:
