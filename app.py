@@ -5299,7 +5299,7 @@ def fix_vehicle_categories():
         return jsonify({"error": "Erreur lors de la correction des catégories"}), 500
 @app.route("/api/chatbot", methods=["POST"])
 def chatbot():
-    """Chatbot utilisant OpenAI GPT-4 avec recherche sémantique RAG et mémoire conversationnelle"""
+    """Chatbot AMÉLIORÉ v2.0 - Stable, rapide et intelligent"""
     try:
         start_time = time.time()
         data = request.get_json()
@@ -5310,14 +5310,58 @@ def chatbot():
         if not query:
             return jsonify({"error": "Message requis"}), 400
 
-        # Feature flag: bascule vers file d'attente Celery pour traitement asynchrone
-        _force_sync = (os.getenv("ALLOW_FORCE_SYNC", "0") == "1") and (request.args.get("force_sync") == "1")
-        if os.getenv("CHAT_V2", "0") == "1" and not _force_sync:
-            task = chat_v2_task.apply_async(args=[data], queue=os.getenv("LLM_QUEUE", "celery"))
-            return jsonify({"task_id": task.id}), 202
-        if os.getenv("ASYNC_CHAT", "1") == "1" and not _force_sync:
-            task = chat_task.apply_async(args=[data], queue=os.getenv("LLM_QUEUE", "celery"))
-            return jsonify({"task_id": task.id}), 202
+        # ===== FIX STABILITÉ CHATBOT v2.0 =====
+        # FORCE traitement synchrone pour éviter timeouts et déconnexions
+        USE_ASYNC = False  # Celery complètement désactivé
+        
+        # Détection d'intention rapide
+        query_lower = query.lower()
+        intent = 'general'
+        if any(word in query_lower for word in ['valeur', 'total', 'combien', 'prix']):
+            intent = 'value_analysis'
+        elif any(word in query_lower for word in ['ajouter', 'créer', 'nouveau']):
+            intent = 'create_item'
+        elif any(word in query_lower for word in ['vendre', 'vente', 'sold']):
+            intent = 'sales_analysis'
+        
+        # ===== RÉPONSES ULTRA-RAPIDES pour questions simples =====
+        if len(query) < 60:  # Questions courtes = réponses immédiates
+            
+            # Cache pour performance
+            items_cached = smart_cache.get('all_items_quick')
+            if items_cached is None:
+                items_cached = AdvancedDataManager.fetch_all_items()
+                smart_cache.set('all_items_quick', items_cached, ttl=30)
+            
+            # Valeur totale
+            if 'valeur total' in query_lower or 'combien vaut' in query_lower:
+                total = sum(getattr(item, 'current_value', 0) for item in items_cached)
+                available = len([i for i in items_cached if getattr(i, 'status', '') == 'Available'])
+                response = f"💰 **Valeur totale de votre collection**: {total:,.0f} CHF\n\n"
+                response += f"📦 **{len(items_cached)} objets** dont {available} disponibles"
+                return jsonify({
+                    "reply": response,
+                    "metadata": {"mode": "ultra_quick", "response_time": time.time() - start_time}
+                })
+            
+            # Nombre d'objets
+            if 'combien' in query_lower and ('objet' in query_lower or 'item' in query_lower):
+                response = f"📦 Vous avez **{len(items_cached)} objets** dans votre collection"
+                return jsonify({
+                    "reply": response,
+                    "metadata": {"mode": "ultra_quick", "response_time": time.time() - start_time}
+                })
+            
+            # Top valeurs
+            if ('plus' in query_lower and 'cher' in query_lower) or 'top' in query_lower:
+                top_items = sorted(items_cached, key=lambda x: getattr(x, 'current_value', 0), reverse=True)[:3]
+                response = "🏆 **Top 3 des objets les plus précieux**:\n\n"
+                for i, item in enumerate(top_items, 1):
+                    response += f"{i}. **{getattr(item, 'name', 'N/A')}**: {getattr(item, 'current_value', 0):,.0f} CHF\n"
+                return jsonify({
+                    "reply": response,
+                    "metadata": {"mode": "ultra_quick", "response_time": time.time() - start_time}
+                })
         
         # Guardrails
         blocked = _should_block_query(query)
@@ -6057,8 +6101,62 @@ def chatbot():
             pass
 
         if ai_engine:
-            # Génération de réponse via OpenAI avec RAG et historique
-            response = ai_engine.generate_response_with_history(query, items, analytics, conversation_history)
+            # ===== TIMEOUT STRICT ET OPTIMISATIONS =====
+            try:
+                # Limiter les données pour performance
+                items_limited = items[:100] if len(items) > 100 else items
+                history_limited = conversation_history[-4:] if len(conversation_history) > 4 else conversation_history
+                
+                # Créer un prompt simplifié si la question est complexe
+                if len(query) > 100:
+                    query_simplified = query[:100] + "..."
+                else:
+                    query_simplified = query
+                
+                # Timeout avec threading (compatible avec tous les OS)
+                import threading
+                response = None
+                error = None
+                
+                def call_ai():
+                    nonlocal response, error
+                    try:
+                        response = ai_engine.generate_response_with_history(
+                            query_simplified, 
+                            items_limited, 
+                            analytics, 
+                            history_limited
+                        )
+                    except Exception as e:
+                        error = e
+                
+                # Lancer dans un thread avec timeout
+                thread = threading.Thread(target=call_ai)
+                thread.daemon = True
+                thread.start()
+                thread.join(timeout=8.0)  # 8 secondes max
+                
+                if thread.is_alive():
+                    # Timeout dépassé
+                    response = f"⚡ **Réponse rapide** (l'analyse complète prend trop de temps):\n\n"
+                    response += f"📊 Vous avez {len(items)} objets d'une valeur totale de {analytics.get('total_value', 0):,.0f} CHF.\n"
+                    response += f"💡 Essayez une question plus spécifique pour une réponse détaillée."
+                elif error:
+                    # Erreur dans l'appel
+                    response = f"📊 **Résumé de votre collection**:\n\n"
+                    response += f"• {len(items)} objets au total\n"
+                    response += f"• Valeur: {analytics.get('total_value', 0):,.0f} CHF\n"
+                    response += f"• Disponibles: {analytics.get('available_count', 0)}\n"
+                    response += f"• En vente: {analytics.get('for_sale_count', 0)}"
+                elif not response:
+                    # Réponse vide
+                    response = "Je suis là pour vous aider avec votre collection. Que souhaitez-vous savoir ?"
+                
+            except Exception as e:
+                # Fallback ultime
+                logger.error(f"Erreur AI critique: {e}")
+                response = f"📦 Votre collection contient {len(items)} objets. Comment puis-je vous aider ?"
+            
             # Persister l'échange (best-effort)
             try:
                 conversation_memory.add_message(session_id, 'user', query)
