@@ -99,3 +99,5 @@ Le chatbot est maintenant :
 ---
 *Fix appliqué le 16/09/2025*
 *Version : Production-Ready*
+
+

@@ -139,3 +139,5 @@ Les deux chatbots (Collection et Markets) sont maintenant **100% stables et opti
 ---
 *Fix appliqué le 16/09/2025*
 *Version : Production-Ready*
+
+
