@@ -5327,11 +5327,11 @@ def chatbot():
         # ===== RÉPONSES ULTRA-RAPIDES pour questions simples =====
         if len(query) < 60:  # Questions courtes = réponses immédiates
             
-            # Cache pour performance
-            items_cached = smart_cache.get('all_items_quick')
+            # Cache pour performance (utilise le cache 'items' existant avec TTL=60s)
+            items_cached = smart_cache.get('items')
             if items_cached is None:
                 items_cached = AdvancedDataManager.fetch_all_items()
-                smart_cache.set('all_items_quick', items_cached, ttl=30)
+                smart_cache.set('items', items_cached)  # Pas de paramètre ttl !
             
             # Valeur totale
             if 'valeur total' in query_lower or 'combien vaut' in query_lower:
