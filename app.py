@@ -6198,6 +6198,7 @@ def chatbot():
                 # Contexte RAG minimal pour guider le modèle sur VOS données
                 # Inclure un aperçu des 30 voitures pour questions de performance
                 rag_context = ""
+                special_fast = any(w in query.lower() for w in ['voiture', 'auto', 'car']) and any(k in query.lower() for k in ['plus rapide', 'rapide', 'vitesse', '0-100', '0 à 100'])
                 if any(w in query.lower() for w in ['voiture', 'auto', 'car']):
                     try:
                         cars = [it for it in items_limited if str(getattr(it, 'category', '')).lower().startswith('voiture')]
@@ -6252,7 +6253,13 @@ def chatbot():
                         rag_context = ""
 
                 # Construire une question enrichie orientée sur vos données
-                query_simplified = (query if len(query) <= 400 else (query[:400] + '...')) + rag_context
+                if special_fast:
+                    task = ("Tâche: À partir des sections [PERF_VOITURES] (vitesse_kmh, accel_0_100_s, power_hp) et [APERCU_VOITURES], "
+                            "déduis la voiture LA PLUS RAPIDE de la collection. Critères: vitesse max prioritaire; sinon 0-100 le plus bas; sinon puissance la plus élevée. "
+                            "Réponds UNIQUEMENT avec le NOM du modèle exact (une ligne). Si impossible, réponds 'Inconnu'.")
+                    query_simplified = (task + "\nQuestion: " + (query if len(query) <= 200 else (query[:200] + '...')) + rag_context)
+                else:
+                    query_simplified = (query if len(query) <= 400 else (query[:400] + '...')) + rag_context
                 
                 # Timeout avec threading (compatible avec tous les OS)
                 import threading
@@ -6275,12 +6282,19 @@ def chatbot():
                 thread = threading.Thread(target=call_ai)
                 thread.daemon = True
                 thread.start()
-                thread.join(timeout=8.0)  # 8 secondes max
+                thread.join(timeout=15.0)  # 15 secondes max pour laisser le LLM répondre
                 
                 if thread.is_alive():
                     # Timeout dépassé
+                    # Calculer une valeur totale fiable si analytics ne l'a pas
+                    try:
+                        total_val = analytics.get('total_value', 0) or 0
+                        if not total_val:
+                            total_val = sum((getattr(i, 'current_value', 0) or 0) for i in items)
+                    except Exception:
+                        total_val = sum((getattr(i, 'current_value', 0) or 0) for i in items)
                     response = f"⚡ **Réponse rapide** (l'analyse complète prend trop de temps):\n\n"
-                    response += f"📊 Vous avez {len(items)} objets d'une valeur totale de {analytics.get('total_value', 0):,.0f} CHF.\n"
+                    response += f"📊 Vous avez {len(items)} objets d'une valeur totale de {total_val:,.0f} CHF.\n"
                     response += f"💡 Essayez une question plus spécifique pour une réponse détaillée."
                 elif error:
                     # Erreur dans l'appel
