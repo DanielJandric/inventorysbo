@@ -5315,6 +5315,8 @@ def chatbot():
         USE_ASYNC = False  # Celery complètement désactivé
         # LLM d'abord: si ALWAYS_LLM=1 (par défaut), on ignore le chemin ultra-rapide
         ALWAYS_LLM = (os.getenv('ALWAYS_LLM', '1') == '1')
+        # FULL CONTEXT: si FULL_CONTEXT_MODE=1 (par défaut), inclure un snapshot compact de toute la collection
+        FULL_CONTEXT_MODE = (os.getenv('FULL_CONTEXT_MODE', '1') == '1')
         
         # Détection d'intention rapide
         query_lower = query.lower()
@@ -6251,6 +6253,39 @@ def chatbot():
                             rag_context += "\n\n[PERF_VOITURES]\n" + "\n".join(perf_lines)
                     except Exception:
                         rag_context = ""
+
+                # FULL CONTEXT: ajouter un snapshot compact de tous les objets (capé)
+                if FULL_CONTEXT_MODE:
+                    try:
+                        max_lines = 500
+                        snap_lines = []
+                        # Ordonner par catégorie puis valeur descendante
+                        def safe_num(x):
+                            try:
+                                v = getattr(x, 'current_value', 0) or 0
+                                return float(v)
+                            except Exception:
+                                return 0.0
+                        items_sorted = sorted(items_limited, key=lambda it: (str(getattr(it, 'category', 'ZZ')), -safe_num(it)))
+                        for it in items_sorted:
+                            if len(snap_lines) >= max_lines:
+                                break
+                            cat = str(getattr(it, 'category', ''))
+                            name = str(getattr(it, 'name', ''))
+                            status = str(getattr(it, 'status', ''))
+                            year = str(getattr(it, 'construction_year', '') or '')
+                            val = getattr(it, 'current_value', 0) or 0
+                            symbol = str(getattr(it, 'stock_symbol', '') or '')
+                            qty = str(getattr(it, 'stock_quantity', '') or '')
+                            desc = str(getattr(it, 'description', '') or '')
+                            desc = (desc[:80] + '…') if len(desc) > 80 else desc
+                            snap_lines.append(
+                                f"- cat:{cat}|name:{name}|status:{status}|year:{year}|val:{val}|sym:{symbol}|qty:{qty} :: {desc}"
+                            )
+                        if snap_lines:
+                            rag_context += "\n\n[ALL_ITEMS_SNAPSHOT]\n" + "\n".join(snap_lines)
+                    except Exception:
+                        pass
 
                 # Construire une question enrichie orientée sur vos données
                 if special_fast:
