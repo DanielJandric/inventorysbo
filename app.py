@@ -9626,11 +9626,10 @@ def markets_chat():
         def call_worker():
             nonlocal reply, error
             try:
-        reply = worker.generate_reply(user_message, extra_context, history=history)
+                reply = worker.generate_reply(user_message, extra_context, history=history)
             except Exception as e:
                 error = e
         
-        # Indentation verified: call_worker try/except is correct
         # Lancer dans un thread avec timeout de 8 secondes
         thread = threading.Thread(target=call_worker)
         thread.daemon = True
