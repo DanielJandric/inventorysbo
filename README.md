@@ -150,8 +150,10 @@ Application de gestion d'inventaire sophistiquée avec **IA avancée**, **recher
 ### Prérequis
 - **Python 3.11+**
 - **Compte Supabase** (gratuit)
-- **Clé API OpenAI** (GPT-4)
+- **Clé API OpenAI** (GPT-4) **ou** module `ai_engine` fournissant un client compatible
 - **Compte Gmail** (pour notifications)
+
+> ⚠️ Le module `chatbot_manager.py` vérifie explicitement la présence d'un module `ai_engine` ou de la variable d'environnement `OPENAI_API_KEY`. Sans l'une de ces options, les fonctionnalités IA retourneront une erreur indiquant que la configuration est manquante.
 
 ### Installation Locale
 
