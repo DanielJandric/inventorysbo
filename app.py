@@ -9630,6 +9630,7 @@ def markets_chat():
             except Exception as e:
                 error = e
         
+        # Indentation verified: call_worker try/except is correct
         # Lancer dans un thread avec timeout de 8 secondes
         thread = threading.Thread(target=call_worker)
         thread.daemon = True
