@@ -912,6 +912,7 @@ class ScrapingBeeScraper:
                         added += 1
                     except Exception:
                         continue
+                logger.info(f"📰 Google News: ajoutés {added} article(s)")
             except Exception:
                 pass
 
@@ -1013,6 +1014,7 @@ class ScrapingBeeScraper:
                     if it.url not in seen:
                         scraped.append(it)
                         seen.add(it.url)
+                logger.info(f"📰 RSS extra ajoutés: {len(extra_items)} (sources: SNB, ECB, Fed, EIA, Le Temps, Reuters Markets)")
                 # Enrichissement: suivre les liens RSS extra et scraper le texte complet
                 try:
                     enrich_extra = str(os.getenv('EXTRA_RSS_ENRICH', '1')).lower() in ('1', 'true', 'yes', 'on')
