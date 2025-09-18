@@ -890,19 +890,89 @@ class ScrapingBeeScraper:
                     if added >= per_site:
                         break
                     try:
-                        details = await self._scrape_page_with_metadata(it['url'])
+                        # Résoudre la redirection vers l’éditeur final
+                        target_url = it['url']
+                        try:
+                            async with aiohttp.ClientSession() as session:
+                                async with session.get(target_url, allow_redirects=True, timeout=15) as resp:
+                                    target_url = str(resp.url)
+                        except Exception:
+                            pass
+                        details = await self._scrape_page_with_metadata(target_url)
                         if not details or not details.get('text'):
                             continue
-                        # Timestamp filtré via published_at si dispo
                         published_at = details.get('published_at') or datetime.now()
                         scraped.append(ScrapedData(
-                            url=it['url'],
-                            title=(it.get('title') or it['url'])[:120],
+                            url=target_url,
+                            title=(it.get('title') or target_url)[:120],
                             content=(details.get('text') or '')[:8000],
                             timestamp=published_at,
                             metadata={'source': 'google_news', 'scraped_at': datetime.now().isoformat()}
                         ))
                         added += 1
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+
+            # Étape 1c: Ajout explicite de sources institutionnelles (<24h) si besoin
+            try:
+                seed_sites = [
+                    # Suisse
+                    'https://www.snb.ch/', 'https://www.seco.admin.ch/', 'https://www.bfs.admin.ch/',
+                    'https://kof.ethz.ch/', 'https://www.bwo.admin.ch/', 'https://www.procure.ch/pmi-index/',
+                    'https://www.rts.ch/info/economie/', 'https://www.letemps.ch/economie', 'https://www.nzz.ch/wirtschaft/',
+                    # Europe
+                    'https://www.ecb.europa.eu/', 'https://ec.europa.eu/eurostat/', 'https://www.ifo.de/en/ifo-business-climate-index', 'https://www.zew.de/en/',
+                    # US
+                    'https://www.federalreserve.gov/', 'https://www.ismworld.org/', 'https://www.conference-board.org/',
+                    # Asie
+                    'http://www.stats.gov.cn/english/', 'https://www.caixinglobal.com/', 'https://www.scmp.com/economy',
+                    'http://www.pbc.gov.cn/', 'https://www.boj.or.jp/en/', 'https://www.e-stat.go.jp/en', 'https://www.moea.gov.tw/', 'http://www.customs.go.kr/',
+                    # Marchés/News
+                    'https://www.reuters.com/markets/', 'https://www.bloomberg.com/markets', 'https://www.ft.com/markets',
+                    'https://www.cnbc.com/markets/', 'https://www.cnbc.com/economy/', 'https://www.cnbc.com/world/', 'https://www.cnbc.com/politics/',
+                    'https://www.marketwatch.com/markets', 'https://www.marketwatch.com/economy-politics', 'https://edition.cnn.com/business',
+                    # Énergie / Commodities
+                    'https://www.theice.com/products/27996665/Dutch-TTF-Gas-Futures', 'https://www.theice.com/products/197/EUA-Futures',
+                    'https://www.eex.com/en/market-data', 'https://www.nordpoolgroup.com/market-data/', 'https://www.eia.gov/', 'https://www.opec.org/opec_web/en/press_room/press_room.htm',
+                    # Indices/Prix
+                    'https://finance.yahoo.com/', 'https://www.tradingview.com/',
+                    # Immobilier Suisse
+                    'https://www.wuestpartner.com/', 'https://www.ubs.com/'
+                ]
+                # Crawl léger (page d’accueil/section) pour extraire des liens d’articles récents
+                for site in seed_sites:
+                    try:
+                        html_index = await self._scrape_with_params(site, {
+                            'render_js': 'false', 'premium_proxy': 'true', 'block_resources': 'true', 'wait': '1200'
+                        })
+                        if not html_index:
+                            continue
+                        from bs4 import BeautifulSoup
+                        soup = BeautifulSoup(html_index or '', 'lxml')
+                        links = []
+                        for a in soup.find_all('a', href=True):
+                            href = a['href']
+                            if href.startswith('/'):
+                                href = f"{site.rstrip('/')}{href}"
+                            if href.startswith('http') and href not in links:
+                                links.append(href)
+                        # Scraper quelques liens par site
+                        take = 3
+                        for url in links[:take]:
+                            try:
+                                details = await self._scrape_page_with_metadata(url)
+                                if details and details.get('text'):
+                                    scraped.append(ScrapedData(
+                                        url=url,
+                                        title=a.get_text()[:120] if a else url[:120],
+                                        content=(details.get('text') or '')[:8000],
+                                        timestamp=details.get('published_at') or datetime.now(),
+                                        metadata={'source': 'seed_site', 'scraped_at': datetime.now().isoformat()}
+                                    ))
+                            except Exception:
+                                continue
                     except Exception:
                         continue
             except Exception:
@@ -1156,6 +1226,12 @@ class ScrapingBeeScraper:
                 'country_code': country,
                 'wait': '2000' if needs_js else '1200'
             }
+            # Google domains require custom_google=true (charged) per ScrapingBee
+            try:
+                if 'news.google.com' in u or (u.startswith('https://www.google.') or '://www.google.' in u):
+                    params['custom_google'] = 'true'
+            except Exception:
+                pass
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout_secs)) as session:
                 async with session.get(self.base_url, params=params) as response:
                     if response.status != 200:
