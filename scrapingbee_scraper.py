@@ -1644,6 +1644,26 @@ class ScrapingBeeScraper:
                         "schema": {
                             "type": "object",
                             "properties": {
+                                "market_pulse": {
+                                    "type": "object",
+                                    "properties": {
+                                        "main_title": {"type": "string", "maxLength": 100},
+                                        "subtitle": {"type": "string", "maxLength": 150},
+                                        "verdict_trinity": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "string"}},
+                                        "key_metric": {
+                                            "type": "object",
+                                            "properties": {
+                                                "name": {"type": "string"},
+                                                "value": {"type": "string"},
+                                                "change": {"type": "string"},
+                                                "significance": {"type": "string"}
+                                            }
+                                        },
+                                        "market_mood": {"type": "string", "enum": ["PANIC", "FEAR", "UNCERTAIN", "NEUTRAL", "OPTIMISTIC", "EUPHORIC"]},
+                                        "reading_priority": {"type": "string", "enum": ["FLASH_READ", "IMPORTANT", "ROUTINE"]}
+                                    },
+                                    "required": ["main_title", "subtitle", "verdict_trinity", "key_metric", "market_mood"]
+                                },
                                 "executive_summary": {"type": "array", "items": {"type": "string"}},
                                 "summary": {"type": "string"},
                                 "key_points": {"type": "array", "items": {"type": "string"}},

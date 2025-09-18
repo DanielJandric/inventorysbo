@@ -548,8 +548,17 @@ class MarketAnalysisWorker:
         market_snapshot = {} if is_swiss else stock_api_manager.get_market_snapshot()
         atype = (getattr(analysis, 'analysis_type', '') or '').strip().lower()
         is_global = atype in { 'global_market_update', 'global', 'gmu' }
+        # Market pulse (headline) support
+        market_pulse = {}
+        try:
+            market_pulse = (structured_data.get('market_pulse') or result.get('market_pulse') or {}) if isinstance(result, dict) else {}
+            if not isinstance(market_pulse, dict):
+                market_pulse = {}
+        except Exception:
+            market_pulse = {}
+        # Title prioritizes market_pulse when present
         header_title = (
-            "Swiss Market Update" if is_swiss else ("🌐 GLOBAL MARKET UPDATE" if is_global else "📊 RAPPORT D'ANALYSE DE MARCHÉ")
+            market_pulse.get('main_title') or ("Swiss Market Update" if is_swiss else ("🌐 GLOBAL MARKET UPDATE" if is_global else "📊 RAPPORT D'ANALYSE DE MARCHÉ"))
         )
         header_style = (
             "background-color:#b91c1c;background:linear-gradient(135deg,#7f1d1d 0%,#dc2626 60%,#ef4444 100%);" if is_swiss else
@@ -870,6 +879,9 @@ class MarketAnalysisWorker:
             <div class="container">
                 <div class="header" style="{header_style}color:#ffffff;padding:24px 16px;text-align:center;">
                     <h1 style="margin:0;font-size:22px;letter-spacing:1px;text-transform:uppercase;font-weight:800;color:#ffffff;">{header_title}</h1>
+                    {('' if not market_pulse.get('subtitle') else f'<div style="margin-top:8px;font-size:14px;color:rgba(255,255,255,0.95);font-weight:600;">{html.escape(str(market_pulse.get("subtitle"))[:180])}</div>')}
+                    {('' if not market_pulse.get('verdict_trinity') else '<div style="margin-top:10px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">' + chr(10).join([f'<span style="background:rgba(0,0,0,0.25);padding:6px 10px;border-radius:999px;font-size:12px;font-weight:700;">{html.escape(str(v))}</span>' for v in (market_pulse.get('verdict_trinity') or [])]) + '</div>')}
+                    {('' if not market_pulse.get('key_metric') else f'<div style="margin-top:8px;font-size:13px;color:rgba(255,255,255,0.9);">{html.escape(str((market_pulse.get("key_metric") or {}).get("name", "")))}: <strong>{html.escape(str((market_pulse.get("key_metric") or {}).get("value", "")))}</strong> ({html.escape(str((market_pulse.get("key_metric") or {}).get("change", "")))}) — {html.escape(str((market_pulse.get("key_metric") or {}).get("significance", "")))}</div>')}
                     <div class="date" style="margin-top:6px;font-size:13px;font-weight:500;color:rgba(255,255,255,0.92);">Généré le {ts_str}</div>
                 </div>
                 

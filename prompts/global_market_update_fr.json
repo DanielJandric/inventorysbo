@@ -107,6 +107,7 @@
     "type": "object",
     "additionalProperties": false,
     "required": [
+      "market_pulse",
       "meta_analysis",
       "executive_summary",
       "summary",
@@ -122,6 +123,27 @@
       "metadata"
     ],
     "properties": {
+      "market_pulse": {
+        "type": "object",
+        "required": ["main_title", "subtitle", "verdict_trinity", "key_metric", "market_mood"],
+        "description": "Synthèse instantanée de l'état du marché en une vue",
+        "properties": {
+          "main_title": {"type": "string", "maxLength": 100, "description": "Titre percutant capturant l'événement dominant (style FT/Bloomberg)"},
+          "subtitle": {"type": "string", "maxLength": 150, "description": "Contexte explicatif et implications directes"},
+          "verdict_trinity": {"type": "array", "items": {"type": "string"}, "minItems": 3, "maxItems": 3, "description": "3 actions immédiates en UN mot chacune"},
+          "key_metric": {
+            "type": "object",
+            "properties": {
+              "name": {"type": "string"},
+              "value": {"type": "string"},
+              "change": {"type": "string"},
+              "significance": {"type": "string"}
+            }
+          },
+          "market_mood": {"type": "string", "enum": ["PANIC", "FEAR", "UNCERTAIN", "NEUTRAL", "OPTIMISTIC", "EUPHORIC"]},
+          "reading_priority": {"type": "string", "enum": ["FLASH_READ", "IMPORTANT", "ROUTINE"], "description": "FLASH=arrêtez tout, IMPORTANT=à lire sous 2h, ROUTINE=mise à jour normale"}
+        }
+      },
       "meta_analysis": {
         "type": "object",
         "required": ["regime_detection", "key_drivers", "mode_context"],
