@@ -915,94 +915,92 @@ class ScrapingBeeScraper:
             except Exception:
                 pass
 
-            # Étape 1c (optionnelle): RSS supplémentaires confirmés (flag USE_EXTRA_RSS=1)
+            # Étape 1c: RSS supplémentaires confirmés (activés par défaut)
             try:
-                use_extra_rss = str(os.getenv('USE_EXTRA_RSS', '0')).strip().lower() in ('1', 'true', 'yes')
-                if use_extra_rss:
-                    async def _fetch_generic_rss(feeds: List[str], source_name: str, max_items: int) -> List[ScrapedData]:
-                        items: List[ScrapedData] = []
-                        try:
-                            import xml.etree.ElementTree as ET
-                        except Exception:
-                            return items
-                        headers = {
-                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119 Safari/537.36'
-                        }
-                        async with aiohttp.ClientSession(headers=headers) as session:
-                            for f in feeds:
-                                text = None
+                async def _fetch_generic_rss(feeds: List[str], source_name: str, max_items: int) -> List[ScrapedData]:
+                    items: List[ScrapedData] = []
+                    try:
+                        import xml.etree.ElementTree as ET
+                    except Exception:
+                        return items
+                    headers = {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119 Safari/537.36'
+                    }
+                    async with aiohttp.ClientSession(headers=headers) as session:
+                        for f in feeds:
+                            text = None
+                            try:
+                                async with session.get(f, timeout=15) as resp:
+                                    if resp.status == 200:
+                                        text = await resp.text()
+                            except Exception:
+                                pass
+                            # ScrapingBee fallback
+                            if not text and self.api_key and self.api_key != 'test_key_for_testing':
                                 try:
-                                    async with session.get(f, timeout=15) as resp:
-                                        if resp.status == 200:
-                                            text = await resp.text()
+                                    async with session.get(self.base_url, params={
+                                        'api_key': self.api_key,
+                                        'url': f,
+                                        'render_js': 'false'
+                                    }, timeout=20) as r2:
+                                        if r2.status == 200:
+                                            text = await r2.text()
                                 except Exception:
                                     pass
-                                # ScrapingBee fallback
-                                if not text and self.api_key and self.api_key != 'test_key_for_testing':
-                                    try:
-                                        async with session.get(self.base_url, params={
-                                            'api_key': self.api_key,
-                                            'url': f,
-                                            'render_js': 'false'
-                                        }, timeout=20) as r2:
-                                            if r2.status == 200:
-                                                text = await r2.text()
-                                    except Exception:
-                                        pass
-                                if not text:
-                                    continue
+                            if not text:
+                                continue
+                            try:
+                                root = ET.fromstring(text)
+                            except Exception:
+                                continue
+                            for item in root.findall('.//item'):
                                 try:
-                                    root = ET.fromstring(text)
+                                    link_el = item.find('link')
+                                    title_el = item.find('title')
+                                    desc_el = item.find('description')
+                                    pub_el = item.find('pubDate')
+                                    link = (link_el.text or '').strip() if link_el is not None else ''
+                                    title = (title_el.text or '').strip() if title_el is not None else link[:120]
+                                    desc = (desc_el.text or '').strip() if desc_el is not None else ''
+                                    ts = self._parse_datetime_str(pub_el.text) if pub_el is not None else None
+                                    if not link:
+                                        continue
+                                    items.append(ScrapedData(
+                                        url=link,
+                                        title=title[:120],
+                                        content=desc[:4000] if desc else title[:200],
+                                        timestamp=ts or datetime.now(),
+                                        metadata={'source': source_name, 'from': 'rss'}
+                                    ))
+                                    if len(items) >= max_items:
+                                        break
                                 except Exception:
                                     continue
-                                for item in root.findall('.//item'):
-                                    try:
-                                        link_el = item.find('link')
-                                        title_el = item.find('title')
-                                        desc_el = item.find('description')
-                                        pub_el = item.find('pubDate')
-                                        link = (link_el.text or '').strip() if link_el is not None else ''
-                                        title = (title_el.text or '').strip() if title_el is not None else link[:120]
-                                        desc = (desc_el.text or '').strip() if desc_el is not None else ''
-                                        ts = self._parse_datetime_str(pub_el.text) if pub_el is not None else None
-                                        if not link:
-                                            continue
-                                        items.append(ScrapedData(
-                                            url=link,
-                                            title=title[:120],
-                                            content=desc[:4000] if desc else title[:200],
-                                            timestamp=ts or datetime.now(),
-                                            metadata={'source': source_name, 'from': 'rss'}
-                                        ))
-                                        if len(items) >= max_items:
-                                            break
-                                    except Exception:
-                                        continue
-                                if len(items) >= max_items:
-                                    break
-                        return items
+                            if len(items) >= max_items:
+                                break
+                    return items
 
-                    extra_feeds = [
-                        # Suisse
-                        'https://www.snb.ch/public/fr/rss/news',
-                        # Europe
-                        'https://www.ecb.europa.eu/rss/',
-                        # US
-                        'https://www.federalreserve.gov/feeds/',
-                        # Énergie
-                        'https://www.eia.gov/rss/todayinenergy.xml',
-                        # Presse
-                        'https://www.letemps.ch/articles.rss',
-                        # Marchés
-                        'https://feeds.reuters.com/reuters/marketsNews'
-                    ]
-                    extra_items = await _fetch_generic_rss(extra_feeds, 'extra_rss', max_items=per_site)
-                    # Déduplication par URL
-                    seen = set(x.url for x in scraped)
-                    for it in extra_items:
-                        if it.url not in seen:
-                            scraped.append(it)
-                            seen.add(it.url)
+                extra_feeds = [
+                    # Suisse
+                    'https://www.snb.ch/public/fr/rss/news',
+                    # Europe (si ce flux n'est pas XML, il sera ignoré)
+                    'https://www.ecb.europa.eu/rss/',
+                    # US
+                    'https://www.federalreserve.gov/feeds/',
+                    # Énergie
+                    'https://www.eia.gov/rss/todayinenergy.xml',
+                    # Presse
+                    'https://www.letemps.ch/articles.rss',
+                    # Marchés
+                    'https://feeds.reuters.com/reuters/marketsNews'
+                ]
+                extra_items = await _fetch_generic_rss(extra_feeds, 'extra_rss', max_items=per_site)
+                # Déduplication par URL
+                seen = set(x.url for x in scraped)
+                for it in extra_items:
+                    if it.url not in seen:
+                        scraped.append(it)
+                        seen.add(it.url)
             except Exception:
                 pass
 
