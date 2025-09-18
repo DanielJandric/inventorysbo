@@ -927,16 +927,17 @@ class ScrapingBeeScraper:
                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119 Safari/537.36'
                     }
                     async with aiohttp.ClientSession(headers=headers) as session:
-                            for f in feeds:
-                                text = None
-                                try:
-                                    async with session.get(f, timeout=15) as resp:
-                                        if resp.status == 200:
-                                            text = await resp.text()
-                                        else:
-                                            logger.warning(f"⚠️ RSS fetch failed ({resp.status}): {f}")
-                                except Exception as e:
-                                    logger.warning(f"⚠️ RSS fetch error: {f} ({e})")
+                        for f in feeds:
+                            text = None
+                            try:
+                                async with session.get(f, timeout=15) as resp:
+                                    if resp.status == 200:
+                                        text = await resp.text()
+                                    else:
+                                        logger.warning(f"⚠️ RSS fetch failed ({resp.status}): {f}")
+                            except Exception as e:
+                                logger.warning(f"⚠️ RSS fetch error: {f} ({e})")
+
                             # ScrapingBee fallback
                             if not text and self.api_key and self.api_key != 'test_key_for_testing':
                                 try:
@@ -951,14 +952,17 @@ class ScrapingBeeScraper:
                                             logger.warning(f"⚠️ RSS SBee failed ({r2.status}): {f}")
                                 except Exception as e:
                                     logger.warning(f"⚠️ RSS SBee error: {f} ({e})")
-                                if not text:
-                                    logger.warning(f"⚠️ RSS ignored (no content): {f}")
-                                    continue
-                                try:
-                                    root = ET.fromstring(text)
-                                except Exception as e:
-                                    logger.warning(f"⚠️ RSS parse error: {f} ({e})")
-                                    continue
+
+                            if not text:
+                                logger.warning(f"⚠️ RSS ignored (no content): {f}")
+                                continue
+
+                            try:
+                                root = ET.fromstring(text)
+                            except Exception as e:
+                                logger.warning(f"⚠️ RSS parse error: {f} ({e})")
+                                continue
+
                             for item in root.findall('.//item'):
                                 try:
                                     link_el = item.find('link')
@@ -982,8 +986,10 @@ class ScrapingBeeScraper:
                                         break
                                 except Exception:
                                     continue
+
                             if len(items) >= max_items:
                                 break
+
                     return items
 
                 extra_feeds = [
