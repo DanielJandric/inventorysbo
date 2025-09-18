@@ -402,6 +402,35 @@ class MarketAnalysisWorker:
 
             result = _ensure_structured_data_mirror(result)
 
+            # Déterminer un confidence_score robuste (fallback depuis meta_analysis.regime_detection.confidence)
+            def _derive_confidence_score(obj: dict) -> float:
+                try:
+                    raw = obj.get('confidence_score')
+                    if raw is not None:
+                        try:
+                            val = float(raw)
+                            if 0.0 <= val <= 1.0:
+                                return val
+                        except Exception:
+                            pass
+                    # Fallback via structured_data.meta_analysis.regime_detection.confidence
+                    try:
+                        meta = obj.get('structured_data') or {}
+                        rd = (meta.get('meta_analysis') or {}).get('regime_detection') or {}
+                        mconf = rd.get('confidence')
+                        if mconf is not None:
+                            val2 = float(mconf)
+                            if 0.0 <= val2 <= 1.0:
+                                return val2
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
+                # Valeur prudente par défaut
+                return 0.6
+
+            final_conf = _derive_confidence_score(result)
+
             update_data = {
                 'executive_summary': exec_summary,
                 'summary': summary_text,
@@ -413,7 +442,7 @@ class MarketAnalysisWorker:
                 'risks': risks,
                 'opportunities': opportunities,
                 'sources': sources,
-                'confidence_score': result.get('confidence_score', 0.0),
+                'confidence_score': final_conf,
                 'worker_status': 'completed',
                 'processing_time_seconds': processing_time
             }

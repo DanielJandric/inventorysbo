@@ -1674,9 +1674,9 @@ class ScrapingBeeScraper:
                                 "risks": {"type": "array", "minItems": 3, "items": {"type": "string"}},
                                 "opportunities": {"type": "array", "minItems": 3, "items": {"type": "string"}},
                                 "sources": {"type": "array"},
-                                "confidence_score": {"type": "number"}
+                                "confidence_score": {"type": "number", "minimum": 0, "maximum": 1}
                             },
-                            "required": ["executive_summary", "summary", "key_points", "insights", "risks", "opportunities"],
+                            "required": ["executive_summary", "summary", "key_points", "insights", "risks", "opportunities", "confidence_score"],
                             "additionalProperties": True
                         }
                     }
