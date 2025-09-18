@@ -805,6 +805,146 @@ class ScrapingBeeScraper:
             logger.error(f"❌ Erreur execute_swiss_market_update: {e}")
             return { 'error': str(e) }
 
+    async def execute_global_market_update(self, prompt: str) -> Dict:
+        """Pipeline GLOBAL MARKET UPDATE: <24h news (incl. Google News) → snapshot → LLM JSON."""
+        try:
+            # Paramètres par défaut
+            per_site = int(os.getenv('GLOBAL_PER_SITE', '20'))
+            max_age_hours = int(os.getenv('GLOBAL_MAX_AGE_HOURS', '24'))
+            min_chars = int(os.getenv('LLM_MIN_CONTEXT_CHARS', '30000'))
+
+            # Étape 1: Scrape profond multi-sources (<24h)
+            scraped = await self.search_and_scrape_deep(
+                topic_query='marché global',
+                per_site=per_site,
+                max_age_hours=max_age_hours,
+                min_chars=min_chars
+            )
+
+            # Étape 1b: Google News (FR) – enrichissement liens récents
+            async def _fetch_google_news_links(queries: list, hl: str = 'fr', gl: str = 'CH', ceid: str = 'CH:fr', max_items: int = 20) -> list:
+                import xml.etree.ElementTree as ET
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119 Safari/537.36'
+                }
+                items = []
+                async with aiohttp.ClientSession(headers=headers) as session:
+                    for q in queries:
+                        try:
+                            feed_url = f"https://news.google.com/rss/search?q={quote_plus(q)}&hl={hl}&gl={gl}&ceid={ceid}"
+                            # Essai direct
+                            text = None
+                            try:
+                                async with session.get(feed_url, timeout=10) as resp:
+                                    if resp.status == 200:
+                                        text = await resp.text()
+                            except Exception:
+                                pass
+                            # Fallback via ScrapingBee (sans JS)
+                            if not text and self.api_key and self.api_key != 'test_key_for_testing':
+                                try:
+                                    async with session.get(self.base_url, params={
+                                        'api_key': self.api_key,
+                                        'url': feed_url,
+                                        'render_js': 'false'
+                                    }, timeout=15) as r2:
+                                        if r2.status == 200:
+                                            text = await r2.text()
+                                except Exception:
+                                    pass
+                            if not text:
+                                continue
+                            try:
+                                root = ET.fromstring(text)
+                            except Exception:
+                                continue
+                            for item in root.findall('.//item'):
+                                try:
+                                    link_el = item.find('link')
+                                    title_el = item.find('title')
+                                    pub_el = item.find('pubDate')
+                                    link = (link_el.text or '').strip() if link_el is not None else ''
+                                    title = (title_el.text or '').strip() if title_el is not None else link[:120]
+                                    if not link:
+                                        continue
+                                    items.append({'url': link, 'title': title})
+                                    if len(items) >= max_items:
+                                        break
+                                except Exception:
+                                    continue
+                            if len(items) >= max_items:
+                                break
+                        except Exception:
+                            continue
+                return items
+
+            try:
+                queries = [
+                    'banques centrales', 'inflation', 'PMI', 'PIB', 'chômage',
+                    'EUR/CHF', 'USD/CHF', 'énergie', 'Fed', 'BCE', 'BNS', 'PBoC', 'BoJ'
+                ]
+                gn_links = await _fetch_google_news_links(queries, hl='fr', gl='CH', ceid='CH:fr', max_items=per_site)
+                # Scraper le contenu des liens Google News (limité)
+                added = 0
+                for it in gn_links:
+                    if added >= per_site:
+                        break
+                    try:
+                        details = await self._scrape_page_with_metadata(it['url'])
+                        if not details or not details.get('text'):
+                            continue
+                        # Timestamp filtré via published_at si dispo
+                        published_at = details.get('published_at') or datetime.now()
+                        scraped.append(ScrapedData(
+                            url=it['url'],
+                            title=(it.get('title') or it['url'])[:120],
+                            content=(details.get('text') or '')[:8000],
+                            timestamp=published_at,
+                            metadata={'source': 'google_news', 'scraped_at': datetime.now().isoformat()}
+                        ))
+                        added += 1
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+
+            if not scraped:
+                return {'error': "Aucune donnée récente trouvée (<24h)"}
+
+            # Étape 2: Snapshot de marché quasi temps réel
+            from stock_api_manager import stock_api_manager
+            market_snapshot = stock_api_manager.get_market_snapshot()
+
+            # Étape 3: Appel LLM avec tokens étendus (45k) et reasoning 'high'
+            result = await self.process_with_llm_custom(
+                prompt=prompt,
+                scraped_data=scraped,
+                market_snapshot=market_snapshot,
+                max_tokens=int(os.getenv('GLOBAL_MAX_OUTPUT_TOKENS', '45000')),
+                reasoning_effort=os.getenv('GLOBAL_REASONING_EFFORT', 'high')
+            )
+            return result
+        except Exception as e:
+            logger.error(f"❌ Erreur execute_global_market_update: {e}")
+            return { 'error': str(e) }
+
+    async def process_with_llm_custom(self, prompt: str, scraped_data: List[ScrapedData], market_snapshot: Dict, max_tokens: int = 45000, reasoning_effort: str = 'high') -> Dict:
+        """Wrapper pour forcer max tokens et reasoning sans impacter les autres flux."""
+        prev_tokens = os.getenv('LLM_MAX_OUTPUT_TOKENS')
+        prev_reason = os.getenv('AI_REASONING_EFFORT')
+        try:
+            os.environ['LLM_MAX_OUTPUT_TOKENS'] = str(max_tokens)
+            os.environ['AI_REASONING_EFFORT'] = str(reasoning_effort)
+            return await self.process_with_llm(prompt, scraped_data, market_snapshot)
+        finally:
+            if prev_tokens is not None:
+                os.environ['LLM_MAX_OUTPUT_TOKENS'] = prev_tokens
+            else:
+                os.environ.pop('LLM_MAX_OUTPUT_TOKENS', None)
+            if prev_reason is not None:
+                os.environ['AI_REASONING_EFFORT'] = prev_reason
+            else:
+                os.environ.pop('AI_REASONING_EFFORT', None)
     # search_x_recent retiré (X.com désactivé)
     
     async def _search_google(self, query: str, num_results: int = 5) -> List[Dict]:

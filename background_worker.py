@@ -134,9 +134,10 @@ class MarketAnalysisWorker:
             logger.info(f"🔄 Mise à jour du statut de la tâche #{task_id} à 'processing'...")
             self.db.update_analysis_status(task_id, 'processing')
 
-            # 2. Préparer et exécuter l'analyse ScrapingBee (branche Suisse vs général)
+            # 2. Préparer et exécuter l'analyse ScrapingBee (branche Suisse vs global vs général)
             prompt = task.prompt or DEFAULT_PROMPT
             is_swiss = str(task.analysis_type or '').strip().lower() in { 'swiss', 'ch', 'swiss_market', 'suisse' }
+            is_global = str(task.analysis_type or '').strip().lower() in { 'global_market_update', 'global', 'gmu' }
             if is_swiss:
                 # Charger prompt strict depuis fichier si non fourni
                 if not task.prompt:
@@ -154,6 +155,23 @@ class MarketAnalysisWorker:
                 except Exception as e_swiss:
                     logger.error(f"❌ Erreur pipeline Suisse: {e_swiss}")
                     result = { 'error': str(e_swiss) }
+            elif is_global:
+                # Charger le prompt GLOBAL MARKET UPDATE si non fourni
+                if not task.prompt:
+                    try:
+                        import os
+                        base_dir = os.path.dirname(__file__)
+                        prompt_path = os.path.join(base_dir, 'prompts', 'global_market_update_fr.json')
+                        with open(prompt_path, 'r', encoding='utf-8') as pf:
+                            prompt = pf.read()
+                    except Exception as _:
+                        prompt = DEFAULT_PROMPT
+                logger.info("🌐 Exécution pipeline GLOBAL (ScrapingBee <24h + Google News → snapshot → LLM JSON)")
+                try:
+                    result = await self.scraper.execute_global_market_update(prompt)
+                except Exception as e_global:
+                    logger.error(f"❌ Erreur pipeline GLOBAL: {e_global}")
+                    result = { 'error': str(e_global) }
             else:
                 logger.info(f"🕷️ Création de la tâche ScrapingBee avec prompt: {prompt[:100]}...")
                 scraper_task_id = await self.scraper.create_scraping_task(prompt, MAX_SCRAPING_PAGES)
@@ -466,7 +484,17 @@ class MarketAnalysisWorker:
                 ts_str = now_local.strftime('%d/%m/%Y %H:%M %Z')
             except Exception:
                 ts_str = datetime.utcnow().strftime('%d/%m/%Y %H:%M UTC')
-            msg['Subject'] = f"[BONVIN] Rapport d'Analyse de Marché - {ts_str}"
+            # Style de sujet dynamique pour GLOBAL MARKET UPDATE
+            subject_prefix = "[BONVIN] Rapport d'Analyse de Marché"
+            try:
+                atype = (analysis.analysis_type or '').strip().lower()
+                if atype in {'global_market_update', 'global', 'gmu'}:
+                    subject_prefix = "[BONVIN] GLOBAL MARKET UPDATE"
+                elif atype in {'swiss', 'suisse', 'ch', 'swiss_market'}:
+                    subject_prefix = "[BONVIN] Swiss Market Update"
+            except Exception:
+                pass
+            msg['Subject'] = f"{subject_prefix} - {ts_str}"
             
             # Préparer les parties MIME
             # 1) Texte brut minimal (fallback)
@@ -518,11 +546,15 @@ class MarketAnalysisWorker:
         analysis_type = (getattr(analysis, 'analysis_type', '') or '').strip().lower()
         is_swiss = analysis_type in { 'swiss', 'suisse', 'ch', 'swiss_market' }
         market_snapshot = {} if is_swiss else stock_api_manager.get_market_snapshot()
-        header_title = "Swiss Market Update" if is_swiss else "📊 RAPPORT D'ANALYSE DE MARCHÉ"
+        atype = (getattr(analysis, 'analysis_type', '') or '').strip().lower()
+        is_global = atype in { 'global_market_update', 'global', 'gmu' }
+        header_title = (
+            "Swiss Market Update" if is_swiss else ("🌐 GLOBAL MARKET UPDATE" if is_global else "📊 RAPPORT D'ANALYSE DE MARCHÉ")
+        )
         header_style = (
-            "background-color:#b91c1c;background:linear-gradient(135deg,#7f1d1d 0%,#dc2626 60%,#ef4444 100%);"
-            if is_swiss else
-            "background-color:#1e3a8a;background:linear-gradient(135deg,#0f172a 0%,#1d4ed8 40%,#60a5fa 100%);"
+            "background-color:#b91c1c;background:linear-gradient(135deg,#7f1d1d 0%,#dc2626 60%,#ef4444 100%);" if is_swiss else
+            ("background-color:#0f766e;background:linear-gradient(135deg,#042f2e 0%,#0d9488 40%,#5eead4 100%);" if is_global else
+             "background-color:#1e3a8a;background:linear-gradient(135deg,#0f172a 0%,#1d4ed8 40%,#60a5fa 100%);")
         )
         # Timestamp local pour affichage
         try:

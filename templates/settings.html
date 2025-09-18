@@ -106,12 +106,16 @@
                         <button id="trigger-market-update" class="w-full bg-bonvin-gold hover:bg-yellow-600 text-black font-semibold py-3 px-4 rounded-lg transition-colors">
                             🚀 Générer Update Marchés (Web Scraping)
                         </button>
+                        <button id="trigger-global-update" class="w-full bg-teal-500 hover:bg-teal-600 text-white font-semibold py-3 px-4 rounded-lg transition-colors">
+                            🌐 Générer GLOBAL MARKET UPDATE
+                        </button>
                         <button id="trigger-swiss-update" class="w-full bg-red-500 hover:bg-red-600 text-white font-semibold py-3 px-4 rounded-lg transition-colors">
                             🇨🇭 Générer Update Marchés Suisse
                         </button>
                     </div>
                     
                     <div id="trigger-status" class="mt-3 text-sm text-gray-300"></div>
+                    <div id="trigger-status-global" class="mt-2 text-sm text-gray-300"></div>
                     <div id="trigger-status-swiss" class="mt-2 text-sm text-gray-300"></div>
                 </div>
 
@@ -775,6 +779,34 @@
             } finally {
                 button.disabled = false;
                 button.textContent = '🚀 Générer Update Marchés (Web Scraping)';
+            }
+        });
+
+        // Manual Trigger GLOBAL MARKET UPDATE
+        document.getElementById('trigger-global-update').addEventListener('click', async function() {
+            const button = this;
+            const statusDiv = document.getElementById('trigger-status-global');
+            button.disabled = true;
+            button.textContent = '🔄 Génération GLOBAL en cours...';
+            statusDiv.textContent = 'Planification du GLOBAL MARKET UPDATE...';
+            try {
+                const response = await fetch('/api/market-analysis/global/trigger', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ force: true })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    statusDiv.innerHTML = '<span class="text-green-400">✅ GLOBAL MARKET UPDATE planifié</span>';
+                    await loadRecentUpdates();
+                } else {
+                    statusDiv.innerHTML = `<span class="text-red-400">❌ Erreur: ${data.error || 'Échec serveur'}</span>`;
+                }
+            } catch (error) {
+                statusDiv.innerHTML = '<span class="text-red-400">❌ Erreur de connexion</span>';
+            } finally {
+                button.disabled = false;
+                button.textContent = '🌐 Générer GLOBAL MARKET UPDATE';
             }
         });
 
