@@ -945,12 +945,12 @@ class ScrapingBeeScraper:
                                         'url': f,
                                         'render_js': 'false'
                                     }, timeout=20) as r2:
-                                            if r2.status == 200:
-                                                text = await r2.text()
-                                            else:
-                                                logger.warning(f"⚠️ RSS SBee failed ({r2.status}): {f}")
-                                    except Exception as e:
-                                        logger.warning(f"⚠️ RSS SBee error: {f} ({e})")
+                                        if r2.status == 200:
+                                            text = await r2.text()
+                                        else:
+                                            logger.warning(f"⚠️ RSS SBee failed ({r2.status}): {f}")
+                                except Exception as e:
+                                    logger.warning(f"⚠️ RSS SBee error: {f} ({e})")
                                 if not text:
                                     logger.warning(f"⚠️ RSS ignored (no content): {f}")
                                     continue
@@ -1007,6 +1007,34 @@ class ScrapingBeeScraper:
                     if it.url not in seen:
                         scraped.append(it)
                         seen.add(it.url)
+                # Enrichissement: suivre les liens RSS extra et scraper le texte complet
+                try:
+                    enrich_extra = str(os.getenv('EXTRA_RSS_ENRICH', '1')).lower() in ('1', 'true', 'yes', 'on')
+                except Exception:
+                    enrich_extra = True
+                if enrich_extra:
+                    max_enrich = max(1, min(per_site, len(scraped)))
+                    enriched = 0
+                    logger.info(f"📰 Enrichissement des flux RSS extra (max {max_enrich})…")
+                    for idx, it in enumerate(list(scraped)):
+                        if enriched >= max_enrich:
+                            break
+                        try:
+                            if isinstance(it.metadata, dict) and it.metadata.get('source') == 'extra_rss':
+                                details = await self._scrape_page_with_metadata(it.url)
+                                if details and details.get('text'):
+                                    published_at = details.get('published_at') or it.timestamp
+                                    scraped[idx] = ScrapedData(
+                                        url=it.url,
+                                        title=it.title,
+                                        content=(details.get('text') or '')[:8000],
+                                        timestamp=published_at,
+                                        metadata={**it.metadata, 'enriched': '1'}
+                                    )
+                                    enriched += 1
+                        except Exception as e:
+                            logger.warning(f"⚠️ Enrichissement RSS extra échoué: {it.url} ({e})")
+                    logger.info(f"📰 Enrichissement terminé: {enriched} article(s) enrichi(s)")
             except Exception:
                 pass
 
@@ -1894,6 +1922,11 @@ class ScrapingBeeScraper:
                     parsed = _ensure_structured_data_mirror(parsed)
 
                     result = parsed
+                    try:
+                        if isinstance(result.get('sources'), list) and len(result['sources']) == 0:
+                            logger.warning("⚠️ LLM a retourné 0 source dans le rapport")
+                    except Exception:
+                        pass
                     logger.info(f"✅ OpenAI a retourné une réponse complète (exec={len(result.get('executive_summary', []))}, key={len(result.get('key_points', []))}, summary_len={len(result.get('summary',''))})")
                     return result
                     
