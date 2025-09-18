@@ -1159,7 +1159,16 @@ class ScrapingBeeScraper:
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout_secs)) as session:
                 async with session.get(self.base_url, params=params) as response:
                     if response.status != 200:
+                        # Log détaillé pour diagnostiquer les 4xx/5xx
+                        try:
+                            response_text = await response.text()
+                        except Exception:
+                            response_text = ''
                         logger.error(f"❌ Erreur ScrapingBee scraping: {response.status}")
+                        logger.error(f"URL: {url}")
+                        logger.error(f"Params: {params}")
+                        if response_text:
+                            logger.error(f"Réponse de ScrapingBee: {response_text}")
                         return None
                     html_content = await response.text()
                     cleaned_content = self._extract_text_from_html(html_content)
