@@ -33,6 +33,11 @@ summary : ≥ 4000 caractères (texte continu, structuré).
 
 key_points : ≥ 12 points à haut signal.
 
+FORMAT EXECUTIVE SUMMARY (obligatoire)
+- Chaque puce DOIT commencer par un tag région normalisé entre crochets, p.ex.:
+  [Suisse], [Europe], [États-Unis], [Asie], [Global], [Énergie], [FX], [Taux], [Commodities]
+- Exemple: "[Europe] BCE: ton neutre, core inflation en décélération → duration favorisée"
+
 Auto‑validation avant envoi :
 
 Le premier caractère doit être { et le dernier }.

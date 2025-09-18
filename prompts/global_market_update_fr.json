@@ -62,6 +62,12 @@
     "deep_analysis_narrative": "≥ 3500 caractères en mode COMPLETE (optionnel en STANDARD)",
     "key_points": "≥ 12 points en COMPLETE, ≥ 6 en STANDARD"
   },
+  "format_executive_summary": {
+    "tags_regional_obligatoires": [
+      "[Suisse]", "[Europe]", "[États-Unis]", "[Asie]", "[Global]", "[Énergie]", "[FX]", "[Taux]", "[Commodities]"
+    ],
+    "règle": "Chaque puce DOIT commencer par un tag région ou thème entre crochets. Exemple: [Europe] BCE: ton neutre, core inflation en décélération → duration favorisée"
+  },
   "priorites": "Couvrir systématiquement: Suisse/Europe (SNB, SECO, OFS/BFS, KOF, PMI procure.ch/UBS, BCE, Eurostat, Ifo, énergie UE), États-Unis (Fed, BLS CPI/PPI, PCE, NFP/chômage, ventes au détail, ISM/PMI, BEA GDP/GDPNow), Asie (Chine: NBS/Caixin PMI, PBoC, commerce extérieur, inflation; Japon: BoJ, Tankan, inflation; Corée/Taïwan: export tech/semis). Relier chaque constat à des implications C-suite (budget, pricing, capex, organisation, risques réglementaires/énergie/FX).",
   "cadre_analytique": "Architecture C-suite: (1) Court terme: décisions monétaires, chocs de politique/énergie/commerce; (2) Moyen terme: tendances conjoncturelles et transmission via consommation, investissement, emploi, commerce, crédit, énergie; (3) Long terme: productivité, démographie, transition (énergie/numérique), IA/automatisation. Toujours expliciter: catalyseur → effets de 2e ordre → chaînes de transmission → indicateurs avancés/retardés → conditions de rupture de régime.",
   "style": "Clair, pédagogique, orienté direction générale. Mettre en gras les notions clés. Emojis sobres (📊/📈/📉/🏦/🌍/🌱/⚡/🤖) parcimonieux. Termes préférés: coût du capital, structure financière, cash-flow, marge, pricing, résilience supply, couverture énergie/FX, priorisation capex, productivité/IA, transition énergétique, critères ESG.",
