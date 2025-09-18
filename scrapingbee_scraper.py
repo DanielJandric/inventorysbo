@@ -927,14 +927,16 @@ class ScrapingBeeScraper:
                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119 Safari/537.36'
                     }
                     async with aiohttp.ClientSession(headers=headers) as session:
-                        for f in feeds:
-                            text = None
-                            try:
-                                async with session.get(f, timeout=15) as resp:
-                                    if resp.status == 200:
-                                        text = await resp.text()
-                            except Exception:
-                                pass
+                            for f in feeds:
+                                text = None
+                                try:
+                                    async with session.get(f, timeout=15) as resp:
+                                        if resp.status == 200:
+                                            text = await resp.text()
+                                        else:
+                                            logger.warning(f"⚠️ RSS fetch failed ({resp.status}): {f}")
+                                except Exception as e:
+                                    logger.warning(f"⚠️ RSS fetch error: {f} ({e})")
                             # ScrapingBee fallback
                             if not text and self.api_key and self.api_key != 'test_key_for_testing':
                                 try:
@@ -943,16 +945,20 @@ class ScrapingBeeScraper:
                                         'url': f,
                                         'render_js': 'false'
                                     }, timeout=20) as r2:
-                                        if r2.status == 200:
-                                            text = await r2.text()
-                                except Exception:
-                                    pass
-                            if not text:
-                                continue
-                            try:
-                                root = ET.fromstring(text)
-                            except Exception:
-                                continue
+                                            if r2.status == 200:
+                                                text = await r2.text()
+                                            else:
+                                                logger.warning(f"⚠️ RSS SBee failed ({r2.status}): {f}")
+                                    except Exception as e:
+                                        logger.warning(f"⚠️ RSS SBee error: {f} ({e})")
+                                if not text:
+                                    logger.warning(f"⚠️ RSS ignored (no content): {f}")
+                                    continue
+                                try:
+                                    root = ET.fromstring(text)
+                                except Exception as e:
+                                    logger.warning(f"⚠️ RSS parse error: {f} ({e})")
+                                    continue
                             for item in root.findall('.//item'):
                                 try:
                                     link_el = item.find('link')
@@ -1598,7 +1604,7 @@ class ScrapingBeeScraper:
 
                     # Utiliser exclusivement Responses API (JSON garanti)
                     from gpt5_compat import from_responses_simple, extract_output_text
-                    # Schéma JSON strict pour garantir les sections
+                    # Schéma JSON strict pour garantir les sections (et contraindre min items)
                     json_schema = {
                         "name": "MarketAnalysis",
                         "schema": {
@@ -1610,13 +1616,13 @@ class ScrapingBeeScraper:
                                 "structured_data": {"type": "object"},
                                 "geopolitical_analysis": {"type": "object"},
                                 "economic_indicators": {"type": "object"},
-                                "insights": {"type": "array", "items": {"type": "string"}},
-                                "risks": {"type": "array", "items": {"type": "string"}},
-                                "opportunities": {"type": "array", "items": {"type": "string"}},
+                                "insights": {"type": "array", "minItems": 3, "items": {"type": "string"}},
+                                "risks": {"type": "array", "minItems": 3, "items": {"type": "string"}},
+                                "opportunities": {"type": "array", "minItems": 3, "items": {"type": "string"}},
                                 "sources": {"type": "array"},
                                 "confidence_score": {"type": "number"}
                             },
-                            "required": ["executive_summary", "summary", "key_points"],
+                            "required": ["executive_summary", "summary", "key_points", "insights", "risks", "opportunities"],
                             "additionalProperties": True
                         }
                     }
