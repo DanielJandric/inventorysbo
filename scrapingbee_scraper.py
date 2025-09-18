@@ -964,6 +964,26 @@ class ScrapingBeeScraper:
                                 logger.warning(f"⚠️ RSS parse error: {f} ({e})")
                                 continue
 
+                            # Déterminer le label de la source pour ce flux
+                            feed_label = 'extra'
+                            try:
+                                fl = f.lower()
+                                if 'snb.ch' in fl:
+                                    feed_label = 'snb'
+                                elif 'ecb.europa.eu' in fl:
+                                    feed_label = 'ecb'
+                                elif 'federalreserve.gov' in fl:
+                                    feed_label = 'fed'
+                                elif 'eia.gov' in fl:
+                                    feed_label = 'eia'
+                                elif 'letemps.ch' in fl:
+                                    feed_label = 'letemps'
+                                elif 'reuters.com' in fl and 'marketsnews' in fl:
+                                    feed_label = 'reuters_markets'
+                            except Exception:
+                                pass
+
+                            added_this_feed = 0
                             for item in root.findall('.//item'):
                                 try:
                                     link_el = item.find('link')
@@ -981,12 +1001,15 @@ class ScrapingBeeScraper:
                                         title=title[:120],
                                         content=desc[:4000] if desc else title[:200],
                                         timestamp=ts or datetime.now(),
-                                        metadata={'source': source_name, 'from': 'rss'}
+                                        metadata={'source': source_name, 'feed': feed_label, 'from': 'rss'}
                                     ))
+                                    added_this_feed += 1
                                     if len(items) >= max_items:
                                         break
                                 except Exception:
                                     continue
+
+                            logger.info(f"📰 RSS extra feed {feed_label}: ajoutés {added_this_feed} article(s)")
 
                             if len(items) >= max_items:
                                 break
