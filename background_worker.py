@@ -689,6 +689,31 @@ class MarketAnalysisWorker:
         else:
             geo_html = self._generate_geopolitical_analysis(geo_analysis if isinstance(geo_analysis, dict) else {})
         analytics_html = self._generate_analytics_section(analytics_data if isinstance(analytics_data, dict) else {})
+        # Macro (FRED) section
+        def _render_macros(macros: Dict) -> str:
+            try:
+                if not isinstance(macros, dict) or not macros:
+                    return ''
+                blocks = []
+                for block_name, series in macros.items():
+                    if not isinstance(series, dict) or not series:
+                        continue
+                    items = []
+                    for label, val in series.items():
+                        if isinstance(val, dict) and val.get('value') is not None:
+                            value = val.get('value')
+                            change = val.get('change')
+                            unit = val.get('unit')
+                            meta = f"{value}{('%' if unit == '%' else '')}"
+                            if change is not None:
+                                meta += f" ({change:+})"
+                            items.append(f"<li><strong>{html.escape(label)}</strong>: {html.escape(str(meta))}</li>")
+                    if items:
+                        title = block_name.replace('_',' ').title()
+                        blocks.append('<div class="card"><h4>' + html.escape(title) + '</h4><ul>' + chr(10).join(items) + '</ul></div>')
+                return chr(10).join(blocks)
+            except Exception:
+                return ''
         # Résumé: préférer analysis.summary, puis result.summary, puis deep_analysis.narrative
         summary_text = getattr(analysis, 'summary', None) or ''
         if not summary_text:
@@ -952,6 +977,8 @@ class MarketAnalysisWorker:
                 
                 <!-- Analytics Avancés -->
                 {'' if is_swiss else f'<div class="section"><h3>🔍 Analytics Avancés</h3><div class="economic-grid">{analytics_html}</div></div>'}
+
+                {'' if is_swiss else (f'<div class="section"><h3>🏦 Indicateurs Macro (FRED)</h3>{_render_macros(structured_data.get("macros", {}))}</div>')}
 
                 <!-- Tableau de Bord Exécutif (structured_data) -->
                 {('' if is_swiss else (f'<div class="section"><h3>🧭 Tableau de Bord Exécutif</h3>{exec_dash_html}</div>' if exec_dash_html else ''))}

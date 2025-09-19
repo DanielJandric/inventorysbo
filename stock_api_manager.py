@@ -732,11 +732,24 @@ class StockAPIManager:
                         val = self.fred.get_latest_yield(sid)
                         if val is not None and 'yield' in val:
                             macros[block][label] = {"value": val['yield'], "change": val.get('change_bps'), "unit": ("%" if 'DGS' in sid else None), "source": val.get('source')}
+                            try:
+                                logger.debug(f"FRED {block}/{label} ({sid}) -> yield={val['yield']}, change_bps={val.get('change_bps')}")
+                            except Exception:
+                                pass
                             continue
                     # Autres séries: valeur simple
                     v = self.fred.get_latest_value(sid)
                     if v is not None:
                         macros[block][label] = {"value": v.get('value'), "change": v.get('change'), "source": v.get('source')}
+                        try:
+                            logger.debug(f"FRED {block}/{label} ({sid}) -> value={v.get('value')}, change={v.get('change')}")
+                        except Exception:
+                            pass
+                    else:
+                        try:
+                            logger.debug(f"FRED {block}/{label} ({sid}) -> aucune donnée")
+                        except Exception:
+                            pass
             snapshot['macros'] = macros
         except Exception as e:
             logger.warning(f"⚠️ Indicateurs FRED non disponibles: {e}")
