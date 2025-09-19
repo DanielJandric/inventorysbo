@@ -480,7 +480,8 @@ class StockAPIManager:
             "commodities": {},
             "crypto": {},
             "forex": {},
-            "bonds": {}
+            "bonds": {},
+            "macros": {}
         }
 
         # Liste ordonnée des requêtes à effectuer (avec affichage)
@@ -669,6 +670,76 @@ class StockAPIManager:
             pass
 
         snapshot['analytics'] = analytics
+        
+        # Ajout: Indicateurs macro FRED (groupés par thèmes)
+        try:
+            fred_blocks = {
+                'rates_yields': {
+                    # US
+                    'DFF': "Fed Funds Rate",
+                    'DGS2': "2Y Treasury",
+                    'DGS10': "10Y Treasury",
+                    'DGS30': "30Y Treasury",
+                    'T10Y2Y': "Yield Curve 10Y-2Y",
+                    'BAMLH0A0HYM2': "High Yield Spread",
+                    # Europe
+                    'IRLTLT01EZM156N': "ECB 10Y",
+                    'IR3TIB01DEM156N': "3M Euribor",
+                    # Suisse
+                    'IRLTLT01CHM156N': "Swiss 10Y",
+                    'IRSTCI01CHM156N': "SARON",
+                },
+                'inflation': {
+                    'CPIAUCSL': "US CPI",
+                    'CPILFESL': "US Core CPI",
+                    'PCEPI': "US PCE",
+                    'DPCCRV1Q225SBEA': "US Core PCE",
+                    'CP0000EZ19M086NEST': "Eurozone HICP",
+                    'CPALTT01CHM659N': "Swiss CPI",
+                },
+                'employment': {
+                    'UNRATE': "US Unemployment",
+                    'PAYEMS': "US NFP",
+                    'CIVPART': "US Participation Rate",
+                    'EMVOVERALLEMV': "US Job Openings",
+                    'LRHUTTTTEZM156S': "Eurozone Unemployment",
+                },
+                'activity': {
+                    'GDP': "US GDP",
+                    'GDPC1': "US Real GDP",
+                    'MANEMP': "ISM Manufacturing",
+                    'NMFBAI': "ISM Services",
+                    'RSAFS': "US Retail Sales",
+                    'INDPRO': "US Industrial Production",
+                    'NAPM': "US PMI Composite",
+                },
+                'liquidity_stress': {
+                    'WALCL': "Fed Balance Sheet",
+                    'RRPONTSYD': "Reverse Repo",
+                    'SOFR': "SOFR Rate",
+                    'TEDRATE': "TED Spread",
+                    'DCOILWTICO': "WTI Oil",
+                    'DEXUSEU': "EUR/USD",
+                }
+            }
+            macros: Dict[str, Any] = {}
+            for block, series in fred_blocks.items():
+                macros[block] = {}
+                for sid, label in series.items():
+                    # Yields: privilégier get_latest_yield pour tranches reconnues
+                    val = None
+                    if sid in ('DGS2','DGS10','DGS30'):
+                        val = self.fred.get_latest_yield(sid)
+                        if val is not None and 'yield' in val:
+                            macros[block][label] = {"value": val['yield'], "change": val.get('change_bps'), "unit": ("%" if 'DGS' in sid else None), "source": val.get('source')}
+                            continue
+                    # Autres séries: valeur simple
+                    v = self.fred.get_latest_value(sid)
+                    if v is not None:
+                        macros[block][label] = {"value": v.get('value'), "change": v.get('change'), "source": v.get('source')}
+            snapshot['macros'] = macros
+        except Exception as e:
+            logger.warning(f"⚠️ Indicateurs FRED non disponibles: {e}")
         
         execution_time = time.time() - start_time
         logger.info(f"✅ Aperçu du marché (strict) récupéré en {execution_time:.1f}s")
@@ -866,6 +937,38 @@ class FredAPI:
                 except Exception:
                     change_bps = None
             return {"yield": round(latest, 3), "change_bps": change_bps, "source": 'FRED'}
+        except Exception:
+            return None
+
+    @rate_limit(calls_per_minute=60)
+    def get_latest_value(self, series_id: str) -> Optional[Dict[str, Any]]:
+        """Retourne la dernière valeur numérique d'une série FRED (valeur et variation d'une obs)."""
+        if not self.api_key:
+            return None
+        try:
+            import requests
+            params = {
+                'series_id': series_id,
+                'api_key': self.api_key,
+                'file_type': 'json',
+                'sort_order': 'desc',
+                'limit': 10
+            }
+            r = requests.get(self.base, params=params, timeout=15)
+            r.raise_for_status()
+            data = r.json()
+            obs = [o for o in (data.get('observations') or []) if o.get('value') not in (None, '.', '')]
+            if not obs:
+                return None
+            latest = float(obs[0]['value'])
+            change = None
+            if len(obs) > 1:
+                try:
+                    prev = float(obs[1]['value'])
+                    change = round(latest - prev, 4)
+                except Exception:
+                    change = None
+            return {"value": latest, "change": change, "source": 'FRED'}
         except Exception:
             return None
 

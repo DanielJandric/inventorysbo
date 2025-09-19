@@ -236,7 +236,14 @@ class ScrapingBeeScraper:
         def _is_cnn_article(url: str) -> bool:
             u = url.lower()
             return ('cnn.com' in u) and ('/world/' in u or '/business/' in u) and ('/live-news/' not in u)
-
+        def _is_investing_article(url: str) -> bool:
+            u = url.lower()
+            if 'investing.com' not in u:
+                return False
+            has_section = any(s in u for s in ['/news/', '/analysis/'])
+            excluded = any(s in u for s in ['/quotes/', '/currencies/', '/etfs/', '/indices/', '/technical/', '/tools/', '/crypto/'])
+            return has_section and not excluded
+        
         # Points d'entrée par site
         marketwatch_starts = [
             'https://www.marketwatch.com/',
@@ -246,6 +253,12 @@ class ScrapingBeeScraper:
         cnn_starts = [
             'https://www.cnn.com/world',
             'https://www.cnn.com/business',
+        ]
+        investing_starts = [
+            'https://www.investing.com/news/',
+            'https://www.investing.com/analysis/',
+            'https://www.investing.com/news/stock-market-news',
+            'https://www.investing.com/news/economy',
         ]
 
         # RSS helpers (contournent headers trop longs et anti‑bot JS)
@@ -358,6 +371,10 @@ class ScrapingBeeScraper:
             'https://rss.cnn.com/rss/edition_world.rss',
             'https://rss.cnn.com/rss/edition_business.rss',
         ]
+        inv_rss = [
+            'https://www.investing.com/rss/news.rss',
+            'https://www.investing.com/rss/stock_analyses.rss',
+        ]
         # Flux RSS alternatifs qui fonctionnent
         alt_rss = [
             'https://feeds.bloomberg.com/markets/news.rss',
@@ -372,6 +389,7 @@ class ScrapingBeeScraper:
         rss_items: List[ScrapedData] = []
         rss_items += await _fetch_rss_items(mw_rss, 'marketwatch', per_site * 3)
         rss_items += await _fetch_rss_items(cnn_rss, 'cnn', per_site * 3)
+        rss_items += await _fetch_rss_items(inv_rss, 'investing', per_site * 2)
         # Fallback vers des flux alternatifs si les principaux échouent
         if len(rss_items) < per_site * 2:
             logger.info(f"📰 RSS principal: {len(rss_items)} articles, ajout de flux alternatifs...")
@@ -381,6 +399,7 @@ class ScrapingBeeScraper:
         # Fallback domain crawl SI explicitement autorisé
         mw_links = []
         cnn_links = []
+        inv_links = []
         # Autoriser le crawl si RSS insuffisant OU si explicitement configuré
         allow_crawl = (len(rss_items) < per_site * 2) or (os.getenv('ALLOW_DOMAIN_CRAWL', 'false').lower() == 'true')
         # Robustesse: forcer le crawl si les RSS sont quasi nuls
@@ -393,6 +412,8 @@ class ScrapingBeeScraper:
                 mw_links = await _gather_domain('www.marketwatch.com', marketwatch_starts, _is_mw_article, per_site * 2)
             if len([i for i in rss_items if i.metadata.get('source') == 'cnn']) < per_site:
                 cnn_links = await _gather_domain('www.cnn.com', cnn_starts, _is_cnn_article, per_site * 2)
+            if len([i for i in rss_items if i.metadata.get('source') == 'investing']) < per_site:
+                inv_links = await _gather_domain('www.investing.com', investing_starts, _is_investing_article, per_site * 2)
         else:
             logger.info("📰 Deep scrape: RSS-only mode (domain crawl disabled)")
 
@@ -401,6 +422,7 @@ class ScrapingBeeScraper:
         # Préparer les URLs issues des RSS pour enrichir le contenu (sans domain crawl)
         rss_mw_links = [i.url for i in rss_items if i.metadata.get('source') == 'marketwatch']
         rss_cnn_links = [i.url for i in rss_items if i.metadata.get('source') == 'cnn']
+        rss_inv_links = [i.url for i in rss_items if i.metadata.get('source') == 'investing']
         
         # Ajouter des sites d'actualités financières directes si RSS insuffisant
         if len(rss_items) < per_site:
@@ -410,6 +432,8 @@ class ScrapingBeeScraper:
                 'https://www.bloomberg.com/markets',
                 'https://www.ft.com/markets',
                 'https://www.cnbc.com/markets/',
+                'https://www.investing.com/news/',
+                'https://www.investing.com/analysis/',
             ]
             for site in direct_sites:
                 try:
@@ -479,11 +503,14 @@ class ScrapingBeeScraper:
         # Enrichir d'abord à partir des liens RSS (texte complet)
         await _scrape_links(rss_mw_links, 'marketwatch')
         await _scrape_links(rss_cnn_links, 'cnn')
+        await _scrape_links(rss_inv_links, 'investing')
 
         if mw_links:
             await _scrape_links(mw_links, 'marketwatch')
         if cnn_links:
             await _scrape_links(cnn_links, 'cnn')
+        if inv_links:
+            await _scrape_links(inv_links, 'investing')
 
         # Assurer un minimum de caractères
         def _total_chars(data: List[ScrapedData]) -> int:
@@ -890,7 +917,7 @@ class ScrapingBeeScraper:
                     if added >= per_site:
                         break
                     try:
-                        # Résoudre la redirection vers l’éditeur final
+                        # Résoudre la redirection vers l'éditeur final
                         target_url = it['url']
                         try:
                             async with aiohttp.ClientSession() as session:
@@ -1733,7 +1760,7 @@ class ScrapingBeeScraper:
             # }
 
             # Exigences géopolitiques (obligatoire):
-            # - Analyse géopolitique à jour issue des DERNIÈRES nouvelles scrappées (≤72h), en priorité depuis Reuters, FT, Bloomberg, CNN (rubrique World) et X.com (≤12h). Si plusieurs versions d’un même événement, privilégie la plus récente et cite la source (titre+URL).
+            # - Analyse géopolitique à jour issue des DERNIÈRES nouvelles scrappées (≤72h), en priorité depuis Reuters, FT, Bloomberg, CNN (rubrique World) et X.com (≤12h). Si plusieurs versions d'un même événement, privilégie la plus récente et cite la source (titre+URL).
             # - Détaille causes → effets de 2e ordre → risques de queue; propose hedges concrets.
 
             # Exigences indicateurs (obligatoire):
