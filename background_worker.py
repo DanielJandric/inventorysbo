@@ -756,7 +756,7 @@ class MarketAnalysisWorker:
         opps_list = _normalize_to_list(getattr(analysis, 'opportunities', None) or result.get('opportunities', []))
 
         # Générer le HTML optimisé pour mobile
-        html = f"""
+        html_content = f"""
         <!DOCTYPE html>
         <html>
         <head>
@@ -1050,7 +1050,7 @@ class MarketAnalysisWorker:
         </html>
         """
         
-        return html
+        return html_content
 
     def _render_summary_paragraphs(self, text: str) -> str:
         """Transforme un texte brut en paragraphes HTML simples."""
