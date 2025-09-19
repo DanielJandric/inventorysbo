@@ -138,6 +138,7 @@ class MarketAnalysisWorker:
             prompt = task.prompt or DEFAULT_PROMPT
             is_swiss = str(task.analysis_type or '').strip().lower() in { 'swiss', 'ch', 'swiss_market', 'suisse' }
             is_global = str(task.analysis_type or '').strip().lower() in { 'global_market_update', 'global', 'gmu' }
+            is_csuite = str(task.analysis_type or '').strip().lower() in { 'csuite_global_market_update', 'csuite', 'c-suite' }
             if is_swiss:
                 # Charger prompt strict depuis fichier si non fourni
                 if not task.prompt:
@@ -155,22 +156,22 @@ class MarketAnalysisWorker:
                 except Exception as e_swiss:
                     logger.error(f"❌ Erreur pipeline Suisse: {e_swiss}")
                     result = { 'error': str(e_swiss) }
-            elif is_global:
+            elif is_global or is_csuite:
                 # Charger le prompt GLOBAL MARKET UPDATE si non fourni
                 if not task.prompt:
                     try:
                         import os
                         base_dir = os.path.dirname(__file__)
-                        prompt_path = os.path.join(base_dir, 'prompts', 'global_market_update_fr.json')
+                        prompt_path = os.path.join(base_dir, 'prompts', 'csuite_global_market_update_fr.json') if is_csuite else os.path.join(base_dir, 'prompts', 'global_market_update_fr.json')
                         with open(prompt_path, 'r', encoding='utf-8') as pf:
                             prompt = pf.read()
                     except Exception as _:
                         prompt = DEFAULT_PROMPT
-                logger.info("🌐 Exécution pipeline GLOBAL (ScrapingBee <24h + Google News → snapshot → LLM JSON)")
+                logger.info("🏢 Exécution pipeline C‑SUITE (ScrapingBee <24h + Google News → snapshot → LLM JSON)" if is_csuite else "🌐 Exécution pipeline GLOBAL (ScrapingBee <24h + Google News → snapshot → LLM JSON)")
                 try:
                     result = await self.scraper.execute_global_market_update(prompt)
                 except Exception as e_global:
-                    logger.error(f"❌ Erreur pipeline GLOBAL: {e_global}")
+                    logger.error(f"❌ Erreur pipeline C‑SUITE/GLOBAL: {e_global}")
                     result = { 'error': str(e_global) }
             else:
                 logger.info(f"🕷️ Création de la tâche ScrapingBee avec prompt: {prompt[:100]}...")
