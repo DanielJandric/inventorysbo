@@ -9431,6 +9431,68 @@ def trigger_background_worker():
     except Exception as e:
         logger.error(f"Erreur déclenchement Background Worker: {e}")
         return jsonify({"error": str(e)}), 500
+
+@app.route("/api/market-analysis/global/trigger", methods=["POST"])
+def trigger_global_market_update():
+    """Planifie un GLOBAL MARKET UPDATE (LLM JSON) pour le worker."""
+    try:
+        from market_analysis_db import get_market_analysis_db, MarketAnalysis
+
+        db = get_market_analysis_db()
+
+        # Corps de requête tolérant
+        req = request.get_json(silent=True) or {}
+        force = bool(req.get('force', False))
+        prompt = (req.get('prompt') or '').strip()
+
+        # Charger le prompt strict par défaut si non fourni
+        if not prompt:
+            try:
+                base_dir = os.path.dirname(__file__)
+                prompt_path = os.path.join(base_dir, 'prompts', 'global_market_update_fr.json')
+                with open(prompt_path, 'r', encoding='utf-8') as pf:
+                    prompt = pf.read()
+            except Exception:
+                prompt = "GLOBAL MARKET UPDATE"
+
+        # Vérifier si une analyse est déjà en cours
+        latest = db.get_latest_analysis()
+        if latest and latest.worker_status in ['pending', 'processing']:
+            if force:
+                try:
+                    db.update_analysis_status(latest.id, 'error')
+                except Exception:
+                    pass
+            else:
+                return jsonify({
+                    "success": True,
+                    "status": "already_in_progress",
+                    "message": "Une analyse est déjà en cours.",
+                    "analysis_id": latest.id,
+                    "timestamp": datetime.now().isoformat()
+                })
+
+        # Créer la tâche GLOBAL MARKET UPDATE
+        new_analysis = MarketAnalysis(
+            analysis_type='global_market_update',
+            worker_status='pending',
+            prompt=prompt
+        )
+        analysis_id = db.save_analysis(new_analysis)
+
+        if not analysis_id:
+            return jsonify({"success": False, "error": "Impossible de créer la tâche d'analyse dans la base de données"}), 500
+
+        logger.info(f"🌐 GLOBAL MARKET UPDATE planifié (ID: {analysis_id})")
+        return jsonify({
+            "success": True,
+            "message": "GLOBAL MARKET UPDATE planifié. Le worker va le traiter.",
+            "analysis_id": analysis_id,
+            "timestamp": datetime.now().isoformat()
+        })
+    except Exception as e:
+        logger.error(f"Erreur déclenchement GLOBAL MARKET UPDATE: {e}")
+        return jsonify({"error": str(e)}), 500
 @app.route("/api/background-worker/status", methods=["GET"])
 def get_background_worker_status():
     """Récupère le statut de la dernière analyse."""
