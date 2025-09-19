@@ -54,6 +54,8 @@
     "confiance_dynamique": "Le `confidence_score` dans `meta_analysis` doit être **évalué dynamiquement** à chaque génération (plage 0.5-0.95), reflétant la clarté et la convergence des informations disponibles dans la fenêtre d'analyse.",
     "calibrage_esg": "Intégrer systématiquement les considérations ESG/durabilité quand elles impactent matériellement les décisions (réglementation, coûts transition, opportunités vertes)",
     "règle_presence_champs": "NE JAMAIS omettre un champ requis du schéma. Si une information fait défaut, REMPLIR avec une chaîne explicite du type 'N/D — justification brève'. Pour les listes requises (insights, risks, opportunities), fournir au moins 3 éléments (placeholders autorisés). ÉCHEC si un champ requis manque ou si une liste requise contient <3 éléments. Réponse EXCLUSIVEMENT en JSON pur (aucun ```)."
+  ,
+    "style_deep_analysis": "Dans deep_analysis.narrative: ne pas utiliser de Markdown (pas de ###, pas de **). Écrire des titres en texte simple (ex: '🔍 Analyse causale — Pourquoi maintenant?') suivis de paragraphes explicatifs complets, séparés par des lignes vides. Séparer la 'Vue contrarienne' de façon claire et pédagogique."
   },
   "verbosity": "medium",
   "reasoning_depth": "high",
@@ -80,17 +82,17 @@
     },
     "format_deep_analysis": {
       "structure_requise": [
-        "### 🔍 Analyse causale: Pourquoi maintenant?",
-        "### ⚙️ Mécaniques de marché",
-        "### 💱 Dynamique FX et transmission",
-        "### ⚡ Énergie et matières premières",
-        "### 🏛️ Risques politiques et réglementaires",
-        "### 🇨🇭 Analyse approfondie Suisse",
-        "### 🌏 Comparaisons régionales",
-        "### 🔄 Canaux de transmission",
-        "### 🚨 Conditions de rupture",
-        "### 📊 Implications quantifiées",
-        "### 🧭 Vue contrarienne (arguments, triggers, hedges)"
+        "🔍 Analyse causale — Pourquoi maintenant?",
+        "⚙️ Mécaniques de marché",
+        "💱 Dynamique FX et transmission",
+        "⚡ Énergie et matières premières",
+        "🏛️ Risques politiques et réglementaires",
+        "🇨🇭 Analyse approfondie Suisse",
+        "🌏 Comparaisons régionales",
+        "🔄 Canaux de transmission",
+        "🚨 Conditions de rupture",
+        "📊 Implications quantifiées",
+        "🧭 Vue contrarienne (arguments, triggers, hedges)"
       ],
       "sous_sections": "Utiliser ** ** pour les sous-thèmes dans chaque section principale"
     },
@@ -132,7 +134,7 @@
     "Remplir executive_dashboard.snapshot_metrics depuis market_snapshot (sinon N/D).",
     "Écrire executive_summary (10 puces) orienté décisions C-suite.",
     "Rédiger summary (≥3500 en COMPLETE) structuré court/moyen/long terme, centré sur le 'Quoi' et le 'Et alors ?'.",
-    "Compléter deep_analysis (narrative ≥3500 en COMPLETE) avec comparaisons régionales, corrélations et section IA, centré sur le 'Pourquoi' et le 'Et si ?'. Ajouter une Vue contrarienne (contrarian_view) distincte, argumentée, avec triggers de falsification et hedges. Assurer une faible redondance avec le summary.",
+    "Compléter deep_analysis (narrative ≥3500 en COMPLETE) avec comparaisons régionales, corrélations et section IA, centré sur le 'Pourquoi' et le 'Et si ?'. Rédiger deep_analysis sans Markdown (pas de ###/**), avec titres en texte simple et paragraphes explicatifs. Ajouter une Vue contrarienne (contrarian_view) distincte, argumentée, avec triggers de falsification et hedges. Assurer une faible redondance avec le summary.",
     "Géopolitique: impacts immédiats datés, effets 2e ordre, cygnes noirs, hedges concrets.",
     "ESG/Durabilité: risques transition, opportunités vertes, updates réglementaires impactant la stratégie.",
     "Quantitative_signals: Synthétiser les commentaires de sources fiables sur les flux et signaux, sans simuler d'accès direct.",
@@ -151,12 +153,13 @@
     "note": "Avant envoi: vérifier que JSON.parse() fonctionnerait; guillemets doubles; aucune virgule finale; toutes les clés requises présentes; longueurs minimales respectées selon format choisi; premiers/derniers caractères { }.",
     "checks_obligatoires": [
       "Summary contient minimum 8 sous-titres avec ###",
-      "Deep_analysis contient minimum 10 sous-titres",
+      "Deep_analysis contient minimum 10 sous-titres (sans Markdown ###/**)",
       "Chaque section narrative >1500 chars est structurée",
       "Au moins 50 mots en **gras** dans le rapport total",
       "Séparation visuelle claire entre sections (lignes vides)",
       "Champs insights/risks/opportunities présents et ≥3 chacun",
       "Réponse 100% JSON pur: aucun texte hors { ... }, pas de ```",
+      "Deep_analysis.narrative: titres en texte simple (sans ###/**), paragraphes séparés",
       "deep_analysis.contrarian_view présent avec arguments, triggers et hedges"
     ]
   },
