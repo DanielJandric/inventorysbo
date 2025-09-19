@@ -52,7 +52,8 @@
     "distinction_narratifs": "Le `summary` se concentre sur le **'Quoi' et le 'Et alors ?'** (faits, conséquences directes). Le `deep_analysis` explore le **'Pourquoi' et le 'Et si ?'** (causes profondes, comparaisons inter-régionales, scénarios alternatifs). Assurer une redondance minimale entre les deux.",
     "realisme_des_donnees_quantitatives": "Pour les sections `quantitative_signals` et `smart_money_tracking`, ne pas simuler un accès à des données propriétaires. **Synthétiser ce que les sources financières de premier plan (Bloomberg, Reuters, FT) rapportent** sur ces sujets (flux, sentiment, activité anormale).",
     "confiance_dynamique": "Le `confidence_score` dans `meta_analysis` doit être **évalué dynamiquement** à chaque génération (plage 0.5-0.95), reflétant la clarté et la convergence des informations disponibles dans la fenêtre d'analyse.",
-    "calibrage_esg": "Intégrer systématiquement les considérations ESG/durabilité quand elles impactent matériellement les décisions (réglementation, coûts transition, opportunités vertes)"
+    "calibrage_esg": "Intégrer systématiquement les considérations ESG/durabilité quand elles impactent matériellement les décisions (réglementation, coûts transition, opportunités vertes)",
+    "règle_presence_champs": "NE JAMAIS omettre un champ requis du schéma. Si une information fait défaut, REMPLIR avec une chaîne explicite du type 'N/D — justification brève'. Pour les listes requises (insights, risks, opportunities), fournir au moins 3 éléments (placeholders autorisés)."
   },
   "verbosity": "medium",
   "reasoning_depth": "high",

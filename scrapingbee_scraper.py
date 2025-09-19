@@ -1853,12 +1853,14 @@ class ScrapingBeeScraper:
                         }
                     }
 
+                    # Renforcer la contrainte JSON: rappel explicite des champs requis dans le dernier user message
+                    reminder = "IMPORTANT: Le JSON DOIT inclure 'market_pulse', 'executive_summary', 'summary', 'key_points', 'insights'(>=3), 'risks'(>=3), 'opportunities'(>=3), 'confidence_score'. Si une info manque, mettre 'N/D — justification'. AUCUN texte hors JSON."
                     resp = from_responses_simple(
                         client=client,
                         model=os.getenv("AI_MODEL", "gpt-5"),
                         messages=[
                             {"role": "system", "content": [{"type": "input_text", "text": system_prompt}]},
-                            {"role": "user", "content": [{"type": "input_text", "text": f"Demande: {prompt}\n\nDONNÉES FACTUELLES (snapshot):\n{attempt_snapshot}\n\nDONNÉES COLLECTÉES (articles):\n{attempt_context}"}]}
+                            {"role": "user", "content": [{"type": "input_text", "text": f"Demande: {prompt}\n\n{reminder}\n\nDONNÉES FACTUELLES (snapshot):\n{attempt_snapshot}\n\nDONNÉES COLLECTÉES (articles):\n{attempt_context}"}]}
                         ],
                         max_output_tokens=current_max_tokens,
                         reasoning_effort=os.getenv("AI_REASONING_EFFORT", "high"),
@@ -2069,7 +2071,7 @@ class ScrapingBeeScraper:
                         # Retry avec instruction de correction si tentative restante
                         if attempt < 2:
                             logger.info("Retry LLM avec instruction de correction JSON…")
-                            correction_prompt = system_prompt + "\n\nATTENTION: La réponse précédente n'était pas un JSON valide. Renvoie le MÊME CONTENU sous forme d'un SEUL objet JSON complet et fermé, sans texte hors JSON."
+                            correction_prompt = system_prompt + "\n\nATTENTION: La réponse précédente n'était pas un JSON valide. Renvoie le MÊME CONTENU sous forme d'un SEUL objet JSON complet et fermé, sans texte hors JSON. INCLUS OBLIGATOIREMENT: market_pulse, executive_summary, summary, key_points, insights(>=3), risks(>=3), opportunities(>=3), confidence_score. Si une info manque: 'N/D — justification'."
                             resp = from_responses_simple(
                                 client=client,
                                 model=os.getenv("AI_MODEL", "gpt-5"),

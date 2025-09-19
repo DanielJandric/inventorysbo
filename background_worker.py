@@ -978,7 +978,7 @@ class MarketAnalysisWorker:
                 <!-- Analytics Avancés -->
                 {'' if is_swiss else f'<div class="section"><h3>🔍 Analytics Avancés</h3><div class="economic-grid">{analytics_html}</div></div>'}
 
-                {'' if is_swiss else (f'<div class="section"><h3>🏦 Indicateurs Macro (FRED)</h3>{_render_macros(structured_data.get("macros", {}))}</div>')}
+                {'' if is_swiss else (f'<div class="section"><h3>🏦 Indicateurs Macro (FRED)</h3>{_render_macros(market_snapshot.get("macros", {}))}</div>')}
 
                 <!-- Tableau de Bord Exécutif (structured_data) -->
                 {('' if is_swiss else (f'<div class="section"><h3>🧭 Tableau de Bord Exécutif</h3>{exec_dash_html}</div>' if exec_dash_html else ''))}
