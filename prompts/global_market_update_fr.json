@@ -55,7 +55,7 @@
     "calibrage_esg": "Intégrer systématiquement les considérations ESG/durabilité quand elles impactent matériellement les décisions (réglementation, coûts transition, opportunités vertes)",
     "règle_presence_champs": "NE JAMAIS omettre un champ requis du schéma. Si une information fait défaut, REMPLIR avec une chaîne explicite du type 'N/D — justification brève'. Pour les listes requises (insights, risks, opportunities), fournir au moins 3 éléments (placeholders autorisés). ÉCHEC si un champ requis manque ou si une liste requise contient <3 éléments. Réponse EXCLUSIVEMENT en JSON pur (aucun ```)."
   ,
-    "style_deep_analysis": "Dans deep_analysis.narrative: ne pas utiliser de Markdown (pas de ###, pas de **). Écrire des titres en texte simple (ex: '🔍 Analyse causale — Pourquoi maintenant?') suivis de paragraphes explicatifs complets, séparés par des lignes vides. Séparer la 'Vue contrarienne' de façon claire et pédagogique."
+    "style_deep_analysis": "Dans deep_analysis.narrative: ne pas utiliser de Markdown (pas de ###, pas de **). Générer des sous-titres dynamiques (simples, courts, informatifs) alignés sur le contenu qui suit. Écrire chaque sous-titre en texte simple (ex: '🔍 Analyse causale — Pourquoi maintenant?'), puis 1–2 paragraphes explicatifs STRICTEMENT sur ce sous-titre. Séparer la 'Vue contrarienne' de façon claire et pédagogique."
   },
   "verbosity": "medium",
   "reasoning_depth": "high",
@@ -82,19 +82,10 @@
     },
     "format_deep_analysis": {
       "structure_requise": [
-        "🔍 Analyse causale — Pourquoi maintenant?",
-        "⚙️ Mécaniques de marché",
-        "💱 Dynamique FX et transmission",
-        "⚡ Énergie et matières premières",
-        "🏛️ Risques politiques et réglementaires",
-        "🇨🇭 Analyse approfondie Suisse",
-        "🌏 Comparaisons régionales",
-        "🔄 Canaux de transmission",
-        "🚨 Conditions de rupture",
-        "📊 Implications quantifiées",
+        "Sous-titres dynamiques alignés sur le contenu (thèmes indicatifs: Analyse causale, Mécaniques de marché, FX, Énergie, Risques politiques, Suisse, Régional, Canaux de transmission, Conditions de rupture, Implications quantifiées)",
         "🧭 Vue contrarienne (arguments, triggers, hedges)"
       ],
-      "sous_sections": "Utiliser ** ** pour les sous-thèmes dans chaque section principale"
+      "règles_titres_dynamiques": "Chaque sous-titre doit être unique et informatif, sans termes génériques ('Introduction', 'Conclusion'). Le paragraphe qui suit doit développer EXACTEMENT ce sous-titre, sans digressions."
     },
     "règles_typographiques": {
       "titres_principaux": "### suivi d'un emoji et du titre",
