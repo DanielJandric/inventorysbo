@@ -525,7 +525,9 @@ class MarketAnalysisWorker:
             subject_prefix = "[BONVIN] Rapport d'Analyse de Marché"
             try:
                 atype = (analysis.analysis_type or '').strip().lower()
-                if atype in {'global_market_update', 'global', 'gmu'}:
+                if atype in {'csuite_global_market_update', 'csuite', 'c-suite'}:
+                    subject_prefix = "[BONVIN] C‑Suite Global Market Update"
+                elif atype in {'global_market_update', 'global', 'gmu'}:
                     subject_prefix = "[BONVIN] GLOBAL MARKET UPDATE"
                 elif atype in {'swiss', 'suisse', 'ch', 'swiss_market'}:
                     subject_prefix = "[BONVIN] Swiss Market Update"
@@ -724,15 +726,8 @@ class MarketAnalysisWorker:
                     summary_text = str((deep_analysis.get('narrative') or '')).strip()
                 except Exception:
                     summary_text = ''
-        # Préparer la narrative approfondie et l'afficher avec des sous-titres
-        try:
-            deep_narrative_text = ''
-            if isinstance(deep_analysis, dict):
-                deep_narrative_text = str(deep_analysis.get('narrative') or '').strip()
-        except Exception:
-            deep_narrative_text = ''
-        narrative_text = deep_narrative_text or summary_text
-        narrative_html = self._render_deep_narrative_with_headings(narrative_text)
+        # Toujours utiliser le summary pour l'email (supprimer l'usage de la narrative approfondie)
+        narrative_html = self._render_deep_narrative_with_headings(summary_text)
 
         # Rendu des sections structured_data (si présentes)
         meta_html = self._generate_meta_analysis(structured_data.get('meta_analysis', {}) if isinstance(structured_data.get('meta_analysis', {}), dict) else {})
@@ -756,7 +751,7 @@ class MarketAnalysisWorker:
         risks_list = _normalize_to_list(getattr(analysis, 'risks', None) or result.get('risks', []))
         opps_list = _normalize_to_list(getattr(analysis, 'opportunities', None) or result.get('opportunities', []))
 
-        # Générer le HTML optimisé pour mobile
+        # Générer le HTML optimisé pour mobile (ordre: titre -> executive summary -> summary -> reste)
         html_content = f"""
         <!DOCTYPE html>
         <html>
