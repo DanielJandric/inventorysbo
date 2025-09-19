@@ -89,7 +89,8 @@
         "### 🌏 Comparaisons régionales",
         "### 🔄 Canaux de transmission",
         "### 🚨 Conditions de rupture",
-        "### 📊 Implications quantifiées"
+        "### 📊 Implications quantifiées",
+        "### 🧭 Vue contrarienne (arguments, triggers, hedges)"
       ],
       "sous_sections": "Utiliser ** ** pour les sous-thèmes dans chaque section principale"
     },
@@ -131,7 +132,7 @@
     "Remplir executive_dashboard.snapshot_metrics depuis market_snapshot (sinon N/D).",
     "Écrire executive_summary (10 puces) orienté décisions C-suite.",
     "Rédiger summary (≥3500 en COMPLETE) structuré court/moyen/long terme, centré sur le 'Quoi' et le 'Et alors ?'.",
-    "Compléter deep_analysis (narrative ≥3500 en COMPLETE) avec comparaisons régionales, corrélations et section IA, centré sur le 'Pourquoi' et le 'Et si ?'. Assurer une faible redondance avec le summary.",
+    "Compléter deep_analysis (narrative ≥3500 en COMPLETE) avec comparaisons régionales, corrélations et section IA, centré sur le 'Pourquoi' et le 'Et si ?'. Ajouter une Vue contrarienne (contrarian_view) distincte, argumentée, avec triggers de falsification et hedges. Assurer une faible redondance avec le summary.",
     "Géopolitique: impacts immédiats datés, effets 2e ordre, cygnes noirs, hedges concrets.",
     "ESG/Durabilité: risques transition, opportunités vertes, updates réglementaires impactant la stratégie.",
     "Quantitative_signals: Synthétiser les commentaires de sources fiables sur les flux et signaux, sans simuler d'accès direct.",
@@ -155,7 +156,8 @@
       "Au moins 50 mots en **gras** dans le rapport total",
       "Séparation visuelle claire entre sections (lignes vides)",
       "Champs insights/risks/opportunities présents et ≥3 chacun",
-      "Réponse 100% JSON pur: aucun texte hors { ... }, pas de ```"
+      "Réponse 100% JSON pur: aucun texte hors { ... }, pas de ```",
+      "deep_analysis.contrarian_view présent avec arguments, triggers et hedges"
     ]
   },
   "schema_json": {
@@ -315,7 +317,7 @@
       },
       "deep_analysis": {
         "type": "object",
-        "required": ["narrative", "sector_rotation_matrix", "correlation_insights", "ai_focus_section", "geopolitical_chess"],
+        "required": ["narrative", "sector_rotation_matrix", "correlation_insights", "ai_focus_section", "geopolitical_chess", "contrarian_view"],
         "properties": {
           "narrative": { 
             "type": "string", 
@@ -448,6 +450,34 @@
                     "early_warning": { "type": "string" } 
                   } 
                 } 
+              }
+            }
+          },
+          "contrarian_view": {
+            "type": "object",
+            "required": ["narrative", "key_arguments", "falsification_triggers", "hedge_ideas"],
+            "properties": {
+              "narrative": {
+                "type": "string",
+                "description": "Vue contrarienne structurée (thèse alternative, hypothèses, risques)."
+              },
+              "key_arguments": {
+                "type": "array",
+                "minItems": 3,
+                "items": { "type": "string" },
+                "description": "Arguments clés en faveur de la vue contrarienne"
+              },
+              "falsification_triggers": {
+                "type": "array",
+                "minItems": 3,
+                "items": { "type": "string" },
+                "description": "Signaux/conditions qui invalideraient la vue contrarienne"
+              },
+              "hedge_ideas": {
+                "type": "array",
+                "minItems": 3,
+                "items": { "type": "string" },
+                "description": "Hedges/positionnements pour se protéger si la vue contrarienne se matérialise"
               }
             }
           }
