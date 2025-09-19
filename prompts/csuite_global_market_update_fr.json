@@ -11,10 +11,37 @@
   },
   "exigences_highlight": "Inclure highlight_title (≤120c) aligné sur catalyseur ≤48–72h et cohérent avec market_pulse.main_title. Refléter ce titre: (i) ≥2 puces executive_summary, (ii) 3 items verdict_trinity, (iii) 1er sous‑titre de summary. En cas d’écart: ajouter '⚠️ Alerte cohérence' en fin de summary (1 phrase).",
   "style_deep_analysis": "Dans deep_analysis.narrative: ne pas utiliser de Markdown (pas de ###, pas de **). Générer des sous‑titres dynamiques (simples, courts, informatifs) alignés sur le contenu qui suit. Chaque sous‑titre en texte simple est suivi de 1–2 paragraphes STRICTEMENT pertinents au sous‑titre. Séparer clairement la Vue contrarienne (thèse, arguments, triggers, hedges).",
+  "style_journalistique": {
+    "pyramide_inversee": {
+      "lead": "Ouvrir par un fait saillant vérifiable (≤ 2 phrases) aligné sur highlight_title et market_pulse.main_title.",
+      "nut_graf": "Expliquer pourquoi c’est important (enjeu business) en ≤ 3 phrases, immédiatement après le lead, dans summary → 'Situation immédiate'."
+    },
+    "noms_societes": "Toujours nom complet + ticker entre parenthèses si connu (ex. NVIDIA (NVDA), Novartis (NOVN)). Utiliser **gras** pour les entités clés dans les narratifs.",
+    "citations": "Intégrer 1–3 citations directes par rapport, fidèlement traduites en français, sous la forme « … », a déclaré Nom Prénom, fonction, Entreprise (TICKER), [date si connue]. Placement: priorité dans summary (Implications C‑Suite) et deep_analysis.narrative. INTERDIT dans executive_summary.",
+    "angles_equilibres": "Présenter un contre‑point pertinent (analyste, pair sectoriel, régulateur) avec attribution quand disponible.",
+    "micro_meso_macro": "Conserver la hiérarchie analytique micro/meso/macro; paragraphes courts (3–5 phrases) séparés par une ligne vide; sous‑titres dynamiques annonçant le contenu qui suit (sans Markdown).",
+    "chiffres": "Tout chiffre cité doit porter unité et intervalle temporel (ex. marge opérationnelle 17.2% au T2). Si incertain: 'N/D — justification brève'.",
+    "coherence_editoriale": "Ton factuel, neutre, précis. Éviter superlatifs non sourcés et le jargon non expliqué.",
+    "verifiabilite": "Si un élément clé manque (prix, date, devise), ne pas extrapoler; marquer 'N/D — justification brève' et lister la source attendue.",
+    "controle_final_additionnel": "Au moins 1 citation directe et 1 attribution de contre‑point si disponible; au moins 3 sociétés nommées avec tickers."
+  },
   "structure": {
-    "summary": "≥3500 caractères, 8 sous‑titres imposés: Situation immédiate (T0-48h); Implications C‑Suite directes; Court terme (1-3 mois); Moyen terme (3-12 mois); Long terme (12-36 mois); Focus Suisse; Dynamiques régionales; Indicateurs d’alerte. Paragraphes courts (3–5 phrases) séparés par une ligne vide. Utiliser **gras** à l’intérieur des chaînes.",
+    "summary": "Commencer par LEAD (≤2 phrases) puis NUT‑GRAF (≤3 phrases) dans 'Situation immédiate'. ≥3500 caractères, 8 sous‑titres imposés: Situation immédiate (T0-48h); Implications C‑Suite directes; Court terme (1-3 mois); Moyen terme (3-12 mois); Long terme (12-36 mois); Focus Suisse; Dynamiques régionales; Indicateurs d’alerte. Paragraphes courts (3–5 phrases) séparés par une ligne vide. Utiliser **gras** à l’intérieur des chaînes.",
     "deep_analysis": "≥3500 caractères, ≥10 sous‑titres dynamiques (texte simple, pas de Markdown); chaque sous‑titre annonce précisément le contenu qui suit; paragraphes courts séparés par une ligne vide; inclure Vue contrarienne (thèse, arguments, triggers de falsification, hedges)."
   },
+  "user_context_attendu": {
+    "contexte_journalistique_48_72h": {
+      "faits_cles_verifiables": {
+        "societes": "[Nom complet + ticker]",
+        "citations_candidates": "[extraits FR ou EN à traduire fidèlement]",
+        "documents_sources": "[titres + URLs: communiqué, transcript, Reuters/FT/Bloomberg]"
+      },
+      "donnees_de_marche": "[market_snapshot si dispo; sinon 'indisponible']",
+      "angle_souhaite": "[ex. coûts énergie et pricing pharma]",
+      "contraintes": "français strict, pas d’URL hors sources[].url"
+    }
+  },
+  "tache_journalistique": "Produire le rapport JSON strict en style journalistique: lead + nut‑graf, 1–3 citations attribuées (FR), sociétés nommées (gras + ticker), contre‑point si possible. Aucune hallucination; écrire 'N/D — justification brève' si manque.",
   "donnees_fraicheur": "Si market_snapshot est fourni (user), le prioriser pour prix/variations/volumes/ratios; sinon ajouter 'N/D — market_snapshot non fourni' dans executive_dashboard.snapshot_metrics. Sources ≤48–72h pour géopolitique/banques centrales/indicateurs. Signaler anomalies (divergences prix/volume >20% sur 20j, z sectoriel >2, écarts géographiques >1σ) si détectables.",
   "validation_finale": {
     "checks_obligatoires": [
@@ -22,10 +49,61 @@
       "Pas de virgules finales",
       "highlight_title présent et ≤120c, cohérent avec market_pulse.main_title",
       "executive_summary = 10 puces taguées [Suisse]/[Europe]/[États-Unis]/[Asie]/[Global]/[Énergie]/[FX]/[Taux]/[Commodities]",
-      "summary ≥3500 caractères; 8 sous‑titres imposés; paragraphes courts (ligne vide)",
+      "summary ≥3500 caractères; 8 sous‑titres imposés; paragraphes courts (ligne vide); présence d’un LEAD (≤2 phrases) et d’un NUT‑GRAF (≤3 phrases)",
       "deep_analysis.narrative ≥3500; ≥10 sous‑titres dynamiques; pas de Markdown; Vue contrarienne incluse",
       "key_points ≥12; insights/risks/opportunities ≥3 chacun",
-      "Aucune URL hors champs autorisés"
+      "Aucune URL hors champs autorisés",
+      "≥1 citation directe présente (format « … », attribution nom+fonction+entreprise[ticker])",
+      "≥3 sociétés nommées avec tickers (Nom (TICKER))",
+      "Aucune citation dans executive_summary",
+      "Citations placées uniquement dans summary et/ou deep_analysis.narrative"
+    ]
+  },
+  "few_shot_assistant_example": {
+    "highlight_title": "Guidance prudente chez **Novartis (NOVN)**, l’IA de **NVIDIA (NVDA)** soutient la chaîne semi",
+    "market_pulse": {
+      "main_title": "Pharma suisse prudente, méga-caps IA résilientes",
+      "subtitle": "Contexte mixte : défensifs en appui, capex tech sélectif",
+      "verdict_trinity": ["Prioriser", "Couvrir", "Séquencer"],
+      "key_metric": {"name": "VIX", "value": "15.3", "change": "-2.5%", "significance": "Volatilité contenue"},
+      "market_mood": "NEUTRAL",
+      "reading_priority": "IMPORTANT"
+    },
+    "executive_summary": [
+      "[Suisse] **Novartis (NOVN)**: ton prudent → phaser capex clinique",
+      "[États-Unis] **NVIDIA (NVDA)**: demande data center soutenue → sécuriser composants",
+      "[Europe] IG serré → fenêtre de pré-refinancement 12–24 mois",
+      "[Énergie] Brent modéré → couvrir 30–50% besoins Q4–Q1",
+      "[FX] USD/CHF ferme → hedger marges export",
+      "[Asie] **TSMC (2330.TW)**: capex inchangé → continuité supply",
+      "[Taux] 10Y US ~4% → duration neutre/positive",
+      "[Commodities] Cuivre stable → capex maintenance ok",
+      "[Global] PMI services résilient → pricing mix à optimiser",
+      "[Taux] SARON bas → flexibilité covenants"
+    ],
+    "summary": "Lead — **Novartis (NOVN)** adopte une guidance prudente tandis que **NVIDIA (NVDA)** confirme une demande robuste côté data centers. Nut-graf — Pour la C-Suite, l’enjeu est de **séquencer les capex** et de **sécuriser les intrants critiques**.\n\n« La priorité reste la discipline sur le pipeline et les retours aux actionnaires », a déclaré **X, CFO, Novartis (NOVN)**. À l’inverse, « la demande d’IA générative soutient la visibilité 12 mois », a indiqué **Y, CFO, NVIDIA (NVDA)**. Ces déclarations cadrent un environnement mixte : défensifs solides, mais investissements tech à calibrer.\n\n…",
+    "deep_analysis": {
+      "narrative": "Sous-titre dynamique — Pipeline pharma et trésorerie\nLe recentrage de **Novartis (NOVN)** implique des arbitrages capex…\n\nSous-titre dynamique — Data centers et semi\nLa chaîne **NVDA–TSMC–ASML** reste tirée par des commandes HPC…\n\nSous-titre dynamique — Vue contrarienne\n« Les commandes HPC pourraient normaliser plus vite », nuance **Z, analyste sell-side**…\n\n…",
+      "sector_rotation_matrix": {"outperformers": [], "underperformers": [], "rotation_signal": "N/D — exemple"},
+      "correlation_insights": {"breaking_correlations": [], "new_relationships": [], "regime_dependent": []},
+      "ai_focus_section": {
+        "mega_caps": {"NVDA": {"price": "N/D", "change": "N/D", "rsi": "N/D", "volume_ratio": "N/D"}, "MSFT": {"price": "N/D", "change": "N/D"}, "other_ai_plays": ["ASML (ASML)", "TSMC (2330.TW)"]},
+        "supply_chain": "…",
+        "investment_flows": "…",
+        "productivity_impact": "…"
+      },
+      "geopolitical_chess": {"immediate_impacts": [], "second_order_effects": [], "black_swans": []},
+      "contrarian_view": {
+        "narrative": "Thèse : normalisation plus rapide des capex HPC",
+        "key_arguments": ["Carnets concentrés", "Sensibilité prix énergie", "Risque régulatoire data"],
+        "falsification_triggers": ["Bookings > attentes 2 trimestres", "Marge brute ↑ séquentielle durable", "Stocks semi en baisse 3 mois"],
+        "hedge_ideas": ["Puts sectoriels semi", "Calendar spreads Brent", "Pairs long défensifs / short cycliques"]
+      }
+    },
+    "sources": [
+      {"title": "Communiqué Novartis — résultats T2 (traduction FR)", "url": "https://…"},
+      {"title": "Transcript NVIDIA — conférence résultats (traduction FR)", "url": "https://…"},
+      {"title": "Reuters — synthèse marché (≤48h)", "url": "https://…"}
     ]
   },
   "schema_json": {
