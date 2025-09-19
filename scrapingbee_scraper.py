@@ -1935,9 +1935,33 @@ class ScrapingBeeScraper:
                             # supprimer virgules traînantes avant } ou ]
                             s = re.sub(r",(\s*[}\]])", r"\\1", s)
                             
+                            # Helper: compléter minimalement market_pulse si absent (robustesse)
+                            def _ensure_market_pulse(obj: dict) -> dict:
+                                try:
+                                    if isinstance(obj, dict) and "market_pulse" not in obj:
+                                        logger.warning("market_pulse absent — ajout d'un bloc minimal 'N/D' pour robustesse")
+                                        highlight = str(obj.get("highlight_title") or "N/D — non fourni par LLM")[:100]
+                                        obj["market_pulse"] = {
+                                            "main_title": highlight,
+                                            "subtitle": "N/D — non fourni",
+                                            "verdict_trinity": ["N/D", "N/D", "N/D"],
+                                            "key_metric": {
+                                                "name": "N/D",
+                                                "value": "N/D",
+                                                "change": "N/D",
+                                                "significance": "N/D",
+                                            },
+                                            "market_mood": "NEUTRAL",
+                                            "reading_priority": "IMPORTANT",
+                                        }
+                                except Exception:
+                                    pass
+                                return obj
+
                             # Tentative de parse direct
                             try:
                                 parsed = json.loads(s)
+                                parsed = _ensure_market_pulse(parsed)
                                 if validate_llm_response(parsed):
                                     return parsed
                             except json.JSONDecodeError as e:
@@ -1948,6 +1972,7 @@ class ScrapingBeeScraper:
                                 if repaired:
                                     try:
                                         parsed = json.loads(repaired)
+                                        parsed = _ensure_market_pulse(parsed)
                                         if validate_llm_response(parsed):
                                             logger.info("JSON réparé avec succès")
                                             return parsed
@@ -1959,6 +1984,7 @@ class ScrapingBeeScraper:
                                 if partial_json:
                                     try:
                                         parsed = json.loads(partial_json)
+                                        parsed = _ensure_market_pulse(parsed)
                                         if validate_llm_response(parsed):
                                             logger.info("JSON partiel extrait avec succès")
                                             return parsed
