@@ -1883,7 +1883,7 @@ class ScrapingBeeScraper:
                             return False
                         
                         # En mode GMU, exiger aussi insights/risks/opportunities et market_pulse
-                        required_fields = ['executive_summary', 'summary', 'key_points', 'insights', 'risks', 'opportunities', 'market_pulse']
+                        required_fields = ['executive_summary', 'summary', 'key_points', 'insights', 'risks', 'opportunities', 'market_pulse', 'confidence_score']
                         for field in required_fields:
                             if field not in data:
                                 logger.error(f"Champ manquant: {field}")
@@ -1907,6 +1907,16 @@ class ScrapingBeeScraper:
                             if not isinstance(val, list) or len(val) < 3:
                                 logger.error(f"Champ {fld} doit contenir au moins 3 éléments")
                                 validation_errors.append(f"{fld} doit contenir au moins 3 éléments")
+
+                        # Vérifier confidence_score (numérique 0..1)
+                        if 'confidence_score' in data:
+                            cs = data.get('confidence_score')
+                            if not isinstance(cs, (int, float)):
+                                logger.error("confidence_score doit être un nombre (0..1)")
+                                validation_errors.append("confidence_score doit être un nombre (0..1)")
+                            elif cs < 0 or cs > 1:
+                                logger.error("confidence_score doit être compris entre 0 et 1")
+                                validation_errors.append("confidence_score doit être compris entre 0 et 1")
                         return len(validation_errors) == 0
 
                     # Parsing JSON robuste avec réparation automatique
