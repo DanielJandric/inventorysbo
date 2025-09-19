@@ -727,7 +727,7 @@ class MarketAnalysisWorker:
                 except Exception:
                     summary_text = ''
         # Toujours utiliser le summary pour l'email (supprimer l'usage de la narrative approfondie)
-        narrative_html = self._render_deep_narrative_with_headings(summary_text)
+        summary_html = self._render_deep_narrative_with_headings(summary_text)
 
         # Rendu des sections structured_data (si présentes)
         meta_html = self._generate_meta_analysis(structured_data.get('meta_analysis', {}) if isinstance(structured_data.get('meta_analysis', {}), dict) else {})
@@ -965,9 +965,11 @@ class MarketAnalysisWorker:
                     </ul>
                 </div>
                 
-                
-                
-                
+                <!-- Résumé -->
+                <div class="section">
+                    <h3>📝 Résumé</h3>
+                    {summary_html or '<p style="font-size: 14px; line-height: 1.8;">Aucun contenu disponible</p>'}
+                </div>
                 <!-- Aperçu du marché -->
                 {'' if is_swiss else f'<div class="section"><h3>📈 Aperçu du Marché</h3><table class="market-table"><thead><tr><th>Actif</th><th>Prix</th><th>Variation</th></tr></thead><tbody>{self._generate_market_snapshot_rows(market_snapshot)}</tbody></table></div>'}
                 
@@ -982,11 +984,7 @@ class MarketAnalysisWorker:
                 <!-- Analyse Méta / Régimes (structured_data) -->
                 {f'<div class="section"><h3>🧠 Analyse Méta & Régimes</h3>{meta_html}</div>' if meta_html else ''}
                 
-                <!-- Résumé détaillé -->
-                <div class="section">
-                    <h3>📝 Analyse Approfondie</h3>
-                    {narrative_html or '<p style="font-size: 14px; line-height: 1.8;">Aucun contenu disponible</p>'}
-                </div>
+                
                 
                 <!-- Points clés -->
                 <div class="section">
