@@ -1669,7 +1669,8 @@ class ScrapingBeeScraper:
             from openai import OpenAI
             
             client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-            strict_mode = str(os.getenv('STRICT_LLM_JSON', '0')).strip() in ('1', 'true', 'True')
+            # Forcer le mode strict pour GLOBAL MARKET UPDATE
+            strict_mode = True
             
             # Prompt système chargé depuis un fichier (aucun fallback embarqué)
             prompt_path = os.path.join(os.path.dirname(__file__), 'prompts', 'market_analysis_fr.txt')
@@ -1876,7 +1877,8 @@ class ScrapingBeeScraper:
                         if not isinstance(data, dict):
                             return False
                         
-                        required_fields = ['executive_summary', 'summary', 'key_points']
+                        # En mode GMU, exiger aussi insights/risks/opportunities et market_pulse
+                        required_fields = ['executive_summary', 'summary', 'key_points', 'insights', 'risks', 'opportunities', 'market_pulse']
                         for field in required_fields:
                             if field not in data:
                                 logger.error(f"Champ manquant: {field}")
@@ -1893,6 +1895,12 @@ class ScrapingBeeScraper:
                             logger.error("Le champ 'summary' contient du JSON stringifié au lieu d'une string")
                             return False
                             
+                        # Vérifier longueur minimale pour i/r/o
+                        for fld in ['insights','risks','opportunities']:
+                            val = data.get(fld)
+                            if not isinstance(val, list) or len(val) < 3:
+                                logger.error(f"Champ {fld} doit contenir au moins 3 éléments")
+                                return False
                         return True
 
                     # Parsing JSON robuste avec réparation automatique

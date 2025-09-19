@@ -337,18 +337,25 @@ class MarketAnalysisWorker:
                 
                 return fallbacks[:4]  # Limiter à 4 opportunités
 
-            # Appliquer les fallbacks si les champs sont vides
-            if not insights:
-                insights = _generate_fallback_insights()
-                logger.info(f"🔄 Insights générés par fallback: {len(insights)} éléments")
-            
-            if not risks:
-                risks = _generate_fallback_risks()
-                logger.info(f"🔄 Risques générés par fallback: {len(risks)} éléments")
-            
-            if not opportunities:
-                opportunities = _generate_fallback_opportunities()
-                logger.info(f"🔄 Opportunités générées par fallback: {len(opportunities)} éléments")
+            # Appliquer les fallbacks si les champs sont vides (désactivé pour GLOBAL MARKET UPDATE)
+            try:
+                _atype = str(task.analysis_type or '').strip().lower()
+            except Exception:
+                _atype = ''
+            _is_global_only_llm = _atype in { 'global_market_update', 'global', 'gmu' }
+            if not _is_global_only_llm:
+                if not insights:
+                    insights = _generate_fallback_insights()
+                    logger.info(f"🔄 Insights générés par fallback: {len(insights)} éléments")
+                if not risks:
+                    risks = _generate_fallback_risks()
+                    logger.info(f"🔄 Risques générés par fallback: {len(risks)} éléments")
+                if not opportunities:
+                    opportunities = _generate_fallback_opportunities()
+                    logger.info(f"🔄 Opportunités générées par fallback: {len(opportunities)} éléments")
+            else:
+                if not insights or not risks or not opportunities:
+                    logger.info("LLM-only mode (GLOBAL): fallbacks désactivés pour insights/risks/opportunities")
 
             # 4. Mettre à jour la tâche avec les résultats directs du LLM
             # Nettoyer summary si JSON-like (ne pas tronquer pour email)
@@ -691,7 +698,15 @@ class MarketAnalysisWorker:
                     summary_text = str((deep_analysis.get('narrative') or '')).strip()
                 except Exception:
                     summary_text = ''
-        summary_html = self._render_summary_paragraphs(summary_text)
+        # Préparer la narrative approfondie et l'afficher avec des sous-titres
+        try:
+            deep_narrative_text = ''
+            if isinstance(deep_analysis, dict):
+                deep_narrative_text = str(deep_analysis.get('narrative') or '').strip()
+        except Exception:
+            deep_narrative_text = ''
+        narrative_text = deep_narrative_text or summary_text
+        narrative_html = self._render_deep_narrative_with_headings(narrative_text)
 
         # Rendu des sections structured_data (si présentes)
         meta_html = self._generate_meta_analysis(structured_data.get('meta_analysis', {}) if isinstance(structured_data.get('meta_analysis', {}), dict) else {})
@@ -947,7 +962,7 @@ class MarketAnalysisWorker:
                 <!-- Résumé détaillé -->
                 <div class="section">
                     <h3>📝 Analyse Approfondie</h3>
-                    {summary_html or '<p style="font-size: 14px; line-height: 1.8;">Aucun résumé disponible</p>'}
+                    {narrative_html or '<p style="font-size: 14px; line-height: 1.8;">Aucun contenu disponible</p>'}
                 </div>
                 
                 <!-- Points clés -->
@@ -1023,6 +1038,68 @@ class MarketAnalysisWorker:
             return chr(10).join([f'<p style="font-size: 14px; line-height: 1.8;">{html.escape(p)}</p>' for p in parts])
         except Exception:
             return f'<p style="font-size: 14px; line-height: 1.8;">{html.escape(str(text))}</p>'
+
+    def _render_deep_narrative_with_headings(self, text: str) -> str:
+        """Ajoute automatiquement des intertitres pour aérer la lecture.
+
+        Heuristiques simples:
+        - Détecte des sections clés (Court terme / Moyen terme / Long terme / Banques centrales / Inflation / Emploi / Énergie / Géopolitique / IA / Risques / Opportunités)
+        - Si non trouvées, découpe en paragraphes et insère des sous-titres génériques.
+        """
+        try:
+            if not text:
+                return ''
+            raw = str(text).replace('\r', '\n').strip()
+            # Normaliser doubles sauts
+            chunks = [c.strip() for c in raw.split('\n\n') if c.strip()]
+            if len(chunks) < 3:
+                # fallback simple sur paragraphes
+                return self._render_summary_paragraphs(text)
+
+            sections = []
+            current_title = None
+            buffer = []
+
+            def flush():
+                if buffer:
+                    body = chr(10).join([f'<p style="font-size: 14px; line-height: 1.8;">{html.escape(p)}</p>' for p in buffer])
+                    if current_title:
+                        sections.append(f'<h4 style="margin:12px 0 6px 0; color:#0f172a;">{html.escape(current_title)}</h4>' + body)
+                    else:
+                        sections.append(body)
+
+            keyword_map = [
+                ('Court terme', ['au court terme', 'court terme', 'immédiat', 'prochaines', 'à très court']),
+                ('Moyen terme', ['moyen terme', 'prochains trimestres', 'prochain trimestre']),
+                ('Long terme', ['long terme', 'structurel', 'tendance de fond']),
+                ('Banques centrales', ['fed', 'bce', 'bns', 'boj', 'pboc', 'banque centrale']),
+                ('Inflation & Prix', ['inflation', 'pce', 'cpi', 'hicp', 'prix']),
+                ('Emploi & Activité', ['emploi', 'nfp', 'unemployment', 'pmi', 'ism', 'gdp', 'croissance']),
+                ('Énergie & Commodities', ['pétrole', 'gaz', 'brent', 'wti', 'énergie', 'commodities']),
+                ('FX & Taux', ['eur/chf', 'usd/chf', 'dollar', 'taux', 'rendement']),
+                ('Géopolitique', ['géopolitique', 'ukraine', 'moyen-orient', 'chine', 'sanctions']),
+                ('IA & Productivité', ['ia', 'intelligence artificielle', 'productivité']),
+                ('Risques', ['risque', 'incertitude', 'volatilité']),
+                ('Opportunités', ['opportunité', 'surperformance', 'rotation sectorielle'])
+            ]
+
+            for chunk in chunks:
+                low = chunk.lower()
+                matched = None
+                for title, keys in keyword_map:
+                    if any(k in low for k in keys):
+                        matched = title
+                        break
+                if matched and matched != current_title:
+                    flush()
+                    current_title = matched
+                    buffer = [chunk]
+                else:
+                    buffer.append(chunk)
+            flush()
+            return chr(10).join(sections)
+        except Exception:
+            return self._render_summary_paragraphs(text)
 
     def _generate_executive_dashboard(self, dashboard: Dict) -> str:
         """Rend le tableau de bord exécutif: alert_level, top_trades, snapshot_metrics."""

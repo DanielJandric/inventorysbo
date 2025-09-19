@@ -62,6 +62,46 @@
     "deep_analysis_narrative": "≥ 3500 caractères en mode COMPLETE (optionnel en STANDARD)",
     "key_points": "≥ 12 points en COMPLETE, ≥ 6 en STANDARD"
   },
+  "structure_narrative": {
+    "obligation": "TOUTES les sections narratives >1500 caractères DOIVENT être structurées avec des sous-titres clairs",
+    "format_summary": {
+      "structure_requise": [
+        "## 📊 Situation immédiate (T0-48h)",
+        "## 💼 Implications C-Suite directes",
+        "## ⏱️ Court terme (1-3 mois)",
+        "## 📈 Moyen terme (3-12 mois)",
+        "## 🌍 Long terme (12-36 mois)",
+        "## 🇨🇭 Focus Suisse",
+        "## 🌐 Dynamiques régionales",
+        "## ⚠️ Indicateurs d'alerte"
+      ],
+      "règle": "Chaque section doit avoir un titre en gras avec emoji, suivi d'un paragraphe de 300-500 caractères"
+    },
+    "format_deep_analysis": {
+      "structure_requise": [
+        "### 🔍 Analyse causale: Pourquoi maintenant?",
+        "### ⚙️ Mécaniques de marché",
+        "### 💱 Dynamique FX et transmission",
+        "### ⚡ Énergie et matières premières",
+        "### 🏛️ Risques politiques et réglementaires",
+        "### 🇨🇭 Analyse approfondie Suisse",
+        "### 🌏 Comparaisons régionales",
+        "### 🔄 Canaux de transmission",
+        "### 🚨 Conditions de rupture",
+        "### 📊 Implications quantifiées"
+      ],
+      "sous_sections": "Utiliser ** ** pour les sous-thèmes dans chaque section principale"
+    },
+    "règles_typographiques": {
+      "titres_principaux": "### suivi d'un emoji et du titre",
+      "sous_titres": "**Texte en gras** pour les sous-sections",
+      "mots_clés": "Utiliser **gras** pour les concepts critiques dans le texte",
+      "listes": "Utiliser • ou numérotation pour les points multiples",
+      "séparation": "Sauter une ligne entre chaque section"
+    }
+  },
+  "exemple_structure_summary": "\n### 📊 Situation immédiate (T0-48h)\nLa Fed a coupé de 25pb comme attendu, mais le ton hawkish a surpris. Les **spreads IG** atteignent un plancher historique de 27 ans, créant une **fenêtre d'opportunité** pour les émetteurs mais aussi une **asymétrie de risque** préoccupante.\n\n### 💼 Implications C-Suite directes  \nPour les CFO, trois actions prioritaires:\n- **Refinancement immédiat** de la dette 2026-2028\n- **Couverture FX** sur 6-9 mois (USD/CHF particulièrement)\n- **Sécurisation énergie** via collars Q1-Q2 2025\n\n### ⏱️ Court terme (1-3 mois)\nLes **canaux de transmission** monétaires suggèrent une volatilité accrue sur les taux longs. Le **10Y US** pourrait osciller entre 3.9% et 4.3% selon les données d'inflation. Points de surveillance:\n- Core PCE du 26/09\n- Décision BoJ\n- Flux ETF crédit\n\n[etc...]\n",
+  "exemple_structure_deep_analysis": "\n### 🔍 Analyse causale: Pourquoi maintenant?\nLa convergence de trois forces explique le régime actuel: (1) une Fed **prudente mais accommodante**, (2) une **euphorie IA** ravivée par l'accord Nvidia-Intel, et (3) des **conditions financières ultra-lâches** malgré des taux réels encore restrictifs.\n\n### ⚙️ Mécaniques de marché\n\n**Dynamique Micro vs Macro**\nAu niveau micro, l'injection de 5 Mds$ de Nvidia dans Intel redéfinit la **chaîne de valeur** des semiconducteurs. Les implications cascadent vers les équipementiers (ASML +7%) et l'infrastructure adjacente.\n\n**Crédit et liquidité**  \nLes spreads IG au plus bas depuis 1997 reflètent une **recherche de rendement** exacerbée. La prime de risque est quasi-inexistante: 87bp pour l'IG US vs 600bp historique en récession. Cette **complaisance** crée un setup asymétrique dangereux.\n\n### 💱 Dynamique FX et transmission\nLe **DXY à 97** constitue un double tranchant:\n- **Avantage**: importateurs européens, pression désinflationniste US\n- **Risque**: stress émergents, compression marges exportateurs\n- **Action**: couvertures rolling 3 mois avec triggers à DXY 97.5 et 98\n\n[etc...]\n",
   "format_executive_summary": {
     "tags_regional_obligatoires": [
       "[Suisse]", "[Europe]", "[États-Unis]", "[Asie]", "[Global]", "[Énergie]", "[FX]", "[Taux]", "[Commodities]"
@@ -98,9 +138,23 @@
     "Performance_metrics: évaluer la pertinence passée et projeter l'accuracy future.",
     "Actionable_summary: to-do exécutif global, watchlist, seuils et agenda international.",
     "Indicateurs: normaliser valeurs/périodes; N/D si indisponible + raison.",
+    "7. Structurer OBLIGATOIREMENT le summary avec 8 sections titrées (emojis + ###)",
+    "8. Diviser le deep_analysis.narrative en 10 sections minimum avec titres clairs",
+    "9. Utiliser **gras** pour TOUS les concepts clés (minimum 20 par section)",
+    "10. Insérer des listes • pour les énumérations (pas de paragraphes listes)",
+    "11. Maintenir un ratio 1 titre pour 300-500 caractères maximum",
     "Contrôles finaux: longueurs, types, aucune URL hors champs autorisés, JSON valide {...}."
   ],
-  "validation_finale": "Avant envoi: vérifier que JSON.parse() fonctionnerait; guillemets doubles; aucune virgule finale; toutes les clés requises présentes; longueurs minimales respectées selon format choisi; premiers/derniers caractères { }.",
+  "validation_finale": {
+    "note": "Avant envoi: vérifier que JSON.parse() fonctionnerait; guillemets doubles; aucune virgule finale; toutes les clés requises présentes; longueurs minimales respectées selon format choisi; premiers/derniers caractères { }.",
+    "checks_obligatoires": [
+      "Summary contient minimum 8 sous-titres avec ###",
+      "Deep_analysis contient minimum 10 sous-titres",
+      "Chaque section narrative >1500 chars est structurée",
+      "Au moins 50 mots en **gras** dans le rapport total",
+      "Séparation visuelle claire entre sections (lignes vides)"
+    ]
+  },
   "schema_json": {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "title": "Institutional Research Report (FR) — C-suite Global Market Update v3.0",
