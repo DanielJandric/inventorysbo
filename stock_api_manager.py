@@ -722,6 +722,49 @@ class StockAPIManager:
                     'DEXUSEU': "EUR/USD",
                 }
             }
+            # Formatage/Unités par série FRED
+            def _fred_series_format(series_id: str) -> Dict[str, Any]:
+                """Retourne unit, change_unit, scale d'affichage (pour value), et decimals.
+                - unit: suffixe d'unité pour la valeur (ex: '%', 'index', 'bln USD', 'USD/bbl', 'ratio', 'K jobs')
+                - change_unit: unité de variation (ex: 'bp', 'pp', 'pts', 'USD')
+                - scale: facteur à appliquer à la valeur brute pour l'affichage
+                - decimals: nombre de décimales recommandé
+                """
+                percent_series = {
+                    'DFF','DGS2','DGS10','DGS30','T10Y2Y','BAMLH0A0HYM2',
+                    'IRLTLT01EZM156N','IR3TIB01DEM156N','IRLTLT01CHM156N','IRSTCI01CHM156N',
+                    'UNRATE','CIVPART','SOFR','TEDRATE'
+                }
+                index_series = {
+                    'CPIAUCSL','CPILFESL','PCEPI','DPCCRV1Q225SBEA','CP0000EZ19M086NEST','CPALTT01CHM659N',
+                    'INDPRO','NAPM','NMFBAI'
+                }
+                usd_per_barrel = {'DCOILWTICO'}
+                ratio_series = {'DEXUSEU'}
+                bln_usd_series = {'GDP','GDPC1'}  # déjà en milliards
+                mln_to_bln_series = {'WALCL','RRPONTSYD','RSAFS'}  # millions -> milliards
+                k_jobs_series = {'PAYEMS'}  # milliers de personnes
+
+                if series_id in percent_series:
+                    # Valeur en %, variation en points de pourcentage (pp); pour DGS*, change est en bp
+                    if series_id in {'DGS2','DGS10','DGS30'}:
+                        return {'unit': '%', 'change_unit': 'bp', 'scale': 1.0, 'decimals': 2}
+                    return {'unit': '%', 'change_unit': 'pp', 'scale': 1.0, 'decimals': 2}
+                if series_id in index_series:
+                    return {'unit': 'index', 'change_unit': 'pts', 'scale': 1.0, 'decimals': 1}
+                if series_id in usd_per_barrel:
+                    return {'unit': 'USD/bbl', 'change_unit': 'USD', 'scale': 1.0, 'decimals': 2}
+                if series_id in ratio_series:
+                    return {'unit': 'ratio', 'change_unit': None, 'scale': 1.0, 'decimals': 4}
+                if series_id in bln_usd_series:
+                    return {'unit': 'bln USD', 'change_unit': 'bln USD', 'scale': 1.0, 'decimals': 1}
+                if series_id in mln_to_bln_series:
+                    return {'unit': 'bln USD', 'change_unit': 'bln USD', 'scale': 1e-3, 'decimals': 1}
+                if series_id in k_jobs_series:
+                    return {'unit': 'K jobs', 'change_unit': 'K', 'scale': 1.0, 'decimals': 0}
+                # Défaut
+                return {'unit': None, 'change_unit': None, 'scale': 1.0, 'decimals': 2}
+
             macros: Dict[str, Any] = {}
             for block, series in fred_blocks.items():
                 macros[block] = {}
@@ -731,7 +774,16 @@ class StockAPIManager:
                     if sid in ('DGS2','DGS10','DGS30'):
                         val = self.fred.get_latest_yield(sid)
                         if val is not None and 'yield' in val:
-                            macros[block][label] = {"value": val['yield'], "change": val.get('change_bps'), "unit": ("%" if 'DGS' in sid else None), "source": val.get('source')}
+                            fmt = _fred_series_format(sid)
+                            macros[block][label] = {
+                                "value": val['yield'],
+                                "change": val.get('change_bps'),
+                                "unit": fmt.get('unit'),
+                                "change_unit": fmt.get('change_unit'),
+                                "scale": fmt.get('scale'),
+                                "decimals": fmt.get('decimals'),
+                                "source": val.get('source')
+                            }
                             try:
                                 logger.debug(f"FRED {block}/{label} ({sid}) -> yield={val['yield']}, change_bps={val.get('change_bps')}")
                             except Exception:
@@ -740,7 +792,16 @@ class StockAPIManager:
                     # Autres séries: valeur simple
                     v = self.fred.get_latest_value(sid)
                     if v is not None:
-                        macros[block][label] = {"value": v.get('value'), "change": v.get('change'), "source": v.get('source')}
+                        fmt = _fred_series_format(sid)
+                        macros[block][label] = {
+                            "value": v.get('value'),
+                            "change": v.get('change'),
+                            "unit": fmt.get('unit'),
+                            "change_unit": fmt.get('change_unit'),
+                            "scale": fmt.get('scale'),
+                            "decimals": fmt.get('decimals'),
+                            "source": v.get('source')
+                        }
                         try:
                             logger.debug(f"FRED {block}/{label} ({sid}) -> value={v.get('value')}, change={v.get('change')}")
                         except Exception:
