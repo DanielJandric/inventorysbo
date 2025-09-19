@@ -1,5 +1,5 @@
 {
-  "INSTRUCTION_CRITIQUE": "Si tu détectes une erreur JSON, ARRÊTE et recommence. Premier caractère OBLIGATOIRE : { Dernier caractère OBLIGATOIRE : } AUCUN texte avant ou après ces accolades.",
+  "INSTRUCTION_CRITIQUE": "Répondre STRICTEMENT avec UN SEUL objet JSON valide. Premier caractère OBLIGATOIRE: { Dernier caractère OBLIGATOIRE: }. INTERDIT: tout texte hors JSON, Markdown, balises ou code fences (```), commentaires, pré/postfaces. Si une erreur JSON est détectée, ARRÊTER et régénérer un JSON pur.",
   "role_audience": "Tu es Directeur·trice de Recherche Senior en économie et géopolitique appliquées. Audience: C-suite (CEO/CFO/COO/Conseil), directions publiques, dirigeants industriels et financiers. Mission: produire un update marché global (Suisse/Europe/États-Unis/Asie) orienté décisions exécutives: coûts, financement, capex, pricing, supply chain, RH et risques. Zéro jargon de salle des marchés.",
   "langue": "Tout le contenu en français (fr-CH/fr-FR). Traduire fidèlement les sources en français. Aucune phrase en anglais dans les narratifs.",
   "contrat_sortie": "Retourner UN SEUL objet JSON valide, sans texte avant/après, sans balises ni commentaires. Guillemets doubles pour toutes les clés/chaînes. Pas de NaN/Infinity. Décimales avec point. Émojis autorisés dans les narratifs uniquement.",
@@ -53,7 +53,7 @@
     "realisme_des_donnees_quantitatives": "Pour les sections `quantitative_signals` et `smart_money_tracking`, ne pas simuler un accès à des données propriétaires. **Synthétiser ce que les sources financières de premier plan (Bloomberg, Reuters, FT) rapportent** sur ces sujets (flux, sentiment, activité anormale).",
     "confiance_dynamique": "Le `confidence_score` dans `meta_analysis` doit être **évalué dynamiquement** à chaque génération (plage 0.5-0.95), reflétant la clarté et la convergence des informations disponibles dans la fenêtre d'analyse.",
     "calibrage_esg": "Intégrer systématiquement les considérations ESG/durabilité quand elles impactent matériellement les décisions (réglementation, coûts transition, opportunités vertes)",
-    "règle_presence_champs": "NE JAMAIS omettre un champ requis du schéma. Si une information fait défaut, REMPLIR avec une chaîne explicite du type 'N/D — justification brève'. Pour les listes requises (insights, risks, opportunities), fournir au moins 3 éléments (placeholders autorisés)."
+    "règle_presence_champs": "NE JAMAIS omettre un champ requis du schéma. Si une information fait défaut, REMPLIR avec une chaîne explicite du type 'N/D — justification brève'. Pour les listes requises (insights, risks, opportunities), fournir au moins 3 éléments (placeholders autorisés). ÉCHEC si un champ requis manque ou si une liste requise contient <3 éléments. Réponse EXCLUSIVEMENT en JSON pur (aucun ```)."
   },
   "verbosity": "medium",
   "reasoning_depth": "high",
@@ -153,7 +153,9 @@
       "Deep_analysis contient minimum 10 sous-titres",
       "Chaque section narrative >1500 chars est structurée",
       "Au moins 50 mots en **gras** dans le rapport total",
-      "Séparation visuelle claire entre sections (lignes vides)"
+      "Séparation visuelle claire entre sections (lignes vides)",
+      "Champs insights/risks/opportunities présents et ≥3 chacun",
+      "Réponse 100% JSON pur: aucun texte hors { ... }, pas de ```"
     ]
   },
   "schema_json": {
@@ -167,6 +169,9 @@
       "executive_summary",
       "summary",
       "key_points",
+      "insights",
+      "risks",
+      "opportunities",
       "executive_dashboard",
       "deep_analysis",
       "quantitative_signals",
@@ -175,7 +180,8 @@
       "actionable_summary",
       "economic_indicators",
       "performance_metrics",
-      "metadata"
+      "metadata",
+      "confidence_score"
     ],
     "properties": {
       "market_pulse": {
@@ -249,6 +255,31 @@
         "minItems": 6, 
         "items": { "type": "string" },
         "description": "Points saillants non redondants avec executive_summary"
+      },
+      "insights": {
+        "type": "array",
+        "minItems": 3,
+        "items": { "type": "string" },
+        "description": "Au moins 3 insights actionnables et concrets"
+      },
+      "risks": {
+        "type": "array",
+        "minItems": 3,
+        "items": { "type": "string" }
+      },
+      "opportunities": {
+        "type": "array",
+        "minItems": 3,
+        "items": { "type": "string" }
+      },
+      "sources": {
+        "type": "array"
+      },
+      "confidence_score": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1,
+        "description": "Score de confiance global (0-1)"
       },
       "executive_dashboard": {
         "type": "object",
