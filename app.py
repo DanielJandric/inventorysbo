@@ -9626,7 +9626,7 @@ def markets_chat():
         def call_worker():
             nonlocal reply, error
             try:
-        reply = worker.generate_reply(user_message, extra_context, history=history)
+                reply = worker.generate_reply(user_message, extra_context, history=history)
             except Exception as e:
                 error = e
         
