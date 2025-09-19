@@ -1069,6 +1069,125 @@ class ScrapingBeeScraper:
             except Exception:
                 pass
 
+            # Étape 1d: Deep-crawl CH (RTS, Immobilien Business) pour le GLOBAL
+            try:
+                from datetime import timezone as _tz
+                def _now_utc() -> datetime:
+                    try:
+                        return datetime.now(_tz.utc)
+                    except Exception:
+                        return datetime.utcnow().replace(tzinfo=None)
+                def _normalize_ts(dt_obj: Optional[datetime]) -> Optional[datetime]:
+                    if not dt_obj:
+                        return None
+                    try:
+                        if getattr(dt_obj, 'tzinfo', None) is None:
+                            return dt_obj.replace(tzinfo=_tz.utc)
+                        return dt_obj.astimezone(_tz.utc)
+                    except Exception:
+                        return dt_obj
+                def _is_recent_dt(dt: Optional[datetime]) -> bool:
+                    try:
+                        if not dt:
+                            return False
+                        dtz = _normalize_ts(dt)
+                        nowz = _now_utc()
+                        if getattr(nowz, 'tzinfo', None) is None:
+                            nowz = nowz.replace(tzinfo=_tz.utc)
+                        return (nowz - dtz) <= timedelta(hours=max_age_hours)
+                    except Exception:
+                        return False
+
+                async def _gather_domain(domain: str, start_urls: List[str], link_predicate, max_links: int) -> List[str]:
+                    links: List[str] = []
+                    seen: set = set()
+                    for start in start_urls:
+                        try:
+                            html = await self._scrape_with_params(start, {
+                                'render_js': 'false',
+                                'premium_proxy': 'true',
+                                'block_resources': 'true',
+                                'wait': '1200',
+                                'country_code': 'ch',
+                            })
+                            if not html:
+                                continue
+                            from bs4 import BeautifulSoup  # type: ignore
+                            soup = BeautifulSoup(html or '', 'lxml')
+                            for a in soup.find_all('a'):
+                                href = a.get('href') or ''
+                                if not href:
+                                    continue
+                                if href.startswith('/'):
+                                    href = f"https://{domain}{href}"
+                                if (domain in href) and link_predicate(href) and href not in seen:
+                                    seen.add(href)
+                                    links.append(href)
+                                if len(links) >= max_links:
+                                    break
+                        except Exception:
+                            continue
+                        if len(links) >= max_links:
+                            break
+                    return links
+
+                def _is_rts_article(url: str) -> bool:
+                    u = url.lower()
+                    return ('rts.ch' in u) and ('/info/' in u) and any(p in u for p in ['/article', '/monde', '/suisse', '/economie', '/politique'])
+                rts_starts = [
+                    'https://www.rts.ch/info/',
+                    'https://www.rts.ch/info/suisse/',
+                    'https://www.rts.ch/info/economie/',
+                    'https://www.rts.ch/info/monde/'
+                ]
+                def _is_immobilien_article(url: str) -> bool:
+                    u = url.lower()
+                    return ('immobilienbusiness.ch' in u) and ('/de/' in u) and not any(x in u for x in ['/shop', '/kontakt', '/agb', '/datenschutz'])
+                immo_starts = [
+                    'https://www.immobilienbusiness.ch/de/',
+                    'https://www.immobilienbusiness.ch/de/residential/',
+                    'https://www.immobilienbusiness.ch/de/regionen/',
+                    'https://www.immobilienbusiness.ch/de/unternehmen/'
+                ]
+
+                # Collecter quelques liens par domaine
+                try:
+                    rts_links = await _gather_domain('www.rts.ch', rts_starts, _is_rts_article, max_links=max(6, per_site))
+                except Exception:
+                    rts_links = []
+                try:
+                    immo_links = await _gather_domain('www.immobilienbusiness.ch', immo_starts, _is_immobilien_article, max_links=max(6, per_site))
+                except Exception:
+                    immo_links = []
+
+                async def _scrape_ch_links(links: List[str], source_name: str, cap: int) -> int:
+                    added_local = 0
+                    for url in links[:cap]:
+                        try:
+                            details = await self._scrape_page_with_metadata(url)
+                            if not details or not details.get('text'):
+                                continue
+                            published_at = details.get('published_at')
+                            if not _is_recent_dt(published_at):
+                                continue
+                            scraped.append(ScrapedData(
+                                url=url,
+                                title=url[:120],
+                                content=(details.get('text') or '')[:8000],
+                                timestamp=published_at or _now_utc(),
+                                metadata={'source': source_name, 'scraped_at': datetime.now().isoformat()}
+                            ))
+                            added_local += 1
+                        except Exception:
+                            continue
+                    return added_local
+
+                added_rts = await _scrape_ch_links(rts_links, 'rts', cap=max(3, per_site // 2)) if rts_links else 0
+                added_immo = await _scrape_ch_links(immo_links, 'immobilienbusiness', cap=max(3, per_site // 2)) if immo_links else 0
+                logger.info(f"🇨🇭 Deep-crawl CH: RTS ajoutés {added_rts}, Immobilien {added_immo}")
+            except Exception:
+                pass
+
             if not scraped:
                 return {'error': "Aucune donnée récente trouvée (<24h)"}
 
@@ -1532,7 +1651,7 @@ class ScrapingBeeScraper:
             
             # Préparer le contexte (avec limitation stricte)
             context_complete = self._prepare_context(scraped_data)
-            max_context_chars = int(os.getenv('LLM_CONTEXT_MAX_CHARS', '150000'))
+            max_context_chars = int(os.getenv('LLM_CONTEXT_MAX_CHARS', '400000'))
             if len(context_complete) > max_context_chars:
                 context = context_complete[:max_context_chars]
                 truncated = True
@@ -1701,7 +1820,7 @@ class ScrapingBeeScraper:
                                 "sources": {"type": "array"},
                                 "confidence_score": {"type": "number", "minimum": 0, "maximum": 1}
                             },
-                            "required": ["executive_summary", "summary", "key_points", "insights", "risks", "opportunities", "confidence_score"],
+                            "required": ["market_pulse", "executive_summary", "summary", "key_points", "insights", "risks", "opportunities", "confidence_score"],
                             "additionalProperties": True
                         }
                     }

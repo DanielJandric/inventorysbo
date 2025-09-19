@@ -577,18 +577,6 @@ class MarketAnalysisWorker:
         market_snapshot = {} if is_swiss else stock_api_manager.get_market_snapshot()
         atype = (getattr(analysis, 'analysis_type', '') or '').strip().lower()
         is_global = atype in { 'global_market_update', 'global', 'gmu' }
-        # Market pulse (headline) support
-        market_pulse = {}
-        try:
-            market_pulse = (structured_data.get('market_pulse') or result.get('market_pulse') or {}) if isinstance(result, dict) else {}
-            if not isinstance(market_pulse, dict):
-                market_pulse = {}
-        except Exception:
-            market_pulse = {}
-        # Title prioritizes market_pulse when present
-        header_title = (
-            market_pulse.get('main_title') or ("Swiss Market Update" if is_swiss else ("🌐 GLOBAL MARKET UPDATE" if is_global else "📊 RAPPORT D'ANALYSE DE MARCHÉ"))
-        )
         header_style = (
             "background-color:#b91c1c;background:linear-gradient(135deg,#7f1d1d 0%,#dc2626 60%,#ef4444 100%);" if is_swiss else
             ("background-color:#0f766e;background:linear-gradient(135deg,#042f2e 0%,#0d9488 40%,#5eead4 100%);" if is_global else
@@ -655,6 +643,25 @@ class MarketAnalysisWorker:
         legacy_geo = getattr(analysis, 'geopolitical_analysis', None) or result.get('geopolitical_analysis', {})
         geo_analysis = geo_chess if geo_chess else (legacy_geo if isinstance(legacy_geo, dict) else {})
         analytics_data = market_snapshot.get('analytics', {}) if isinstance(market_snapshot, dict) else {}
+
+        # Market pulse (headline): extraire après normalisation de result/structured_data
+        market_pulse = {}
+        try:
+            if isinstance(result, dict):
+                mp = result.get('market_pulse')
+                if isinstance(mp, dict):
+                    market_pulse = mp
+                else:
+                    sd_mp = structured_data.get('market_pulse') if isinstance(structured_data, dict) else None
+                    if isinstance(sd_mp, dict):
+                        market_pulse = sd_mp
+        except Exception:
+            market_pulse = {}
+        # Titre: utiliser celui du LLM si présent, sinon générique
+        header_title = (
+            (market_pulse.get('main_title') if isinstance(market_pulse, dict) else None) or
+            ("Swiss Market Update" if is_swiss else ("🌐 GLOBAL MARKET UPDATE" if is_global else "📊 RAPPORT D'ANALYSE DE MARCHÉ"))
+        )
 
         # Ne pas afficher ni rendre de sources pour garder un narratif épuré
         sources_html = ""

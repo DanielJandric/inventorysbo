@@ -9481,63 +9481,6 @@ def get_recent_market_analyses():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-@app.route("/api/market-analysis/global/trigger", methods=["POST"])
-def trigger_global_market_update():
-    """Crée une nouvelle tâche GLOBAL MARKET UPDATE (worker) sans affecter les autres rapports."""
-    try:
-        from market_analysis_db import get_market_analysis_db, MarketAnalysis
-        db = get_market_analysis_db()
-
-        data = request.get_json(silent=True) or {}
-        force = bool(data.get('force', True))
-
-        # Prompt: charger depuis le fichier si non fourni
-        prompt = data.get('prompt')
-        if not prompt:
-            try:
-                base_dir = os.path.dirname(__file__)
-                prompt_path = os.path.join(base_dir, 'prompts', 'global_market_update_fr.json')
-                with open(prompt_path, 'r', encoding='utf-8') as pf:
-                    prompt = pf.read()
-            except Exception:
-                prompt = "GLOBAL MARKET UPDATE"
-
-        # Éviter la collision avec une tâche en cours
-        latest = db.get_latest_analysis()
-        if latest and latest.worker_status in ['pending', 'processing'] and not force:
-            return jsonify({
-                "success": True,
-                "status": "already_in_progress",
-                "message": "Une analyse est déjà en cours.",
-                "analysis_id": latest.id,
-                "timestamp": datetime.now().isoformat()
-            })
-
-        if latest and latest.worker_status in ['pending', 'processing'] and force:
-            try:
-                db.update_analysis_status(latest.id, 'error')
-            except Exception:
-                pass
-
-        new_analysis = MarketAnalysis(
-            analysis_type='global_market_update',
-            worker_status='pending',
-            prompt=prompt
-        )
-        analysis_id = db.save_analysis(new_analysis)
-        if not analysis_id:
-            return jsonify({"success": False, "error": "Impossible de créer la tâche"}), 500
-
-        return jsonify({
-            "success": True,
-            "message": "GLOBAL MARKET UPDATE planifié. Le worker va le traiter.",
-            "analysis_id": analysis_id,
-            "timestamp": datetime.now().isoformat()
-        })
-    except Exception as e:
-        logger.error(f"Erreur trigger_global_market_update: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
-
 @app.route("/api/markets/chat", methods=["POST"])
 def markets_chat():
     """Chatbot marchés.
@@ -9683,7 +9626,7 @@ def markets_chat():
         def call_worker():
             nonlocal reply, error
             try:
-                reply = worker.generate_reply(user_message, extra_context, history=history)
+        reply = worker.generate_reply(user_message, extra_context, history=history)
             except Exception as e:
                 error = e
         
