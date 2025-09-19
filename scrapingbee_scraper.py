@@ -1874,9 +1874,12 @@ class ScrapingBeeScraper:
                         pass
 
                     # Validation stricte du schéma JSON
+                    validation_errors: List[str] = []
                     def validate_llm_response(data: dict) -> bool:
-                        """Valide que la réponse LLM respecte le schéma attendu"""
+                        """Valide que la réponse LLM respecte le schéma attendu et collecte les erreurs."""
+                        validation_errors.clear()
                         if not isinstance(data, dict):
+                            validation_errors.append("La réponse n'est pas un objet JSON.")
                             return False
                         
                         # En mode GMU, exiger aussi insights/risks/opportunities et market_pulse
@@ -1884,26 +1887,27 @@ class ScrapingBeeScraper:
                         for field in required_fields:
                             if field not in data:
                                 logger.error(f"Champ manquant: {field}")
-                                return False
+                                validation_errors.append(f"Champ manquant: {field}")
+                                continue
                             if field in ['executive_summary', 'key_points'] and not isinstance(data[field], list):
                                 logger.error(f"Champ {field} doit être une liste, reçu: {type(data[field])}")
-                                return False
+                                validation_errors.append(f"Champ {field} doit être une liste")
                             if field == 'summary' and not isinstance(data[field], str):
                                 logger.error(f"Champ {field} doit être une string, reçu: {type(data[field])}")
-                                return False
+                                validation_errors.append(f"Champ {field} doit être une string")
                         
                         # Vérifier que summary n'est pas du JSON stringifié
                         if isinstance(data.get('summary'), str) and data['summary'].strip().startswith('{'):
                             logger.error("Le champ 'summary' contient du JSON stringifié au lieu d'une string")
-                            return False
+                            validation_errors.append("summary contient du JSON stringifié")
                             
                         # Vérifier longueur minimale pour i/r/o
                         for fld in ['insights','risks','opportunities']:
                             val = data.get(fld)
                             if not isinstance(val, list) or len(val) < 3:
                                 logger.error(f"Champ {fld} doit contenir au moins 3 éléments")
-                                return False
-                        return True
+                                validation_errors.append(f"{fld} doit contenir au moins 3 éléments")
+                        return len(validation_errors) == 0
 
                     # Parsing JSON robuste avec réparation automatique
                     def _safe_parse_json(text: str):
@@ -2070,14 +2074,24 @@ class ScrapingBeeScraper:
                     if parsed is None:
                         # Retry avec instruction de correction si tentative restante
                         if attempt < 2:
-                            logger.info("Retry LLM avec instruction de correction JSON…")
-                            correction_prompt = system_prompt + "\n\nATTENTION: La réponse précédente n'était pas un JSON valide. Renvoie le MÊME CONTENU sous forme d'un SEUL objet JSON complet et fermé, sans texte hors JSON. INCLUS OBLIGATOIREMENT: market_pulse, executive_summary, summary, key_points, insights(>=3), risks(>=3), opportunities(>=3), confidence_score. Si une info manque: 'N/D — justification'."
+                            logger.info("Retry LLM avec instruction de correction JSON guidée par erreurs…")
+                            errors_for_llm = "\n".join([f"- {e}" for e in validation_errors][:20]) if validation_errors else "- (aucune erreur spécifique capturée)"
+                            prev_snippet = (raw or "")[:12000]
+                            correction_prompt = (
+                                system_prompt
+                                + "\n\nATTENTION: La réponse précédente n'était pas un JSON valide.\n"
+                                + "Objectif: renvoyer le MÊME CONTENU sous forme d'un SEUL objet JSON complet et fermé, SANS AUCUN TEXTE hors JSON.\n"
+                                + "INCLUS OBLIGATOIREMENT: market_pulse, executive_summary, summary, key_points, insights(>=3), risks(>=3), opportunities(>=3), confidence_score.\n"
+                                + "Si une information manque: utiliser 'N/D — justification brève'.\n"
+                                + "NE PAS utiliser de fences ``` ni de balises. Réponse = JSON pur uniquement.\n"
+                                + "\nErreurs détectées à corriger:\n" + errors_for_llm
+                            )
                             resp = from_responses_simple(
                                 client=client,
                                 model=os.getenv("AI_MODEL", "gpt-5"),
                                 messages=[
                                     {"role": "system", "content": [{"type": "input_text", "text": correction_prompt}]},
-                                    {"role": "user", "content": [{"type": "input_text", "text": f"Demande: {prompt}\n\nDONNÉES FACTUELLES (snapshot):\n{attempt_snapshot}\n\nDONNÉES COLLECTÉES (articles):\n{attempt_context}"}]}
+                                    {"role": "user", "content": [{"type": "input_text", "text": f"SORTIE_PRÉCÉDENTE (à corriger):\n{prev_snippet}\n\nDONNÉES FACTUELLES (snapshot):\n{attempt_snapshot}\n\nDONNÉES COLLECTÉES (articles):\n{attempt_context}"}]}
                                 ],
                                 max_output_tokens=current_max_tokens,
                                 reasoning_effort=os.getenv("AI_REASONING_EFFORT", "high"),
