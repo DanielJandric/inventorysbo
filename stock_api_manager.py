@@ -909,7 +909,7 @@ class FredAPI:
         self.api_key = os.environ.get('FRED_API_KEY')
         self.base = 'https://api.stlouisfed.org/fred/series/observations'
 
-    @rate_limit(calls_per_minute=60)
+    @rate_limit(calls_per_minute=12)
     def get_latest_yield(self, series_id: str) -> Optional[Dict[str, Any]]:
         if not self.api_key:
             return None
@@ -940,7 +940,7 @@ class FredAPI:
         except Exception:
             return None
 
-    @rate_limit(calls_per_minute=60)
+    @rate_limit(calls_per_minute=12)
     def get_latest_value(self, series_id: str) -> Optional[Dict[str, Any]]:
         """Retourne la dernière valeur numérique d'une série FRED (valeur et variation d'une obs)."""
         if not self.api_key:
