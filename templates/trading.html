@@ -42,7 +42,11 @@
                 <form id="trade-form" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
                     <div>
                         <label class="block text-sm font-semibold mb-2">Symbole *</label>
-                        <input class="input" name="symbol" placeholder="Ex: NVDA, EURUSD, BTCUSD" required />
+                        <div class="flex gap-2">
+                            <input class="input flex-1" name="symbol" id="symbol-input" placeholder="Ex: NVDA, NESN.SW, EURUSD=X, BTC-USD" required />
+                            <button type="button" id="btn-price" class="btn glass">Prix</button>
+                        </div>
+                        <div id="live-price" class="text-xs text-cyan-200/70 mt-1"></div>
                     </div>
                     <div>
                         <label class="block text-sm font-semibold mb-2">Direction *</label>
@@ -138,6 +142,10 @@
             const r = await fetch('/api/trades');
             return await r.json();
         }
+        async function fetchPrice(symbol){
+            const r = await fetch(`/api/price?symbol=${encodeURIComponent(symbol)}`);
+            return await r.json();
+        }
         function fmt(v){ return (v === null || v === undefined || v === '') ? '' : v; }
         function fmtNum(v){ if(v===null||v===undefined||v==='') return ''; const n = Number(v); return isNaN(n)? '': n.toFixed(4); }
         function badge(status){ return `<span class="badge ${status==='CLOSED'?'badge-closed':'badge-open'}">${status}</span>`; }
@@ -227,6 +235,24 @@
             load();
         });
         document.getElementById('refresh-btn').addEventListener('click', load);
+        document.getElementById('btn-price').addEventListener('click', async ()=>{
+            const s = (document.getElementById('symbol-input').value||'').trim();
+            if(!s) return;
+            const out = document.getElementById('live-price');
+            out.textContent = 'Chargement…';
+            try{
+                const d = await fetchPrice(s);
+                if(!d.success){ out.textContent = d.error||'Indisponible'; return; }
+                const px = d.data && d.data.price != null ? Number(d.data.price) : null;
+                const cur = d.data && d.data.currency ? d.data.currency : '';
+                out.textContent = px!=null ? `Prix: ${px} ${cur}` : 'Indisponible';
+                // préremplir prix d'entrée si vide
+                const entryEl = document.querySelector('input[name="entry_price"]');
+                if (entryEl && (!entryEl.value || entryEl.value === '')) {
+                    if (px!=null) entryEl.value = px;
+                }
+            }catch(e){ out.textContent = e.message; }
+        });
         load();
     </script>
 </body>

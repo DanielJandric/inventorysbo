@@ -2663,6 +2663,24 @@ def api_delete_trade(trade_id: str):
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 400
 
+
+# ──────────────────────────────────────────────────────────
+# Live price endpoint (yfinance)
+# ──────────────────────────────────────────────────────────
+
+@app.route('/api/price')
+def api_price():
+    try:
+        symbol = (request.args.get('symbol') or '').strip()
+        if not symbol:
+            return jsonify({"success": False, "error": "Paramètre 'symbol' requis"}), 400
+        data = stock_api_manager.get_stock_price(symbol, force_refresh=True)
+        if not data:
+            return jsonify({"success": False, "error": "Prix indisponible"}), 502
+        return jsonify({"success": True, "symbol": symbol, "data": data})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
 # Configuration du dépôt de PDF marché
 app.config.setdefault('MARKET_PDF_UPLOAD_FOLDER', os.path.join(app.root_path, 'static', 'market_pdfs'))
 app.config.setdefault('MARKET_PDF_ALLOWED_EXTENSIONS', {'.pdf'})
