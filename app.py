@@ -2401,6 +2401,24 @@ class TradingSQLiteStore:
             )
             cur.execute("CREATE INDEX IF NOT EXISTS idx_trades_symbol ON trades(symbol)")
             cur.execute("CREATE INDEX IF NOT EXISTS idx_trades_dates ON trades(entry_date, exit_date)")
+            # Essayer d'ajouter les colonnes options si absentes (ignorer les erreurs)
+            for ddl in [
+                "ALTER TABLE trades ADD COLUMN is_option INTEGER",
+                "ALTER TABLE trades ADD COLUMN option_type TEXT",
+                "ALTER TABLE trades ADD COLUMN expiration TEXT",
+                "ALTER TABLE trades ADD COLUMN strike REAL",
+                "ALTER TABLE trades ADD COLUMN contract_symbol TEXT",
+                "ALTER TABLE trades ADD COLUMN multiplier REAL",
+                "ALTER TABLE trades ADD COLUMN iv REAL",
+                "ALTER TABLE trades ADD COLUMN delta REAL",
+                "ALTER TABLE trades ADD COLUMN gamma REAL",
+                "ALTER TABLE trades ADD COLUMN theta REAL",
+                "ALTER TABLE trades ADD COLUMN vega REAL"
+            ]:
+                try:
+                    cur.execute(ddl)
+                except Exception:
+                    pass
             conn.commit()
 
     def list(self) -> List[Dict[str, Any]]:
@@ -2415,7 +2433,9 @@ class TradingSQLiteStore:
         now = datetime.utcnow().isoformat()
         fields = [
             "symbol","direction","strategy","entry_date","entry_price","stop_loss",
-            "take_profit","size","exit_date","exit_price","notes","tags"
+            "take_profit","size","exit_date","exit_price","notes","tags",
+            "is_option","option_type","expiration","strike","contract_symbol","multiplier",
+            "iv","delta","gamma","theta","vega"
         ]
         values = [data.get(k) for k in fields]
         with self._connect() as conn:
@@ -2440,7 +2460,9 @@ class TradingSQLiteStore:
         now = datetime.utcnow().isoformat()
         allowed = [
             "symbol","direction","strategy","entry_date","entry_price","stop_loss",
-            "take_profit","size","exit_date","exit_price","notes","tags"
+            "take_profit","size","exit_date","exit_price","notes","tags",
+            "is_option","option_type","expiration","strike","contract_symbol","multiplier",
+            "iv","delta","gamma","theta","vega"
         ]
         set_parts = []
         params: List[Any] = []
@@ -2678,6 +2700,44 @@ def api_price():
         if not data:
             return jsonify({"success": False, "error": "Prix indisponible"}), 502
         return jsonify({"success": True, "symbol": symbol, "data": data})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/options/expirations')
+def api_options_expirations():
+    try:
+        symbol = (request.args.get('symbol') or '').strip()
+        if not symbol:
+            return jsonify({"success": False, "error": "Paramètre 'symbol' requis"}), 400
+        # yfinance via stock_api_manager.yfinance
+        try:
+            import yfinance as yf  # type: ignore
+        except Exception as e:
+            return jsonify({"success": False, "error": f"yfinance indisponible: {e}"}), 500
+        tk = yf.Ticker(symbol)
+        expirations = getattr(tk, 'options', []) or []
+        return jsonify({"success": True, "symbol": symbol, "expirations": list(expirations)})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/options/chain')
+def api_options_chain():
+    try:
+        symbol = (request.args.get('symbol') or '').strip()
+        expiration = (request.args.get('expiration') or '').strip()
+        if not symbol or not expiration:
+            return jsonify({"success": False, "error": "Params requis: symbol, expiration (YYYY-MM-DD)"}), 400
+        try:
+            import yfinance as yf  # type: ignore
+        except Exception as e:
+            return jsonify({"success": False, "error": f"yfinance indisponible: {e}"}), 500
+        tk = yf.Ticker(symbol)
+        opt = tk.option_chain(expiration)
+        calls = opt.calls.fillna('').to_dict(orient='records') if hasattr(opt, 'calls') else []
+        puts = opt.puts.fillna('').to_dict(orient='records') if hasattr(opt, 'puts') else []
+        return jsonify({"success": True, "symbol": symbol, "expiration": expiration, "calls": calls, "puts": puts})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
