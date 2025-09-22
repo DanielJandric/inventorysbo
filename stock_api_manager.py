@@ -819,6 +819,74 @@ class StockAPIManager:
         logger.info(f"✅ Aperçu du marché (strict) récupéré en {execution_time:.1f}s")
         return snapshot
 
+    def get_swiss_snapshot(self) -> Dict[str, Any]:
+        """Récupère un snapshot concentré sur la Suisse (yfinance uniquement).
+
+        Contenu:
+        - Indices: SMI (^SSMI)
+        - Actions SMI principales (liste par défaut, surcharge via env SWISS_SMI_TICKERS)
+        - Valeurs immobilières cotées (PSPN.SW, SPSN.SW, MOBN.SW, ALRN.SW; surcharge via env SWISS_RE_TICKERS)
+        - Titre spécifique demandé: IREN.SW
+        """
+        logger.info("🇨🇭 Récupération snapshot Suisse (yfinance)…")
+        snapshot: Dict[str, Any] = {
+            "indices": {},
+            "stocks": {},
+        }
+
+        # Indice SMI
+        try:
+            data = self.yfinance.get_stock_price('^SSMI')
+            if data and data.get('price') is not None:
+                snapshot["indices"]["SMI"] = {
+                    "price": data.get('price'),
+                    "change": data.get('change'),
+                    "change_percent": data.get('change_percent'),
+                    "source": data.get('source')
+                }
+            else:
+                snapshot["indices"]["SMI"] = {"error": "Data not available"}
+        except Exception as e:
+            snapshot["indices"]["SMI"] = {"error": f"Error: {e}"}
+
+        # Listes de tickers
+        env_smi = os.getenv('SWISS_SMI_TICKERS', '')
+        env_re = os.getenv('SWISS_RE_TICKERS', '')
+        def _parse_env_list(val: str) -> list:
+            try:
+                return [s.strip() for s in val.split(',') if s.strip()]
+            except Exception:
+                return []
+        smi_tickers = _parse_env_list(env_smi) or [
+            'NESN.SW','NOVN.SW','ROG.SW','UBSG.SW','CFR.SW','ZURN.SW','ABBN.SW','GIVN.SW',
+            'SIKA.SW','LONN.SW','GEBN.SW','SGSN.SW','SREN.SW','ALC.SW','LOGN.SW','TEMN.SW','UHR.SW'
+        ]
+        re_tickers = _parse_env_list(env_re) or [
+            'PSPN.SW','SPSN.SW','MOBN.SW','ALRN.SW'
+        ]
+        special = ['IREN.SW']
+
+        def _fetch(symbol: str):
+            try:
+                d = self.yfinance.get_stock_price(symbol)
+                if d and d.get('price') is not None:
+                    return {
+                        "price": d.get('price'),
+                        "change": d.get('change'),
+                        "change_percent": d.get('change_percent'),
+                        "source": d.get('source')
+                    }
+                return {"error": "Data not available"}
+            except Exception as e:
+                return {"error": f"Error: {e}"}
+
+        # Récupération actions (latence contrôlée par rate_limit interne yfinance)
+        for sym in smi_tickers + special + re_tickers:
+            snapshot["stocks"][sym] = _fetch(sym)
+
+        logger.info("🇨🇭 Snapshot Suisse prêt")
+        return snapshot
+
     def _get_yfinance_rsi(self, symbol: str, period: int = 14) -> Optional[float]:
         """Calcule le RSI(period) via yfinance (données journalières)."""
         try:
