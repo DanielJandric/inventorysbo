@@ -2358,6 +2358,311 @@ try:
 except Exception as _e:
     pass
 
+# ──────────────────────────────────────────────────────────
+# Trading Store (SQLite fallback) and API
+# ──────────────────────────────────────────────────────────
+
+class TradingSQLiteStore:
+    """SQLite-backed storage for trading entries (fallback when Supabase unavailable)."""
+    def __init__(self, db_filename: str = "trading.db"):
+        try:
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+        except Exception:
+            base_dir = os.getcwd()
+        self.db_path = os.path.join(base_dir, db_filename)
+        self._ensure_schema()
+
+    def _connect(self):
+        return sqlite3.connect(self.db_path, check_same_thread=False)
+
+    def _ensure_schema(self):
+        with self._connect() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS trades (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    symbol TEXT NOT NULL,
+                    direction TEXT NOT NULL,
+                    strategy TEXT,
+                    entry_date TEXT NOT NULL,
+                    entry_price REAL NOT NULL,
+                    stop_loss REAL,
+                    take_profit REAL,
+                    size REAL,
+                    exit_date TEXT,
+                    exit_price REAL,
+                    notes TEXT,
+                    tags TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_trades_symbol ON trades(symbol)")
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_trades_dates ON trades(entry_date, exit_date)")
+            conn.commit()
+
+    def list(self) -> List[Dict[str, Any]]:
+        with self._connect() as conn:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM trades ORDER BY COALESCE(exit_date, entry_date) DESC, id DESC")
+            rows = [dict(r) for r in cur.fetchall()]
+            return rows
+
+    def create(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        now = datetime.utcnow().isoformat()
+        fields = [
+            "symbol","direction","strategy","entry_date","entry_price","stop_loss",
+            "take_profit","size","exit_date","exit_price","notes","tags"
+        ]
+        values = [data.get(k) for k in fields]
+        with self._connect() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"INSERT INTO trades({','.join(fields)}, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                values + [now, now]
+            )
+            trade_id = cur.lastrowid
+            conn.commit()
+            return self.get(trade_id)
+
+    def get(self, trade_id: Any) -> Dict[str, Any]:
+        with self._connect() as conn:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM trades WHERE id = ?", (trade_id,))
+            row = cur.fetchone()
+            return dict(row) if row else {}
+
+    def update(self, trade_id: Any, data: Dict[str, Any]) -> Dict[str, Any]:
+        now = datetime.utcnow().isoformat()
+        allowed = [
+            "symbol","direction","strategy","entry_date","entry_price","stop_loss",
+            "take_profit","size","exit_date","exit_price","notes","tags"
+        ]
+        set_parts = []
+        params: List[Any] = []
+        for k in allowed:
+            if k in data:
+                set_parts.append(f"{k} = ?")
+                params.append(data.get(k))
+        set_parts.append("updated_at = ?")
+        params.append(now)
+        params.append(trade_id)
+        with self._connect() as conn:
+            cur = conn.cursor()
+            cur.execute(f"UPDATE trades SET {', '.join(set_parts)} WHERE id = ?", params)
+            conn.commit()
+            return self.get(trade_id)
+
+    def delete(self, trade_id: Any) -> bool:
+        with self._connect() as conn:
+            cur = conn.cursor()
+            cur.execute("DELETE FROM trades WHERE id = ?", (trade_id,))
+            conn.commit()
+            return cur.rowcount > 0
+
+
+trading_store = TradingSQLiteStore()
+
+
+def _compute_trade_metrics(trade: Dict[str, Any]) -> Dict[str, Any]:
+    """Compute derived metrics: status, pnl, r_multiple, is_win."""
+    try:
+        direction = (trade.get("direction") or "").upper()
+        entry = float(trade.get("entry_price")) if trade.get("entry_price") is not None else None
+        stop = float(trade.get("stop_loss")) if trade.get("stop_loss") is not None else None
+        exit_price = float(trade.get("exit_price")) if trade.get("exit_price") is not None else None
+        size = float(trade.get("size")) if trade.get("size") is not None else None
+        status = "CLOSED" if trade.get("exit_price") is not None else "OPEN"
+
+        pnl = None
+        if exit_price is not None and entry is not None:
+            if direction == "LONG":
+                pnl_unit = exit_price - entry
+            elif direction == "SHORT":
+                pnl_unit = entry - exit_price
+            else:
+                pnl_unit = None
+            if pnl_unit is not None:
+                pnl = pnl_unit if size is None else pnl_unit * size
+
+        r_multiple = None
+        try:
+            if stop is not None and entry is not None and exit_price is not None:
+                if direction == "LONG":
+                    denom = (entry - stop)
+                    if denom > 0:
+                        r_multiple = (exit_price - entry) / denom
+                elif direction == "SHORT":
+                    denom = (stop - entry)
+                    if denom > 0:
+                        r_multiple = (entry - exit_price) / denom
+        except Exception:
+            r_multiple = None
+
+        is_win = None
+        if r_multiple is not None:
+            is_win = r_multiple > 0
+        elif pnl is not None:
+            is_win = pnl > 0
+
+        return {
+            "status": status,
+            "pnl": pnl,
+            "r_multiple": r_multiple,
+            "is_win": is_win,
+        }
+    except Exception:
+        return {"status": "OPEN", "pnl": None, "r_multiple": None, "is_win": None}
+
+
+def _aggregate_trading_stats(trades: List[Dict[str, Any]]) -> Dict[str, Any]:
+    total = len(trades)
+    wins = 0
+    losses = 0
+    pnl_sum = 0.0
+    r_values: List[float] = []
+    best_r = None
+    worst_r = None
+    for t in trades:
+        m = _compute_trade_metrics(t)
+        if m.get("pnl") is not None:
+            pnl_sum += float(m["pnl"]) or 0.0
+        r = m.get("r_multiple")
+        if r is not None:
+            r_values.append(float(r))
+            best_r = float(r) if best_r is None else max(best_r, float(r))
+            worst_r = float(r) if worst_r is None else min(worst_r, float(r))
+        if m.get("is_win") is True:
+            wins += 1
+        elif m.get("is_win") is False:
+            losses += 1
+    hit_rate = (wins / total) if total > 0 else 0.0
+    avg_r = (sum(r_values) / len(r_values)) if r_values else 0.0
+    return {
+        "total_trades": total,
+        "wins": wins,
+        "losses": losses,
+        "hit_rate": hit_rate,
+        "avg_r": avg_r,
+        "total_pnl": pnl_sum,
+        "best_r": best_r,
+        "worst_r": worst_r,
+    }
+
+
+@app.route('/trading')
+def trading_page():
+    try:
+        return render_template('trading.html')
+    except Exception as e:
+        return make_response(f"Erreur de rendu: {e}", 500)
+
+
+@app.route('/api/trades', methods=['GET'])
+def api_list_trades():
+    try:
+        items: List[Dict[str, Any]] = []
+        # Prefer Supabase if available
+        if supabase:
+            try:
+                resp = supabase.table('trades').select('*').order('entry_date', desc=True).execute()
+                items = resp.data or []
+            except Exception:
+                items = trading_store.list()
+        else:
+            items = trading_store.list()
+        stats = _aggregate_trading_stats(items)
+        # attach computed metrics to each item
+        enriched = []
+        for t in items:
+            m = _compute_trade_metrics(t)
+            t2 = dict(t)
+            t2.update({
+                "status": m.get("status"),
+                "pnl": m.get("pnl"),
+                "r_multiple": m.get("r_multiple"),
+            })
+            enriched.append(t2)
+        return jsonify({"success": True, "items": enriched, "stats": stats})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+
+@app.route('/api/trades', methods=['POST'])
+def api_create_trade():
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        # basic normalization
+        for key in ["entry_price", "stop_loss", "take_profit", "exit_price", "size"]:
+            if data.get(key) in ("", None):
+                data[key] = None
+        if supabase:
+            try:
+                now = datetime.utcnow().isoformat()
+                payload = dict(data)
+                if 'created_at' not in payload:
+                    payload['created_at'] = now
+                payload['updated_at'] = now
+                resp = supabase.table('trades').insert(payload).execute()
+                created = (resp.data or [{}])[0]
+                return jsonify({"success": True, "item": created})
+            except Exception:
+                created = trading_store.create(data)
+                return jsonify({"success": True, "item": created})
+        else:
+            created = trading_store.create(data)
+            return jsonify({"success": True, "item": created})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+
+@app.route('/api/trades/<trade_id>', methods=['PUT', 'PATCH'])
+def api_update_trade(trade_id: str):
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        for key in ["entry_price", "stop_loss", "take_profit", "exit_price", "size"]:
+            if data.get(key) in ("", None):
+                data[key] = None
+        if supabase:
+            try:
+                payload = dict(data)
+                payload['updated_at'] = datetime.utcnow().isoformat()
+                resp = supabase.table('trades').update(payload).eq('id', trade_id).execute()
+                updated = (resp.data or [{}])[0]
+                if not updated or ('id' not in updated and isinstance(trade_id, int)):
+                    # fallback to sqlite if supabase did not update
+                    updated = trading_store.update(trade_id, data)
+                return jsonify({"success": True, "item": updated})
+            except Exception:
+                updated = trading_store.update(trade_id, data)
+                return jsonify({"success": True, "item": updated})
+        else:
+            updated = trading_store.update(trade_id, data)
+            return jsonify({"success": True, "item": updated})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+
+@app.route('/api/trades/<trade_id>', methods=['DELETE'])
+def api_delete_trade(trade_id: str):
+    try:
+        if supabase:
+            try:
+                supabase.table('trades').delete().eq('id', trade_id).execute()
+                return jsonify({"success": True})
+            except Exception:
+                ok = trading_store.delete(trade_id)
+                return jsonify({"success": ok})
+        else:
+            ok = trading_store.delete(trade_id)
+            return jsonify({"success": ok})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
 # Configuration du dépôt de PDF marché
 app.config.setdefault('MARKET_PDF_UPLOAD_FOLDER', os.path.join(app.root_path, 'static', 'market_pdfs'))
 app.config.setdefault('MARKET_PDF_ALLOWED_EXTENSIONS', {'.pdf'})
