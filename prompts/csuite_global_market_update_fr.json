@@ -26,7 +26,7 @@
     "controle_final_additionnel": "Au moins 1 citation directe et 1 attribution de contre‑point si disponible; au moins 3 sociétés nommées avec tickers."
   },
   "structure": {
-    "summary": "Commencer par LEAD (≤2 phrases) puis NUT‑GRAF (≤3 phrases). ≥3500 caractères. Sous‑titres dynamiques (texte simple, pas de Markdown) qui précèdent immédiatement le texte correspondant; chaque sous‑titre annonce précisément le contenu qui suit. Paragraphes courts (3–5 phrases) séparés par une ligne vide. Utiliser **gras** à l’intérieur des chaînes.",
+    "summary": "Commencer par LEAD (≤2 phrases) puis NUT‑GRAF (≤3 phrases). ≥3500 caractères. Interdiction d’utiliser des intitulés génériques figés (ex: 'Situation immédiate', 'Court terme', etc.). Produire uniquement des sous‑titres dynamiques non‑Markdown qui précèdent immédiatement le texte correspondant; chaque sous‑titre annonce précisément le contenu qui suit. Paragraphes courts (3–5 phrases) séparés par une ligne vide. Utiliser **gras** à l’intérieur des chaînes.",
     "deep_analysis": "≥3500 caractères, ≥10 sous‑titres dynamiques (texte simple, pas de Markdown); chaque sous‑titre annonce précisément le contenu qui suit; paragraphes courts séparés par une ligne vide; inclure Vue contrarienne (thèse, arguments, triggers de falsification, hedges)."
   },
   "user_context_attendu": {
@@ -49,7 +49,7 @@
       "Pas de virgules finales",
       "highlight_title présent et ≤120c, cohérent avec market_pulse.main_title",
       "executive_summary = 10 puces taguées [Suisse]/[Europe]/[États-Unis]/[Asie]/[Global]/[Énergie]/[FX]/[Taux]/[Commodities]",
-      "summary ≥3500 caractères; LEAD (≤2 phrases) et NUT‑GRAF (≤3 phrases) en ouverture; sous‑titres dynamiques non‑Markdown précédant le texte; paragraphes courts (ligne vide)",
+      "summary ≥3500 caractères; LEAD (≤2 phrases) et NUT‑GRAF (≤3 phrases) en ouverture; AUCUN intitulé standard figé; sous‑titres 100% dynamiques non‑Markdown précédant le texte; paragraphes courts (ligne vide)",
       "deep_analysis.narrative ≥3500; ≥10 sous‑titres dynamiques; pas de Markdown; Vue contrarienne incluse",
       "key_points ≥12; insights/risks/opportunities ≥3 chacun",
       "Aucune URL hors champs autorisés",

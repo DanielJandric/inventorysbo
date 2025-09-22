@@ -726,8 +726,8 @@ class MarketAnalysisWorker:
                     summary_text = str((deep_analysis.get('narrative') or '')).strip()
                 except Exception:
                     summary_text = ''
-        # Toujours utiliser le summary pour l'email (supprimer l'usage de la narrative approfondie)
-        summary_html = self._render_deep_narrative_with_headings(summary_text)
+        # Toujours utiliser le summary pour l'email et conserver sa structure dynamique (pas d'intertitres injectés)
+        summary_html = self._render_summary_paragraphs(summary_text)
 
         # Rendu des sections structured_data (si présentes)
         meta_html = self._generate_meta_analysis(structured_data.get('meta_analysis', {}) if isinstance(structured_data.get('meta_analysis', {}), dict) else {})

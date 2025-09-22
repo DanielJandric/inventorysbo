@@ -28,7 +28,7 @@
 "controle_final": "Au moins 1 citation directe et 1 attribution de contre‑point si disponible; au moins 3 sociétés nommées avec tickers."
 },
 "structure": {
-"summary": "Commencer par LEAD (≤2 phrases) puis NUT‑GRAF (≤3 phrases). Sous‑titres dynamiques (texte simple, pas de Markdown) qui précèdent immédiatement le texte correspondant; chaque sous‑titre annonce précisément le contenu qui suit. Paragraphes courts (3–5 phrases) séparés par une ligne vide."
+"summary": "Commencer par LEAD (≤2 phrases) puis NUT‑GRAF (≤3 phrases). Interdiction d’utiliser des intitulés génériques figés (ex: 'Situation immédiate', 'Court terme', etc.). Produire uniquement des sous‑titres dynamiques non‑Markdown qui précèdent immédiatement le texte correspondant; chaque sous‑titre annonce précisément le contenu qui suit. Paragraphes courts (3–5 phrases) séparés par une ligne vide."
 },
 "schema": "Conserver le même schéma JSON fourni (Institutional Research Report FR), mais centré sur l’économie réelle (croissance, emploi, inflation, commerce extérieur) et les politiques économiques (fiscales, monétaires, industrielles). Pour snapshot_metrics, privilégier SMI, SPI, EUR/CHF, taux SARON, rendements obligataires suisses et européens. Si indisponible → 'N/D — market_snapshot non fourni'.",
 "geopolitique": "Analyser les décisions de la SNB, de la BCE, les politiques budgétaires suisses et européennes, les tensions géopolitiques pouvant affecter l’Europe (Ukraine, Balkans, Moyen-Orient, Chine/États-Unis). Citer les sources FT, Reuters, Bloomberg, Le Temps, NZZ, RTS.",
