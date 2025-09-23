@@ -3436,20 +3436,16 @@ class PureOpenAIEngineWithRAG:
             context = self._build_complete_context(items, analytics)
             
             # Prompt système unifié avec mémoire conversationnelle
-            system_prompt = """Tu es l'assistant IA expert de la collection BONVIN avec mémoire conversationnelle.
-Tu as accès à toutes les données de la collection et tu fournis des analyses précises et contextualisées.
-Tu peux te référer à l'historique de la conversation pour contextualiser tes réponses.
+            system_prompt = """Assistant IA BONVIN. Tu réponds en français, très concis et actionnable.
 
-RÈGLES:
-1. Utilise TOUJOURS des données factuelles de la collection
-2. Structure tes réponses avec des titres et des listes
-3. Sois PRÉCIS avec les chiffres et les détails
-4. Maximum 800 mots
-5. Pas de formules de politesse génériques
-6. Utilise ton intelligence pour comprendre et contextualiser les données
-7. Emojis sobres et professionnels autorisés (📈/📉, 🟢/🟡/🔴, ⚠️, 💡) pour signaler tendances/alertes/insights — 1–2 max; pas dans les nombres ou clés
-7. Réfère-toi à l'historique de conversation quand c'est pertinent
-8. Évite de répéter des informations déjà données sauf si demandé"""
+Règles :
+- Appuie-toi uniquement sur les données de collection fournies.
+- Priorité aux chiffres clés et aux actions concrètes.
+- Bullet list courtes (max 4) puis mini conclusion.
+- Emojis sobres (📈/📉/⚠️/💡) optionnels, 1 maximum.
+- Si information manquante, dis-le clairement, sans inventer.
+- Réutilise l'historique seulement s'il apporte une précision utile.
+"""
 
             # Construire les messages avec historique
             messages = [{"role": "system", "content": system_prompt}]
@@ -3512,15 +3508,11 @@ client=self.client, model=os.getenv("AI_MODEL", "gpt-5"),
             complete_context = self._build_complete_dataset_context(items, analytics)
             
             # Prompt système simplifié
-            system_prompt = """Tu es l'assistant IA expert de la collection BONVIN. Réponds de manière concise et directe.
-
-RÈGLES:
-1. Utilise les données exactes de la collection
-2. Comprends naturellement l'intention de la question
-3. Donne le nombre exact d'objets trouvés
-4. Utilise l'historique de conversation si pertinent
-5. Réponses courtes et précises
-6. Emojis sobres (📈/📉, 🟢/🟡/🔴, ⚠️, 💡) pour souligner tendances/risques/insights — 1–2 max; jamais dans les chiffres"""
+            system_prompt = """Assistant IA BONVIN. Réponds en français. Format : 3 bullets maximum + 1 phrase de synthèse.
+- Utilise uniquement les données fournies (nombre d'objets, montants, statuts).
+- Mentionne les chiffres clés, pas de longue narration.
+- Emojis sobres optionnels (📈/📉/⚠️/💡) — max 1.
+- Si information indisponible, signale-le sans inventer."""
 
             # Construire les messages avec historique
             messages = [{"role": "system", "content": system_prompt}]
@@ -3601,16 +3593,11 @@ client=self.client, model=os.getenv("AI_MODEL", "gpt-5"),
             rag_context = self._build_rag_context(relevant_results, query)
             
             # Prompt pour GPT avec contexte RAG et mémoire conversationnelle
-            system_prompt = """Tu es l'assistant IA expert de la collection BONVIN. Réponds de manière concise et directe.
-
-RÈGLES:
-1. Base-toi sur les résultats de recherche sémantique
-2. Sois intelligent dans l'interprétation (marques, catégories, prix, etc.)
-3. Donne le nombre exact trouvé
-4. Pour les prix/valeurs, calcule les totaux
-5. Utilise l'historique pour contextualiser
-6. Réponses courtes et précises
-7. Emojis sobres (📈/📉, 🟢/🟡/🔴, ⚠️, 💡) pour signaler tendances/risques — 1–2 max; jamais dans les chiffres"""
+            system_prompt = """Assistant IA BONVIN. Tu réponds en français, format 2-4 puces max + phrase finale.
+- Utilise seulement les éléments du bloc RÉSULTATS.
+- Mets l'accent sur les montants, quantités, statuts.
+- Ne comble pas les trous : signale les données manquantes.
+- Emojis sobres facultatifs (📈/📉/⚠️/💡), limité à un seul."""
 
             # Construire les messages avec historique
             messages = [{"role": "system", "content": system_prompt}]
@@ -5702,7 +5689,7 @@ def chatbot():
         # FULL CONTEXT: si FULL_CONTEXT_MODE=1 (par défaut), inclure un snapshot compact de toute la collection
         FULL_CONTEXT_MODE = (os.getenv('FULL_CONTEXT_MODE', '1') == '1')
         
-        # Détection d'intention rapide
+        # Détection d'intention rapide (uniquement pour guider le prompt LLM)
         query_lower = query.lower()
         intent = 'general'
         if any(word in query_lower for word in ['valeur', 'total', 'combien', 'prix']):
@@ -5711,131 +5698,6 @@ def chatbot():
             intent = 'create_item'
         elif any(word in query_lower for word in ['vendre', 'vente', 'sold']):
             intent = 'sales_analysis'
-        
-        # ===== RÉPONSES ULTRA-RAPIDES pour questions simples (désactivées si ALWAYS_LLM=1) =====
-        if (not ALWAYS_LLM) and (len(query) < 60):  # Questions courtes = réponses immédiates
-            
-            # Cache pour performance (utilise le cache 'items' existant avec TTL=60s)
-            items_cached = smart_cache.get('items')
-            if items_cached is None:
-                items_cached = AdvancedDataManager.fetch_all_items()
-                smart_cache.set('items', items_cached)  # Pas de paramètre ttl !
-            
-            # Détecter requête performance voitures pour laisser le LLM traiter
-            skip_fast = (
-                ('voiture' in query_lower or 'auto' in query_lower or 'car' in query_lower)
-                and any(k in query_lower for k in ['plus rapide', 'rapide', 'vitesse', '0-100', '0 à 100'])
-            )
-
-            # Valeur totale (utiliser les analytics pour éviter 0 CHF)
-            if (not skip_fast) and ('valeur total' in query_lower or 'combien vaut' in query_lower):
-                try:
-                    analytics_quick = AdvancedDataManager.calculate_advanced_analytics(items_cached)
-                    total = analytics_quick.get('total_value', 0) or 0
-                    available = analytics_quick.get('available_count', 0)
-                except Exception:
-                    total = sum((getattr(item, 'current_value', 0) or 0) for item in items_cached)
-                    available = len([i for i in items_cached if getattr(i, 'status', '') == 'Available'])
-                response = f"💰 **Valeur totale de votre collection**: {total:,.0f} CHF\n\n"
-                response += f"📦 **{len(items_cached)} objets** dont {available} disponibles"
-                return jsonify({
-                    "reply": response,
-                    "metadata": {"mode": "ultra_quick", "response_time": time.time() - start_time}
-                })
-            
-            # Nombre d'objets
-            if (not skip_fast) and ('combien' in query_lower and ('objet' in query_lower or 'item' in query_lower)):
-                response = f"📦 Vous avez **{len(items_cached)} objets** dans votre collection"
-                return jsonify({
-                    "reply": response,
-                    "metadata": {"mode": "ultra_quick", "response_time": time.time() - start_time}
-                })
-            
-            # Top valeurs
-            if (not skip_fast) and (("plus" in query_lower and 'cher' in query_lower) or 'top' in query_lower):
-                top_items = sorted(items_cached, key=lambda x: getattr(x, 'current_value', 0), reverse=True)[:3]
-                response = "🏆 **Top 3 des objets les plus précieux**:\n\n"
-                for i, item in enumerate(top_items, 1):
-                    response += f"{i}. **{getattr(item, 'name', 'N/A')}**: {getattr(item, 'current_value', 0):,.0f} CHF\n"
-                return jsonify({
-                    "reply": response,
-                    "metadata": {"mode": "ultra_quick", "response_time": time.time() - start_time}
-                })
-
-            # Voiture la plus rapide (détection simple - désactivée par défaut, activer avec QUICK_FASTEST_CAR=1)
-            if os.getenv('QUICK_FASTEST_CAR', '0') == '1' and ('voiture' in query_lower or 'auto' in query_lower or 'car' in query_lower) and any(k in query_lower for k in ['plus rapide', 'rapide', 'vitesse', '0-100', '0 à 100']):
-                try:
-                    import re as _re
-                    cars = [i for i in items_cached if str(getattr(i, 'category', '')).lower().startswith('voiture') or str(getattr(i, 'category', '')).lower().startswith('voitures')]
-                    best_item = None
-                    best_score = -1.0
-                    best_speed = None
-                    best_metric = ''
-                    for it in cars:
-                        text = ' '.join(str(x) for x in [getattr(it, 'name', ''), getattr(it, 'description', '')]).lower()
-                        # 1) Top speed km/h
-                        speed = None
-                        for pat in [r"(\d{2,3})\s?km/?h", r"v\s?max\s?(\d{2,3})"]:
-                            m = _re.search(pat, text)
-                            if m:
-                                try:
-                                    val = int(m.group(1))
-                                    if 180 <= val <= 450:
-                                        speed = val
-                                        break
-                                except Exception:
-                                    pass
-                        # 2) 0-100 s (plus petit est meilleur)
-                        accel = None
-                        for pat in [r"0\s*[-àto]\s*100[^\d]*(\d{1,2}(?:[\.,]\d)?)\s?s"]:
-                            m = _re.search(pat, text)
-                            if m:
-                                try:
-                                    accel = float(m.group(1).replace(',', '.'))
-                                except Exception:
-                                    pass
-                        # 3) Puissance (hp/cv)
-                        power = None
-                        for pat in [r"(\d{3,4})\s?hp", r"(\d{3,4})\s?cv"]:
-                            m = _re.search(pat, text)
-                            if m:
-                                try:
-                                    power = int(m.group(1))
-                                    break
-                                except Exception:
-                                    pass
-                        # Scoring
-                        score = 0.0
-                        if speed:
-                            score = max(score, speed)  # higher is better
-                        if accel:
-                            score = max(score, 300 - accel * 30)  # lower accel => higher score
-                        if power:
-                            score = max(score, power * 0.8)
-                        # heuristic for known fast models
-                        if any(tag in text for tag in ['turbo s', 'gt3', 'gt2', 'pista', 'performante', 'superleggera', 'svj', 'senna', '765lt']):
-                            score += 50
-                        if score > best_score:
-                            best_score = score
-                            best_item = it
-                            best_speed = speed
-                            if speed:
-                                best_metric = f"vitesse max ~{speed} km/h"
-                            elif accel:
-                                best_metric = f"0–100 km/h en ~{accel:.1f}s"
-                            elif power:
-                                best_metric = f"~{power} hp"
-                    if best_item:
-                        name = getattr(best_item, 'name', 'Voiture (modèle inconnu)')
-                        response = f"🚀 **Voiture la plus rapide**: {name}"
-                        if best_metric:
-                            response += f"\n{best_metric}"
-                        return jsonify({
-                            "reply": response,
-                            "metadata": {"mode": "ultra_quick_fastest_car", "response_time": time.time() - start_time}
-                        })
-                except Exception:
-                    pass
         
         # Guardrails
         blocked = _should_block_query(query)
@@ -10008,90 +9870,6 @@ def markets_chat():
         # FORCE traitement synchrone - Celery désactivé pour stabilité
         USE_ASYNC = False  # DÉSACTIVÉ pour éviter timeouts
         
-        # ===== RÉPONSES ULTRA-RAPIDES pour questions marchés simples =====
-        msg_lower = user_message.lower()
-        
-        if len(user_message) < 60:  # Questions courtes = réponses instantanées
-            
-            # Questions sur indices/marchés
-            if any(word in msg_lower for word in ['indices', 'marché', 'bourse', 'cac', 'dow', 'nasdaq']):
-                response = "📊 **Principaux indices** (temps réel non disponible):\n\n"
-                response += "• S&P 500: ~4,500 pts\n"
-                response += "• NASDAQ: ~14,000 pts\n"
-                response += "• CAC 40: ~7,500 pts\n"
-                response += "• SMI: ~11,500 pts\n\n"
-                response += "💡 Pour des données temps réel, consultez votre broker."
-                return jsonify({
-                    "success": True,
-                    "reply": response,
-                    "metadata": {"mode": "ultra_quick_markets", "cached": True}
-                })
-            
-            # Questions sur crypto
-            if any(word in msg_lower for word in ['bitcoin', 'btc', 'crypto', 'ethereum']):
-                response = "₿ **Marchés Crypto** (indicatif):\n\n"
-                response += "• Bitcoin: ~$65,000\n"
-                response += "• Ethereum: ~$3,500\n"
-                response += "• Volatilité: Élevée\n\n"
-                response += "⚠️ Les cryptos sont très volatiles. DYOR."
-                return jsonify({
-                    "success": True,
-                    "reply": response,
-                    "metadata": {"mode": "ultra_quick_crypto"}
-                })
-            
-            # Questions sur sentiment
-            if any(word in msg_lower for word in ['sentiment', 'tendance', 'bullish', 'bearish']):
-                response = "🎯 **Sentiment de Marché**:\n\n"
-                response += "• Tendance générale: Neutre à légèrement haussier\n"
-                response += "• VIX (volatilité): Modéré (~15-20)\n"
-                response += "• Volume: Normal\n\n"
-                response += "📈 Les marchés restent soutenus par les banques centrales."
-                return jsonify({
-                    "success": True,
-                    "reply": response,
-                    "metadata": {"mode": "ultra_quick_sentiment"}
-                })
-            
-            # Questions sur actions/stocks
-            if any(word in msg_lower for word in ['action', 'stock', 'apple', 'tesla', 'microsoft']):
-                response = "📈 **Marchés Actions**:\n\n"
-                response += "• Tech (NASDAQ): Performance solide\n"
-                response += "• FAANG: Résultats mitigés\n"
-                response += "• Europe: Retard vs US\n\n"
-                response += "💡 Les valeurs technologiques restent volatiles."
-                return jsonify({
-                    "success": True,
-                    "reply": response,
-                    "metadata": {"mode": "ultra_quick_stocks"}
-                })
-            
-            # Questions sur forex
-            if any(word in msg_lower for word in ['forex', 'eur', 'usd', 'devise', 'dollar']):
-                response = "💱 **Marché des Devises**:\n\n"
-                response += "• EUR/USD: ~1.08-1.10\n"
-                response += "• USD/CHF: ~0.88-0.90\n"
-                response += "• GBP/USD: ~1.26-1.28\n\n"
-                response += "🏦 Le dollar reste soutenu par la Fed."
-                return jsonify({
-                    "success": True,
-                    "reply": response,
-                    "metadata": {"mode": "ultra_quick_forex"}
-                })
-            
-            # Questions générales sur économie
-            if any(word in msg_lower for word in ['économie', 'inflation', 'récession', 'pib']):
-                response = "🌍 **Contexte Économique**:\n\n"
-                response += "• Inflation: En baisse progressive\n"
-                response += "• Croissance: Ralentissement modéré\n"
-                response += "• Emploi: Reste solide\n\n"
-                response += "📊 Atterrissage en douceur probable."
-                return jsonify({
-                    "success": True,
-                    "reply": response,
-                    "metadata": {"mode": "ultra_quick_economy"}
-                })
-
         # Ajouter le dernier rapport comme contexte (si disponible)
         try:
             from market_analysis_db import get_market_analysis_db

@@ -39,16 +39,14 @@ class MarketsChatWorker:
         self.model = env_model if env_model.startswith("gpt-5") else "gpt-5"
         # Autoriser jusqu'à 30000 tokens (par défaut), configurable via MAX_OUTPUT_TOKENS
         try:
-            self.max_output_tokens = min(30000, int(os.getenv("MAX_OUTPUT_TOKENS", "30000")))
+            self.max_output_tokens = max(600, min(2000, int(os.getenv("MAX_OUTPUT_TOKENS", "1200"))))
         except Exception:
-            self.max_output_tokens = 30000
+            self.max_output_tokens = 1200
 
         # Stable, concise system prompt (verbosity low)
         self.system_prompt = (
-            "Tu es un analyste marchés. Réponds en français, concis (verbosité faible), structuré, actionnable. "
-            "Ne fournis pas de chiffres non étayés. Utilise **gras** pour les points clés. "
-            "Structure 3–5 points puis une conclusion brève. "
-            "N’inclus aucune URL, citation ou section ‘Sources’ dans ta réponse."
+            "Analyste marchés. Réponds en français, très concis, 3-4 puces puis 1 ligne de synthèse. "
+            "Mets en **gras** uniquement les points critiques et n'invente aucun chiffre ou source."
         )
 
     def _build_user_input(self, message: str, context: Optional[str]) -> str:
@@ -83,11 +81,24 @@ class MarketsChatWorker:
         typed_messages.append({"role": "user", "content": user_input})
 
         # Responses API (exclusive) – try direct input first
+        payload_messages = []
+        for msg in typed_messages:
+            payload_messages.append({
+                "role": msg["role"],
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": msg["content"]
+                    }
+                ]
+            })
+
+        text = ""
         try:
             res = self.client.responses.create(
                 model=self.model,
-                input=[{"role": m["role"], "content": [{"type": "input_text" if m["role"]=="user" else "output_text", "text": m["content"]}]} for m in typed_messages],
-                reasoning={"effort": "high"},
+                input=payload_messages,
+                reasoning={"effort": "medium"},
                 max_output_tokens=self.max_output_tokens,
                 store=False,
                 response_format={"type": "text"},
@@ -96,14 +107,13 @@ class MarketsChatWorker:
         except Exception:
             text = ""
 
-        # If empty, retry using typed messages via Responses API
         if not text:
             try:
                 res2 = from_responses_simple(
                     client=self.client,
                     model=self.model,
                     messages=typed_messages,
-                    reasoning_effort="high",
+                    reasoning_effort="medium",
                     max_output_tokens=self.max_output_tokens,
                     response_format={"type": "text"},
                 )
@@ -111,7 +121,13 @@ class MarketsChatWorker:
             except Exception:
                 text = ""
 
-        return text  # laisser l'endpoint décider si vide => 502
+        if not text:
+            text = (
+                "ℹ️ Je n'ai pas pu analyser les données de marché en temps utile. "
+                "Merci de reformuler votre question ou de préciser l'actif visé."
+            )
+
+        return text
 
     def stream_reply(self, message: str, context: Optional[str] = None) -> Generator[str, None, None]:
         """Yield response chunks (plain text). No END footer here; caller may add it.
