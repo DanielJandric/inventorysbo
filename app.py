@@ -2438,10 +2438,11 @@ class TradingSQLiteStore:
             "iv","delta","gamma","theta","vega"
         ]
         values = [data.get(k) for k in fields]
+        placeholders = ','.join(['?'] * len(fields))
         with self._connect() as conn:
             cur = conn.cursor()
             cur.execute(
-                f"INSERT INTO trades({','.join(fields)}, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                f"INSERT INTO trades({','.join(fields)}, created_at, updated_at) VALUES ({placeholders}, ?, ?)",
                 values + [now, now]
             )
             trade_id = cur.lastrowid

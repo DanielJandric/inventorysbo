@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Trading - BONVIN</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="/static/js/trading.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&display=swap" rel="stylesheet">
@@ -13,7 +14,6 @@
         body { background-color: var(--bg-color); color: #e0e6e7; font-family: 'Inter', sans-serif; }
         .glass { background: var(--glass-bg); backdrop-filter: blur(15px); border: 1px solid var(--glass-border); border-radius: 1rem; }
         .glass-dark { background: rgba(10, 40, 50, 0.4); backdrop-filter: blur(20px); border: 1px solid var(--glass-border); border-radius: 1rem; }
-        .tag { background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); color: #86efac; padding: 2px 8px; border-radius: 999px; font-size: 12px; }
         .badge { padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
         .badge-open { background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.4); color: #93c5fd; }
         .badge-closed { background: rgba(34, 197, 94, 0.2); border: 1px solid rgba(34, 197, 94, 0.4); color: #86efac; }
@@ -24,10 +24,19 @@
         th { text-align: left; color: #93c5fd; font-weight: 700; }
         .input { background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(0, 229, 255, 0.3); color: #e0f2fe; padding: 10px 12px; border-radius: 10px; width: 100%; }
         .btn { padding: 10px 14px; border-radius: 10px; }
+        .page-btn { padding: 6px 10px; border-radius: 8px; border: 1px solid rgba(59, 130, 246, 0.4); background: rgba(15, 23, 42, 0.6); color: #e0f2fe; }
+        .page-btn.active { background: rgba(59, 130, 246, 0.6); }
+        .toast-container { position: fixed; top: 24px; right: 24px; display: flex; flex-direction: column; gap: 12px; z-index: 30; }
+        .toast { padding: 12px 16px; border-radius: 10px; background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(59, 130, 246, 0.3); color: #e0f2fe; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.5); transition: opacity 0.15s ease, transform 0.15s ease; cursor: pointer; }
+        .toast-success { border-color: rgba(34, 197, 94, 0.5); }
+        .toast-error { border-color: rgba(248, 113, 113, 0.5); }
+        .toast-warning { border-color: rgba(251, 191, 36, 0.5); }
+        .toast-hide { opacity: 0; transform: translateY(-6px); }
     </style>
 </head>
 <body class="h-full">
     <div class="min-h-screen p-4 md:p-8">
+        <div id="toast-container" class="toast-container hidden"></div>
         <header class="text-center mb-10 pt-6">
             <div class="flex justify-center mb-4">
                 <img src="/static/1da6a1fb-f4c3-401c-aa60-63e9b63360b0.png" alt="BONVIN Logo" class="w-40 h-auto md:w-48">
@@ -155,17 +164,44 @@
             </section>
 
             <section class="glass p-6">
-                <div class="flex items-center justify-between flex-wrap gap-3 mb-3">
+                <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
                     <h2 class="text-xl font-semibold">Métriques</h2>
-                    <button id="refresh-btn" class="btn glass">Rafraîchir</button>
+                    <div class="flex flex-wrap gap-2">
+                        <button id="refresh-btn" class="btn glass">Rafraîchir</button>
+                        <button id="export-csv" class="btn glass">Exporter CSV</button>
+                    </div>
                 </div>
-                <div id="stats" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4"></div>
+                <div class="grid gap-4">
+                    <div id="mid-summary" class="hidden glass-dark p-4 rounded-xl text-sm text-cyan-200/80"></div>
+                    <div id="stats" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4"></div>
+                </div>
             </section>
 
-            <section class="glass p-6">
-                <div class="flex items-center justify-between flex-wrap gap-3 mb-3">
-                    <h2 class="text-xl font-semibold">Journal des Trades</h2>
+            <section class="glass p-6 space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+                    <div>
+                        <h2 class="text-xl font-semibold">Journal des Trades</h2>
+                        <p class="text-xs text-cyan-200/60">Filtrez les entrées pour une analyse ciblée</p>
+                    </div>
+                    <div class="flex flex-wrap gap-2 text-xs">
+                        <input id="filter-symbol" class="input w-32" placeholder="Symbole" />
+                        <select id="filter-direction" class="input w-28">
+                            <option value="">Direction</option>
+                            <option value="LONG">LONG</option>
+                            <option value="SHORT">SHORT</option>
+                        </select>
+                        <select id="filter-status" class="input w-28">
+                            <option value="">Statut</option>
+                            <option value="OPEN">OPEN</option>
+                            <option value="CLOSED">CLOSED</option>
+                        </select>
+                        <input id="filter-tag" class="input w-32" placeholder="Tag" />
+                        <input id="filter-date-start" type="date" class="input w-36" />
+                        <input id="filter-date-end" type="date" class="input w-36" />
+                        <button id="clear-filters" class="btn glass">Effacer</button>
+                    </div>
                 </div>
+                <div id="table-empty" class="hidden text-center py-6 text-cyan-200/60 text-sm">Aucun trade trouvé avec ces filtres.</div>
                 <div class="overflow-x-auto">
                     <table>
                         <thead>
@@ -188,200 +224,20 @@
                                 <th>Actions</th>
                             </tr>
                         </thead>
-                        <tbody id="trades-body">
-                            <tr><td colspan="16" class="text-center py-4 text-cyan-200/70">Chargement…</td></tr>
-                        </tbody>
+                        <tbody id="trades-body"></tbody>
                     </table>
                 </div>
+                <div id="pagination" class="flex justify-end gap-2 text-xs"></div>
             </section>
         </main>
     </div>
 
     <script>
-        async function fetchTrades() {
-            const r = await fetch('/api/trades');
-            return await r.json();
-        }
-        async function fetchPrice(symbol){
-            const r = await fetch(`/api/price?symbol=${encodeURIComponent(symbol)}`);
-            return await r.json();
-        }
-        function fmt(v){ return (v === null || v === undefined || v === '') ? '' : v; }
-        function fmtNum(v){ if(v===null||v===undefined||v==='') return ''; const n = Number(v); return isNaN(n)? '': n.toFixed(4); }
-        function badge(status){ return `<span class="badge ${status==='CLOSED'?'badge-closed':'badge-open'}">${status}</span>`; }
-        function pnlClass(v){ return (Number(v||0) >= 0) ? 'pnl-pos' : 'pnl-neg'; }
-        async function fetchExpirations(symbol){
-            const r = await fetch(`/api/options/expirations?symbol=${encodeURIComponent(symbol)}`);
-            return await r.json();
-        }
-        async function fetchChain(symbol, expiration){
-            const r = await fetch(`/api/options/chain?symbol=${encodeURIComponent(symbol)}&expiration=${encodeURIComponent(expiration)}`);
-            return await r.json();
-        }
-        function renderStats(s){
-            const items = [
-                {k:'Total', v:s.total_trades},
-                {k:'Hit Rate', v: ((s.hit_rate||0)*100).toFixed(1)+'%'},
-                {k:'Wins', v:s.wins},
-                {k:'Losses', v:s.losses},
-                {k:'Avg R', v:(s.avg_r||0).toFixed(2)},
-                {k:'Total PnL', v:(s.total_pnl||0).toFixed(2)} ,
-                {k:'Best R', v: (s.best_r==null?'-':Number(s.best_r).toFixed(2))},
-                {k:'Worst R', v: (s.worst_r==null?'-':Number(s.worst_r).toFixed(2))}
-            ];
-            document.getElementById('stats').innerHTML = items.map(it=>`
-                <div class="glass-dark p-3 rounded-xl">
-                    <div class="text-sm text-cyan-200/70">${it.k}</div>
-                    <div class="text-xl font-bold">${it.v}</div>
-                </div>
-            `).join('');
-        }
-        async function load() {
-            try{
-                const data = await fetchTrades();
-                const rows = (data.items||[]).map((t)=>{
-                    const r = t.r_multiple==null? '' : Number(t.r_multiple).toFixed(2);
-                    const pnl = t.pnl==null? '' : Number(t.pnl).toFixed(2);
-                    return `<tr>
-                        <td>${t.id ?? ''}</td>
-                        <td><strong>${fmt(t.symbol)}</strong></td>
-                        <td>${fmt(t.direction)}</td>
-                        <td>${fmt(t.strategy)}</td>
-                        <td>${fmt(t.entry_date)}</td>
-                        <td>${fmtNum(t.entry_price)}</td>
-                        <td>${fmtNum(t.stop_loss)}</td>
-                        <td>${fmtNum(t.take_profit)}</td>
-                        <td>${fmtNum(t.size)}</td>
-                        <td>${fmt(t.exit_date||'')}</td>
-                        <td>${fmtNum(t.exit_price)}</td>
-                        <td>${badge(t.status||'OPEN')}</td>
-                        <td class="${pnlClass(pnl)}">${pnl}</td>
-                        <td>${r}</td>
-                        <td>${fmt(t.tags)}</td>
-                        <td>
-                          <button class="btn glass" data-id="${t.id}" data-action="close">Clôturer</button>
-                          <button class="btn glass" data-id="${t.id}" data-action="delete">Supprimer</button>
-                        </td>
-                    </tr>`;
-                }).join('');
-                document.getElementById('trades-body').innerHTML = rows || '<tr><td colspan="16" class="text-center py-4 text-cyan-200/70">Aucun trade</td></tr>';
-                renderStats(data.stats||{});
-                bindActions();
-            }catch(e){
-                document.getElementById('trades-body').innerHTML = `<tr><td colspan="16" class="text-center py-4 text-red-400">${e.message}</td></tr>`;
+        document.addEventListener('DOMContentLoaded', () => {
+            if (window.TradingPage && typeof window.TradingPage.init === 'function') {
+                window.TradingPage.init();
             }
-        }
-        function bindActions(){
-            document.querySelectorAll('#trades-body [data-action="delete"]').forEach(btn=>{
-                btn.addEventListener('click', async (e)=>{
-                    const id = e.currentTarget.getAttribute('data-id');
-                    if(!id) return; if(!confirm('Supprimer ce trade ?')) return;
-                    const r = await fetch(`/api/trades/${id}`, { method:'DELETE' });
-                    const d = await r.json(); if(!d.success){ alert(d.error||'Erreur'); return; }
-                    load();
-                });
-            });
-            document.querySelectorAll('#trades-body [data-action="close"]').forEach(btn=>{
-                btn.addEventListener('click', async (e)=>{
-                    const id = e.currentTarget.getAttribute('data-id');
-                    if(!id) return;
-                    const exit_price = prompt('Prix de sortie ?');
-                    const exit_date = new Date().toISOString();
-                    const r = await fetch(`/api/trades/${id}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ exit_price, exit_date }) });
-                    const d = await r.json(); if(!d.success){ alert(d.error||'Erreur'); return; }
-                    load();
-                });
-            });
-        }
-        document.getElementById('trade-form').addEventListener('submit', async (e)=>{
-            e.preventDefault();
-            const form = e.currentTarget;
-            const data = Object.fromEntries(new FormData(form).entries());
-            // normaliser options
-            if ((document.getElementById('asset-type').value||'') === 'option') {
-                data.is_option = 1;
-            } else {
-                data.is_option = 0;
-            }
-            const r = await fetch('/api/trades', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) });
-            const d = await r.json(); if(!d.success){ alert(d.error||'Erreur'); return; }
-            form.reset();
-            load();
         });
-        document.getElementById('refresh-btn').addEventListener('click', load);
-        document.getElementById('btn-price').addEventListener('click', async ()=>{
-            const s = (document.getElementById('symbol-input').value||'').trim();
-            if(!s) return;
-            const out = document.getElementById('live-price');
-            out.textContent = 'Chargement…';
-            try{
-                const d = await fetchPrice(s);
-                if(!d.success){ out.textContent = d.error||'Indisponible'; return; }
-                const px = d.data && d.data.price != null ? Number(d.data.price) : null;
-                const cur = d.data && d.data.currency ? d.data.currency : '';
-                out.textContent = px!=null ? `Prix: ${px} ${cur}` : 'Indisponible';
-                // préremplir prix d'entrée si vide
-                const entryEl = document.querySelector('input[name="entry_price"]');
-                if (entryEl && (!entryEl.value || entryEl.value === '')) {
-                    if (px!=null) entryEl.value = px;
-                }
-            }catch(e){ out.textContent = e.message; }
-        });
-        document.getElementById('asset-type').addEventListener('change', (e)=>{
-            const isOpt = (e.target.value||'') === 'option';
-            document.getElementById('options-block').style.display = isOpt ? '' : 'none';
-        });
-        document.getElementById('btn-exp').addEventListener('click', async ()=>{
-            const s = (document.getElementById('symbol-input').value||'').trim();
-            if(!s) return; const sel = document.getElementById('exp-select');
-            sel.innerHTML = '';
-            const st = document.getElementById('chain-status'); st.textContent = 'Chargement expirations…';
-            try{
-                const d = await fetchExpirations(s);
-                if(!d.success){ st.textContent = d.error||'Erreur'; return; }
-                d.expirations.forEach(exp => {
-                    const opt = document.createElement('option'); opt.value = exp; opt.textContent = exp; sel.appendChild(opt);
-                });
-                st.textContent = `${d.expirations.length} échéances`;
-            }catch(e){ st.textContent = e.message; }
-        });
-        document.getElementById('btn-chain').addEventListener('click', async ()=>{
-            const s = (document.getElementById('symbol-input').value||'').trim();
-            const exp = (document.getElementById('exp-select').value||'').trim();
-            const st = document.getElementById('chain-status');
-            if(!s || !exp){ st.textContent = 'Symbol/expiration requis'; return; }
-            st.textContent = 'Chargement chaîne…';
-            try{
-                const d = await fetchChain(s, exp);
-                if(!d.success){ st.textContent = d.error||'Erreur'; return; }
-                // Simple heuristique: préremplir strike proche du prix
-                const entryEl = document.querySelector('input[name="entry_price"]');
-                const spot = entryEl && entryEl.value ? Number(entryEl.value) : NaN;
-                const arr = (document.getElementById('option-type').value === 'CALL') ? (d.calls||[]) : (d.puts||[]);
-                let best = null; let bestDiff = Infinity;
-                arr.forEach(c => {
-                    const k = Number(c.strike); if(!isFinite(k)) return;
-                    const diff = isFinite(spot) ? Math.abs(k - spot) : Math.abs(k);
-                    if(diff < bestDiff){ bestDiff = diff; best = c; }
-                });
-                if(best){
-                    document.getElementById('strike-input').value = best.strike ?? '';
-                    document.getElementById('contract-input').value = best.contractSymbol ?? '';
-                    document.getElementById('multiplier-input').value = 100;
-                    document.getElementById('iv-input').value = best.impliedVolatility ?? '';
-                    document.getElementById('delta-input').value = best.delta ?? '';
-                    document.getElementById('gamma-input').value = best.gamma ?? '';
-                    document.getElementById('theta-input').value = best.theta ?? '';
-                    document.getElementById('vega-input').value = best.vega ?? '';
-                    const prem = best.lastPrice ?? best.bid ?? '';
-                    if (prem) {
-                        const ep = document.querySelector('input[name="entry_price"]'); if (ep) ep.value = prem;
-                    }
-                }
-                st.textContent = `Chaîne chargée (${(arr||[]).length} contrats)`;
-            }catch(e){ st.textContent = e.message; }
-        });
-        load();
     </script>
 </body>
 </html>
