@@ -230,7 +230,7 @@ Règles:
                     {"role": "system", "content": "Tu es un assistant de gestion de patrimoine. Sois concis et précis."},
                     {"role": "user", "content": prompt}
                 ],
-                max_tokens=300,
+                max_completion_tokens=300,
                 temperature=0.7,
                 timeout=10
             )

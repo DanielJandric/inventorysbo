@@ -346,7 +346,7 @@ class IntelligentScraper:
                     {"role": "user", "content": f"Demande: {prompt}\n\nDonnées collectées:\n{context}"}
                 ],
                 response_format={"type": "json_object"},
-                max_tokens=2000
+                max_completion_tokens=2000
             )
             
             result = json.loads(response.choices[0].message.content)

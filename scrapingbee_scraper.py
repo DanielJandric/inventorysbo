@@ -1232,7 +1232,7 @@ class ScrapingBeeScraper:
                 prompt=prompt,
                 scraped_data=scraped,
                 market_snapshot=market_snapshot,
-                max_tokens=int(os.getenv('GLOBAL_MAX_OUTPUT_TOKENS', '45000')),
+                max_output_tokens=int(os.getenv('GLOBAL_MAX_OUTPUT_TOKENS', '45000')),
                 reasoning_effort=os.getenv('GLOBAL_REASONING_EFFORT', 'high')
             )
             return result
@@ -1240,12 +1240,12 @@ class ScrapingBeeScraper:
             logger.error(f"❌ Erreur execute_global_market_update: {e}")
             return { 'error': str(e) }
 
-    async def process_with_llm_custom(self, prompt: str, scraped_data: List[ScrapedData], market_snapshot: Dict, max_tokens: int = 45000, reasoning_effort: str = 'high') -> Dict:
+    async def process_with_llm_custom(self, prompt: str, scraped_data: List[ScrapedData], market_snapshot: Dict, max_output_tokens: int = 45000, reasoning_effort: str = 'high') -> Dict:
         """Wrapper pour forcer max tokens et reasoning sans impacter les autres flux."""
         prev_tokens = os.getenv('LLM_MAX_OUTPUT_TOKENS')
         prev_reason = os.getenv('AI_REASONING_EFFORT')
         try:
-            os.environ['LLM_MAX_OUTPUT_TOKENS'] = str(max_tokens)
+            os.environ['LLM_MAX_OUTPUT_TOKENS'] = str(max_output_tokens)
             os.environ['AI_REASONING_EFFORT'] = str(reasoning_effort)
             return await self.process_with_llm(prompt, scraped_data, market_snapshot)
         finally:

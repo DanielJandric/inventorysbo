@@ -268,7 +268,7 @@ Format JSON:
                     {"role": "system", "content": "Tu es un analyste financier expert avec 20 ans d'expérience. Tu utilises Google CSE comme source principale pour tes analyses."},
                     {"role": "user", "content": prompt}
                 ],
-                max_tokens=2000
+                max_completion_tokens=2000
             )
             
             ai_response = response.choices[0].message.content
