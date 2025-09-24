@@ -3218,6 +3218,8 @@ class PureOpenAIEngineWithRAG:
         self.client = client
         self.semantic_search = SemanticSearchRAG(client) if client else None
         self._tool_runtime_context: Dict[str, Any] = {}
+        self._last_context_snapshot: Dict[str, Any] = {}
+        self._last_intent: Optional[str] = None
 
     def _get_tools_schema(self) -> List[Dict[str, Any]]:
         return [
@@ -3424,75 +3426,11 @@ class PureOpenAIEngineWithRAG:
         if not self.client:
             return "Moteur IA Indisponible"
         
-        # TOUJOURS utiliser l'approche FULL CONTEXT - faire confiance à GPT-5 (Responses API)
-        logger.info(f"Utilisation de l'approche FULL CONTEXT - Faire confiance à l'intelligence de GPT-5")
-        return self._generate_full_context_response_with_history(query, items, analytics, conversation_history, True)
-        
-        # Cache avec historique
-        history_hash = hashlib.md5(json.dumps(conversation_history, sort_keys=True).encode()).hexdigest()[:8]
-        cache_key = hashlib.md5(f"{query}{len(items)}{history_hash}{json.dumps(analytics.get('basic_metrics', {}), sort_keys=True)}".encode()).hexdigest()[:12]
-        cached_response = smart_cache.get('ai_responses', cache_key)
-        if cached_response:
-            return cached_response
-        
-        try:
-            # Construire le contexte complet
-            context = self._build_complete_context(items, analytics)
-            
-            # Prompt système unifié avec mémoire conversationnelle
-            system_prompt = """Assistant IA BONVIN. Tu réponds en français, très concis et actionnable.
+        intent = self.detect_query_intent(query)
+        self._last_intent = intent.name
 
-Règles :
-- Appuie-toi uniquement sur les données de collection fournies.
-- Priorité aux chiffres clés et aux actions concrètes.
-- Bullet list courtes (max 4) puis mini conclusion.
-- Emojis sobres (📈/📉/⚠️/💡) optionnels, 1 maximum.
-- Si information manquante, dis-le clairement, sans inventer.
-- Réutilise l'historique seulement s'il apporte une précision utile.
-"""
-
-            # Construire les messages avec historique
-            messages = [{"role": "system", "content": system_prompt}]
-            
-            # Ajouter l'historique de conversation (limité à 10 messages pour éviter les tokens excessifs)
-            for msg in conversation_history[-10:]:
-                if msg.get('role') in ['user', 'assistant'] and msg.get('content'):
-                    messages.append({
-                        "role": msg['role'],
-                        "content": msg['content']
-                    })
-            
-            # Ajouter la question actuelle
-            user_prompt = f"""QUESTION: {query}
-
-DONNÉES COLLECTION BONVIN:
-{context}
-
-Analyse cette question en tenant compte de l'historique de notre conversation et fournis une réponse complète et contextualisée basée sur les données réelles de la collection.
-Si la question fait référence à des éléments mentionnés précédemment, utilise cette information pour enrichir ta réponse."""
-
-            messages.append({"role": "user", "content": user_prompt})
-
-            # Responses API only
-            resp = from_responses_simple(
-client=self.client, model=os.getenv("AI_MODEL", "gpt-5"),
-                messages=[
-                    {"role": m["role"], "content": [{"type": "input_text", "text": m["content"]}]} if isinstance(m.get("content"), str) else m
-                    for m in messages
-                ],
-                max_output_tokens=400,
-                reasoning_effort="medium"
-            )
-            ai_response = (extract_output_text(resp) or "").strip()
-            
-            # Cache la réponse
-            smart_cache.set('ai_responses', ai_response, cache_key)
-            
-            return ai_response
-            
-        except Exception as e:
-            logger.error(f"Erreur OpenAI: {e}")
-            return "Moteur IA Indisponible"
+        logger.info("🔍 Chatbot semantic mode (intent=%s)", intent.name)
+        return self._generate_semantic_response_with_history(query, items, analytics, conversation_history)
     
     def _generate_full_context_response(self, query: str, items: List[CollectionItem], analytics: Dict[str, Any], is_concept_search: bool = False) -> str:
         """Génère une réponse en donnant TOUTES les données à GPT-4 (pour petits datasets) - sans historique"""
@@ -3571,34 +3509,52 @@ client=self.client, model=os.getenv("AI_MODEL", "gpt-5"),
         try:
             # Vérifier d'abord si nous avons des embeddings
             items_with_embeddings = sum(1 for item in items if item.embedding)
-            logger.info(f"Recherche sémantique - Items avec embeddings: {items_with_embeddings}/{len(items)}")
+            logger.info(
+                "Recherche sémantique - Items avec embeddings: %s/%s",
+                items_with_embeddings,
+                len(items)
+            )
             
             if items_with_embeddings == 0:
-                logger.warning("Aucun embedding disponible, utilisation de l'analyse complète")
+                logger.warning("Aucun embedding disponible, bascule vers résumé analytique")
                 return self._generate_full_context_response_with_history(query, items, analytics, conversation_history, True)
             
             # Recherche sémantique
-            semantic_results = self.semantic_search.semantic_search(query, items, top_k=15)
+            semantic_results = self.semantic_search.semantic_search(query, items, top_k=DEFAULT_RAG_TOP_ITEMS * 2)
+            total_candidates = len(semantic_results)
             
             if not semantic_results:
-                logger.warning("Pas de résultats sémantiques, utilisation de l'analyse complète")
+                logger.warning("Pas de résultats sémantiques, bascule vers résumé analytique")
                 return self._generate_full_context_response_with_history(query, items, analytics, conversation_history, True)
             
             # Filtrer les résultats pertinents (score > 0.3 au lieu de 0.5 pour être plus inclusif)
             relevant_results = [(item, score) for item, score in semantic_results if score > 0.3]
             
             if not relevant_results:
-                # Si pas de résultats très pertinents, prendre les 15 meilleurs
-                relevant_results = semantic_results[:15]
+                relevant_results = semantic_results[:DEFAULT_RAG_TOP_ITEMS]
             
-            logger.info(f"Résultats sémantiques trouvés: {len(relevant_results)} items pertinents")
+            selected_results = relevant_results[:DEFAULT_RAG_TOP_ITEMS]
+            logger.info(
+                "Résultats sémantiques retenus: %s/%s (limite=%s)",
+                len(selected_results),
+                total_candidates,
+                DEFAULT_RAG_TOP_ITEMS
+            )
+            
+            self._last_context_snapshot = {
+                "intent": self._last_intent,
+                "total_candidates": total_candidates,
+                "selected": len(selected_results),
+                "query": query[:120]
+            }
             
             # Construire le contexte RAG
-            rag_context = self._build_rag_context(relevant_results, query)
+            rag_context = self._build_rag_context(selected_results, query, total_candidates)
             
             # Prompt pour GPT avec contexte RAG et mémoire conversationnelle
             system_prompt = """Assistant IA BONVIN. Tu réponds en français, format 2-4 puces max + phrase finale.
-- Utilise seulement les éléments du bloc RÉSULTATS.
+- Appuie-toi UNIQUEMENT sur les objets listés dans RÉSULTATS.
+- Les lignes sous [METADATA] servent au débogage interne : ne les cite pas.
 - Mets l'accent sur les montants, quantités, statuts.
 - Ne comble pas les trous : signale les données manquantes.
 - Emojis sobres facultatifs (📈/📉/⚠️/💡), limité à un seul."""
@@ -3642,7 +3598,7 @@ client=self.client, model=os.getenv("AI_MODEL", "gpt-5"),
             logger.error(f"Erreur recherche sémantique: {e}")
             return self._generate_full_context_response_with_history(query, items, analytics, conversation_history, True)
     
-    def _build_rag_context(self, results: List[Tuple[CollectionItem, float]], query: str) -> str:
+    def _build_rag_context(self, results: List[Tuple[CollectionItem, float]], query: str, total_candidates: int) -> str:
         """Construit le contexte pour RAG"""
         context_parts = []
         
@@ -3694,6 +3650,12 @@ client=self.client, model=os.getenv("AI_MODEL", "gpt-5"),
                 context_parts.append(f"   - Surface: {item.surface_m2} m²")
                 if item.rental_income_chf is not None:
                     context_parts.append(f"   - Revenus locatifs: {item.rental_income_chf:,.0f} CHF/mois")
+        
+        coverage_pct = (len(results) / max(1, total_candidates)) * 100 if total_candidates else 100
+        context_parts.append("\n[METADATA]")
+        context_parts.append(f"items_retained={len(results)}")
+        context_parts.append(f"candidates_total={total_candidates}")
+        context_parts.append(f"coverage_pct={coverage_pct:.1f}")
         
         return "\n".join(context_parts)
     
@@ -3949,6 +3911,22 @@ client=self.client, model=os.getenv("AI_MODEL", "gpt-5"),
 # Instance du moteur IA avec RAG
 ai_engine = PureOpenAIEngineWithRAG(openai_client) if openai_client else None
 
+# Limiter strictement la taille du contexte envoyé aux LLM
+# Valeurs par défaut défensives pour la taille des contextes RAG
+MIN_RAG_TOP_ITEMS = 3
+MAX_RAG_TOP_ITEMS = 15
+MIN_RAG_TOP_ANALYSES = 1
+MAX_RAG_TOP_ANALYSES = 10
+
+DEFAULT_RAG_TOP_ITEMS = max(
+    MIN_RAG_TOP_ITEMS,
+    min(MAX_RAG_TOP_ITEMS, int(os.getenv("CHATBOT_RAG_TOP_ITEMS", "12")))
+)
+DEFAULT_RAG_TOP_ANALYSES = max(
+    MIN_RAG_TOP_ANALYSES,
+    min(MAX_RAG_TOP_ANALYSES, int(os.getenv("CHATBOT_RAG_TOP_ANALYSES", "6")))
+)
+
 # ──────────────────────────────────────────────────────────
 # RAG helpers (OpenAI embeddings + Supabase pgvector RPC)
 # ──────────────────────────────────────────────────────────
@@ -4006,7 +3984,8 @@ def _build_retrieval_context_from_supabase(query: str, top_k_items: int = 10, to
         parts = []
         # Items retrieval
         try:
-            items = _match_items_by_embedding(emb, max(1, int(top_k_items)))
+            allowed_top_items = max(MIN_RAG_TOP_ITEMS, min(MAX_RAG_TOP_ITEMS, int(top_k_items)))
+            items = _match_items_by_embedding(emb, allowed_top_items)
         except Exception:
             items = []
         if items:
@@ -4031,7 +4010,8 @@ def _build_retrieval_context_from_supabase(query: str, top_k_items: int = 10, to
                 parts.append("[RAG_MATCH_ITEMS]\n" + "\n".join(lines))
         # Market analyses retrieval
         try:
-            analyses = _match_analyses_by_embedding(emb, max(1, int(top_k_analyses)))
+            allowed_top_analyses = max(MIN_RAG_TOP_ANALYSES, min(MAX_RAG_TOP_ANALYSES, int(top_k_analyses)))
+            analyses = _match_analyses_by_embedding(emb, allowed_top_analyses)
         except Exception:
             analyses = []
         if analyses:
@@ -5929,8 +5909,8 @@ def chatbot():
         USE_ASYNC = False  # Celery complètement désactivé
         # LLM d'abord: si ALWAYS_LLM=1 (par défaut), on ignore le chemin ultra-rapide
         ALWAYS_LLM = (os.getenv('ALWAYS_LLM', '1') == '1')
-        # FULL CONTEXT: si FULL_CONTEXT_MODE=1 (par défaut), inclure un snapshot compact de toute la collection
-        FULL_CONTEXT_MODE = (os.getenv('FULL_CONTEXT_MODE', '1') == '1')
+        # FULL CONTEXT: désactivé par défaut. Activer via FULL_CONTEXT_MODE=1 si nécessaire
+        FULL_CONTEXT_MODE = (os.getenv('FULL_CONTEXT_MODE', '0') == '1')
         
         # Détection d'intention rapide (uniquement pour guider le prompt LLM)
         query_lower = query.lower()
@@ -6691,7 +6671,11 @@ def chatbot():
                 # 2) Aperçu voitures si question orientée performance
                 rag_context = ""
                 try:
-                    supabase_ctx = _build_retrieval_context_from_supabase(query, top_k_items=10, top_k_analyses=5)
+                    supabase_ctx = _build_retrieval_context_from_supabase(
+                        query,
+                        top_k_items=min(DEFAULT_RAG_TOP_ITEMS, 10),
+                        top_k_analyses=min(DEFAULT_RAG_TOP_ANALYSES, 5)
+                    )
                     if supabase_ctx:
                         rag_context = (rag_context + ("\n\n" if rag_context else "") + supabase_ctx).strip()
                 except Exception:
@@ -10143,7 +10127,11 @@ def markets_chat():
                 ctx_parts.append(latest_txt)
             # Récupération sémantique via Supabase (focus marchés)
             try:
-                supa_ctx = _build_retrieval_context_from_supabase(user_message, top_k_items=5, top_k_analyses=8)
+                supa_ctx = _build_retrieval_context_from_supabase(
+                    user_message,
+                    top_k_items=min(DEFAULT_RAG_TOP_ITEMS, 5),
+                    top_k_analyses=min(DEFAULT_RAG_TOP_ANALYSES, 8)
+                )
                 if supa_ctx:
                     ctx_parts.append(supa_ctx)
             except Exception:
@@ -10249,7 +10237,11 @@ def markets_chat_stream():
         )
         # Ajouter RAG Supabase au contexte stream
         try:
-            supa_ctx = _build_retrieval_context_from_supabase(user_msg, top_k_items=6, top_k_analyses=8)
+            supa_ctx = _build_retrieval_context_from_supabase(
+                user_msg,
+                top_k_items=min(DEFAULT_RAG_TOP_ITEMS, 6),
+                top_k_analyses=min(DEFAULT_RAG_TOP_ANALYSES, 8)
+            )
         except Exception:
             supa_ctx = ""
         combined_ctx = "".join([
