@@ -88,6 +88,7 @@ def from_chat_completions_compat(
     messages: List[Dict[str, Any]],
     response_format: Optional[Dict[str, Any]] = None,
     max_tokens: Optional[int] = None,
+    max_completion_tokens: Optional[int] = None,
     timeout: Optional[int] = None,
     temperature: Optional[float] = None,  # ignored for GPT-5
     tools: Optional[List[Dict[str, Any]]] = None,
@@ -108,8 +109,11 @@ def from_chat_completions_compat(
     }
     if response_format is not None:
         req_cc["response_format"] = response_format
-    if max_tokens is not None:
-        req_cc["max_tokens"] = max_tokens
+    # Prefer the new max_completion_tokens parameter (required for GPT-5 models)
+    if max_completion_tokens is not None:
+        req_cc["max_completion_tokens"] = max_completion_tokens
+    elif max_tokens is not None:
+        req_cc["max_completion_tokens"] = max_tokens
     if timeout is not None:
         req_cc["timeout"] = timeout
     return client.chat.completions.create(**req_cc)

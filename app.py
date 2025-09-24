@@ -5247,13 +5247,13 @@ client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"),
         if result is None:
             try:
                 cc = from_chat_completions_compat(
-client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"),
+                    client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"),
                     messages=[
                         {"role": "system", "content": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."},
                         {"role": "user", "content": prompt}
                     ],
                     response_format={"type": "json_object"},
-                    max_tokens=800,
+                    max_completion_tokens=800,
                     timeout=20
                 )
                 raw_cc = cc.choices[0].message.content if hasattr(cc, 'choices') else ''
@@ -5587,12 +5587,12 @@ Réponds en JSON avec:
 - market_trend (hausse/stable/baisse)"""
 
                 response = from_chat_completions_compat(
-client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"),
+                    client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"),
                     messages=[
                         {"role": "system", "content": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."},
                         {"role": "user", "content": prompt}
                     ],
-                    max_tokens=800,
+                    max_completion_tokens=800,
                     timeout=15  # Timeout réduit
                 )
                 
@@ -8704,12 +8704,12 @@ Recherche les données de marché actuelles pour :
 Si une classe d'actif n'a pas bougé, dis-le clairement sans meubler. Génère un briefing pour aujourd'hui basé sur les données de marché réelles trouvées."""
 
         response = from_chat_completions_compat(
-client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"),
+            client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"),
             messages=[
                 {"role": "system", "content": "Tu es un expert en marchés financiers. Utilise la recherche web pour des données actuelles."},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=2000
+            max_completion_tokens=2000
         )
 
         if response.choices and response.choices[0].message.content:
