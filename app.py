@@ -1,5 +1,6 @@
 from gevent import monkey; monkey.patch_all()
 import os
+import io
 import json
 import logging
 import re
@@ -15,7 +16,7 @@ from enum import Enum
 from functools import lru_cache, wraps
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from flask import Flask, jsonify, render_template, request, Response, stream_with_context, make_response
+from flask import Flask, jsonify, render_template, request, Response, stream_with_context, make_response, send_file
 from metrics_api import metrics_bp
 from werkzeug.utils import secure_filename
 from pdf_optimizer import generate_optimized_pdf, create_summary_box, create_item_card_html, format_price_for_pdf
@@ -70,6 +71,9 @@ from enhanced_google_cse_ai_report import EnhancedGoogleCSEAIReport
 from intelligent_scraper import IntelligentScraper, get_scraper
 from gpt5_compat import from_chat_completions_compat, chat_tools_messages, from_responses_simple, extract_output_text
 from scrapingbee_scraper import ScrapingBeeScraper, get_scrapingbee_scraper
+from enhanced_chatbot_manager import EnhancedChatbotManager, ConversationOptimizer
+from chatbot_visualizations import ChatbotVisualizer, ReportGenerator
+from prompts.enhanced_prompts import get_contextual_prompt, format_response_with_template
 # Remplacé par l'API Manus unifiée
 # Remplacé par l'API Manus unifiée
 
@@ -5776,6 +5780,137 @@ def fix_vehicle_categories():
     except Exception as e:
         logger.error(f"Erreur fix_vehicle_categories: {e}")
         return jsonify({"error": "Erreur lors de la correction des catégories"}), 500
+enhanced_chatbot_manager = EnhancedChatbotManager()
+conversation_optimizer = ConversationOptimizer()
+chatbot_visualizer = ChatbotVisualizer()
+chatbot_report_generator = ReportGenerator()
+
+
+@app.route("/api/chatbot/analyze-intent", methods=["POST"])
+def chatbot_analyze_intent():
+    try:
+        data = request.get_json() or {}
+        query = (data.get("query") or "").strip()
+        if not query:
+            return jsonify({"error": "Query required"}), 400
+
+        analysis = enhanced_chatbot_manager.analyze_user_intent(query)
+        return jsonify({"success": True, "analysis": analysis})
+    except Exception as e:
+        logger.error(f"Erreur analyse intention chatbot: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/chatbot/predict-value", methods=["POST"])
+def chatbot_predict_value():
+    try:
+        data = request.get_json() or {}
+        item_data = data.get("item") or {}
+        months = data.get("months", 12)
+
+        if not item_data:
+            return jsonify({"error": "Item data required"}), 400
+
+        predictions = enhanced_chatbot_manager.predict_future_value(item_data, months)
+        return jsonify({"success": True, "predictions": predictions})
+    except Exception as e:
+        logger.error(f"Erreur prédiction chatbot: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/chatbot/generate-chart", methods=["POST"])
+def chatbot_generate_chart():
+    try:
+        data = request.get_json() or {}
+        chart_type = data.get("type", "portfolio")
+        items = data.get("items") or []
+
+        if not items:
+            return jsonify({"error": "Items required"}), 400
+
+        if chart_type == "portfolio":
+            chart = chatbot_visualizer.generate_portfolio_chart(items)
+        elif chart_type == "performance":
+            chart = chatbot_visualizer.generate_performance_chart(items)
+        else:
+            return jsonify({"error": "Invalid chart type"}), 400
+
+        return jsonify({"success": True, "chart": chart})
+    except Exception as e:
+        logger.error(f"Erreur génération graphique chatbot: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/chatbot/export-pdf", methods=["POST"])
+def chatbot_export_pdf():
+    try:
+        data = request.get_json() or {}
+        report_data = data.get("data") or {}
+
+        if not report_data:
+            return jsonify({"error": "Report data required"}), 400
+
+        pdf_bytes = chatbot_report_generator.generate_portfolio_report(report_data)
+        buffer = io.BytesIO(pdf_bytes)
+        buffer.seek(0)
+
+        filename = f"rapport_bonvin_{datetime.now().strftime('%Y%m%d')}.pdf"
+        return send_file(buffer, mimetype="application/pdf", as_attachment=True, download_name=filename)
+    except Exception as e:
+        logger.error(f"Erreur export PDF chatbot: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/chatbot/export-excel", methods=["POST"])
+def chatbot_export_excel():
+    try:
+        data = request.get_json() or {}
+        items = data.get("items") or []
+
+        if not items:
+            return jsonify({"error": "Items required"}), 400
+
+        excel_bytes = chatbot_report_generator.generate_excel_export(items)
+        buffer = io.BytesIO(excel_bytes)
+        buffer.seek(0)
+
+        filename = f"inventaire_bonvin_{datetime.now().strftime('%Y%m%d')}.xlsx"
+        mimetype = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        return send_file(buffer, mimetype=mimetype, as_attachment=True, download_name=filename)
+    except Exception as e:
+        logger.error(f"Erreur export Excel chatbot: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/chatbot/smart-suggestions", methods=["POST"])
+def chatbot_smart_suggestions():
+    try:
+        data = request.get_json() or {}
+        context = data.get("context") or {}
+
+        suggestions = enhanced_chatbot_manager.generate_smart_suggestions(context)
+        return jsonify({"success": True, "suggestions": suggestions})
+    except Exception as e:
+        logger.error(f"Erreur suggestions chatbot: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/chatbot/portfolio-metrics", methods=["POST"])
+def chatbot_portfolio_metrics():
+    try:
+        data = request.get_json() or {}
+        items = data.get("items") or []
+
+        if not items:
+            return jsonify({"error": "Items required"}), 400
+
+        metrics = enhanced_chatbot_manager.calculate_portfolio_metrics(items)
+        return jsonify({"success": True, "metrics": metrics})
+    except Exception as e:
+        logger.error(f"Erreur métriques portefeuille chatbot: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/chatbot", methods=["POST"])
 def chatbot():
     """Chatbot AMÉLIORÉ v2.0 - Stable, rapide et intelligent"""
@@ -5784,7 +5919,7 @@ def chatbot():
         data = request.get_json()
         if not data:
             return jsonify({"error": "Données requises"}), 400
-        
+
         query = data.get("message", "").strip()
         if not query:
             return jsonify({"error": "Message requis"}), 400
