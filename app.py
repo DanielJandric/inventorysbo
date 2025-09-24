@@ -3945,6 +3945,114 @@ client=self.client, model=os.getenv("AI_MODEL", "gpt-5"),
 # Instance du moteur IA avec RAG
 ai_engine = PureOpenAIEngineWithRAG(openai_client) if openai_client else None
 
+# ──────────────────────────────────────────────────────────
+# RAG helpers (OpenAI embeddings + Supabase pgvector RPC)
+# ──────────────────────────────────────────────────────────
+def _get_text_embedding_for_rag(text: str):
+    try:
+        if not openai_client:
+            return None
+        model = os.getenv("EMBEDDINGS_MODEL", "text-embedding-3-small")
+        res = openai_client.embeddings.create(model=model, input=(text or "")[:5000])
+        return (res.data[0].embedding if getattr(res, 'data', None) else None)
+    except Exception as e:
+        try:
+            logger.warning(f"⚠️ Embedding error: {e}")
+        except Exception:
+            pass
+        return None
+
+def _match_items_by_embedding(query_embedding, top_k: int = 15):
+    try:
+        if not supabase or query_embedding is None:
+            return []
+        payload = {"query_embedding": query_embedding, "match_count": int(max(1, min(top_k, 100)))}
+        # supabase-py returns .data on .execute()
+        result = supabase.rpc("match_items", payload).execute()
+        return getattr(result, 'data', []) or []
+    except Exception as e:
+        try:
+            logger.warning(f"⚠️ match_items RPC error: {e}")
+        except Exception:
+            pass
+        return []
+
+def _match_analyses_by_embedding(query_embedding, top_k: int = 5):
+    try:
+        if not supabase or query_embedding is None:
+            return []
+        payload = {"query_embedding": query_embedding, "match_count": int(max(1, min(top_k, 50)))}
+        result = supabase.rpc("match_analyses", payload).execute()
+        return getattr(result, 'data', []) or []
+    except Exception as e:
+        try:
+            logger.warning(f"⚠️ match_analyses RPC error: {e}")
+        except Exception:
+            pass
+        return []
+
+def _build_retrieval_context_from_supabase(query: str, top_k_items: int = 10, top_k_analyses: int = 5) -> str:
+    """Builds a compact RAG context block using pgvector RPC functions."""
+    try:
+        if not query or not isinstance(query, str):
+            return ""
+        emb = _get_text_embedding_for_rag(query)
+        if emb is None:
+            return ""
+        parts = []
+        # Items retrieval
+        try:
+            items = _match_items_by_embedding(emb, max(1, int(top_k_items)))
+        except Exception:
+            items = []
+        if items:
+            lines = []
+            for r in items:
+                try:
+                    nm = str(r.get('name') or '')
+                    cat = str(r.get('category') or '')
+                    desc = str(r.get('description') or '')
+                    if len(desc) > 120:
+                        desc = desc[:120] + '…'
+                    rel = r.get('distance')
+                    try:
+                        rel = float(rel) if rel is not None else None
+                    except Exception:
+                        rel = None
+                    rel_s = f" | rel:{rel:.3f}" if isinstance(rel, float) else ""
+                    lines.append(f"- {nm} ({cat}){rel_s} :: {desc}")
+                except Exception:
+                    continue
+            if lines:
+                parts.append("[RAG_MATCH_ITEMS]\n" + "\n".join(lines))
+        # Market analyses retrieval
+        try:
+            analyses = _match_analyses_by_embedding(emb, max(1, int(top_k_analyses)))
+        except Exception:
+            analyses = []
+        if analyses:
+            lines = []
+            for r in analyses:
+                try:
+                    at = str(r.get('analysis_type') or r.get('type') or '')
+                    summ = str(r.get('summary') or '')
+                    if len(summ) > 220:
+                        summ = summ[:220] + '…'
+                    rel = r.get('distance')
+                    try:
+                        rel = float(rel) if rel is not None else None
+                    except Exception:
+                        rel = None
+                    rel_s = f" | rel:{rel:.3f}" if isinstance(rel, float) else ""
+                    lines.append(f"- {at}{rel_s} :: {summ}")
+                except Exception:
+                    continue
+            if lines:
+                parts.append("[RAG_MATCH_ANALYSES]\n" + "\n".join(lines))
+        return ("\n\n".join(parts)).strip()
+    except Exception:
+        return ""
+
 # Routes
 @app.route("/")
 def index():
@@ -6444,8 +6552,15 @@ def chatbot():
                 history_limited = conversation_history[-10:] if len(conversation_history) > 10 else conversation_history
                 
                 # Contexte RAG minimal pour guider le modèle sur VOS données
-                # Inclure un aperçu des 30 voitures pour questions de performance
+                # 1) Récupération sémantique via Supabase (items + analyses)
+                # 2) Aperçu voitures si question orientée performance
                 rag_context = ""
+                try:
+                    supabase_ctx = _build_retrieval_context_from_supabase(query, top_k_items=10, top_k_analyses=5)
+                    if supabase_ctx:
+                        rag_context = (rag_context + ("\n\n" if rag_context else "") + supabase_ctx).strip()
+                except Exception:
+                    pass
                 special_fast = any(w in query.lower() for w in ['voiture', 'auto', 'car']) and any(k in query.lower() for k in ['plus rapide', 'rapide', 'vitesse', '0-100', '0 à 100'])
                 if any(w in query.lower() for w in ['voiture', 'auto', 'car']):
                     try:
@@ -6455,7 +6570,7 @@ def chatbot():
                             name = str(getattr(it, 'name', ''))
                             desc = str(getattr(it, 'description', ''))[:120]
                             return f"- {name} :: {desc}"
-                        rag_context = "\n\n[APERCU_VOITURES]\n" + "\n".join(car_line(c) for c in cars)
+                        rag_context = (rag_context + ("\n\n" if rag_context else "") + "[APERCU_VOITURES]\n" + "\n".join(car_line(c) for c in cars)).strip()
                         # Extraire des indices de performance pour guider la réponse
                         perf_lines = []
                         import re as _re
@@ -9870,7 +9985,7 @@ def markets_chat():
         # FORCE traitement synchrone - Celery désactivé pour stabilité
         USE_ASYNC = False  # DÉSACTIVÉ pour éviter timeouts
         
-        # Ajouter le dernier rapport comme contexte (si disponible)
+        # Ajouter le dernier rapport + RAG analyses/items comme contexte (si disponible)
         try:
             from market_analysis_db import get_market_analysis_db
             db = get_market_analysis_db()
@@ -9886,8 +10001,20 @@ def markets_chat():
                     f"Executive Summary:\n{exec_summary}\n"
                     f"Résumé:\n{summary_compact}"
                 )
+            ctx_parts = []
+            if extra_context:
+                ctx_parts.append(extra_context)
             if latest_txt:
-                extra_context = (extra_context + "\n---\n" + latest_txt).strip() if extra_context else latest_txt
+                ctx_parts.append(latest_txt)
+            # Récupération sémantique via Supabase (focus marchés)
+            try:
+                supa_ctx = _build_retrieval_context_from_supabase(user_message, top_k_items=5, top_k_analyses=8)
+                if supa_ctx:
+                    ctx_parts.append(supa_ctx)
+            except Exception:
+                pass
+            if ctx_parts:
+                extra_context = "\n---\n".join([p for p in ctx_parts if p])
         except Exception:
             pass
 
@@ -9985,7 +10112,17 @@ def markets_chat_stream():
             "Tu es un analyste marchés. Réponds en français, concis (verbosité faible), structuré, actionnable. "
             "N'invente pas de chiffres. Mets en **gras** les points clés."
         )
-        prefix_ctx = "".join([report_ctx, (f"Contexte (utilisateur):\n{extra_context}\n---\n" if extra_context else "")])
+        # Ajouter RAG Supabase au contexte stream
+        try:
+            supa_ctx = _build_retrieval_context_from_supabase(user_msg, top_k_items=6, top_k_analyses=8)
+        except Exception:
+            supa_ctx = ""
+        combined_ctx = "".join([
+            report_ctx,
+            (f"Contexte (utilisateur):\n{extra_context}\n---\n" if extra_context else ""),
+            (f"{supa_ctx}\n---\n" if supa_ctx else "")
+        ])
+        prefix_ctx = combined_ctx
         user_input = f"{prefix_ctx}Question: {user_msg}" if prefix_ctx else user_msg
 
         from openai import OpenAI
