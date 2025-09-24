@@ -30,6 +30,31 @@ def _coerce_float(value: Any) -> Optional[float]:
     except Exception:
         return None
 
+def _parse_embedding(value: Any) -> Optional[List[float]]:
+    """Normalise un embedding pgvector (liste, string, None)."""
+    if value is None:
+        return None
+    try:
+        if isinstance(value, list):
+            return [float(x) for x in value]
+        if isinstance(value, tuple):
+            return [float(x) for x in value]
+        if isinstance(value, str):
+            s = value.strip()
+            if not s:
+                return None
+            # Formats possibles: "[1,2,3]" ou "(1,2,3)"
+            if s.startswith('[') and s.endswith(']'):
+                parsed = json.loads(s)
+                if isinstance(parsed, list):
+                    return [float(x) for x in parsed]
+            if s.startswith('(') and s.endswith(')'):
+                inner = [seg.strip() for seg in s[1:-1].split(',') if seg.strip()]
+                return [float(seg) for seg in inner]
+    except Exception as e:
+        logger.warning(f"Impossible de parser l'embedding: {e}")
+    return None
+
 @dataclass
 class MarketAnalysis:
     """Modèle de données pour une analyse de marché"""
@@ -39,6 +64,7 @@ class MarketAnalysis:
     prompt: Optional[str] = None
     executive_summary: Optional[List[str]] = None
     summary: Optional[str] = None
+    embedding: Optional[List[float]] = None
     key_points: Optional[List[str]] = None
     structured_data: Optional[Dict[str, Any]] = None
     geopolitical_analysis: Optional[Dict[str, Any]] = None
@@ -76,6 +102,12 @@ class MarketAnalysis:
             data['geopolitical_analysis'] = json.dumps(self.geopolitical_analysis)
         if self.economic_indicators:
             data['economic_indicators'] = json.dumps(self.economic_indicators)
+
+        if self.embedding is not None:
+            try:
+                data['embedding'] = [float(x) for x in self.embedding]
+            except Exception:
+                data.pop('embedding', None)
         
         # Assainir les champs numériques susceptibles d'être 'N/A'
         if 'confidence_score' in data:
@@ -112,6 +144,10 @@ class MarketAnalysis:
                         data[field] = []
                     else:
                         data[field] = []
+
+        if data.get('embedding') is not None:
+            emb = _parse_embedding(data.get('embedding'))
+            data['embedding'] = emb
         
         return {k: v for k, v in data.items() if v is not None}
 
@@ -143,6 +179,8 @@ class MarketAnalysis:
         data['structured_data'] = _safe_json_load(data.get('structured_data'), {})
         data['geopolitical_analysis'] = _safe_json_load(data.get('geopolitical_analysis'), {})
         data['economic_indicators'] = _safe_json_load(data.get('economic_indicators'), {})
+
+        data['embedding'] = _parse_embedding(data.get('embedding'))
         
         return cls(**data)
 
