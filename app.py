@@ -10256,7 +10256,7 @@ def markets_chat_stream():
         timeout_s = int(os.getenv('TIMEOUT_S', '110'))
         client = openai_client.with_options(timeout=timeout_s) if openai_client else OpenAI(api_key=os.getenv("OPENAI_API_KEY"), timeout=timeout_s)
         model = os.getenv("AI_MODEL", "gpt-5")
-        max_tokens = int(os.getenv("MAX_OUTPUT_TOKENS", "8000"))
+        max_output_tokens = int(os.getenv("MAX_OUTPUT_TOKENS", "8000"))
         budget_s = int(os.getenv("STREAM_BUDGET_S", "110"))
         hb_every = int(os.getenv("STREAM_HEARTBEAT_S", "10"))
 
@@ -10266,7 +10266,7 @@ def markets_chat_stream():
             # ouvrir le flux
             yield "event: open\ndata: {}\n\n"
             try:
-                with client.responses.stream(model=model, instructions=system_prompt, input=user_input, max_output_tokens=max_tokens) as stream:
+                with client.responses.stream(model=model, instructions=system_prompt, input=user_input, max_output_tokens=max_output_tokens) as stream:
                     for event in stream:
                         now = time.monotonic()
                         if getattr(event, 'type', None) == "response.output_text.delta":
