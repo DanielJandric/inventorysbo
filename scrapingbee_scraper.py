@@ -6,7 +6,7 @@ import logging
 from datetime import datetime
 from typing import List, Dict, Optional
 from dataclasses import dataclass
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urlparse, parse_qs
 import re
 from datetime import timedelta
 from datetime import timezone
@@ -1418,12 +1418,17 @@ class ScrapingBeeScraper:
                             if not details or not details.get('text'):
                                 continue
                             timestamp = details.get('published_at') or datetime.now()
+                            metadata = {'source': f"google_news_{hl}"}
+                            if it.get('source'):
+                                metadata['original_source'] = it['source']
+                            if it.get('published_at'):
+                                metadata['published_at_raw'] = it['published_at']
                             results.append(ScrapedData(
                                 url=it['url'],
                                 title=(it.get('title') or '')[:120],
                                 content=(details.get('text') or '')[:9000],
                                 timestamp=timestamp,
-                                metadata={'source': f"google_news_{hl}"}
+                                metadata=metadata
                             ))
                         except Exception:
                             continue
@@ -1588,14 +1593,38 @@ class ScrapingBeeScraper:
                     try:
                         link_el = item.find('link')
                         title_el = item.find('title')
-                        link = (link_el.text or '').strip() if link_el is not None else ''
-                        title = (title_el.text or '').strip() if title_el is not None else link[:120]
+                        source_el = item.find('source')
+                        pub_el = item.find('pubDate')
+                        link_raw = (link_el.text or '').strip() if link_el is not None else ''
+                        title = (title_el.text or '').strip() if title_el is not None else link_raw[:120]
+                        if not link_raw:
+                            continue
+                        parsed = urlparse(link_raw)
+                        if parsed.netloc.endswith('news.google.com'):
+                            qs = parse_qs(parsed.query)
+                            if 'url' in qs and qs['url']:
+                                link = qs['url'][0]
+                            else:
+                                link = link_raw
+                        else:
+                            link = link_raw
                         if not link:
                             continue
                         if link in seen_urls:
                             continue
                         seen_urls.add(link)
-                        items.append({'url': link, 'title': title})
+                        published_at = None
+                        try:
+                            if pub_el is not None and pub_el.text:
+                                published_at = self._parse_datetime_str(pub_el.text)
+                        except Exception:
+                            published_at = None
+                        items.append({
+                            'url': link,
+                            'title': title,
+                            'source': (source_el.text if source_el is not None else link.split('/')[2])[:60],
+                            'published_at': published_at.isoformat() if published_at else None
+                        })
                         if len(items) >= max_items:
                             return items
                     except Exception:
