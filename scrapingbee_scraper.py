@@ -1482,6 +1482,49 @@ class ScrapingBeeScraper:
             total_chars_collected = _count_chars(scraped_blocks)
             logger.info(f"📰 Bonvin Collection News: {len(scraped_blocks)} articles agrégés (~{total_chars_collected} chars)")
 
+            def _score_item(item: ScrapedData) -> float:
+                score = 0.0
+                try:
+                    source = (item.metadata or {}).get('source', '')
+                    if source:
+                        if any(key in source.lower() for key in ['reuters', 'bloomberg', 'ft', 'wsj', 'google_news', 'politico', 'nikkei']):
+                            score += 2.0
+                        elif any(key in source.lower() for key in ['guardian', 'cnn', 'marketwatch', 'investing', 'energy', 'geopolitics', 'asia', 'africa']):
+                            score += 1.0
+                    if item.timestamp:
+                        delta_hours = max(0.1, (datetime.now(timezone.utc) - item.timestamp.replace(tzinfo=timezone.utc)).total_seconds() / 3600.0)
+                        score += max(0, 24 - delta_hours) / 12.0  # +2 max pour <12h
+                    text = (item.content or '')
+                    if len(text) > 5000:
+                        score += 1.0
+                    high_signal = ['banque centrale', 'fed', 'ecb', 'inflation', 'pmi', 'geopolitique', 'sanctions', 'fusion', 'acquisition', 'earnings', 'macro', 'tensions']
+                    text_lower = text.lower()
+                    if any(word in text_lower for word in high_signal):
+                        score += 1.5
+                    topics = (item.metadata or {}).get('topics')
+                    if topics and isinstance(topics, list):
+                        score += min(1.0, len(topics) * 0.3)
+                except Exception:
+                    pass
+                return score
+
+            top_source_quota: Dict[str, int] = {}
+            filtered_for_llm: List[ScrapedData] = []
+            max_per_source = int(os.getenv('COLLECTION_NEWS_MAX_PER_SOURCE', '8'))
+            scraped_sorted = sorted(scraped_blocks, key=_score_item, reverse=True)
+            for item in scraped_sorted:
+                if len(filtered_for_llm) >= int(os.getenv('COLLECTION_NEWS_MAX_ITEMS', '120')):
+                    break
+                src = (item.metadata or {}).get('source', 'unknown')
+                count = top_source_quota.get(src, 0)
+                if count >= max_per_source:
+                    continue
+                top_source_quota[src] = count + 1
+                item.metadata = {**(item.metadata or {}), 'score': round(_score_item(item), 2)}
+                filtered_for_llm.append(item)
+
+            logger.info(f"🧮 Scoring Bonvin: {len(filtered_for_llm)} articles sélectionnés sur {len(scraped_blocks)}")
+
             if total_chars_collected < min_chars_target:
                 logger.info(f"📰 Bonvin Collection News: fallback direct (Google News + sources premium) pour atteindre {min_chars_target} caractères")
                 fallback_direct_sources = [
@@ -1538,6 +1581,10 @@ class ScrapingBeeScraper:
                 if total_chars_collected < min_chars_target:
                     logger.warning(f"⚠️ Bonvin fallback direct n'atteint toujours pas {min_chars_target} chars (actuel ~{total_chars_collected})")
 
+            total_chars_collected = _count_chars(scraped_blocks)
+            if total_chars_collected < min_chars_target:
+                logger.warning(f"⚠️ Bonvin Collection News: caractères collectés {total_chars_collected} < {min_chars_target} malgré les reforçes")
+
             # Déduplication stricte
             seen_urls: Dict[str, ScrapedData] = {}
             for item in scraped_blocks:
@@ -1548,7 +1595,19 @@ class ScrapingBeeScraper:
                 if not prev or (prev.timestamp or datetime.min) < ts:
                     seen_urls[item.url] = item
 
-            scraped = list(seen_urls.values())
+            scraped_all = list(seen_urls.values())
+            if filtered_for_llm:
+                unique_filtered: Dict[str, ScrapedData] = {}
+                for item in filtered_for_llm:
+                    if not item.url:
+                        continue
+                    existing = unique_filtered.get(item.url)
+                    if not existing or _score_item(item) > _score_item(existing):
+                        unique_filtered[item.url] = item
+                scraped = list(unique_filtered.values())
+            else:
+                scraped = scraped_all
+
             if not scraped:
                 return { 'error': 'Aucune donnée agrégée pour Bonvin Collection News' }
 
