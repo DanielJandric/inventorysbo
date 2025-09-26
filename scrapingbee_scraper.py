@@ -1459,6 +1459,8 @@ class ScrapingBeeScraper:
                             logger.debug(f"⚠️ Google News enrichissement échoué ({it.get('url')}): {e}")
                             continue
                 logger.info(f"📰 Google News total agrégé: {len(results)} articles")
+                if not results:
+                    logger.warning(f"⚠️ Google News vide pour locale={hl}-{gl} | queries={queries[:3]}")
                 return results
 
             try:
@@ -1984,7 +1986,8 @@ class ScrapingBeeScraper:
             # Google domains require custom_google=true (charged) per ScrapingBee
             try:
                 if 'news.google.com' in u or (u.startswith('https://www.google.') or '://www.google.' in u):
-                    params['custom_google'] = 'true'
+                    if os.getenv('SCRAPINGBEE_CUSTOM_GOOGLE', 'false').lower() == 'true':
+                        params['custom_google'] = 'true'
             except Exception:
                 pass
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout_secs)) as session:
