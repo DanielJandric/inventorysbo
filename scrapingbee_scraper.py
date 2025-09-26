@@ -586,13 +586,18 @@ class ScrapingBeeScraper:
                             # garder quand même si c'est du market summary générique
                             pass
                     if not any(existing.url == url for existing in items):
-                    items.append(ScrapedData(
-                        url=url,
-                        title=url[:120],
-                        content=text[:8000],
-                        timestamp=published_at or _now_utc(),
-                        metadata={'source': source_name, 'scraped_at': datetime.now().isoformat()}
-                    ))
+                        items.append(
+                            ScrapedData(
+                                url=url,
+                                title=url[:120],
+                                content=text[:8000],
+                                timestamp=published_at or _now_utc(),
+                                metadata={
+                                    'source': source_name,
+                                    'scraped_at': datetime.now().isoformat()
+                                }
+                            )
+                        )
                 except Exception:
                     continue
 
