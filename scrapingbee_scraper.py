@@ -452,7 +452,7 @@ class ScrapingBeeScraper:
                             if href and any(domain in href for domain in ['/news/', '/story/', '/article/']):
                                 if href.startswith('/'):
                                     href = f"https://{site.split('/')[2]}{href}"
-                                if href not in [i.url for i in items]:
+                                if not any(i.url == href for i in items):
                                     items.append(ScrapedData(
                                         url=href,
                                         title=a.get_text()[:120] or href[:120],
@@ -490,13 +490,14 @@ class ScrapingBeeScraper:
                         if q and (q not in (text.lower() or '')):
                             # garder quand même si c'est du market summary générique
                             pass
-                    items.append(ScrapedData(
-                        url=url,
-                        title=url[:120],
-                        content=text[:8000],
-                        timestamp=published_at or _now_utc(),
-                        metadata={'source': source_name, 'scraped_at': datetime.now().isoformat()}
-                    ))
+                    if not any(existing.url == url for existing in items):
+                        items.append(ScrapedData(
+                            url=url,
+                            title=url[:120],
+                            content=text[:8000],
+                            timestamp=published_at or _now_utc(),
+                            metadata={'source': source_name, 'scraped_at': datetime.now().isoformat()}
+                        ))
                 except Exception:
                     continue
 
