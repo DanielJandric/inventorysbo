@@ -1828,7 +1828,7 @@ class ScrapingBeeScraper:
                 'url': url,
                 'render_js': 'true' if needs_js else 'false',
                 'premium_proxy': 'true',
-                'block_resources': 'true' if needs_js else 'false',
+                'block_resources': 'true if needs_js else 'false',
                 'country_code': country,
                 'wait': '2000' if needs_js else '1200'
             }
