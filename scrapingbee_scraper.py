@@ -375,25 +375,115 @@ class ScrapingBeeScraper:
             'https://www.investing.com/rss/news.rss',
             'https://www.investing.com/rss/stock_analyses.rss',
         ]
-        # Flux RSS alternatifs qui fonctionnent
-        alt_rss = [
+        energy_rss = [
+            'https://www.eia.gov/rss/todayinenergy.xml',
+            'https://www.opec.org/opec_web/en/press_room/press_releases/rss.xml',
+            'https://www.offshore-energy.biz/feed/'
+        ]
+        tech_rss = [
+            'https://www.theverge.com/rss/index.xml',
+            'https://www.reuters.com/rssFeed/technologyNews',
+            'https://www.cnbc.com/id/19854910/device/rss/rss.xml'
+        ]
+        geopolitics_rss = [
+            'https://www.politico.com/rss/politics-news.xml',
+            'https://feeds.bbci.co.uk/news/world/rss.xml',
+            'https://www.aljazeera.com/xml/rss/all.xml'
+        ]
+        reuters_rss = [
+            'https://feeds.reuters.com/reuters/businessNews',
+            'https://feeds.reuters.com/reuters/worldNews',
+            'https://feeds.reuters.com/reuters/marketsNews'
+        ]
+        bloomberg_rss = [
             'https://feeds.bloomberg.com/markets/news.rss',
-            'https://feeds.bloomberg.com/politics/news.rss',
+            'https://feeds.bloomberg.com/politics/news.rss'
+        ]
+        ft_rss = [
             'https://www.ft.com/rss/home',
             'https://www.ft.com/rss/world',
-            'https://www.ft.com/rss/companies',
+            'https://www.ft.com/rss/companies'
+        ]
+        wsj_rss = [
+            'https://feeds.a.dj.com/rss/RSSMarketsMain.xml',
+            'https://feeds.a.dj.com/rss/RSSWorldNews.xml'
+        ]
+        guardian_rss = [
+            'https://www.theguardian.com/world/rss',
+            'https://www.theguardian.com/business/rss'
+        ]
+        asia_rss = [
+            'https://asia.nikkei.com/rss/feed/narrow_all.xml',
+            'https://www.scmp.com/rss/91/feed'
+        ]
+        latam_rss = [
+            'https://www.bnamericas.com/en/news/feed',
+            'https://www.reuters.com/rssFeed/americasNews'
+        ]
+        africa_rss = [
+            'https://www.reuters.com/rssFeed/africaNews',
+            'https://www.theafricareport.com/feed/'
+        ]
+        # Flux RSS alternatifs qui fonctionnent
+        alt_rss = [
             'https://www.cnbc.com/id/100003114/device/rss/rss.xml',
             'https://www.cnbc.com/id/10000664/device/rss/rss.xml',
         ]
 
         rss_items: List[ScrapedData] = []
-        rss_items += await _fetch_rss_items(mw_rss, 'marketwatch', per_site * 3)
-        rss_items += await _fetch_rss_items(cnn_rss, 'cnn', per_site * 3)
-        rss_items += await _fetch_rss_items(inv_rss, 'investing', per_site * 2)
+        rss_sources = [
+            (mw_rss, 'marketwatch', per_site * 2),
+            (cnn_rss, 'cnn', per_site * 2),
+            (inv_rss, 'investing', per_site * 2),
+            (reuters_rss, 'reuters', per_site * 2),
+            (bloomberg_rss, 'bloomberg', per_site * 2),
+            (ft_rss, 'ft', per_site * 2),
+            (wsj_rss, 'wsj', per_site * 2),
+            (guardian_rss, 'guardian', per_site * 2),
+            (energy_rss, 'energy', max(4, per_site)),
+            (tech_rss, 'technology', max(4, per_site)),
+            (geopolitics_rss, 'geopolitics', max(4, per_site)),
+            (asia_rss, 'asia', per_site * 2),
+            (latam_rss, 'latam', per_site * 2),
+            (africa_rss, 'africa', per_site * 2)
+        ]
+        for feeds, name, limit in rss_sources:
+            try:
+                rss_items += await _fetch_rss_items(feeds, name, limit)
+            except Exception as e:
+                logger.debug(f"📰 RSS source ignorée ({name}): {e}")
+
         # Fallback vers des flux alternatifs si les principaux échouent
         if len(rss_items) < per_site * 2:
             logger.info(f"📰 RSS principal: {len(rss_items)} articles, ajout de flux alternatifs...")
             rss_items += await _fetch_rss_items(alt_rss, 'alternative', per_site * 2)
+
+        # Déduplication et limite par source pour éviter la boucle sur 2 sites
+        seen_rss_urls: set = set()
+        deduped_rss: List[ScrapedData] = []
+        for item in rss_items:
+            if not item or not item.url:
+                continue
+            if item.url in seen_rss_urls:
+                continue
+            seen_rss_urls.add(item.url)
+            deduped_rss.append(item)
+        per_source_cap = max(per_site * 3, 50)
+        # Limiter les sources très prolifiques pour éviter la saturation d'un seul domaine
+        dominant_sources = {'marketwatch', 'investing'}
+        dominant_cap = max(per_site * 2, 30)
+        per_source_counts: Dict[str, int] = {}
+        filtered_rss: List[ScrapedData] = []
+        for item in deduped_rss:
+            source = (item.metadata or {}).get('source', 'unknown')
+            current = per_source_counts.get(source, 0)
+            cap = dominant_cap if source in dominant_sources else per_source_cap
+            if current >= cap:
+                continue
+            per_source_counts[source] = current + 1
+            filtered_rss.append(item)
+
+        rss_items = filtered_rss
         logger.info(f"📰 Total RSS collecté: {len(rss_items)} articles")
 
         # Fallback domain crawl SI explicitement autorisé
@@ -1296,7 +1386,7 @@ class ScrapingBeeScraper:
 
             scraped_blocks: List[ScrapedData] = []
             total_topic_count = sum(len(q) for q in topic_groups.values()) or 1
-            per_topic_min = max(20000, min_chars_target // total_topic_count)
+            per_topic_min = max(25000, min_chars_target // total_topic_count)
 
             for group, queries in topic_groups.items():
                 for query in queries:
@@ -1343,16 +1433,27 @@ class ScrapingBeeScraper:
                 gn_locales = [
                     {'hl': 'fr', 'gl': 'CH', 'ceid': 'CH:fr'},
                     {'hl': 'en', 'gl': 'US', 'ceid': 'US:en'},
-                    {'hl': 'de', 'gl': 'CH', 'ceid': 'CH:de'}
+                    {'hl': 'de', 'gl': 'CH', 'ceid': 'CH:de'},
+                    {'hl': 'en', 'gl': 'GB', 'ceid': 'GB:en'},
+                    {'hl': 'en', 'gl': 'IN', 'ceid': 'IN:en'},
+                    {'hl': 'en', 'gl': 'SG', 'ceid': 'SG:en'}
                 ]
                 gn_queries = [
                     'breaking news finance',
                     'central bank decision',
                     'geopolitics markets',
                     'trade policy',
-                    'market regulation'
+                    'market regulation',
+                    'emerging markets outlook',
+                    'global energy markets',
+                    'technology stocks rally',
+                    'european politics economy',
+                    'asia macro economy',
+                    'middle east energy geopolitics',
+                    'latin america markets',
+                    'africa economic outlook'
                 ]
-                gn_articles = await _boost_google_news(gn_locales, gn_queries, cap=max(per_site, 40))
+                gn_articles = await _boost_google_news(gn_locales, gn_queries, cap=max(per_site * 2, 70))
                 scraped_blocks.extend(gn_articles)
             except Exception as e:
                 logger.warning(f"⚠️ Boost Google News Bonvin échec: {e}")
@@ -1373,10 +1474,14 @@ class ScrapingBeeScraper:
                     'economy policy update',
                     'global supply chain news',
                     'énergie géopolitique',
-                    'macro data release'
+                    'macro data release',
+                    'emerging markets politics',
+                    'asia technology regulation',
+                    'latin america inflation',
+                    'africa investment climate'
                 ]
                 attempt = 0
-                max_attempts = len(fallback_queries) * 2
+                max_attempts = len(fallback_queries) * 4
                 while total_chars_collected < min_chars_target and attempt < max_attempts:
                     fallback_topic = fallback_queries[attempt % len(fallback_queries)]
                     try:
@@ -1384,7 +1489,7 @@ class ScrapingBeeScraper:
                             topic_query=fallback_topic,
                             per_site=max(6, per_site // 2),
                             max_age_hours=max_age_hours,
-                            min_chars=max(30000, min_chars_target // 4)
+                            min_chars=max(35000, min_chars_target // 5)
                         )
                         scraped_blocks.extend(extra_block)
                         total_chars_collected = _count_chars(scraped_blocks)
@@ -1723,7 +1828,7 @@ class ScrapingBeeScraper:
                 'url': url,
                 'render_js': 'true' if needs_js else 'false',
                 'premium_proxy': 'true',
-                'block_resources': 'true' if needs_js else 'false',
+                'block_resources': 'true if needs_js else 'false',
                 'country_code': country,
                 'wait': '2000' if needs_js else '1200'
             }
