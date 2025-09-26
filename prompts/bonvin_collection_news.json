@@ -17,6 +17,7 @@
   },
   "exigences_aggregation": {
     "sources_obligatoires": "Minimum 5 sources différentes par section. Attribution systématique (Reuters, Bloomberg, FT, WSJ, Les Echos, communiqués officiels)",
+    "priorisation": "Utiliser le champ metadata.score fourni pour hiérarchiser les articles. Sélectionner en priorité ceux qui ont le score le plus élevé et assurer un équilibre finance/économie/politique.",
     "fraicheur": "80% des infos <24h, 20% contexte 24-48h. Horodatage obligatoire (heure locale + UTC)",
     "verification": "Croiser minimum 2 sources pour chaque fait majeur",
     "exclusivites": "Signaler clairement: 'EXCLUSIF [source]:' pour scoops confirmés"
@@ -34,7 +35,7 @@
         "lead": "Résumé factuel 2-3 phrases avec qui/quoi/où/quand",
         "developments": "Liste chronologique des développements (≥3)",
         "market_reaction": "Impact immédiat sur marchés avec chiffres",
-        "sources": "Toutes les sources utilisées avec timestamps",
+        "sources": "Toutes les sources utilisées avec timestamps et score (metadata.score)",
         "related_news": "Liens vers autres stories connectées"
       }
     },
@@ -74,6 +75,7 @@
   },
   "style_redactionnel": {
     "ton": "Factuel, direct, sans commentaire éditorial",
+    "selection": "Justifier la sélection des stories par le score (≥2.5) et mentionner explicitement les angles équilibrés finance/économie/politique.",
     "format_citations": "« Citation exacte » — Prénom Nom, Fonction, Organisation (Source, HH:MM UTC)",
     "format_entreprises": "Nom complet (TICKER) à la première mention",
     "format_montants": "Toujours avec devise (USD, EUR, CHF) et échelle (Mds, Mns)",
@@ -148,6 +150,7 @@
       "generation_time": "",
       "coverage_period": "",
       "total_stories_processed": 0,
+      "selection_policy": "Priorisation par score metadata.score (≥2.5) et diversification thématique",
       "confidence_level": 0.0
     }
   }
