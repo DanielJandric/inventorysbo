@@ -112,6 +112,9 @@
                         <button id="trigger-csuite-update" class="w-full bg-fuchsia-600 hover:bg-fuchsia-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors">
                             🏢 Générer C‑Suite Global Market Update
                         </button>
+                        <button id="trigger-collection-news" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-3 px-4 rounded-lg transition-colors">
+                            📰 Générer Bonvin Collection News
+                        </button>
                         <button id="trigger-swiss-update" class="w-full bg-red-500 hover:bg-red-600 text-white font-semibold py-3 px-4 rounded-lg transition-colors">
                             🇨🇭 Générer Update Marchés Suisse
                         </button>
@@ -120,6 +123,7 @@
                     <div id="trigger-status" class="mt-3 text-sm text-gray-300"></div>
                     <div id="trigger-status-global" class="mt-2 text-sm text-gray-300"></div>
                     <div id="trigger-status-csuite" class="mt-2 text-sm text-gray-300"></div>
+                    <div id="trigger-status-collection" class="mt-2 text-sm text-gray-300"></div>
                     <div id="trigger-status-swiss" class="mt-2 text-sm text-gray-300"></div>
                 </div>
 
@@ -832,7 +836,7 @@
                     statusDiv.innerHTML = '<span class="text-green-400">✅ C‑Suite Global Market Update planifié</span>';
                     await loadRecentUpdates();
                 } else {
-                    statusDiv.innerHTML = `<span class=\"text-red-400\">❌ Erreur: ${data.error || 'Échec serveur'}</span>`;
+                    statusDiv.innerHTML = `<span class="text-red-400">❌ Erreur: ${data.error || 'Échec serveur'}</span>`;
                 }
             } catch (error) {
                 statusDiv.innerHTML = '<span class="text-red-400">❌ Erreur de connexion</span>';
@@ -841,6 +845,36 @@
                 button.textContent = '🏢 Générer C‑Suite Global Market Update';
             }
         });
+
+        const collectionButton = document.getElementById('trigger-collection-news');
+        const collectionStatus = document.getElementById('trigger-status-collection');
+        if (collectionButton && collectionStatus) {
+            collectionButton.addEventListener('click', async function() {
+                const button = this;
+                button.disabled = true;
+                button.textContent = '🔄 Génération Bonvin Collection News en cours...';
+                collectionStatus.textContent = 'Planification du Bonvin Collection News...';
+                try {
+                    const response = await fetch('/api/market-analysis/collection-news/trigger', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ force: true })
+                    });
+                    const data = await response.json();
+                    if (data.success) {
+                        collectionStatus.innerHTML = '<span class="text-green-400">✅ Bonvin Collection News planifié</span>';
+                        await loadRecentUpdates();
+                    } else {
+                        collectionStatus.innerHTML = `<span class="text-red-400">❌ Erreur: ${data.error || 'Échec serveur'}</span>`;
+                    }
+                } catch (error) {
+                    collectionStatus.innerHTML = '<span class="text-red-400">❌ Erreur de connexion</span>';
+                } finally {
+                    button.disabled = false;
+                    button.textContent = '📰 Générer Bonvin Collection News';
+                }
+            });
+        }
 
         // Manual Trigger Swiss Market Update
         document.getElementById('trigger-swiss-update').addEventListener('click', async function() {
