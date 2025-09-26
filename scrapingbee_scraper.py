@@ -1424,74 +1424,6 @@ class ScrapingBeeScraper:
                         scraped_blocks.extend(block)
                     logger.info(f"📰 Bonvin topic group '{group}' → '{query}': {len(block)} articles")
 
-            # Google News multi-locales
-            async def _boost_google_news(locales: List[Dict[str, str]], queries: List[str], cap: int = 30) -> List[ScrapedData]:
-                results: List[ScrapedData] = []
-                for locale_cfg in locales:
-                    hl = locale_cfg.get('hl', 'fr')
-                    gl = locale_cfg.get('gl', 'CH')
-                    ceid = locale_cfg.get('ceid', 'CH:fr')
-                    try:
-                        items = await self._fetch_google_news_links_generic(queries, hl=hl, gl=gl, ceid=ceid, max_items=cap)
-                        logger.info(f"📰 Google News locale={hl}-{gl} → {len(items)} liens")
-                    except Exception as e:
-                        logger.warning(f"⚠️ Google News ({locale_cfg}) échoué: {e}")
-                        items = []
-                    for it in items:
-                        try:
-                            details = await self._scrape_page_with_metadata(it['url'])
-                            if not details or not details.get('text'):
-                                continue
-                            timestamp = details.get('published_at') or datetime.now()
-                            metadata = {'source': f"google_news_{hl}"}
-                            if it.get('source'):
-                                metadata['original_source'] = it['source']
-                            if it.get('published_at'):
-                                metadata['published_at_raw'] = it['published_at']
-                            results.append(ScrapedData(
-                                url=it['url'],
-                                title=(it.get('title') or '')[:160],
-                                content=(details.get('text') or '')[:20000],
-                                timestamp=timestamp,
-                                metadata=metadata
-                            ))
-                        except Exception as e:
-                            logger.debug(f"⚠️ Google News enrichissement échoué ({it.get('url')}): {e}")
-                            continue
-                logger.info(f"📰 Google News total agrégé: {len(results)} articles")
-                if not results:
-                    logger.warning(f"⚠️ Google News vide pour locale={hl}-{gl} | queries={queries[:3]}")
-                return results
-
-            try:
-                gn_locales = [
-                    {'hl': 'fr', 'gl': 'CH', 'ceid': 'CH:fr'},
-                    {'hl': 'en', 'gl': 'US', 'ceid': 'US:en'},
-                    {'hl': 'de', 'gl': 'CH', 'ceid': 'CH:de'},
-                    {'hl': 'en', 'gl': 'GB', 'ceid': 'GB:en'},
-                    {'hl': 'en', 'gl': 'IN', 'ceid': 'IN:en'},
-                    {'hl': 'en', 'gl': 'SG', 'ceid': 'SG:en'}
-                ]
-                gn_queries = [
-                    'breaking news finance',
-                    'central bank decision',
-                    'geopolitics markets',
-                    'trade policy',
-                    'market regulation',
-                    'emerging markets outlook',
-                    'global energy markets',
-                    'technology stocks rally',
-                    'european politics economy',
-                    'asia macro economy',
-                    'middle east energy geopolitics',
-                    'latin america markets',
-                    'africa economic outlook'
-                ]
-                gn_articles = await _boost_google_news(gn_locales, gn_queries, cap=max(per_site * 2, 70))
-                scraped_blocks.extend(gn_articles)
-            except Exception as e:
-                logger.warning(f"⚠️ Boost Google News Bonvin échec: {e}")
-
             def _count_chars(items: List[ScrapedData]) -> int:
                 try:
                     return sum(len((itm.content or '')) for itm in items)
@@ -1585,7 +1517,7 @@ class ScrapingBeeScraper:
 
                 # 1) Google News extra (cap plus large)
                 try:
-                    extra_gn = await _boost_google_news(gn_locales, gn_queries, cap=max(120, per_site * 3))
+                    extra_gn = await self._fetch_google_news_links_generic(gn_queries, cap=max(120, per_site * 3))
                     scraped_blocks.extend(extra_gn)
                     total_chars_collected = _count_chars(scraped_blocks)
                     logger.info(f"📰 Fallback GN: +{len(extra_gn)} articles, chars ~{total_chars_collected}")
