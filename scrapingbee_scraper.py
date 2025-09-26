@@ -453,6 +453,8 @@ class ScrapingBeeScraper:
             except Exception as e:
                 logger.debug(f"📰 RSS source ignorée ({name}): {e}")
 
+        logger.info(f"📰 RSS initial collecté: {len(rss_items)} articles")
+
         # Fallback vers des flux alternatifs si les principaux échouent
         if len(rss_items) < per_site * 2:
             logger.info(f"📰 RSS principal: {len(rss_items)} articles, ajout de flux alternatifs...")
@@ -484,7 +486,7 @@ class ScrapingBeeScraper:
             filtered_rss.append(item)
 
         rss_items = filtered_rss
-        logger.info(f"📰 Total RSS collecté: {len(rss_items)} articles")
+        logger.info(f"📰 RSS filtré (sources limitées): {len(rss_items)} articles | breakdown={per_source_counts}")
 
         # Fallback domain crawl SI explicitement autorisé
         mw_links = []
