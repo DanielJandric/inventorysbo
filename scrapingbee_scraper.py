@@ -463,8 +463,10 @@ class ScrapingBeeScraper:
         ]
         for feeds, name, limit in rss_sources:
              try:
-                 rss_items += await _fetch_rss_items(feeds, name, limit)
-+                logger.info(f"📰 RSS {name}: +{len(rss_items)} total après collecte")
+                 before_count = len(rss_items)
+                 fetched = await _fetch_rss_items(feeds, name, limit)
+                 rss_items += fetched
+                 logger.info(f"📰 RSS {name}: +{len(fetched)} articles (total={len(rss_items)})")
              except Exception as e:
                  logger.debug(f"📰 RSS source ignorée ({name}): {e}")
 
