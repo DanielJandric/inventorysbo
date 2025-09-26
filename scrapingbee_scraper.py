@@ -424,6 +424,18 @@ class ScrapingBeeScraper:
             'https://www.reuters.com/rssFeed/africaNews',
             'https://www.theafricareport.com/feed/'
         ]
+        french_rss = [
+            'https://www.lesechos.fr/rss/rss_3.xml',
+            'https://www.lesechos.fr/rss/rss_24.xml',
+            'https://www.challenges.fr/rss.xml',
+            'https://www.latribune.fr/rss/derniers.xml'
+        ]
+        swiss_rss = [
+            'https://www.letemps.ch/rss',
+            'https://www.agefi.com/rss',
+            'https://www.swissinfo.ch/eng/rss',
+            'https://www.swissinfo.ch/fre/rss'
+        ]
         # Flux RSS alternatifs qui fonctionnent
         alt_rss = [
             'https://www.cnbc.com/id/100003114/device/rss/rss.xml',
@@ -443,15 +455,18 @@ class ScrapingBeeScraper:
             (energy_rss, 'energy', max(4, per_site)),
             (tech_rss, 'technology', max(4, per_site)),
             (geopolitics_rss, 'geopolitics', max(4, per_site)),
+            (french_rss, 'france', max(4, per_site)),
+            (swiss_rss, 'switzerland', max(4, per_site)),
             (asia_rss, 'asia', per_site * 2),
             (latam_rss, 'latam', per_site * 2),
             (africa_rss, 'africa', per_site * 2)
         ]
         for feeds, name, limit in rss_sources:
-            try:
-                rss_items += await _fetch_rss_items(feeds, name, limit)
-            except Exception as e:
-                logger.debug(f"📰 RSS source ignorée ({name}): {e}")
+             try:
+                 rss_items += await _fetch_rss_items(feeds, name, limit)
++                logger.info(f"📰 RSS {name}: +{len(rss_items)} total après collecte")
+             except Exception as e:
+                 logger.debug(f"📰 RSS source ignorée ({name}): {e}")
 
         logger.info(f"📰 RSS initial collecté: {len(rss_items)} articles")
 
@@ -1539,7 +1554,12 @@ class ScrapingBeeScraper:
                     'https://asia.nikkei.com/',
                     'https://www.scmp.com/frontpage/international',
                     'https://www.aljazeera.com/news/',
-                    'https://www.theguardian.com/world'
+                    'https://www.theguardian.com/world',
+                    'https://www.lesechos.fr/monde',
+                    'https://www.letemps.ch/monde',
+                    'https://www.agefi.com/actualites',
+                    'https://www.bilan.ch/economie',
+                    'https://www.rts.ch/info/economie/'
                 ]
 
                 async def _fetch_direct_page(url: str) -> Optional[ScrapedData]:
