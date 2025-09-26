@@ -547,7 +547,7 @@ class ScrapingBeeScraper:
                             if href and any(domain in href for domain in ['/news/', '/story/', '/article/']):
                                 if href.startswith('/'):
                                     href = f"https://{site.split('/')[2]}{href}"
-                                if not any(i.url == href for i in items):
+                                if not any(existing.url == href for existing in items):
                                     items.append(ScrapedData(
                                         url=href,
                                         title=a.get_text()[:120] or href[:120],
@@ -1535,7 +1535,7 @@ class ScrapingBeeScraper:
                 prompt=prompt,
                 scraped_data=scraped,
                 market_snapshot=market_snapshot,
-                max_output_tokens=int(os.getenv('COLLECTION_NEWS_MAX_OUTPUT_TOKENS', '55000')),
+                max_output_tokens=int(os.getenv('COLLECTION_NEWS_MAX_OUTPUT_TOKENS', '50000')),
                 reasoning_effort=os.getenv('COLLECTION_NEWS_REASONING_EFFORT', 'maximum')
             )
             return result
@@ -1633,12 +1633,16 @@ class ScrapingBeeScraper:
         return items
 
 
-    async def process_with_llm_custom(self, prompt: str, scraped_data: List[ScrapedData], market_snapshot: Dict, max_output_tokens: int = 45000, reasoning_effort: str = 'high') -> Dict:
+    async def process_with_llm_custom(self, prompt: str, scraped_data: List[ScrapedData], market_snapshot: Dict, max_output_tokens: int = 50000, reasoning_effort: str = 'high') -> Dict:
         """Wrapper pour forcer max tokens et reasoning sans impacter les autres flux."""
         prev_tokens = os.getenv('LLM_MAX_OUTPUT_TOKENS')
+        prev_input = os.getenv('LLM_MAX_INPUT_TOKENS')
         prev_reason = os.getenv('AI_REASONING_EFFORT')
         try:
-            os.environ['LLM_MAX_OUTPUT_TOKENS'] = str(max_output_tokens)
+            clamped_output = str(min(int(max_output_tokens or 0), 50000) or 50000)
+            clamped_input = str(50000)
+            os.environ['LLM_MAX_OUTPUT_TOKENS'] = clamped_output
+            os.environ['LLM_MAX_INPUT_TOKENS'] = clamped_input
             os.environ['AI_REASONING_EFFORT'] = str(reasoning_effort)
             return await self.process_with_llm(prompt, scraped_data, market_snapshot)
         finally:
@@ -1646,10 +1650,15 @@ class ScrapingBeeScraper:
                 os.environ['LLM_MAX_OUTPUT_TOKENS'] = prev_tokens
             else:
                 os.environ.pop('LLM_MAX_OUTPUT_TOKENS', None)
+            if prev_input is not None:
+                os.environ['LLM_MAX_INPUT_TOKENS'] = prev_input
+            else:
+                os.environ.pop('LLM_MAX_INPUT_TOKENS', None)
             if prev_reason is not None:
                 os.environ['AI_REASONING_EFFORT'] = prev_reason
             else:
                 os.environ.pop('AI_REASONING_EFFORT', None)
+
     # search_x_recent retiré (X.com désactivé)
     
     async def _search_google(self, query: str, num_results: int = 5) -> List[Dict]:
