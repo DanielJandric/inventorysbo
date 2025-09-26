@@ -1240,6 +1240,226 @@ class ScrapingBeeScraper:
             logger.error(f"❌ Erreur execute_global_market_update: {e}")
             return { 'error': str(e) }
 
+    async def execute_bonvin_collection_news(self, prompt: str) -> Dict:
+        try:
+            from stock_api_manager import stock_api_manager
+
+            per_site = int(os.getenv('COLLECTION_NEWS_PER_SITE', '24'))
+            max_age_hours = int(os.getenv('COLLECTION_NEWS_MAX_AGE_HOURS', '48'))
+            min_chars_target = int(os.getenv('COLLECTION_NEWS_MIN_CHARS', '400000'))
+
+            topic_queries = [
+                'marchés financiers mondiaux',
+                'banques centrales décisions',
+                'géopolitique économique',
+                'régulation financière',
+                'fusions acquisitions',
+                'PMI global',
+                'inflation mondiale',
+                'élections majeures'
+            ]
+
+            scraped_blocks: List[ScrapedData] = []
+            per_topic_min = max(20000, min_chars_target // max(1, len(topic_queries)))
+
+            for query in topic_queries:
+                block = await self.search_and_scrape_deep(
+                    topic_query=query,
+                    per_site=max(8, per_site // 3),
+                    max_age_hours=max_age_hours,
+                    min_chars=per_topic_min
+                )
+                scraped_blocks.extend(block)
+
+            # Google News multi-locales
+            async def _boost_google_news(locales: List[Dict[str, str]], queries: List[str], cap: int = 30) -> List[ScrapedData]:
+                results: List[ScrapedData] = []
+                for locale_cfg in locales:
+                    hl = locale_cfg.get('hl', 'fr')
+                    gl = locale_cfg.get('gl', 'CH')
+                    ceid = locale_cfg.get('ceid', 'CH:fr')
+                    try:
+                        items = await self._fetch_google_news_links_generic(queries, hl=hl, gl=gl, ceid=ceid, max_items=cap)
+                    except Exception as e:
+                        logger.warning(f"⚠️ Google News ({locale_cfg}) échoué: {e}")
+                        items = []
+                    for it in items:
+                        try:
+                            details = await self._scrape_page_with_metadata(it['url'])
+                            if not details or not details.get('text'):
+                                continue
+                            timestamp = details.get('published_at') or datetime.now()
+                            results.append(ScrapedData(
+                                url=it['url'],
+                                title=(it.get('title') or '')[:120],
+                                content=(details.get('text') or '')[:9000],
+                                timestamp=timestamp,
+                                metadata={'source': f"google_news_{hl}"}
+                            ))
+                        except Exception:
+                            continue
+                return results
+
+            try:
+                gn_locales = [
+                    {'hl': 'fr', 'gl': 'CH', 'ceid': 'CH:fr'},
+                    {'hl': 'en', 'gl': 'US', 'ceid': 'US:en'},
+                    {'hl': 'de', 'gl': 'CH', 'ceid': 'CH:de'}
+                ]
+                gn_queries = [
+                    'breaking news finance',
+                    'central bank decision',
+                    'geopolitics markets',
+                    'trade policy',
+                    'market regulation'
+                ]
+                gn_articles = await _boost_google_news(gn_locales, gn_queries, cap=max(per_site, 40))
+                scraped_blocks.extend(gn_articles)
+            except Exception as e:
+                logger.warning(f"⚠️ Boost Google News Bonvin échec: {e}")
+
+            def _count_chars(items: List[ScrapedData]) -> int:
+                try:
+                    return sum(len((itm.content or '')) for itm in items)
+                except Exception:
+                    return 0
+
+            total_chars_collected = _count_chars(scraped_blocks)
+            logger.info(f"📰 Bonvin Collection News: {len(scraped_blocks)} articles agrégés (~{total_chars_collected} chars)")
+
+            if total_chars_collected < min_chars_target:
+                logger.info(f"📰 Bonvin Collection News: renforcement supplémentaire pour atteindre {min_chars_target} caractères")
+                fallback_queries = [
+                    'marchés actions live',
+                    'economy policy update',
+                    'global supply chain news',
+                    'énergie géopolitique',
+                    'macro data release'
+                ]
+                attempt = 0
+                max_attempts = len(fallback_queries) * 2
+                while total_chars_collected < min_chars_target and attempt < max_attempts:
+                    fallback_topic = fallback_queries[attempt % len(fallback_queries)]
+                    try:
+                        extra_block = await self.search_and_scrape_deep(
+                            topic_query=fallback_topic,
+                            per_site=max(6, per_site // 2),
+                            max_age_hours=max_age_hours,
+                            min_chars=max(30000, min_chars_target // 4)
+                        )
+                        scraped_blocks.extend(extra_block)
+                        total_chars_collected = _count_chars(scraped_blocks)
+                        logger.info(f"📰 Bonvin fallback '{fallback_topic}': +{len(extra_block)} articles, total chars ~{total_chars_collected}")
+                        if not extra_block:
+                            await asyncio.sleep(0)
+                    except Exception as e:
+                        logger.warning(f"⚠️ Fallback scraping échec ({fallback_topic}): {e}")
+                    attempt += 1
+
+            total_chars_collected = _count_chars(scraped_blocks)
+            if total_chars_collected < min_chars_target:
+                logger.warning(f"⚠️ Bonvin Collection News: caractères collectés {total_chars_collected} < {min_chars_target} malgré les reforçes")
+
+            # Déduplication stricte
+            seen_urls: Dict[str, ScrapedData] = {}
+            for item in scraped_blocks:
+                if not item or not item.url or not item.content:
+                    continue
+                ts = item.timestamp or datetime.now()
+                prev = seen_urls.get(item.url)
+                if not prev or (prev.timestamp or datetime.min) < ts:
+                    seen_urls[item.url] = item
+
+            scraped = list(seen_urls.values())
+            if not scraped:
+                return { 'error': 'Aucune donnée agrégée pour Bonvin Collection News' }
+
+            scraped.sort(key=lambda x: x.timestamp or datetime.min, reverse=True)
+
+            market_snapshot = stock_api_manager.get_market_snapshot()
+            try:
+                market_snapshot['swiss'] = stock_api_manager.get_swiss_snapshot()
+            except Exception:
+                pass
+
+            result = await self.process_with_llm_custom(
+                prompt=prompt,
+                scraped_data=scraped,
+                market_snapshot=market_snapshot,
+                max_output_tokens=int(os.getenv('COLLECTION_NEWS_MAX_OUTPUT_TOKENS', '55000')),
+                reasoning_effort=os.getenv('COLLECTION_NEWS_REASONING_EFFORT', 'maximum')
+            )
+            return result
+        except Exception as e:
+            logger.error(f"❌ Erreur execute_bonvin_collection_news: {e}")
+            return { 'error': str(e) }
+
+    async def _fetch_google_news_links_generic(self, queries: List[str], hl: str = 'fr', gl: str = 'CH', ceid: str = 'CH:fr', max_items: int = 20) -> List[Dict[str, str]]:
+        items: List[Dict[str, str]] = []
+        try:
+            import xml.etree.ElementTree as ET
+        except Exception:
+            logger.warning("⚠️ XML non disponible pour Google News RSS")
+            return items
+
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119 Safari/537.36'
+        }
+
+        seen_urls = set()
+
+        async with aiohttp.ClientSession(headers=headers) as session:
+            for q in queries:
+                feed_url = f"https://news.google.com/rss/search?q={quote_plus(q)}&hl={hl}&gl={gl}&ceid={ceid}"
+                text = None
+                try:
+                    async with session.get(feed_url, timeout=10) as resp:
+                        if resp.status == 200:
+                            text = await resp.text()
+                except Exception as e:
+                    logger.debug(f"⚠️ Google News direct échoué ({feed_url}): {e}")
+
+                if not text and self.api_key and self.api_key != 'test_key_for_testing':
+                    try:
+                        async with session.get(self.base_url, params={
+                            'api_key': self.api_key,
+                            'url': feed_url,
+                            'render_js': 'false'
+                        }, timeout=15) as proxy_resp:
+                            if proxy_resp.status == 200:
+                                text = await proxy_resp.text()
+                    except Exception as e:
+                        logger.debug(f"⚠️ Google News via ScrapingBee échoué ({feed_url}): {e}")
+
+                if not text:
+                    continue
+
+                try:
+                    root = ET.fromstring(text)
+                except Exception as e:
+                    logger.debug(f"⚠️ Parsing RSS Google News échoué ({feed_url}): {e}")
+                    continue
+
+                for item in root.findall('.//item'):
+                    try:
+                        link_el = item.find('link')
+                        title_el = item.find('title')
+                        link = (link_el.text or '').strip() if link_el is not None else ''
+                        title = (title_el.text or '').strip() if title_el is not None else link[:120]
+                        if not link:
+                            continue
+                        if link in seen_urls:
+                            continue
+                        seen_urls.add(link)
+                        items.append({'url': link, 'title': title})
+                        if len(items) >= max_items:
+                            return items
+                    except Exception:
+                        continue
+
+        return items
+
+
     async def process_with_llm_custom(self, prompt: str, scraped_data: List[ScrapedData], market_snapshot: Dict, max_output_tokens: int = 45000, reasoning_effort: str = 'high') -> Dict:
         """Wrapper pour forcer max tokens et reasoning sans impacter les autres flux."""
         prev_tokens = os.getenv('LLM_MAX_OUTPUT_TOKENS')

@@ -10034,6 +10034,65 @@ def trigger_csuite_global_market_update():
     except Exception as e:
         logger.error(f"Erreur déclenchement C‑SUITE GLOBAL MARKET UPDATE: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/market-analysis/collection-news/trigger", methods=["POST"])
+def trigger_collection_news_update():
+    """Planifie un Bonvin Collection News (LLM JSON) pour le worker."""
+    try:
+        from market_analysis_db import get_market_analysis_db, MarketAnalysis
+
+        db = get_market_analysis_db()
+
+        req = request.get_json(silent=True) or {}
+        force = bool(req.get('force', False))
+        prompt = (req.get('prompt') or '').strip()
+
+        if not prompt:
+            try:
+                base_dir = os.path.dirname(__file__)
+                prompt_path = os.path.join(base_dir, 'prompts', 'bonvin_collection_news.json')
+                with open(prompt_path, 'r', encoding='utf-8') as pf:
+                    prompt = pf.read()
+            except Exception:
+                prompt = "Bonvin Collection News"
+
+        latest = db.get_latest_analysis()
+        if latest and latest.worker_status in ['pending', 'processing']:
+            if force:
+                try:
+                    db.update_analysis_status(latest.id, 'error')
+                except Exception:
+                    pass
+            else:
+                return jsonify({
+                    "success": True,
+                    "status": "already_in_progress",
+                    "message": "Une analyse est déjà en cours.",
+                    "analysis_id": latest.id,
+                    "timestamp": datetime.now().isoformat()
+                })
+
+        new_analysis = MarketAnalysis(
+            analysis_type='bonvin_collection_news',
+            worker_status='pending',
+            prompt=prompt
+        )
+        analysis_id = db.save_analysis(new_analysis)
+
+        if not analysis_id:
+            return jsonify({"success": False, "error": "Impossible de créer la tâche d'analyse dans la base de données"}), 500
+
+        logger.info(f"📰 Bonvin Collection News planifié (ID: {analysis_id})")
+        return jsonify({
+            "success": True,
+            "message": "Bonvin Collection News planifié. Le worker va le traiter.",
+            "analysis_id": analysis_id,
+            "timestamp": datetime.now().isoformat()
+        })
+    except Exception as e:
+        logger.error(f"Erreur déclenchement Bonvin Collection News: {e}")
+        return jsonify({"error": str(e)}), 500
 @app.route("/api/background-worker/status", methods=["GET"])
 def get_background_worker_status():
     """Récupère le statut de la dernière analyse."""

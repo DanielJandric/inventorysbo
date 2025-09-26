@@ -136,9 +136,11 @@ class MarketAnalysisWorker:
 
             # 2. Préparer et exécuter l'analyse ScrapingBee (branche Suisse vs global vs général)
             prompt = task.prompt or DEFAULT_PROMPT
-            is_swiss = str(task.analysis_type or '').strip().lower() in { 'swiss', 'ch', 'swiss_market', 'suisse' }
-            is_global = str(task.analysis_type or '').strip().lower() in { 'global_market_update', 'global', 'gmu' }
-            is_csuite = str(task.analysis_type or '').strip().lower() in { 'csuite_global_market_update', 'csuite', 'c-suite' }
+            analysis_type_normalized = str(task.analysis_type or '').strip().lower()
+            is_swiss = analysis_type_normalized in { 'swiss', 'ch', 'swiss_market', 'suisse' }
+            is_global = analysis_type_normalized in { 'global_market_update', 'global', 'gmu' }
+            is_csuite = analysis_type_normalized in { 'csuite_global_market_update', 'csuite', 'c-suite' }
+            is_collection_news = analysis_type_normalized in { 'bonvin_collection_news', 'collection_news', 'bonvin_news' }
             if is_swiss:
                 # Charger prompt strict depuis fichier si non fourni
                 if not task.prompt:
@@ -173,6 +175,22 @@ class MarketAnalysisWorker:
                 except Exception as e_global:
                     logger.error(f"❌ Erreur pipeline C‑SUITE/GLOBAL: {e_global}")
                     result = { 'error': str(e_global) }
+            elif is_collection_news:
+                if not task.prompt:
+                    try:
+                        import os
+                        base_dir = os.path.dirname(__file__)
+                        prompt_path = os.path.join(base_dir, 'prompts', 'bonvin_collection_news.json')
+                        with open(prompt_path, 'r', encoding='utf-8') as pf:
+                            prompt = pf.read()
+                    except Exception:
+                        prompt = DEFAULT_PROMPT
+                logger.info("📰 Exécution pipeline Bonvin Collection News (scraping intensif multi-sources → LLM JSON)")
+                try:
+                    result = await self.scraper.execute_bonvin_collection_news(prompt)
+                except Exception as e_collection:
+                    logger.error(f"❌ Erreur pipeline Bonvin Collection News: {e_collection}")
+                    result = { 'error': str(e_collection) }
             else:
                 logger.info(f"🕷️ Création de la tâche ScrapingBee avec prompt: {prompt[:100]}...")
                 scraper_task_id = await self.scraper.create_scraping_task(prompt, MAX_SCRAPING_PAGES)
@@ -585,12 +603,15 @@ class MarketAnalysisWorker:
         analysis_type = (getattr(analysis, 'analysis_type', '') or '').strip().lower()
         is_swiss = analysis_type in { 'swiss', 'suisse', 'ch', 'swiss_market' }
         market_snapshot = {} if is_swiss else stock_api_manager.get_market_snapshot()
-        atype = (getattr(analysis, 'analysis_type', '') or '').strip().lower()
+        atype = analysis_type
         is_global = atype in { 'global_market_update', 'global', 'gmu' }
+        is_collection_news = atype in { 'bonvin_collection_news', 'collection_news', 'bonvin_news' }
+
         header_style = (
             "background-color:#b91c1c;background:linear-gradient(135deg,#7f1d1d 0%,#dc2626 60%,#ef4444 100%);" if is_swiss else
             ("background-color:#0f766e;background:linear-gradient(135deg,#042f2e 0%,#0d9488 40%,#5eead4 100%);" if is_global else
-             "background-color:#1e3a8a;background:linear-gradient(135deg,#0f172a 0%,#1d4ed8 40%,#60a5fa 100%);")
+            ("background-color:#4c1d95;background:linear-gradient(135deg,#2d0f66 0%,#6d28d9 50%,#c084fc 100%);" if is_collection_news else
+             "background-color:#1e3a8a;background:linear-gradient(135deg,#0f172a 0%,#1d4ed8 40%,#60a5fa 100%);"))
         )
         # Timestamp local pour affichage
         try:
@@ -668,10 +689,10 @@ class MarketAnalysisWorker:
         except Exception:
             market_pulse = {}
         # Titre: utiliser celui du LLM si présent, sinon générique
-        header_title = (
-            (market_pulse.get('main_title') if isinstance(market_pulse, dict) else None) or
-            ("Swiss Market Update" if is_swiss else ("🌐 GLOBAL MARKET UPDATE" if is_global else "📊 RAPPORT D'ANALYSE DE MARCHÉ"))
-        )
+            header_title = (
+                (market_pulse.get('main_title') if isinstance(market_pulse, dict) else None) or
+                ("Swiss Market Update" if is_swiss else ("🌐 GLOBAL MARKET UPDATE" if is_global else ("📰 Bonvin Collection News" if is_collection_news else "📊 RAPPORT D'ANALYSE DE MARCHÉ")))
+            )
 
         # Ne pas afficher ni rendre de sources pour garder un narratif épuré
         sources_html = ""
