@@ -1368,63 +1368,7 @@ class ScrapingBeeScraper:
             max_age_hours = int(os.getenv('COLLECTION_NEWS_MAX_AGE_HOURS', '48'))
             min_chars_target = int(os.getenv('COLLECTION_NEWS_MIN_CHARS', '200000'))
 
-            topic_groups = {
-                'finance': [
-                    'marchés financiers mondiaux',
-                    'earning season résultats entreprises',
-                    'banques centrales décisions',
-                    'fusions acquisitions mégadeals',
-                    'obligations crédit corporate'
-                ],
-                'economy': [
-                    'PMI global',
-                    'inflation mondiale',
-                    'commerce international supply chain disruptions',
-                    'emploi données macro',
-                    'politique budgétaire investissements publics'
-                ],
-                'geopolitics': [
-                    'élections majeures',
-                    "conflits géopolitiques sanctions", 
-                    'politique commerciale Etats-Unis Chine',
-                    'tensions énergie Russie Moyen-Orient',
-                    'politique européenne intégration économique'
-                ],
-                'energy': [
-                    'transition énergétique investissements',
-                    'prix pétrole gaz électricité',
-                    'politiques climatiques réglementation carbone'
-                ],
-                'technology': [
-                    'technologie IA générative investissements',
-                    'semi-conducteurs supply chain',
-                    'cyber sécurité incidents financiers'
-                ],
-                'regulation': [
-                    'régulation financière Bâle III',
-                    'crypto réglementation',
-                    'ESG reporting réglementations',
-                    'politique monétaire divergences'
-                ]
-            }
-
-            scraped_blocks: List[ScrapedData] = []
-            total_topic_count = sum(len(q) for q in topic_groups.values()) or 1
-            per_topic_min = max(20000, min_chars_target // total_topic_count)
-
-            for group, queries in topic_groups.items():
-                for query in queries:
-                    block = await self.search_and_scrape_deep(
-                        topic_query=query,
-                        per_site=max(8, per_site // 3),
-                        max_age_hours=max_age_hours,
-                        min_chars=per_topic_min
-                    )
-                    if block:
-                        scraped_blocks.extend(block)
-                    logger.info(f"📰 Bonvin topic group '{group}' → '{query}': {len(block)} articles")
-
-            # Google News multi-locales
+            # Étape 1: collecte Google News en amont pour garantir la diversité immédiate
             async def _boost_google_news(locales: List[Dict[str, str]], queries: List[str], cap: int = 30) -> List[ScrapedData]:
                 results: List[ScrapedData] = []
                 for locale_cfg in locales:
@@ -1460,37 +1404,80 @@ class ScrapingBeeScraper:
                             continue
                 logger.info(f"📰 Google News total agrégé: {len(results)} articles")
                 if not results:
-                    logger.warning(f"⚠️ Google News vide pour locale={hl}-{gl} | queries={queries[:3]}")
+                    logger.warning(f"⚠️ Google News vide (locales={locales})")
                 return results
 
+            gn_locales = [
+                {'hl': 'fr', 'gl': 'CH', 'ceid': 'CH:fr'},
+                {'hl': 'en', 'gl': 'US', 'ceid': 'US:en'},
+                {'hl': 'de', 'gl': 'CH', 'ceid': 'CH:de'},
+                {'hl': 'en', 'gl': 'GB', 'ceid': 'GB:en'},
+                {'hl': 'en', 'gl': 'IN', 'ceid': 'IN:en'},
+                {'hl': 'en', 'gl': 'SG', 'ceid': 'SG:en'}
+            ]
+            gn_queries = [
+                'breaking news finance',
+                'central bank decision',
+                'geopolitics markets',
+                'trade policy',
+                'market regulation',
+                'emerging markets outlook',
+                'global energy markets',
+                'technology stocks rally',
+                'european politics economy',
+                'asia macro economy',
+                'middle east energy geopolitics',
+                'latin america markets',
+                'africa economic outlook'
+            ]
+
+            scraped_blocks: List[ScrapedData] = []
             try:
-                gn_locales = [
-                    {'hl': 'fr', 'gl': 'CH', 'ceid': 'CH:fr'},
-                    {'hl': 'en', 'gl': 'US', 'ceid': 'US:en'},
-                    {'hl': 'de', 'gl': 'CH', 'ceid': 'CH:de'},
-                    {'hl': 'en', 'gl': 'GB', 'ceid': 'GB:en'},
-                    {'hl': 'en', 'gl': 'IN', 'ceid': 'IN:en'},
-                    {'hl': 'en', 'gl': 'SG', 'ceid': 'SG:en'}
-                ]
-                gn_queries = [
-                    'breaking news finance',
-                    'central bank decision',
-                    'geopolitics markets',
-                    'trade policy',
-                    'market regulation',
-                    'emerging markets outlook',
-                    'global energy markets',
-                    'technology stocks rally',
-                    'european politics economy',
-                    'asia macro economy',
-                    'middle east energy geopolitics',
-                    'latin america markets',
-                    'africa economic outlook'
-                ]
-                gn_articles = await _boost_google_news(gn_locales, gn_queries, cap=max(per_site * 2, 70))
+                gn_articles = await _boost_google_news(gn_locales, gn_queries, cap=max(per_site * 2, 80))
                 scraped_blocks.extend(gn_articles)
+                logger.info(f"📰 Après Google News initial: {len(scraped_blocks)} articles")
             except Exception as e:
-                logger.warning(f"⚠️ Boost Google News Bonvin échec: {e}")
+                logger.warning(f"⚠️ Google News initial échoué: {e}")
+
+            # Étape 2: boucle topics (réduite) pour compléter par domaines
+            topic_groups = {
+                'finance': [
+                    'marchés financiers mondiaux',
+                    'banques centrales décisions'
+                ],
+                'economy': [
+                    'inflation mondiale',
+                    'emploi données macro'
+                ],
+                'geopolitics': [
+                    "conflits géopolitiques sanctions",
+                    'politique commerciale Etats-Unis Chine'
+                ],
+                'energy': [
+                    'transition énergétique investissements'
+                ],
+                'technology': [
+                    'technologie IA générative investissements'
+                ],
+                'regulation': [
+                    'régulation financière Bâle III'
+                ]
+            }
+
+            total_topic_count = sum(len(q) for q in topic_groups.values()) or 1
+            per_topic_min = max(15000, min_chars_target // total_topic_count)
+
+            for group, queries in topic_groups.items():
+                for query in queries:
+                    block = await self.search_and_scrape_deep(
+                        topic_query=query,
+                        per_site=max(6, per_site // 4),
+                        max_age_hours=max_age_hours,
+                        min_chars=per_topic_min
+                    )
+                    if block:
+                        scraped_blocks.extend(block)
+                    logger.info(f"📰 Bonvin topic '{group}' → '{query}': {len(block)} articles")
 
             def _count_chars(items: List[ScrapedData]) -> int:
                 try:
