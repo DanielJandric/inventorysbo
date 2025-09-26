@@ -1819,6 +1819,7 @@ class ScrapingBeeScraper:
             # Heuristique: certaines pages exigent JS (consent/hydratation)
             u = (url or '').lower()
             needs_js = any(k in u for k in ['marketwatch.com', 'cnn.com', '/quote/', '/key-statistics'])
+            block_resources = 'true' if needs_js else 'false'
             # Pays par défaut: 'ch' pour domaines suisses connus sinon 'us'
             is_swiss_domain = any(d in u for d in ['.ch', 'rts.ch', 'letemps.ch', 'snb.ch', 'nzz.ch', 'agefi.com', 'immobilienbusiness.ch'])
             country = 'ch' if is_swiss_domain else 'us'
@@ -1828,7 +1829,7 @@ class ScrapingBeeScraper:
                 'url': url,
                 'render_js': 'true' if needs_js else 'false',
                 'premium_proxy': 'true',
-                'block_resources': 'true' if needs_js else 'false',
+                'block_resources': block_resources,
                 'country_code': country,
                 'wait': '2000' if needs_js else '1200'
             }
