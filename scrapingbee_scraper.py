@@ -1349,7 +1349,7 @@ class ScrapingBeeScraper:
 
             per_site = int(os.getenv('COLLECTION_NEWS_PER_SITE', '24'))
             max_age_hours = int(os.getenv('COLLECTION_NEWS_MAX_AGE_HOURS', '48'))
-            min_chars_target = int(os.getenv('COLLECTION_NEWS_MIN_CHARS', '400000'))
+            min_chars_target = int(os.getenv('COLLECTION_NEWS_MIN_CHARS', '200000'))
 
             topic_groups = {
                 'finance': [
@@ -1393,7 +1393,7 @@ class ScrapingBeeScraper:
 
             scraped_blocks: List[ScrapedData] = []
             total_topic_count = sum(len(q) for q in topic_groups.values()) or 1
-            per_topic_min = max(25000, min_chars_target // total_topic_count)
+            per_topic_min = max(20000, min_chars_target // total_topic_count)
 
             for group, queries in topic_groups.items():
                 for query in queries:
@@ -1433,8 +1433,8 @@ class ScrapingBeeScraper:
                                 metadata['published_at_raw'] = it['published_at']
                             results.append(ScrapedData(
                                 url=it['url'],
-                                title=(it.get('title') or '')[:120],
-                                content=(details.get('text') or '')[:9000],
+                                title=(it.get('title') or '')[:160],
+                                content=(details.get('text') or '')[:20000],
                                 timestamp=timestamp,
                                 metadata=metadata
                             ))
@@ -1483,41 +1483,60 @@ class ScrapingBeeScraper:
             logger.info(f"📰 Bonvin Collection News: {len(scraped_blocks)} articles agrégés (~{total_chars_collected} chars)")
 
             if total_chars_collected < min_chars_target:
-                logger.info(f"📰 Bonvin Collection News: renforcement supplémentaire pour atteindre {min_chars_target} caractères")
-                fallback_queries = [
-                    'marchés actions live',
-                    'economy policy update',
-                    'global supply chain news',
-                    'énergie géopolitique',
-                    'macro data release',
-                    'emerging markets politics',
-                    'asia technology regulation',
-                    'latin america inflation',
-                    'africa investment climate'
+                logger.info(f"📰 Bonvin Collection News: fallback direct (Google News + sources premium) pour atteindre {min_chars_target} caractères")
+                fallback_direct_sources = [
+                    'https://www.reuters.com/world/',
+                    'https://www.reuters.com/business/',
+                    'https://www.reuters.com/markets/',
+                    'https://www.ft.com/world',
+                    'https://www.ft.com/companies',
+                    'https://www.wsj.com/news/world',
+                    'https://www.wsj.com/news/business',
+                    'https://www.politico.com/news/world',
+                    'https://asia.nikkei.com/',
+                    'https://www.scmp.com/frontpage/international',
+                    'https://www.aljazeera.com/news/',
+                    'https://www.theguardian.com/world'
                 ]
-                attempt = 0
-                max_attempts = len(fallback_queries) * 4
-                while total_chars_collected < min_chars_target and attempt < max_attempts:
-                    fallback_topic = fallback_queries[attempt % len(fallback_queries)]
-                    try:
-                        extra_block = await self.search_and_scrape_deep(
-                            topic_query=fallback_topic,
-                            per_site=max(6, per_site // 2),
-                            max_age_hours=max_age_hours,
-                            min_chars=max(35000, min_chars_target // 5)
-                        )
-                        scraped_blocks.extend(extra_block)
-                        total_chars_collected = _count_chars(scraped_blocks)
-                        logger.info(f"📰 Bonvin fallback '{fallback_topic}': +{len(extra_block)} articles, total chars ~{total_chars_collected}")
-                        if not extra_block:
-                            await asyncio.sleep(0)
-                    except Exception as e:
-                        logger.warning(f"⚠️ Fallback scraping échec ({fallback_topic}): {e}")
-                    attempt += 1
 
-            total_chars_collected = _count_chars(scraped_blocks)
-            if total_chars_collected < min_chars_target:
-                logger.warning(f"⚠️ Bonvin Collection News: caractères collectés {total_chars_collected} < {min_chars_target} malgré les reforçes")
+                async def _fetch_direct_page(url: str) -> Optional[ScrapedData]:
+                    try:
+                        details = await self._scrape_page_with_metadata(url)
+                        if not details or not details.get('text'):
+                            return None
+                        timestamp = details.get('published_at') or datetime.now()
+                        return ScrapedData(
+                            url=url,
+                            title=url[:120],
+                            content=(details.get('text') or '')[:20000],
+                            timestamp=timestamp,
+                            metadata={'source': 'fallback_direct'}
+                        )
+                    except Exception as e:
+                        logger.debug(f"⚠️ Fallback direct échoué ({url}): {e}")
+                        return None
+
+                # 1) Google News extra (cap plus large)
+                try:
+                    extra_gn = await _boost_google_news(gn_locales, gn_queries, cap=max(120, per_site * 3))
+                    scraped_blocks.extend(extra_gn)
+                    total_chars_collected = _count_chars(scraped_blocks)
+                    logger.info(f"📰 Fallback GN: +{len(extra_gn)} articles, chars ~{total_chars_collected}")
+                except Exception as e:
+                    logger.warning(f"⚠️ Fallback Google News échoué: {e}")
+
+                # 2) Direct pages
+                for url in fallback_direct_sources:
+                    if total_chars_collected >= min_chars_target:
+                        break
+                    direct_entry = await _fetch_direct_page(url)
+                    if direct_entry:
+                        scraped_blocks.append(direct_entry)
+                        total_chars_collected = _count_chars(scraped_blocks)
+                        logger.info(f"📰 Fallback direct {url[:60]}... → chars ~{total_chars_collected}")
+
+                if total_chars_collected < min_chars_target:
+                    logger.warning(f"⚠️ Bonvin fallback direct n'atteint toujours pas {min_chars_target} chars (actuel ~{total_chars_collected})")
 
             # Déduplication stricte
             seen_urls: Dict[str, ScrapedData] = {}
