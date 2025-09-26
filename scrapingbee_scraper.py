@@ -434,6 +434,11 @@ class ScrapingBeeScraper:
                 'https://www.cnbc.com/markets/',
                 'https://www.investing.com/news/',
                 'https://www.investing.com/analysis/',
+                'https://www.wsj.com/news/business',
+                'https://www.politico.com/news/economy',
+                'https://www.aljazeera.com/economy/',
+                'https://www.theguardian.com/business',
+                'https://www.bbc.com/news/business'
             ]
             for site in direct_sites:
                 try:
@@ -1249,28 +1254,61 @@ class ScrapingBeeScraper:
             max_age_hours = int(os.getenv('COLLECTION_NEWS_MAX_AGE_HOURS', '48'))
             min_chars_target = int(os.getenv('COLLECTION_NEWS_MIN_CHARS', '400000'))
 
-            topic_queries = [
-                'marchés financiers mondiaux',
-                'banques centrales décisions',
-                'géopolitique économique',
-                'régulation financière',
-                'fusions acquisitions',
-                'PMI global',
-                'inflation mondiale',
-                'élections majeures'
-            ]
+            topic_groups = {
+                'finance': [
+                    'marchés financiers mondiaux',
+                    'earning season résultats entreprises',
+                    'banques centrales décisions',
+                    'fusions acquisitions mégadeals',
+                    'obligations crédit corporate'
+                ],
+                'economy': [
+                    'PMI global',
+                    'inflation mondiale',
+                    'commerce international supply chain disruptions',
+                    'emploi données macro',
+                    'politique budgétaire investissements publics'
+                ],
+                'geopolitics': [
+                    'élections majeures',
+                    "conflits géopolitiques sanctions", 
+                    'politique commerciale Etats-Unis Chine',
+                    'tensions énergie Russie Moyen-Orient',
+                    'politique européenne intégration économique'
+                ],
+                'energy': [
+                    'transition énergétique investissements',
+                    'prix pétrole gaz électricité',
+                    'politiques climatiques réglementation carbone'
+                ],
+                'technology': [
+                    'technologie IA générative investissements',
+                    'semi-conducteurs supply chain',
+                    'cyber sécurité incidents financiers'
+                ],
+                'regulation': [
+                    'régulation financière Bâle III',
+                    'crypto réglementation',
+                    'ESG reporting réglementations',
+                    'politique monétaire divergences'
+                ]
+            }
 
             scraped_blocks: List[ScrapedData] = []
-            per_topic_min = max(20000, min_chars_target // max(1, len(topic_queries)))
+            total_topic_count = sum(len(q) for q in topic_groups.values()) or 1
+            per_topic_min = max(20000, min_chars_target // total_topic_count)
 
-            for query in topic_queries:
-                block = await self.search_and_scrape_deep(
-                    topic_query=query,
-                    per_site=max(8, per_site // 3),
-                    max_age_hours=max_age_hours,
-                    min_chars=per_topic_min
-                )
-                scraped_blocks.extend(block)
+            for group, queries in topic_groups.items():
+                for query in queries:
+                    block = await self.search_and_scrape_deep(
+                        topic_query=query,
+                        per_site=max(8, per_site // 3),
+                        max_age_hours=max_age_hours,
+                        min_chars=per_topic_min
+                    )
+                    if block:
+                        scraped_blocks.extend(block)
+                    logger.info(f"📰 Bonvin topic group '{group}' → '{query}': {len(block)} articles")
 
             # Google News multi-locales
             async def _boost_google_news(locales: List[Dict[str, str]], queries: List[str], cap: int = 30) -> List[ScrapedData]:
