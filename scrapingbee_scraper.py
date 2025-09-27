@@ -2042,7 +2042,7 @@ class ScrapingBeeScraper:
             try:
                 if 'news.google.com' in u or (u.startswith('https://www.google.') or '://www.google.' in u):
                     if os.getenv('SCRAPINGBEE_CUSTOM_GOOGLE', 'false').lower() == 'true':
-                    params['custom_google'] = 'true'
+                        params['custom_google'] = 'true'
             except Exception:
                 pass
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout_secs)) as session:
