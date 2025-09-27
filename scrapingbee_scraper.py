@@ -23,6 +23,63 @@ try:
 except Exception as e:
     logger.warning(f"⚠️ Impossible de charger .env: {e}")
 
+# Tables de scoring (tiers et signaux clés)
+SOURCE_TIERS = {
+    "reuters": 1.0,
+    "bloomberg": 1.0,
+    "financial times": 1.0,
+    "ft.com": 1.0,
+    "wsj": 1.0,
+    "wall street journal": 1.0,
+    "les echos": 1.0,
+    "ap news": 1.0,
+    "associated press": 1.0,
+    "afp": 1.0,
+    "le temps": 0.8,
+    "bbc": 0.8,
+    "rts": 0.8,
+    "nzz": 0.8,
+    "agefi": 0.8,
+    "nikkei": 0.8,
+    "politico": 0.8,
+    "guardian": 0.6,
+    "cnn": 0.6,
+    "marketwatch": 0.6,
+    "investing.com": 0.6,
+}
+
+HIGH_VALUE_SIGNALS = {
+    "banque centrale": 1.0,
+    "bns": 1.0,
+    "snb": 1.0,
+    "fed": 1.0,
+    "ecb": 1.0,
+    "bce": 1.0,
+    "finma": 0.9,
+    "sec": 0.9,
+    "commission européenne": 0.9,
+    "inflation": 0.8,
+    "cpi": 0.8,
+    "pmi": 0.7,
+    "ppi": 0.6,
+    "gdp": 0.6,
+    "sanctions": 0.8,
+    "profit warning": 1.0,
+    "guidance": 0.7,
+    "downgrade": 0.7,
+    "fusion": 0.9,
+    "acquisition": 0.9,
+    "m&a": 0.9,
+    "earnings": 0.8,
+    "résultats": 0.8,
+    "dividende": 0.6,
+    "rachat d'actions": 0.6,
+    "géopolitique": 0.6,
+    "tensions": 0.5,
+    "cybersécurité": 0.6,
+    "fuite de données": 0.8
+}
+
 @dataclass
 class ScrapedData:
     url: str
