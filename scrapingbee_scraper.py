@@ -10,6 +10,7 @@ from urllib.parse import quote_plus, urlparse, parse_qs
 import re
 from datetime import timedelta
 from datetime import timezone
+import math
 
 # Configuration du logging
 logging.basicConfig(level=logging.DEBUG)  # Changed to DEBUG
@@ -1501,29 +1502,88 @@ class ScrapingBeeScraper:
             logger.info(f"📰 Bonvin Collection News: {len(scraped_blocks)} articles agrégés (~{total_chars_collected} chars)")
 
             def _score_item(item: ScrapedData) -> float:
-                score = 0.0
-                try:
-                    source = (item.metadata or {}).get('source', '')
-                    if source:
-                        if any(key in source.lower() for key in ['reuters', 'bloomberg', 'ft', 'wsj', 'google_news', 'politico', 'nikkei']):
-                            score += 2.0
-                        elif any(key in source.lower() for key in ['guardian', 'cnn', 'marketwatch', 'investing', 'energy', 'geopolitics', 'asia', 'africa']):
-                            score += 1.0
-                    if item.timestamp:
-                        delta_hours = max(0.1, (datetime.now(timezone.utc) - item.timestamp.replace(tzinfo=timezone.utc)).total_seconds() / 3600.0)
-                        score += max(0, 24 - delta_hours) / 12.0  # +2 max pour <12h
-                    text = (item.content or '')
-                    if len(text) > 5000:
-                        score += 1.0
-                    high_signal = ['banque centrale', 'fed', 'ecb', 'inflation', 'pmi', 'geopolitique', 'sanctions', 'fusion', 'acquisition', 'earnings', 'macro', 'tensions']
-                    text_lower = text.lower()
-                    if any(word in text_lower for word in high_signal):
-                        score += 1.5
-                    topics = (item.metadata or {}).get('topics')
-                    if topics and isinstance(topics, list):
-                        score += min(1.0, len(topics) * 0.3)
-                except Exception:
-                    pass
+                def _tier_from_source_name(raw: str) -> float:
+                    if not raw:
+                        return 0.5
+                    raw_low = raw.lower()
+                    try:
+                        netloc = urlparse(raw).netloc.lower()
+                    except Exception:
+                        netloc = ''
+                    for key, val in SOURCE_TIERS.items():
+                        if key in raw_low or (netloc and key in netloc):
+                            return val
+                    if 'google_news' in raw_low or 'google news' in raw_low:
+                        return 0.7
+                    return 0.5
+
+                def _freshness_score(ts: Optional[datetime]) -> float:
+                    if not ts:
+                        return 0.4
+                    try:
+                        age_h = max(0.0, (datetime.now(timezone.utc) - ts.replace(tzinfo=timezone.utc)).total_seconds() / 3600.0)
+                    except Exception:
+                        return 0.4
+                    tau = 48.0
+                    return math.exp(-age_h / tau)
+
+                def _keyword_signal(text: str) -> float:
+                    if not text:
+                        return 0.0
+                    t = text.lower()
+                    raw = 0.0
+                    for kw, w in HIGH_VALUE_SIGNALS.items():
+                        if kw in t:
+                            raw += w
+                    raw = min(raw, 4.0)
+                    return raw / 4.0
+
+                def _quality_score(text: str) -> float:
+                    if not text:
+                        return 0.0
+                    words = max(1, len(text.split()))
+                    if words < 200:
+                        base = 0.2
+                    elif words < 400:
+                        base = 0.6
+                    elif words < 1200:
+                        base = 1.0
+                    elif words < 2000:
+                        base = 0.8
+                    else:
+                        base = 0.6
+                    digits = sum(c.isdigit() for c in text)
+                    dens = min(digits / max(200, words), 0.5)
+                    return min(1.0, 0.8 * base + 0.2 * dens)
+
+                def _consensus_score(meta: Dict) -> float:
+                    n = int(meta.get('cluster_sources') or meta.get('sources_distinct') or 0)
+                    if n <= 1:
+                        return 0.0
+                    return min(math.log(1 + n) / math.log(1 + 6), 1.0)
+
+                meta = item.metadata or {}
+                S = _tier_from_source_name(meta.get('source') or meta.get('domain') or '')
+                T = _freshness_score(item.timestamp)
+                K = _keyword_signal(item.content or '')
+                Q = _quality_score(item.content or '')
+                C = _consensus_score(meta)
+
+                score01 = 0.35 * S + 0.25 * T + 0.20 * K + 0.10 * Q + 0.10 * C
+                score = 5.0 * max(0.0, min(1.0, score01))
+
+                if meta.get('is_official') or ('communiqué' in (item.content or '').lower()):
+                    score = min(5.0, score + 0.2)
+
+                item.metadata = meta
+                item.metadata['score_breakdown'] = {
+                    'S': round(S, 3),
+                    'T': round(T, 3),
+                    'K': round(K, 3),
+                    'Q': round(Q, 3),
+                    'C': round(C, 3),
+                    'score_0_5': round(score, 2)
+                }
                 return score
 
             top_source_quota: Dict[str, int] = {}
