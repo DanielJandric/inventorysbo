@@ -1439,45 +1439,57 @@ class ScrapingBeeScraper:
             except Exception as e:
                 logger.warning(f"⚠️ Google News initial échoué: {e}")
 
-            # Étape 2: boucle topics (réduite) pour compléter par domaines
-            topic_groups = {
-                'finance': [
-                    'marchés financiers mondiaux',
-                    'banques centrales décisions'
-                ],
-                'economy': [
-                    'inflation mondiale',
-                    'emploi données macro'
-                ],
-                'geopolitics': [
-                    "conflits géopolitiques sanctions",
-                    'politique commerciale Etats-Unis Chine'
-                ],
-                'energy': [
-                    'transition énergétique investissements'
-                ],
-                'technology': [
-                    'technologie IA générative investissements'
-                ],
-                'regulation': [
-                    'régulation financière Bâle III'
+            # Étape 2: flux institutionnels ciblés (banques centrales, organismes) sans relancer tout le RSS
+            async def _collect_institutional_feeds() -> List[ScrapedData]:
+                feeds = [
+                    'https://www.snb.ch/public/fr/rss/news',
+                    'https://www.federalreserve.gov/feeds/press_statements.htm',
+                    'https://www.ecb.europa.eu/rss/press/pr.htm',
+                    'https://www.bafin.de/SiteGlobals/Functions/RSSFeed/RSSGenerator_letty.xml?nn=877020',
+                    'https://www.bis.org/rss/press.xml'
                 ]
-            }
+                extra = await _fetch_rss_items(feeds, 'institutions', per_site)
+                logger.info(f"🏛️ Flux institutionnels: {len(extra)} articles")
+                return extra
 
-            total_topic_count = sum(len(q) for q in topic_groups.values()) or 1
-            per_topic_min = max(15000, min_chars_target // total_topic_count)
+            try:
+                institutional = await _collect_institutional_feeds()
+                scraped_blocks.extend(institutional)
+            except Exception as e:
+                logger.warning(f"⚠️ Flux institutionnels échoués: {e}")
 
-            for group, queries in topic_groups.items():
-                for query in queries:
-                    block = await self.search_and_scrape_deep(
-                        topic_query=query,
-                        per_site=max(6, per_site // 4),
-                        max_age_hours=max_age_hours,
-                        min_chars=per_topic_min
-                    )
-                    if block:
-                        scraped_blocks.extend(block)
-                    logger.info(f"📰 Bonvin topic '{group}' → '{query}': {len(block)} articles")
+            # Étape 3: deep crawl léger sur Reuters/Bloomberg pour les headlines manquantes
+            async def _collect_direct_sites() -> List[ScrapedData]:
+                direct_sites = [
+                    'https://www.reuters.com/world/',
+                    'https://www.reuters.com/business/finance/',
+                    'https://www.bloomberg.com/markets/economics',
+                    'https://www.bloomberg.com/politics',
+                    'https://www.ft.com/regulation'
+                ]
+                collected: List[ScrapedData] = []
+                for url in direct_sites:
+                    try:
+                        details = await self._scrape_page_with_metadata(url)
+                        if not details or not details.get('text'):
+                            continue
+                        collected.append(ScrapedData(
+                            url=url,
+                            title=url[:120],
+                            content=(details.get('text') or '')[:8000],
+                            timestamp=details.get('published_at') or datetime.now(),
+                            metadata={'source': 'direct_focus'}
+                        ))
+                    except Exception as e:
+                        logger.debug(f"⚠️ Direct focus échoué ({url}): {e}")
+                logger.info(f"🗞️ Direct focus: {len(collected)} articles")
+                return collected
+
+            try:
+                direct_focus = await _collect_direct_sites()
+                scraped_blocks.extend(direct_focus)
+            except Exception as e:
+                logger.warning(f"⚠️ Direct focus échoué: {e}")
 
             def _count_chars(items: List[ScrapedData]) -> int:
                 try:
