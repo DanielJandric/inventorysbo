@@ -1866,9 +1866,13 @@ class ScrapingBeeScraper:
         try:
             clamped_output = str(min(int(max_output_tokens or 0), 50000) or 50000)
             clamped_input = str(50000)
+            allowed_effort = {'low', 'medium', 'high'}
+            effort = str(reasoning_effort or '').lower()
+            if effort not in allowed_effort:
+                effort = 'high'
             os.environ['LLM_MAX_OUTPUT_TOKENS'] = clamped_output
             os.environ['LLM_MAX_INPUT_TOKENS'] = clamped_input
-            os.environ['AI_REASONING_EFFORT'] = str(reasoning_effort)
+            os.environ['AI_REASONING_EFFORT'] = effort
             return await self.process_with_llm(prompt, scraped_data, market_snapshot)
         finally:
             if prev_tokens is not None:
