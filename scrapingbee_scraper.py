@@ -1424,7 +1424,7 @@ class ScrapingBeeScraper:
 
             per_site = int(os.getenv('COLLECTION_NEWS_PER_SITE', '24'))
             max_age_hours = int(os.getenv('COLLECTION_NEWS_MAX_AGE_HOURS', '48'))
-            min_chars_target = int(os.getenv('COLLECTION_NEWS_MIN_CHARS', '200000'))
+            min_chars_target = int(os.getenv('COLLECTION_NEWS_MIN_CHARS', '80000'))
 
             # Étape 1: collecte Google News en amont pour garantir la diversité immédiate
             async def _boost_google_news(locales: List[Dict[str, str]], queries: List[str], cap: int = 30) -> List[ScrapedData]:
@@ -1697,10 +1697,11 @@ class ScrapingBeeScraper:
 
                 # 1) Google News extra (cap plus large)
                 try:
-                    extra_gn = await _boost_google_news(gn_locales, gn_queries, cap=max(120, per_site * 3))
-                    scraped_blocks.extend(extra_gn)
+                    extra_gn = await _boost_google_news(gn_locales[:2], gn_queries, cap=max(40, per_site))
+                    filtered_extra = [it for it in extra_gn if len((it.content or '')) > 1500]
+                    scraped_blocks.extend(filtered_extra)
                     total_chars_collected = _count_chars(scraped_blocks)
-                    logger.info(f"📰 Fallback GN: +{len(extra_gn)} articles, chars ~{total_chars_collected}")
+                    logger.info(f"📰 Fallback GN: +{len(filtered_extra)} articles, chars ~{total_chars_collected}")
                 except Exception as e:
                     logger.warning(f"⚠️ Fallback Google News échoué: {e}")
 
