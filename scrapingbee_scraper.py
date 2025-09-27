@@ -608,10 +608,10 @@ class ScrapingBeeScraper:
                     if not any(existing.url == url for existing in items):
                         items.append(
                             ScrapedData(
-                                url=url,
-                                title=url[:120],
-                                content=text[:8000],
-                                timestamp=published_at or _now_utc(),
+                        url=url,
+                        title=url[:120],
+                        content=text[:8000],
+                        timestamp=published_at or _now_utc(),
                                 metadata={
                                     'source': source_name,
                                     'scraped_at': datetime.now().isoformat()
@@ -2046,7 +2046,7 @@ class ScrapingBeeScraper:
             try:
                 if 'news.google.com' in u or (u.startswith('https://www.google.') or '://www.google.' in u):
                     if os.getenv('SCRAPINGBEE_CUSTOM_GOOGLE', 'false').lower() == 'true':
-                        params['custom_google'] = 'true'
+                    params['custom_google'] = 'true'
             except Exception:
                 pass
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout_secs)) as session:
