@@ -1410,11 +1410,7 @@ class ScrapingBeeScraper:
 
             gn_locales = [
                 {'hl': 'fr', 'gl': 'CH', 'ceid': 'CH:fr'},
-                {'hl': 'en', 'gl': 'US', 'ceid': 'US:en'},
-                {'hl': 'de', 'gl': 'CH', 'ceid': 'CH:de'},
-                {'hl': 'en', 'gl': 'GB', 'ceid': 'GB:en'},
-                {'hl': 'en', 'gl': 'IN', 'ceid': 'IN:en'},
-                {'hl': 'en', 'gl': 'SG', 'ceid': 'SG:en'}
+                {'hl': 'en', 'gl': 'US', 'ceid': 'US:en'}
             ]
             gn_queries = [
                 'breaking news finance',
