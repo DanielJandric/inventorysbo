@@ -35,164 +35,71 @@ def _to_responses_input(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 def _extract_output_text_from_response(res: Any) -> str:
-    """Best-effort extraction of text from a Responses API result."""
-    try:
-        import logging
-        logger = logging.getLogger(__name__)
-        
-        # LOG: Type de l'objet réponse
-        logger.info(f"🔍 GPT-5 Response Type: {type(res)}")
-        logger.info(f"🔍 GPT-5 Response Dir: {[attr for attr in dir(res) if not attr.startswith('_')][:20]}")
-        
-        # Try direct output_text attribute first
-        text = getattr(res, "output_text", None)
-        logger.info(f"🔍 Direct output_text: {text[:100] if text else 'None'}")
-        if text:
-            return str(text)
-        
-        # Try output array - AGRÉGER TOUS LES messages.output_text (critique!)
-        outputs = getattr(res, "output", None) or []
-        logger.info(f"🔍 Output array length: {len(outputs) if outputs else 0}")
-        
-        # LOG: Inspecter le premier item de output
-        if outputs and len(outputs) > 0:
-            first_item = outputs[0]
-            logger.info(f"🔍 output[0] type: {type(first_item)}")
-            logger.info(f"🔍 output[0] attributes: {[a for a in dir(first_item) if not a.startswith('_')][:15]}")
-            if hasattr(first_item, 'type'):
-                logger.info(f"🔍 output[0].type: {first_item.type}")
-            if hasattr(first_item, 'model_dump'):
-                try:
-                    dump = first_item.model_dump()
-                    logger.info(f"🔍 output[0] keys: {list(dump.keys())}")
-                except:
-                    pass
-        
-        parts: List[str] = []
-        message_count = 0
-        
-        # Parcourir TOUS les items, pas juste le premier
-        for idx, item in enumerate(outputs):
-            try:
-                item_type = getattr(item, "type", None) or (item.get("type") if isinstance(item, dict) else None)
-                logger.info(f"🔍 output[{idx}].type = {item_type}")
-                
-                if item_type == "message":
-                    message_count += 1
-                    logger.info(f"🔍 Processing message #{message_count}")
-                    
-                    content = getattr(item, "content", None) or (item.get("content") if isinstance(item, dict) else [])
-                    for c in content or []:
-                        c_type = getattr(c, "type", None) or (c.get("type") if isinstance(c, dict) else None)
-                        
-                        # CRITIQUE: Chercher output_text spécifiquement
-                        if c_type == "output_text":
-                            t = getattr(c, "text", None) or (c.get("text") if isinstance(c, dict) else "")
-                            if t:
-                                logger.info(f"  ✅ Found output_text: {len(t)} chars")
-                                parts.append(str(t))
-                        elif c_type == "text":  # Fallback
-                            t = getattr(c, "text", None) or (c.get("text") if isinstance(c, dict) else "")
-                            if t:
-                                logger.info(f"  ✅ Found text: {len(t)} chars")
-                                parts.append(str(t))
-            except Exception as e:
-                logger.warning(f"Error extracting from output item: {e}")
-                continue
-        
-        logger.info(f"🔍 Total messages processed: {message_count}, parts found: {len(parts)}")
-        
-        if parts:
-            logger.info(f"✅ Extracted {len(parts)} parts via output array")
-            return "".join(parts)
-        
-        logger.warning("⚠️ No parts found in output array, trying dict conversion...")
-        
-        # GPT-5 peut utiliser un format différent - essayer de convertir en dict et extraire
-        try:
-            if hasattr(res, 'model_dump'):
-                res_dict = res.model_dump()
-                logger.info("🔍 Using model_dump()")
-            elif hasattr(res, 'to_dict'):
-                res_dict = res.to_dict()
-                logger.info("🔍 Using to_dict()")
-            else:
-                res_dict = dict(res) if hasattr(res, '__iter__') else {}
-                logger.info("🔍 Using dict() cast")
-            
-            # LOG: Structure de la réponse
-            logger.info(f"🔍 Response dict keys: {list(res_dict.keys())[:20]}")
-            
-            # LOG: Échantillon des premières clés/valeurs
-            for key in list(res_dict.keys())[:5]:
-                value = res_dict[key]
-                if isinstance(value, str):
-                    logger.info(f"🔍   {key}: {value[:100]}")
-                else:
-                    logger.info(f"🔍   {key}: {type(value)}")
-            
-            # Chercher récursivement du texte dans la structure
-            def find_text(obj, depth=0):
-                if depth > 5:  # Limite de profondeur
-                    return None
-                if isinstance(obj, str) and len(obj) > 20:  # Texte significatif (min 20 chars)
-                    # Ignorer les IDs de réponse (format: resp_xxxx ou id_xxxx ou juste des hex)
-                    if obj.startswith(('resp_', 'id_', 'req_')) or (len(obj) == 64 and all(c in '0123456789abcdef' for c in obj)):
-                        return None
-                    # Ignorer les timestamps purs
-                    if obj.replace('-', '').replace(':', '').replace(' ', '').isdigit():
-                        return None
-                    return obj
-                if isinstance(obj, dict):
-                    # IGNORER les clés d'ID explicites
-                    skip_keys = {'id', 'response_id', 'request_id', 'session_id', 'model', 'object', 'created', 'usage'}
-                    
-                    # Chercher dans les clés communes PRIORITAIRES (ordre important)
-                    priority_keys = ['text', 'output_text', 'content', 'message', 'response', 'answer', 'reply']
-                    for key in priority_keys:
-                        if key in obj and key not in skip_keys:
-                            result = find_text(obj[key], depth + 1)
-                            if result:
-                                return result
-                    
-                    # Chercher dans toutes les autres valeurs (en évitant les IDs)
-                    for key, value in obj.items():
-                        if key not in skip_keys and key not in priority_keys:
-                            result = find_text(value, depth + 1)
-                            if result:
-                                return result
-                if isinstance(obj, list):
-                    for item in obj:
-                        result = find_text(item, depth + 1)
-                        if result:
-                            return result
-                return None
-            
-            found_text = find_text(res_dict)
-            if found_text:
-                logger.info(f"✅ Found text via recursive search: {found_text[:100]}")
-                return str(found_text)
-            else:
-                logger.error("❌ Recursive search found NO text!")
-                # LOG: Dump complet pour debug (limité)
-                import json
-                try:
-                    dump = json.dumps(res_dict, indent=2, default=str)[:2000]
-                    logger.error(f"📋 Response structure sample:\n{dump}")
-                except:
-                    logger.error(f"📋 Cannot JSON dump, raw keys: {res_dict.keys()}")
-        except Exception as e:
-            logger.error(f"Error in fallback extraction: {e}", exc_info=True)
-        
-        logger.error("❌ ALL extraction methods failed - returning empty string")
-        return ""
-    except Exception as e:
-        try:
-            import logging
-            logging.error(f"Critical error in _extract_output_text_from_response: {e}")
-        except:
-            pass
-        return ""
+    """Extraction robuste de texte - gère objets Pydantic et dicts, ignore reasoning/tools."""
+    import logging
+    logger = logging.getLogger(__name__)
+
+    # Helper pour accès unifié (objet Pydantic OU dict)
+    def get(obj, key, default=None):
+        if isinstance(obj, dict):
+            return obj.get(key, default)
+        return getattr(obj, key, default)
+
+    # 0) Helper direct s'il existe (optimal)
+    txt = getattr(res, "output_text", None)
+    if txt:
+        logger.info("✅ output_text helper present")
+        return str(txt)
+
+    # 1) Récupérer output sous forme liste (objets Pydantic OU dict)
+    outputs = getattr(res, "output", None)
+    if outputs is None and hasattr(res, "model_dump"):
+        outputs = res.model_dump().get("output", [])
+    if outputs is None and isinstance(res, dict):
+        outputs = res.get("output", [])
+    outputs = outputs or []
+
+    logger.info(f"🔍 outputs len = {len(outputs)}")
+
+    parts = []
+
+    # 2) Parcourir tous les items, ne prendre QUE les 'message'
+    for i, item in enumerate(outputs):
+        itype = get(item, "type")
+        logger.info(f"  • output[{i}].type = {itype}")
+
+        # CRITIQUE: On ne prend QUE les 'message' (ignore reasoning, tool_call, etc.)
+        if itype != "message":
+            continue
+
+        content = get(item, "content", []) or []
+        for j, c in enumerate(content):
+            ctype = get(c, "type")
+            if ctype == "output_text":
+                t = get(c, "text", "")
+                if t:
+                    logger.info(f"    → message.content[{j}].output_text: {len(t)} chars")
+                    parts.append(str(t))
+
+    if parts:
+        logger.info(f"✅ Extracted {len(parts)} parts from messages")
+        return "".join(parts)
+
+    # 3) Fallback: certains SDK stockent directement 'text' dans content
+    logger.warning("⚠️ No output_text found, trying fallback 'text'...")
+    for item in outputs:
+        if get(item, "type") == "message":
+            content = get(item, "content", []) or []
+            for c in content:
+                t = get(c, "text")
+                if isinstance(t, str) and t.strip():
+                    logger.info(f"✅ Found via fallback text: {len(t)} chars")
+                    return t
+
+    # 4) Rien trouvé => retourne chaîne vide (JAMAIS les instructions!)
+    logger.error("❌ No text found in response - returning empty string")
+    logger.error("   Note: Si seulement 'reasoning' présent, GPT-5 n'a pas généré de texte")
+    return ""
 
 
 def _to_chat_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, str]]:
