@@ -37,9 +37,12 @@ def _to_responses_input(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 def _extract_output_text_from_response(res: Any) -> str:
     """Best-effort extraction of text from a Responses API result."""
     try:
+        # Try direct output_text attribute first
         text = getattr(res, "output_text", None)
         if text:
-            return text
+            return str(text)
+        
+        # Try output array
         outputs = getattr(res, "output", None) or []
         parts: List[str] = []
         for item in outputs:
@@ -53,10 +56,69 @@ def _extract_output_text_from_response(res: Any) -> str:
                             t = getattr(c, "text", None) or (c.get("text") if isinstance(c, dict) else "")
                             if t:
                                 parts.append(str(t))
-            except Exception:
+            except Exception as e:
+                # Log pour debug
+                try:
+                    import logging
+                    logging.warning(f"Error extracting from output item: {e}")
+                except:
+                    pass
                 continue
-        return "".join(parts)
-    except Exception:
+        
+        if parts:
+            return "".join(parts)
+        
+        # GPT-5 peut utiliser un format différent - essayer de convertir en dict et extraire
+        try:
+            if hasattr(res, 'model_dump'):
+                res_dict = res.model_dump()
+            elif hasattr(res, 'to_dict'):
+                res_dict = res.to_dict()
+            else:
+                res_dict = dict(res) if hasattr(res, '__iter__') else {}
+            
+            # Chercher récursivement du texte dans la structure
+            def find_text(obj, depth=0):
+                if depth > 5:  # Limite de profondeur
+                    return None
+                if isinstance(obj, str) and len(obj) > 10:  # Texte significatif
+                    return obj
+                if isinstance(obj, dict):
+                    # Chercher dans les clés communes
+                    for key in ['text', 'output_text', 'content', 'message', 'response']:
+                        if key in obj:
+                            result = find_text(obj[key], depth + 1)
+                            if result:
+                                return result
+                    # Chercher dans toutes les valeurs
+                    for value in obj.values():
+                        result = find_text(value, depth + 1)
+                        if result:
+                            return result
+                if isinstance(obj, list):
+                    for item in obj:
+                        result = find_text(item, depth + 1)
+                        if result:
+                            return result
+                return None
+            
+            found_text = find_text(res_dict)
+            if found_text:
+                return str(found_text)
+        except Exception as e:
+            try:
+                import logging
+                logging.warning(f"Error in fallback extraction: {e}")
+            except:
+                pass
+        
+        return ""
+    except Exception as e:
+        try:
+            import logging
+            logging.error(f"Critical error in _extract_output_text_from_response: {e}")
+        except:
+            pass
         return ""
 
 
