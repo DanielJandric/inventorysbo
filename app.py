@@ -3585,8 +3585,13 @@ client=self.client, model=os.getenv("AI_MODEL", "gpt-5"),
                 "query": query[:120]
             }
             
-            # Construire le contexte RAG
-            rag_context = self._build_rag_context(selected_results, query, total_candidates)
+            # Construire le contexte RAG (limité pour éviter dépassement tokens GPT-5)
+            # Réduire à top 5 pour GPT-5 reasoning_effort="high" qui est coûteux en tokens
+            limited_results = selected_results[:5]  # Au lieu de 12
+            rag_context = self._build_rag_context(limited_results, query, total_candidates)
+            
+            # LOG: Taille du contexte
+            logger.info(f"📊 RAG Context length: {len(rag_context)} chars, {len(limited_results)} items")
             
             # Prompt pour GPT avec contexte RAG et mémoire conversationnelle - exploiter GPT-5 avec intelligence hybride
             system_prompt = """Tu es l'assistant IA expert de la collection BONVIN, équipé de GPT-5 pour des analyses approfondies.
@@ -3646,15 +3651,32 @@ IMPORTANT: Combine données DB et connaissances générales pour une analyse opt
 
             messages.append({"role": "user", "content": user_prompt})
 
+            # LOG: Taille totale des messages avant appel
+            total_chars = sum(len(str(m.get("content", ""))) for m in messages)
+            logger.info(f"📊 Total prompt size: {total_chars} chars (~{total_chars//4} tokens)")
+            
+            # Convertir messages au format Responses API (input_text pour user/system, output_text pour assistant)
+            formatted_messages = []
+            for m in messages:
+                if isinstance(m.get("content"), str):
+                    role = m["role"]
+                    # CRITIQUE: assistant utilise output_text, pas input_text !
+                    content_type = "output_text" if role == "assistant" else "input_text"
+                    formatted_messages.append({
+                        "role": role,
+                        "content": [{"type": content_type, "text": m["content"]}]
+                    })
+                else:
+                    formatted_messages.append(m)
+            
             resp = from_responses_simple(
-client=self.client, model=os.getenv("AI_MODEL", "gpt-5"),
-                messages=[
-                    {"role": m["role"], "content": [{"type": "input_text", "text": m["content"]}]} if isinstance(m.get("content"), str) else m
-                    for m in messages
-                ],
-                max_output_tokens=2000,  # Augmenté pour analyses complètes GPT-5
-                reasoning_effort="high"  # Effort max pour exploiter GPT-5
+                client=self.client,
+                model=os.getenv("AI_MODEL", "gpt-5"),
+                messages=formatted_messages,
+                max_output_tokens=1500,
+                reasoning_effort="medium"
             )
+            logger.info(f"✅ API call completed, extracting response...")
             ai_response = (extract_output_text(resp) or "").strip()
             
             # Pas d'indicateur de mémoire - réponses directes
