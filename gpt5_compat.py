@@ -321,8 +321,8 @@ def from_responses_simple(
     req: Dict[str, Any] = {
         "model": model,
         "input": input_messages if instructions_text else typed_input,
-        "reasoning": {"effort": reasoning_effort},
-        "modalities": ["text"]  # Explicite pour éviter ambiguïté
+        "reasoning": {"effort": reasoning_effort}
+        # Note: modalities pas encore supporté dans SDK v1.x
     }
     
     # CRITIQUE: instructions au lieu de system dans input
