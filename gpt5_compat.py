@@ -37,45 +37,84 @@ def _to_responses_input(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 def _extract_output_text_from_response(res: Any) -> str:
     """Best-effort extraction of text from a Responses API result."""
     try:
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        # LOG: Type de l'objet réponse
+        logger.info(f"🔍 GPT-5 Response Type: {type(res)}")
+        logger.info(f"🔍 GPT-5 Response Dir: {[attr for attr in dir(res) if not attr.startswith('_')][:20]}")
+        
         # Try direct output_text attribute first
         text = getattr(res, "output_text", None)
+        logger.info(f"🔍 Direct output_text: {text[:100] if text else 'None'}")
         if text:
             return str(text)
         
-        # Try output array
+        # Try output array - AGRÉGER TOUS LES messages.output_text (critique!)
         outputs = getattr(res, "output", None) or []
+        logger.info(f"🔍 Output array length: {len(outputs) if outputs else 0}")
+        
         parts: List[str] = []
+        message_count = 0
+        
+        # Parcourir TOUS les items, pas juste le premier
         for item in outputs:
             try:
                 item_type = getattr(item, "type", None) or (item.get("type") if isinstance(item, dict) else None)
+                
                 if item_type == "message":
+                    message_count += 1
+                    logger.info(f"🔍 Processing message #{message_count}")
+                    
                     content = getattr(item, "content", None) or (item.get("content") if isinstance(item, dict) else [])
                     for c in content or []:
                         c_type = getattr(c, "type", None) or (c.get("type") if isinstance(c, dict) else None)
-                        if c_type in ("output_text", "text"):
+                        
+                        # CRITIQUE: Chercher output_text spécifiquement
+                        if c_type == "output_text":
                             t = getattr(c, "text", None) or (c.get("text") if isinstance(c, dict) else "")
                             if t:
+                                logger.info(f"  ✅ Found output_text: {len(t)} chars")
+                                parts.append(str(t))
+                        elif c_type == "text":  # Fallback
+                            t = getattr(c, "text", None) or (c.get("text") if isinstance(c, dict) else "")
+                            if t:
+                                logger.info(f"  ✅ Found text: {len(t)} chars")
                                 parts.append(str(t))
             except Exception as e:
-                # Log pour debug
-                try:
-                    import logging
-                    logging.warning(f"Error extracting from output item: {e}")
-                except:
-                    pass
+                logger.warning(f"Error extracting from output item: {e}")
                 continue
         
+        logger.info(f"🔍 Total messages processed: {message_count}, parts found: {len(parts)}")
+        
         if parts:
+            logger.info(f"✅ Extracted {len(parts)} parts via output array")
             return "".join(parts)
+        
+        logger.warning("⚠️ No parts found in output array, trying dict conversion...")
         
         # GPT-5 peut utiliser un format différent - essayer de convertir en dict et extraire
         try:
             if hasattr(res, 'model_dump'):
                 res_dict = res.model_dump()
+                logger.info("🔍 Using model_dump()")
             elif hasattr(res, 'to_dict'):
                 res_dict = res.to_dict()
+                logger.info("🔍 Using to_dict()")
             else:
                 res_dict = dict(res) if hasattr(res, '__iter__') else {}
+                logger.info("🔍 Using dict() cast")
+            
+            # LOG: Structure de la réponse
+            logger.info(f"🔍 Response dict keys: {list(res_dict.keys())[:20]}")
+            
+            # LOG: Échantillon des premières clés/valeurs
+            for key in list(res_dict.keys())[:5]:
+                value = res_dict[key]
+                if isinstance(value, str):
+                    logger.info(f"🔍   {key}: {value[:100]}")
+                else:
+                    logger.info(f"🔍   {key}: {type(value)}")
             
             # Chercher récursivement du texte dans la structure
             def find_text(obj, depth=0):
@@ -116,14 +155,21 @@ def _extract_output_text_from_response(res: Any) -> str:
             
             found_text = find_text(res_dict)
             if found_text:
+                logger.info(f"✅ Found text via recursive search: {found_text[:100]}")
                 return str(found_text)
+            else:
+                logger.error("❌ Recursive search found NO text!")
+                # LOG: Dump complet pour debug (limité)
+                import json
+                try:
+                    dump = json.dumps(res_dict, indent=2, default=str)[:2000]
+                    logger.error(f"📋 Response structure sample:\n{dump}")
+                except:
+                    logger.error(f"📋 Cannot JSON dump, raw keys: {res_dict.keys()}")
         except Exception as e:
-            try:
-                import logging
-                logging.warning(f"Error in fallback extraction: {e}")
-            except:
-                pass
+            logger.error(f"Error in fallback extraction: {e}", exc_info=True)
         
+        logger.error("❌ ALL extraction methods failed - returning empty string")
         return ""
     except Exception as e:
         try:
@@ -239,13 +285,57 @@ def from_responses_simple(
     - Uses typed inputs compatible with Responses API
     - Optionally sets max_output_tokens/timeout/reasoning/response_format
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    # Convert messages to Responses API format
+    typed_input = _to_responses_input(messages)
+    
+    # LOG: Inspection avant envoi
+    logger.info(f"🔍 Responses API call:")
+    logger.info(f"  - Model: {model}")
+    logger.info(f"  - Input messages: {len(typed_input)}")
+    logger.info(f"  - Max output tokens: {max_output_tokens}")
+    logger.info(f"  - Reasoning effort: {reasoning_effort}")
+    
+    # Log format du premier message
+    if typed_input:
+        first_msg = typed_input[0]
+        logger.info(f"  - First message role: {first_msg.get('role')}")
+        logger.info(f"  - First message content type: {type(first_msg.get('content'))}")
+        if isinstance(first_msg.get('content'), list) and first_msg['content']:
+            logger.info(f"  - First content item: {first_msg['content'][0]}")
+    
+    # Extraire system pour le mettre en instructions (recommandation OpenAI)
+    instructions_text = None
+    input_messages = []
+    for msg in typed_input:
+        if msg.get("role") == "system":
+            # Extraire le texte du system message
+            content = msg.get("content", [])
+            if isinstance(content, list) and content:
+                instructions_text = content[0].get("text", "")
+        else:
+            input_messages.append(msg)
+    
     req: Dict[str, Any] = {
         "model": model,
-        "input": _to_responses_input(messages),
+        "input": input_messages if instructions_text else typed_input,
         "reasoning": {"effort": reasoning_effort},
+        "modalities": ["text"]  # Explicite pour éviter ambiguïté
     }
+    
+    # CRITIQUE: instructions au lieu de system dans input
+    if instructions_text:
+        req["instructions"] = instructions_text
+    
+    # CRITIQUE: max_output_tokens dans text={}, PAS en racine !
     if max_output_tokens is not None:
-        req["max_output_tokens"] = max_output_tokens
+        req["text"] = {"max_output_tokens": max_output_tokens}
+    
+    # LOG: Requête finale
+    logger.info(f"📤 Sending request with keys: {list(req.keys())}")
+    
     # Support per-call timeout via client.with_options when provided
     try:
         _client = client.with_options(timeout=timeout) if timeout else client
@@ -253,7 +343,14 @@ def from_responses_simple(
         _client = client
     # Some server SDK versions do not accept response_format for Responses API.
     # We intentionally ignore it here and enforce JSON via prompting and robust parsing upstream.
-    return _client.responses.create(**req)
+    
+    try:
+        response = _client.responses.create(**req)
+        logger.info(f"📥 Response received: {type(response)}")
+        return response
+    except Exception as e:
+        logger.error(f"❌ API call failed: {e}", exc_info=True)
+        raise
 
 
 def extract_output_text(res: Any) -> str:
