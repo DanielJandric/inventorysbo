@@ -336,17 +336,24 @@ def from_responses_simple(
     req: Dict[str, Any] = {
         "model": model,
         "input": input_messages if instructions_text else typed_input,
-        "reasoning": {"effort": reasoning_effort}
-        # Note: modalities pas encore supporté dans SDK v1.x
+        "reasoning": {"effort": reasoning_effort},
+        "response_format": {"type": "text"},  # CRITIQUE: Force sortie texte (pas juste reasoning)
+        "tool_choice": "none"                  # CRITIQUE: Évite call tool implicite
     }
     
     # CRITIQUE: instructions au lieu de system dans input
     if instructions_text:
         req["instructions"] = instructions_text
     
-    # max_output_tokens en racine (format actuel SDK)
+    # CRITIQUE: max_output_tokens dans text={}, PAS en racine !
     if max_output_tokens is not None:
-        req["max_output_tokens"] = max_output_tokens
+        req["text"] = {"max_output_tokens": max_output_tokens}
+    
+    # Essayer modalities si supporté (ne pas fail si pas dispo)
+    try:
+        req["modalities"] = ["text"]
+    except:
+        pass
     
     # LOG: Requête finale
     logger.info(f"📤 Sending request with keys: {list(req.keys())}")
@@ -360,9 +367,26 @@ def from_responses_simple(
     # We intentionally ignore it here and enforce JSON via prompting and robust parsing upstream.
     
     try:
+        # Essayer avec tous les paramètres
         response = _client.responses.create(**req)
         logger.info(f"📥 Response received: {type(response)}")
         return response
+    except TypeError as e:
+        # Si modalities ou autre paramètre non supporté, retry sans
+        if 'modalities' in str(e) or 'unexpected keyword' in str(e):
+            logger.warning(f"⚠️ Paramètre non supporté, retry sans: {e}")
+            # Retirer paramètres potentiellement non supportés
+            req.pop('modalities', None)
+            try:
+                response = _client.responses.create(**req)
+                logger.info(f"📥 Response received (retry): {type(response)}")
+                return response
+            except Exception as e2:
+                logger.error(f"❌ API call failed même après retry: {e2}", exc_info=True)
+                raise
+        else:
+            logger.error(f"❌ API call failed: {e}", exc_info=True)
+            raise
     except Exception as e:
         logger.error(f"❌ API call failed: {e}", exc_info=True)
         raise
