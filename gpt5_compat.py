@@ -110,10 +110,13 @@ def from_chat_completions_compat(
     if response_format is not None:
         req_cc["response_format"] = response_format
     # Prefer the new max_completion_tokens parameter (required for GPT-5 models)
+    # FORCE max_completion_tokens (GPT-5 ne supporte pas max_tokens)
     if max_completion_tokens is not None:
         req_cc["max_completion_tokens"] = max_completion_tokens
     elif max_tokens is not None:
         req_cc["max_completion_tokens"] = max_tokens
+    # Ne JAMAIS envoyer max_tokens à GPT-5
+    # req_cc.pop("max_tokens", None)  # Supprimé si présent par erreur
     if timeout is not None:
         req_cc["timeout"] = timeout
     return client.chat.completions.create(**req_cc)
