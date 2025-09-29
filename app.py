@@ -3515,16 +3515,14 @@ IMPORTANT: Utilise le mode hybride pour une analyse optimale combinant données 
             ai_response = self._run_with_tools(messages, items, analytics)
             if not ai_response:
                 # Fallback to Responses API (no Completions)
-                # Convertir messages au format Responses API (input_text pour user/system, output_text pour assistant)
+                # Convertir messages au format Responses API
+                # ⭐ CRITIQUE: TOUS les messages d'ENTRÉE utilisent input_text
                 formatted_messages_full = []
                 for m in messages:
                     if isinstance(m.get("content"), str):
-                        role = m["role"]
-                        # CRITIQUE: assistant utilise output_text, pas input_text !
-                        content_type = "output_text" if role == "assistant" else "input_text"
                         formatted_messages_full.append({
-                            "role": role,
-                            "content": [{"type": content_type, "text": m["content"]}]
+                            "role": m["role"],
+                            "content": [{"type": "input_text", "text": m["content"]}]
                         })
                     else:
                         formatted_messages_full.append(m)
@@ -3667,16 +3665,15 @@ IMPORTANT: Combine données DB et connaissances générales pour une analyse opt
             total_chars = sum(len(str(m.get("content", ""))) for m in messages)
             logger.info(f"📊 Total prompt size: {total_chars} chars (~{total_chars//4} tokens)")
             
-            # Convertir messages au format Responses API (input_text pour user/system, output_text pour assistant)
+            # Convertir messages au format Responses API
+            # ⭐ CRITIQUE: TOUS les messages d'ENTRÉE utilisent input_text (même assistant!)
+            # output_text est réservé à la SORTIE du modèle uniquement
             formatted_messages = []
             for m in messages:
                 if isinstance(m.get("content"), str):
-                    role = m["role"]
-                    # CRITIQUE: assistant utilise output_text, pas input_text !
-                    content_type = "output_text" if role == "assistant" else "input_text"
                     formatted_messages.append({
-                        "role": role,
-                        "content": [{"type": content_type, "text": m["content"]}]
+                        "role": m["role"],
+                        "content": [{"type": "input_text", "text": m["content"]}]
                     })
                 else:
                     formatted_messages.append(m)
