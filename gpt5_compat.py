@@ -329,9 +329,9 @@ def from_responses_simple(
     if instructions_text:
         req["instructions"] = instructions_text
     
-    # CRITIQUE: max_output_tokens dans text={}, PAS en racine !
+    # max_output_tokens en racine (format actuel SDK)
     if max_output_tokens is not None:
-        req["text"] = {"max_output_tokens": max_output_tokens}
+        req["max_output_tokens"] = max_output_tokens
     
     # LOG: Requête finale
     logger.info(f"📤 Sending request with keys: {list(req.keys())}")
