@@ -3515,14 +3515,26 @@ IMPORTANT: Utilise le mode hybride pour une analyse optimale combinant données 
             ai_response = self._run_with_tools(messages, items, analytics)
             if not ai_response:
                 # Fallback to Responses API (no Completions)
+                # Convertir messages au format Responses API (input_text pour user/system, output_text pour assistant)
+                formatted_messages_full = []
+                for m in messages:
+                    if isinstance(m.get("content"), str):
+                        role = m["role"]
+                        # CRITIQUE: assistant utilise output_text, pas input_text !
+                        content_type = "output_text" if role == "assistant" else "input_text"
+                        formatted_messages_full.append({
+                            "role": role,
+                            "content": [{"type": content_type, "text": m["content"]}]
+                        })
+                    else:
+                        formatted_messages_full.append(m)
+                
                 resp = from_responses_simple(
-client=self.client, model=os.getenv("AI_MODEL", "gpt-5"),
-                    messages=[
-                        {"role": m["role"], "content": [{"type": "input_text", "text": m["content"]}]} if isinstance(m.get("content"), str) else m
-                        for m in messages
-                    ],
-                    max_output_tokens=2000,  # Augmenté pour analyses complètes GPT-5
-                    reasoning_effort="high"  # Effort max pour exploiter GPT-5
+                    client=self.client,
+                    model=os.getenv("AI_MODEL", "gpt-5"),
+                    messages=formatted_messages_full,
+                    max_output_tokens=2000,
+                    reasoning_effort="high"
                 )
                 ai_response = (extract_output_text(resp) or "").strip()
             
