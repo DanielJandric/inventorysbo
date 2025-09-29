@@ -54,13 +54,28 @@ def _extract_output_text_from_response(res: Any) -> str:
         outputs = getattr(res, "output", None) or []
         logger.info(f"🔍 Output array length: {len(outputs) if outputs else 0}")
         
+        # LOG: Inspecter le premier item de output
+        if outputs and len(outputs) > 0:
+            first_item = outputs[0]
+            logger.info(f"🔍 output[0] type: {type(first_item)}")
+            logger.info(f"🔍 output[0] attributes: {[a for a in dir(first_item) if not a.startswith('_')][:15]}")
+            if hasattr(first_item, 'type'):
+                logger.info(f"🔍 output[0].type: {first_item.type}")
+            if hasattr(first_item, 'model_dump'):
+                try:
+                    dump = first_item.model_dump()
+                    logger.info(f"🔍 output[0] keys: {list(dump.keys())}")
+                except:
+                    pass
+        
         parts: List[str] = []
         message_count = 0
         
         # Parcourir TOUS les items, pas juste le premier
-        for item in outputs:
+        for idx, item in enumerate(outputs):
             try:
                 item_type = getattr(item, "type", None) or (item.get("type") if isinstance(item, dict) else None)
+                logger.info(f"🔍 output[{idx}].type = {item_type}")
                 
                 if item_type == "message":
                     message_count += 1
