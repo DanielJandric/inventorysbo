@@ -1324,7 +1324,7 @@ L'objet "<strong>{item_data.get('name', 'N/A')}</strong>" de la catégorie "<str
             logger.error(f"❌ Erreur envoi email rapport de marché: {e}")
             return False
     
-    def _create_market_report_html(self, report_date: str, report_time: str, report_content: str) -> str:
+    def _create_market_report_html(self, report_date: str, report_time: str, report_content: str, header_title: str = "📰 Rapport de Marché", header_style: str = "background-color:#1e3a8a;background:linear-gradient(135deg,#1e3a8a 0%,#3b82f6 100%);color:#ffffff;") -> str:
         """Crée un HTML professionnel pour le rapport de marché"""
         timestamp = datetime.now().strftime("%d/%m/%Y à %H:%M")
         # Assainir le contenu brut (fallback simple)
@@ -1453,9 +1453,9 @@ L'objet "<strong>{item_data.get('name', 'N/A')}</strong>" de la catégorie "<str
         </head>
         <body>
             <div class="container">
-                <div class="header" style="background-color:#1e3a8a;background:linear-gradient(135deg,#1e3a8a 0%,#3b82f6 100%);color:#ffffff;padding:30px;text-align:center;">
+                <div class="header" style="{header_style}padding:30px;text-align:center;">
                     <img src="https://bonvin.ch/wp-content/uploads/2023/03/BONVIN_120x120.png" alt="BONVIN" class="logo">
-                    <h1 style="margin:0;font-size:28px;font-weight:bold;color:#ffffff;">📰 Rapport de Marché</h1>
+                    <h1 style="margin:0;font-size:28px;font-weight:bold;color:#ffffff;">{header_title}</h1>
                     <div class="subtitle" style="margin-top:10px;font-size:16px;opacity:.9;color:#ffffff;">Analyse et insights des marchés financiers</div>
                 </div>
                 
