@@ -1321,7 +1321,9 @@ L'objet "<strong>{item_data.get('name', 'N/A')}</strong>" de la catégorie "<str
             return True
             
         except Exception as e:
-            logger.error(f"❌ Erreur envoi email rapport de marché: {e}")
+            logger.error(f"❌ Erreur envoi email rapport de marché: {e}", exc_info=True)
+            logger.error(f"   Report data: date={market_report_data.get('date')}, time={market_report_data.get('time')}")
+            logger.error(f"   Recipients: {recipients_override or self.recipients}")
             return False
     
     def _create_market_report_html(self, report_date: str, report_time: str, report_content: str, header_title: str = "📰 Rapport de Marché", header_style: str = "background-color:#1e3a8a;background:linear-gradient(135deg,#1e3a8a 0%,#3b82f6 100%);color:#ffffff;") -> str:
