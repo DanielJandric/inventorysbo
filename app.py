@@ -3449,12 +3449,26 @@ class PureOpenAIEngineWithRAG:
             # Construire le contexte COMPLET avec TOUS les objets
             complete_context = self._build_complete_dataset_context(items, analytics)
             
-            # Prompt système simplifié
-            system_prompt = """Assistant IA BONVIN. Réponds en français. Format : 3 bullets maximum + 1 phrase de synthèse.
-- Utilise uniquement les données fournies (nombre d'objets, montants, statuts).
-- Mentionne les chiffres clés, pas de longue narration.
-- Emojis sobres optionnels (📈/📉/⚠️/💡) — max 1.
-- Si information indisponible, signale-le sans inventer."""
+            # Prompt système amélioré pour exploiter GPT-5
+            system_prompt = """Tu es l'assistant IA expert de la collection BONVIN, équipé de GPT-5 pour des analyses approfondies.
+
+CAPACITÉS DISPONIBLES:
+- Analyse comparative intelligente (comparer objets, trouver le meilleur/plus rapide/plus cher)
+- Raisonnement sur les données techniques (performance, caractéristiques)
+- Synthèse financière et stratégique
+- Mémoire conversationnelle pour un dialogue naturel
+
+RÈGLES:
+1. Utilise UNIQUEMENT les données fournies - ne jamais inventer
+2. Pour les questions comparatives (plus rapide, meilleur, etc.), analyse TOUTES les données pertinentes
+3. Extrais les informations techniques des descriptions quand nécessaire
+4. Structure tes réponses avec clarté (titres, listes, bullets)
+5. Sois précis avec les chiffres et références
+6. Si une donnée manque, signale-le explicitement
+7. Exploite ton intelligence pour comprendre et contextualiser
+8. Format: Analyse complète et structurée (pas de limite artificielle)
+
+Réponds en français, style professionnel et conversationnel."""
 
             # Construire les messages avec historique
             messages = [{"role": "system", "content": system_prompt}]
@@ -3467,10 +3481,14 @@ class PureOpenAIEngineWithRAG:
                         "content": msg['content']
                     })
             
-            # Prompt utilisateur simplifié
+            # Prompt utilisateur enrichi
             user_prompt = f"""QUESTION: {query}
-DONNÉES: {complete_context}
-Réponds de manière concise et directe."""
+
+DONNÉES COMPLÈTES DE LA COLLECTION:
+{complete_context}
+
+INSTRUCTIONS:
+Analyse cette question en exploitant toute ton intelligence GPT-5. Si la question nécessite une comparaison (ex: "plus rapide", "meilleur", "plus cher"), examine TOUS les objets pertinents et leurs caractéristiques techniques dans les descriptions. Fournis une réponse complète, structurée et basée uniquement sur les données fournies."""
 
             messages.append({"role": "user", "content": user_prompt})
 
@@ -3484,8 +3502,8 @@ client=self.client, model=os.getenv("AI_MODEL", "gpt-5"),
                         {"role": m["role"], "content": [{"type": "input_text", "text": m["content"]}]} if isinstance(m.get("content"), str) else m
                         for m in messages
                     ],
-                    max_output_tokens=800,
-                    reasoning_effort="medium"
+                    max_output_tokens=2000,  # Augmenté pour analyses complètes GPT-5
+                    reasoning_effort="high"  # Effort max pour exploiter GPT-5
                 )
                 ai_response = (extract_output_text(resp) or "").strip()
             
@@ -3551,13 +3569,26 @@ client=self.client, model=os.getenv("AI_MODEL", "gpt-5"),
             # Construire le contexte RAG
             rag_context = self._build_rag_context(selected_results, query, total_candidates)
             
-            # Prompt pour GPT avec contexte RAG et mémoire conversationnelle
-            system_prompt = """Assistant IA BONVIN. Tu réponds en français, format 2-4 puces max + phrase finale.
-- Appuie-toi UNIQUEMENT sur les objets listés dans RÉSULTATS.
-- Les lignes sous [METADATA] servent au débogage interne : ne les cite pas.
-- Mets l'accent sur les montants, quantités, statuts.
-- Ne comble pas les trous : signale les données manquantes.
-- Emojis sobres facultatifs (📈/📉/⚠️/💡), limité à un seul."""
+            # Prompt pour GPT avec contexte RAG et mémoire conversationnelle - exploiter GPT-5
+            system_prompt = """Tu es l'assistant IA expert de la collection BONVIN, équipé de GPT-5 pour des analyses approfondies.
+
+CAPACITÉS DISPONIBLES:
+- Analyse comparative intelligente (comparer objets, trouver le meilleur/plus rapide/plus cher)
+- Raisonnement sur les données techniques (performance, caractéristiques)
+- Synthèse financière et stratégique
+- Recherche sémantique avancée pour trouver les objets les plus pertinents
+
+RÈGLES:
+1. Utilise UNIQUEMENT les objets listés dans la section RÉSULTATS
+2. Pour les questions comparatives, analyse TOUTES les données des objets retournés
+3. Extrais les informations techniques des descriptions
+4. Structure tes réponses avec clarté (titres, listes si approprié)
+5. Sois précis avec les chiffres et références
+6. Si une donnée manque, signale-le explicitement
+7. Ignore les lignes [METADATA] - elles sont pour le débogage
+8. Exploite ton intelligence pour contextualiser et analyser
+
+Réponds en français, style professionnel et conversationnel."""
 
             # Construire les messages avec historique
             messages = [{"role": "system", "content": system_prompt}]
@@ -3570,12 +3601,13 @@ client=self.client, model=os.getenv("AI_MODEL", "gpt-5"),
                         "content": msg['content']
                     })
 
-            user_prompt = f"""RECHERCHE: {query}
+            user_prompt = f"""QUESTION: {query}
 
-RÉSULTATS ({len(relevant_results)} objets):
+RÉSULTATS DE LA RECHERCHE SÉMANTIQUE ({len(relevant_results)} objets pertinents):
 {rag_context}
 
-Réponds de manière concise et directe."""
+INSTRUCTIONS:
+Analyse cette question en exploitant toute ton intelligence GPT-5. Si la question nécessite une comparaison (ex: "plus rapide", "meilleur", "plus cher"), examine TOUS les objets listés et leurs caractéristiques techniques dans les descriptions. Fournis une réponse complète, structurée et basée uniquement sur les résultats fournis."""
 
             messages.append({"role": "user", "content": user_prompt})
 
@@ -3585,8 +3617,8 @@ client=self.client, model=os.getenv("AI_MODEL", "gpt-5"),
                     {"role": m["role"], "content": [{"type": "input_text", "text": m["content"]}]} if isinstance(m.get("content"), str) else m
                     for m in messages
                 ],
-                max_output_tokens=600,
-                reasoning_effort="medium"
+                max_output_tokens=2000,  # Augmenté pour analyses complètes GPT-5
+                reasoning_effort="high"  # Effort max pour exploiter GPT-5
             )
             ai_response = (extract_output_text(resp) or "").strip()
             
@@ -3641,9 +3673,9 @@ client=self.client, model=os.getenv("AI_MODEL", "gpt-5"),
                     context_parts.append(f"   - Prix actuel: {item.current_price:,.0f} CHF/action")
             
             if item.description:
-                # Extraire les parties pertinentes de la description
-                desc_preview = item.description[:150] + "..." if len(item.description) > 150 else item.description
-                context_parts.append(f"   - Description: {desc_preview}")
+                # Inclure description complète pour l'analyse intelligente (limite 500 chars si trop long)
+                desc_text = item.description[:500] + "..." if len(item.description) > 500 else item.description
+                context_parts.append(f"   - Description: {desc_text}")
             
                         # Informations spécifiques selon la catégorie
             if item.category == "Appartements / maison" and item.surface_m2 is not None:
@@ -3758,8 +3790,9 @@ client=self.client, model=os.getenv("AI_MODEL", "gpt-5"),
                     context_parts.append(f"   Revenus locatifs: {item.rental_income_chf:,.0f} CHF/mois")
             
             if item.description:
-                desc_preview = item.description[:100] + "..." if len(item.description) > 100 else item.description
-                context_parts.append(f"   Description: {desc_preview}")
+                # Inclure description complète pour l'analyse intelligente (limite 500 chars si trop long)
+                desc_text = item.description[:500] + "..." if len(item.description) > 500 else item.description
+                context_parts.append(f"   Description: {desc_text}")
         
         # Pipeline de vente
         items_for_sale = [item for item in items if item.for_sale]
