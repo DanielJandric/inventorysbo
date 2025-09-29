@@ -81,20 +81,32 @@ def _extract_output_text_from_response(res: Any) -> str:
             def find_text(obj, depth=0):
                 if depth > 5:  # Limite de profondeur
                     return None
-                if isinstance(obj, str) and len(obj) > 10:  # Texte significatif
+                if isinstance(obj, str) and len(obj) > 20:  # Texte significatif (min 20 chars)
+                    # Ignorer les IDs de réponse (format: resp_xxxx ou id_xxxx ou juste des hex)
+                    if obj.startswith(('resp_', 'id_', 'req_')) or (len(obj) == 64 and all(c in '0123456789abcdef' for c in obj)):
+                        return None
+                    # Ignorer les timestamps purs
+                    if obj.replace('-', '').replace(':', '').replace(' ', '').isdigit():
+                        return None
                     return obj
                 if isinstance(obj, dict):
-                    # Chercher dans les clés communes
-                    for key in ['text', 'output_text', 'content', 'message', 'response']:
-                        if key in obj:
+                    # IGNORER les clés d'ID explicites
+                    skip_keys = {'id', 'response_id', 'request_id', 'session_id', 'model', 'object', 'created', 'usage'}
+                    
+                    # Chercher dans les clés communes PRIORITAIRES (ordre important)
+                    priority_keys = ['text', 'output_text', 'content', 'message', 'response', 'answer', 'reply']
+                    for key in priority_keys:
+                        if key in obj and key not in skip_keys:
                             result = find_text(obj[key], depth + 1)
                             if result:
                                 return result
-                    # Chercher dans toutes les valeurs
-                    for value in obj.values():
-                        result = find_text(value, depth + 1)
-                        if result:
-                            return result
+                    
+                    # Chercher dans toutes les autres valeurs (en évitant les IDs)
+                    for key, value in obj.items():
+                        if key not in skip_keys and key not in priority_keys:
+                            result = find_text(value, depth + 1)
+                            if result:
+                                return result
                 if isinstance(obj, list):
                     for item in obj:
                         result = find_text(item, depth + 1)
