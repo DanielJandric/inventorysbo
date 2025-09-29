@@ -3976,6 +3976,11 @@ client=self.client, model=os.getenv("AI_MODEL", "gpt-5"),
 
 # Instance du moteur IA avec RAG
 ai_engine = PureOpenAIEngineWithRAG(openai_client) if openai_client else None
+if ai_engine:
+    logger.info("✅ ai_engine initialisé avec succès (GPT-5 mode hybride activé)")
+else:
+    logger.error("❌ ai_engine NON initialisé - openai_client manquant! Le chatbot ne fonctionnera pas correctement.")
+    logger.error("   Vérifier: OPENAI_API_KEY dans .env")
 
 # Limiter strictement la taille du contexte envoyé aux LLM
 # Valeurs par défaut défensives pour la taille des contextes RAG
@@ -6725,6 +6730,13 @@ def chatbot():
             # Fallback to standard chatbot if anything goes wrong
             pass
 
+        if not ai_engine:
+            logger.error("❌ ai_engine n'est pas disponible - impossible de traiter la requête chatbot")
+            return jsonify({
+                "reply": "⚠️ Le moteur IA n'est pas disponible. Veuillez vérifier la configuration (OPENAI_API_KEY).",
+                "metadata": {"mode": "error_no_ai_engine"}
+            })
+        
         if ai_engine:
             # ===== TIMEOUT STRICT ET OPTIMISATIONS =====
             try:
@@ -6863,7 +6875,11 @@ def chatbot():
                 thread = threading.Thread(target=call_ai)
                 thread.daemon = True
                 thread.start()
-                thread.join(timeout=30.0)  # 30 secondes pour aligner l'expérience "web"
+                
+                # Augmenter timeout pour GPT-5 qui nécessite plus de raisonnement
+                timeout_seconds = 60.0  # 60 secondes pour analyses complexes
+                logger.info(f"🤖 Appel LLM avec timeout de {timeout_seconds}s pour query: {query[:100]}")
+                thread.join(timeout=timeout_seconds)
                 
                 if thread.is_alive():
                     # Timeout dépassé
@@ -6878,14 +6894,17 @@ def chatbot():
                     response += f"📊 Vous avez {len(items)} objets d'une valeur totale de {total_val:,.0f} CHF.\n"
                     response += f"💡 Essayez une question plus spécifique pour une réponse détaillée."
                 elif error:
-                    # Erreur dans l'appel
-                    response = f"📊 **Résumé de votre collection**:\n\n"
+                    # Erreur dans l'appel - LOGGER L'ERREUR
+                    logger.error(f"❌ Erreur LLM chatbot: {error}", exc_info=True)
+                    response = f"📊 **Résumé de votre collection** (erreur LLM: {str(error)[:100]}):\n\n"
                     response += f"• {len(items)} objets au total\n"
                     response += f"• Valeur: {analytics.get('total_value', 0):,.0f} CHF\n"
                     response += f"• Disponibles: {analytics.get('available_count', 0)}\n"
                     response += f"• En vente: {analytics.get('for_sale_count', 0)}"
                 elif not response:
-                    # Réponse vide
+                    # Réponse vide - LOGGER POUR DEBUG
+                    logger.warning(f"⚠️ LLM a retourné une réponse vide pour query: {query[:100]}")
+                    logger.warning(f"⚠️ ai_engine disponible: {ai_engine is not None}")
                     response = "Je suis là pour vous aider avec votre collection. Que souhaitez-vous savoir ?"
                 
             except Exception as e:
