@@ -246,13 +246,18 @@ def from_responses_simple(
     if instructions_text:
         req["instructions"] = instructions_text
     
-    # CRITIQUE: max_output_tokens EN RACINE (pas dans text={})
-    # La version SDK actuelle utilise max_output_tokens au top-level
+    # max_output_tokens EN RACINE (version SDK actuelle)
     if max_output_tokens is not None:
         req["max_output_tokens"] = max_output_tokens
     
-    # LOG: Requête finale
-    logger.info(f"📤 Sending request with keys: {list(req.keys())}")
+    # LOG: Requête finale avec valeurs
+    logger.info(f"📤 Sending request:")
+    logger.info(f"   Keys: {list(req.keys())}")
+    logger.info(f"   Model: {req.get('model')}")
+    logger.info(f"   Input msgs: {len(req.get('input', []))}")
+    logger.info(f"   Has instructions: {bool(req.get('instructions'))}")
+    logger.info(f"   Max output tokens: {req.get('max_output_tokens')}")
+    logger.info(f"   Reasoning effort: {req.get('reasoning', {}).get('effort')}")
     
     # Support per-call timeout via client.with_options when provided
     try:
