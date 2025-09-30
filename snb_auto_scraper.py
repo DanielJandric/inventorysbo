@@ -181,16 +181,103 @@ class SNBAutoScraper:
         print(f"✅ KOF collecté: {barometer} au {as_of}")
         return payload
     
+    def collect_ois_from_eurex(self) -> Optional[Dict[str, Any]]:
+        """
+        Collecte la courbe OIS depuis les futures SARON 3M d'Eurex
+        
+        Source: https://www.eurex.com/ex-en/markets/int/mon/saron-futures/saron/3M-SARON-Futures-1410330
+        """
+        print("\n💹 Collecte courbe OIS depuis Eurex (3M SARON Futures)...")
+        
+        eurex_url = "https://www.eurex.com/ex-en/markets/int/mon/saron-futures/saron/3M-SARON-Futures-1410330"
+        
+        # Scraper avec ScrapingBee
+        extract_rules = {
+            "order_book": {
+                "selector": "#orderBookTable",
+                "type": "table"
+            },
+            "prices_text": {
+                "selector": "body",
+                "type": "text"
+            }
+        }
+        
+        data = self.scrape_with_scrapingbee(eurex_url, extract_rules)
+        
+        if not data and not self.simulation_mode:
+            print("⚠️  Scraping Eurex échoué, utilisation approximation...")
+            return self.collect_ois_approximation()
+        
+        if self.simulation_mode:
+            print("🧪 Mode simulation: utilisation approximation")
+            return self.collect_ois_approximation()
+        
+        # Parser les données Eurex
+        try:
+            # Les futures SARON sont cotés en termes de prix (100 - taux implicite)
+            # Exemple: Prix 99.50 → taux implicite = 0.50%
+            
+            # Extraire les prix des contrats par échéance
+            # Format Eurex: contrats trimestriels (Mar, Jun, Sep, Dec)
+            text = data.get("prices_text", "")
+            
+            # Regex pour trouver les prix (format: 99.XXX)
+            # Les contrats sont listés par échéance (le plus proche en premier)
+            matches = re.findall(r'(99\.\d{2,3}|100\.\d{2,3})', text)
+            
+            if not matches or len(matches) < 4:
+                print("⚠️  Pas assez de données Eurex, utilisation approximation")
+                return self.collect_ois_approximation()
+            
+            # Convertir prix en taux implicites
+            # Prix du futures = 100 - taux implicite (en %)
+            futures_prices = [float(m) for m in matches[:8]]  # 8 premiers contrats (2 ans)
+            implicit_rates = [100.0 - price for price in futures_prices]
+            
+            # Mapper aux tenors (contrats trimestriels)
+            # Contrat 1 = 3M, Contrat 2 = 6M, Contrat 3 = 9M, etc.
+            points = []
+            for i, rate in enumerate(implicit_rates[:8]):
+                tenor = (i + 1) * 3  # 3, 6, 9, 12, 15, 18, 21, 24 mois
+                if tenor <= 24:
+                    points.append({
+                        "tenor_months": tenor,
+                        "rate_pct": rate
+                    })
+            
+            # S'assurer qu'on a au moins 6 points (3, 6, 9, 12, 18, 24)
+            if len(points) < 6:
+                print("⚠️  Pas assez de points OIS, utilisation approximation")
+                return self.collect_ois_approximation()
+            
+            as_of = date.today()
+            
+            payload = {
+                "as_of": as_of.isoformat(),
+                "points": points,
+                "source_url": eurex_url,
+                "idempotency_key": f"ois-{as_of.isoformat()}-eurex"
+            }
+            
+            print(f"✅ OIS Eurex collecté: {len(points)} points")
+            print(f"   3M: {points[0]['rate_pct']:.3f}% | 12M: {points[3]['rate_pct']:.3f}%")
+            return payload
+            
+        except Exception as e:
+            print(f"❌ Erreur parsing Eurex: {e}")
+            print("   Fallback vers approximation...")
+            return self.collect_ois_approximation()
+    
     def collect_ois_approximation(self) -> Optional[Dict[str, Any]]:
         """
         Génère une courbe OIS approximative basée sur le taux directeur BNS actuel
         
-        Note: Pour des données réelles, il faudrait scraper Eurex ou utiliser Bloomberg API
+        Fallback si scraping Eurex échoue
         """
-        print("\n💹 Génération courbe OIS approximative...")
+        print("\n💹 Génération courbe OIS approximative (fallback)...")
         
         # Taux directeur BNS actuel (à adapter selon l'actualité)
-        # TODO: Scraper depuis https://www.snb.ch/en/the-snb/mandates-goals/monetary-policy
         policy_rate = 0.50  # Exemple: 0.50% (à jour dec 2024)
         
         # Approximation : courbe plate avec légère pente
@@ -212,7 +299,7 @@ class SNBAutoScraper:
             "idempotency_key": f"ois-{as_of.isoformat()}-approx"
         }
         
-        print(f"✅ OIS approximatif: {policy_rate}% (taux directeur)")
+        print(f"⚠️  OIS approximatif: {policy_rate}% (taux directeur)")
         return payload
     
     def collect_snb_forecast(self) -> Optional[Dict[str, Any]]:
@@ -320,8 +407,8 @@ class SNBAutoScraper:
         """Collecte quotidienne (OIS seulement)"""
         print("🌅 === COLLECTE QUOTIDIENNE ===")
         
-        # OIS approximatif
-        ois_data = self.collect_ois_approximation()
+        # OIS depuis Eurex (fallback vers approximation si échec)
+        ois_data = self.collect_ois_from_eurex()
         if ois_data:
             self.ingest_data("ois", ois_data)
         
@@ -342,8 +429,8 @@ class SNBAutoScraper:
         if kof_data:
             self.ingest_data("kof", kof_data)
         
-        # OIS
-        ois_data = self.collect_ois_approximation()
+        # OIS depuis Eurex (fallback vers approximation si échec)
+        ois_data = self.collect_ois_from_eurex()
         if ois_data:
             self.ingest_data("ois", ois_data)
         
