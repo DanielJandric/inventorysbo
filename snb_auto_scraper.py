@@ -415,8 +415,23 @@ class SNBAutoScraper:
         # Relancer le modèle
         self.run_model()
     
+    def collect_neer(self) -> Optional[Dict[str, Any]]:
+        """
+        Collecte le NEER depuis l'API officielle SNB
+        """
+        print("\n💱 Collecte NEER depuis data.snb.ch...")
+        
+        try:
+            from snb_neer_collector import collect_neer_from_snb_api
+            neer_data = collect_neer_from_snb_api()
+            return neer_data
+        except Exception as e:
+            print(f"❌ Erreur collecte NEER: {e}")
+            self.errors.append(f"NEER: {str(e)}")
+            return None
+    
     def run_monthly_collection(self):
-        """Collecte mensuelle (CPI + KOF)"""
+        """Collecte mensuelle (CPI + KOF + NEER)"""
         print("📅 === COLLECTE MENSUELLE ===")
         
         # CPI
@@ -428,6 +443,11 @@ class SNBAutoScraper:
         kof_data = self.collect_kof()
         if kof_data:
             self.ingest_data("kof", kof_data)
+        
+        # NEER (nouveau!)
+        neer_data = self.collect_neer()
+        if neer_data:
+            self.ingest_data("neer", neer_data)
         
         # OIS depuis Eurex (fallback vers approximation si échec)
         ois_data = self.collect_ois_from_eurex()

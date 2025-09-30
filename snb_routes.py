@@ -256,6 +256,51 @@ def ingest_ois():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+@snb_bp.route('/ingest/neer', methods=['POST'])
+def ingest_neer():
+    """
+    POST /api/snb/ingest/neer
+    
+    Body: {
+        "as_of": "2025-09-30",
+        "neer_value": 100.5,
+        "neer_change_3m_pct": -1.2,
+        "source_url": "https://data.snb.ch",
+        "idempotency_key": "neer-2025-09"
+    }
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "error": "No JSON body"}), 400
+        
+        required = ["as_of", "neer_change_3m_pct", "idempotency_key"]
+        for field in required:
+            if field not in data:
+                return jsonify({"success": False, "error": f"Missing field: {field}"}), 400
+        
+        supabase = get_supabase_client()
+        if not supabase:
+            return jsonify({"success": False, "error": "Supabase not available"}), 500
+        
+        # Upsert dans snb_config avec la clé neer_latest
+        supabase.table("snb_config").upsert({
+            "key": "neer_latest",
+            "value": json.dumps({
+                "as_of": data["as_of"],
+                "neer_value": data.get("neer_value", 100.0),
+                "neer_change_3m_pct": data["neer_change_3m_pct"],
+                "source_url": data.get("source_url"),
+                "idempotency_key": data["idempotency_key"]
+            })
+        }).execute()
+        
+        return jsonify({"success": True, "message": "NEER updated"}), 200
+    
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 # === ENDPOINTS MODÈLE ===
 
 @snb_bp.route('/model/run', methods=['POST'])
@@ -318,6 +363,17 @@ def model_run():
             elif isinstance(policy_value, str):
                 policy_rate_now = float(policy_value)
         policy_rate_now = overrides.get("policy_rate_now_pct", policy_rate_now)
+        
+        # NEER (depuis config ou override)
+        neer_config = supabase.table("snb_config").select("value").eq("key", "neer_latest").execute()
+        neer_from_db = 0.0
+        if neer_config.data:
+            neer_value = neer_config.data[0]["value"]
+            if isinstance(neer_value, str):
+                neer_value = json.loads(neer_value)
+            if isinstance(neer_value, dict):
+                neer_from_db = float(neer_value.get("neer_change_3m_pct", 0.0))
+        neer = overrides.get("neer_change_3m_pct", neer if neer != 0.0 else neer_from_db)
         
         # Run modèle
         result = run_model(
@@ -498,7 +554,7 @@ def trigger_manual_collection():
     """
     POST /api/snb/trigger/collect
     
-    Lance manuellement la collecte de données (appelle le scraper)
+    Lance manuellement la collecte de données via Celery background worker
     
     Body: {
         "mode": "daily" | "monthly" | "quarterly" | "all"
@@ -508,47 +564,63 @@ def trigger_manual_collection():
         data = request.get_json() or {}
         mode = data.get("mode", "monthly")
         
-        # Import du scraper
-        import subprocess
-        import sys
+        # Import de la tâche Celery
+        from snb_tasks import snb_collect_task
         
-        # Lancer le scraper en subprocess
-        cmd = [sys.executable, "snb_auto_scraper.py", f"--{mode}"]
+        # Lancer la tâche en background (non-bloquant)
+        task = snb_collect_task.delay(mode)
         
-        # Exécuter de manière asynchrone (non-bloquant)
-        process = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
-        
-        # Attendre max 120 secondes
-        try:
-            stdout, stderr = process.communicate(timeout=120)
-            
-            if process.returncode == 0:
-                return jsonify({
-                    "success": True,
-                    "message": f"Collecte {mode} lancée avec succès",
-                    "output": stdout
-                }), 200
-            else:
-                return jsonify({
-                    "success": False,
-                    "error": f"Erreur lors de la collecte: {stderr}",
-                    "output": stdout
-                }), 500
-                
-        except subprocess.TimeoutExpired:
-            process.kill()
-            return jsonify({
-                "success": False,
-                "error": "Timeout (>120s)"
-            }), 408
+        return jsonify({
+            "success": True,
+            "message": f"Collecte {mode} lancee en background",
+            "task_id": task.id,
+            "status_url": f"/api/snb/trigger/status/{task.id}"
+        }), 202
     
     except Exception as e:
         import traceback
         traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@snb_bp.route('/trigger/status/<task_id>', methods=['GET'])
+def get_collection_status(task_id):
+    """
+    GET /api/snb/trigger/status/<task_id>
+    
+    Vérifie le statut d'une tâche de collecte
+    """
+    try:
+        from celery.result import AsyncResult
+        
+        task = AsyncResult(task_id)
+        
+        if task.state == 'PENDING':
+            response = {
+                "state": task.state,
+                "status": "En attente..."
+            }
+        elif task.state == 'PROGRESS':
+            response = {
+                "state": task.state,
+                "status": "En cours...",
+                "meta": task.info
+            }
+        elif task.state == 'SUCCESS':
+            response = {
+                "state": task.state,
+                "status": "Terminé",
+                "result": task.info
+            }
+        else:  # FAILURE
+            response = {
+                "state": task.state,
+                "status": "Erreur",
+                "error": str(task.info)
+            }
+        
+        return jsonify(response), 200
+    
+    except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 

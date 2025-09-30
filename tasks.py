@@ -7,6 +7,8 @@ import requests
 from typing import Optional, Any, Dict, List
 from gpt5_compat import from_responses_simple, extract_output_text
 from celery_app import celery
+import subprocess
+import sys
 @celery.task(bind=True)
 def chat_v2_task(self, payload: dict):
     """
