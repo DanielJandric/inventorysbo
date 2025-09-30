@@ -3536,6 +3536,15 @@ IMPORTANT: Utilise le mode hybride pour une analyse optimale combinant données 
                     reasoning_effort="high"
                 )
                 ai_response = (extract_output_text(resp) or "").strip()
+                if not ai_response:
+                    logger.warning("⚠️ Responses API returned empty output_text, falling back to Chat Completions")
+                    cc_resp = from_chat_completions_compat(
+                        client=self.client,
+                        model=os.getenv("AI_MODEL", "gpt-5"),
+                        messages=messages,
+                        max_completion_tokens=2000,
+                    )
+                    ai_response = (cc_resp.choices[0].message.get("content") or "").strip()
             
             # Cache la réponse
             smart_cache.set('ai_responses', ai_response, cache_key)
@@ -3689,6 +3698,15 @@ IMPORTANT: Combine données DB et connaissances générales pour une analyse opt
             )
             logger.info(f"✅ API call completed, extracting response...")
             ai_response = (extract_output_text(resp) or "").strip()
+            if not ai_response:
+                logger.warning("⚠️ Responses API returned empty output_text, falling back to Chat Completions")
+                cc_resp = from_chat_completions_compat(
+                    client=self.client,
+                    model=os.getenv("AI_MODEL", "gpt-5"),
+                    messages=messages,
+                    max_completion_tokens=1500,
+                )
+                ai_response = (cc_resp.choices[0].message.get("content") or "").strip()
             
             # Pas d'indicateur de mémoire - réponses directes
             
@@ -5286,7 +5304,8 @@ Réponds en JSON avec:
 - price_range (objet avec min et max basés sur le marché)"""
 
         response = from_responses_simple(
-client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"),
+            client=openai_client,
+            model=os.getenv("AI_MODEL", "gpt-5"),
             messages=[
                 {"role": "system", "content": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."},
                 {"role": "user", "content": prompt}
@@ -5473,7 +5492,8 @@ Réponds en JSON avec:
 - market_trend (hausse/stable/baisse)"""
 
             response = from_responses_simple(
-client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"),
+                client=openai_client,
+                model=os.getenv("AI_MODEL", "gpt-5"),
                 messages=[
                     {"role": "system", "content": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."},
                     {"role": "user", "content": prompt}
