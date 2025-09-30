@@ -74,6 +74,7 @@ from scrapingbee_scraper import ScrapingBeeScraper, get_scrapingbee_scraper
 from enhanced_chatbot_manager import EnhancedChatbotManager, ConversationOptimizer
 from chatbot_visualizations import ChatbotVisualizer, ReportGenerator
 from prompts.enhanced_prompts import get_contextual_prompt, format_response_with_template
+from snb_routes import snb_bp
 # Remplacé par l'API Manus unifiée
 # Remplacé par l'API Manus unifiée
 
@@ -2358,11 +2359,23 @@ app.config.update(
     JSON_SORT_KEYS=False
 )
 CORS(app)
+
+# Configure Supabase client in app context (pour snb_routes)
+if supabase:
+    app.config['SUPABASE_CLIENT'] = supabase
+
 # Register metrics blueprint under /api
 try:
     app.register_blueprint(metrics_bp, url_prefix='/api')
 except Exception as _e:
     pass
+
+# Register SNB Policy Engine blueprint
+try:
+    app.register_blueprint(snb_bp)
+    logger.info("✅ SNB Policy Engine blueprint registered")
+except Exception as e:
+    logger.error(f"❌ Failed to register SNB blueprint: {e}")
 
 # ──────────────────────────────────────────────────────────
 # Trading Store (SQLite fallback) and API
@@ -4201,6 +4214,15 @@ def settings():
 def sold():
     """Page des objets vendus"""
     return render_template('sold.html')
+
+@app.route("/snb-taux")
+def snb_taux():
+    """Page Prévision SNB Taux"""
+    try:
+        return render_template('snb_taux.html')
+    except Exception as e:
+        logger.error(f"Erreur rendu SNB Taux: {e}")
+        return make_response(f"Erreur de rendu: {e}", 500)
 
 @app.route("/real-estate")
 def real_estate():

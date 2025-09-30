@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="fr" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SNB Taux - BONVIN</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script defer src="/static/js/snb_taux.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0A232A;
+            --glass-bg: rgba(10, 50, 60, 0.25);
+            --glass-border: rgba(0, 200, 220, 0.2);
+            --glass-glow: rgba(0, 220, 255, 0.15);
+            --text-primary: #e0e6e7;
+            --text-secondary: #88a0a8;
+        }
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+        }
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            background: radial-gradient(circle at 15% 25%, rgba(0, 220, 255, 0.2), transparent 40%),
+                        radial-gradient(circle at 85% 75%, rgba(10, 50, 60, 0.3), transparent 40%);
+            z-index: -1;
+            animation: moveGradient 20s linear infinite alternate;
+            filter: blur(50px);
+        }
+        @keyframes moveGradient {
+            from { transform: translate(0, 0); }
+            to { transform: translate(5vw, -5vh); }
+        }
+        .glass {
+            background: var(--glass-bg);
+            backdrop-filter: blur(15px);
+            border: 1px solid var(--glass-border);
+            border-radius: 1.5rem;
+        }
+        .glass-dark {
+            background: rgba(10, 40, 50, 0.4);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            border-radius: 1.5rem;
+        }
+        .kpi-card {
+            padding: 1.5rem;
+            transition: all 0.3s ease;
+        }
+        .kpi-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 40px rgba(0, 220, 255, 0.2);
+        }
+        .kpi-title {
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            opacity: 0.8;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .kpi-value {
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: var(--text-primary);
+            margin-top: 0.5rem;
+        }
+        .btn-primary {
+            background: rgba(34, 211, 238, 0.2);
+            border: 1px solid rgba(34, 211, 238, 0.4);
+            color: #22d3ee;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.75rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        .btn-primary:hover {
+            background: rgba(34, 211, 238, 0.3);
+            border-color: rgba(34, 211, 238, 0.6);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(34, 211, 238, 0.3);
+        }
+        .input-field {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(0, 229, 255, 0.3);
+            color: #e0f2fe;
+            padding: 0.75rem 1rem;
+            border-radius: 0.75rem;
+            width: 100%;
+        }
+        .input-field:focus {
+            outline: none;
+            border-color: rgba(0, 229, 255, 0.6);
+            box-shadow: 0 0 20px rgba(0, 229, 255, 0.2);
+        }
+        .prob-bar {
+            height: 2.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.875rem;
+            transition: all 0.3s ease;
+            border-radius: 0.5rem;
+        }
+        .prob-bar:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+        .loading-spinner {
+            border: 3px solid rgba(34, 211, 238, 0.3);
+            border-top: 3px solid #22d3ee;
+            border-radius: 50%;
+            width: 2rem;
+            height: 2rem;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .narrative-section {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(34, 211, 238, 0.3);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            margin-top: 1.5rem;
+        }
+        .risk-tag {
+            display: inline-block;
+            background: rgba(251, 146, 60, 0.2);
+            border: 1px solid rgba(251, 146, 60, 0.4);
+            color: #fb923c;
+            padding: 0.25rem 0.75rem;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-right: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+    </style>
+</head>
+<body class="h-full">
+    <div class="min-h-screen p-4 md:p-8">
+        <header class="text-center mb-10 pt-6">
+            <div class="flex justify-center mb-4">
+                <img src="/static/1da6a1fb-f4c3-401c-aa60-63e9b63360b0.png" alt="BONVIN Logo" class="w-40 h-auto md:w-48">
+            </div>
+            <h1 class="text-3xl md:text-4xl font-bold tracking-wider">Prévision BNS — Taux Directeur</h1>
+            <p class="text-sm text-cyan-200/70 mt-2">Modèle quantitatif de politique monétaire suisse</p>
+        </header>
+
+        <main class="max-w-7xl mx-auto space-y-6">
+            <!-- Loading State -->
+            <div id="loading-section" class="glass-dark p-8 text-center hidden">
+                <div class="loading-spinner mx-auto"></div>
+                <p class="mt-4 text-cyan-200/70">Chargement des données...</p>
+            </div>
+
+            <!-- Error State -->
+            <div id="error-section" class="glass-dark p-6 text-center hidden">
+                <div class="text-red-400 text-lg font-semibold mb-2">⚠️ Erreur de chargement</div>
+                <p id="error-message" class="text-gray-300 text-sm"></p>
+                <button onclick="window.SNBTaux.loadLatestModel()" class="btn-primary mt-4">
+                    Réessayer
+                </button>
+            </div>
+
+            <!-- Main Content -->
+            <div id="main-content" class="hidden">
+                <!-- Metadata -->
+                <section class="glass p-4 flex justify-between items-center text-sm">
+                    <div>
+                        <span class="text-cyan-200/70">Mise à jour:</span>
+                        <span id="model-date" class="font-semibold ml-2">—</span>
+                    </div>
+                    <div>
+                        <span class="text-cyan-200/70">Version:</span>
+                        <span id="model-version" class="font-semibold ml-2">—</span>
+                    </div>
+                </section>
+
+                <!-- KPIs -->
+                <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="glass kpi-card">
+                        <div class="kpi-title">CPI YoY</div>
+                        <div id="kpi-cpi" class="kpi-value">—</div>
+                    </div>
+                    <div class="glass kpi-card">
+                        <div class="kpi-title">KOF Barometer</div>
+                        <div id="kpi-kof" class="kpi-value">—</div>
+                    </div>
+                    <div class="glass kpi-card">
+                        <div class="kpi-title">Output Gap</div>
+                        <div id="kpi-output-gap" class="kpi-value">—</div>
+                    </div>
+                    <div class="glass kpi-card">
+                        <div class="kpi-title">i* (prochaine étape)</div>
+                        <div id="kpi-istar" class="kpi-value">—</div>
+                    </div>
+                </section>
+
+                <!-- Charts Row -->
+                <section class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <!-- Probabilités décision -->
+                    <div class="glass-dark p-6">
+                        <h3 class="text-lg font-bold mb-4">Probabilités décision</h3>
+                        <canvas id="chart-probs" height="200"></canvas>
+                        <div id="probs-legend" class="mt-4 space-y-2"></div>
+                    </div>
+
+                    <!-- Chemin des taux (24 mois) -->
+                    <div class="glass-dark p-6 lg:col-span-2">
+                        <h3 class="text-lg font-bold mb-4">Chemin des taux (24 mois)</h3>
+                        <canvas id="chart-path" height="150"></canvas>
+                    </div>
+                </section>
+
+                <!-- Scénario rapide -->
+                <section class="glass-dark p-6">
+                    <h3 class="text-lg font-bold mb-4">Scénario rapide</h3>
+                    <form id="scenario-form" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div>
+                            <label class="block text-sm font-semibold mb-2">Δ NEER 3M (%)</label>
+                            <input type="number" step="0.1" name="neer_change_3m_pct" value="0" class="input-field" placeholder="Ex: -1.5" />
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold mb-2">CPI YoY (%)</label>
+                            <input type="number" step="0.1" name="cpi_yoy_pct" class="input-field" placeholder="Laisser vide = actuel" />
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold mb-2">KOF</label>
+                            <input type="number" step="0.1" name="kof_barometer" class="input-field" placeholder="Laisser vide = actuel" />
+                        </div>
+                        <div class="flex items-end">
+                            <button type="submit" class="btn-primary w-full">
+                                Recalculer
+                            </button>
+                        </div>
+                    </form>
+                </section>
+
+                <!-- Explication GPT-5 -->
+                <section id="narrative-section" class="narrative-section hidden">
+                    <h3 id="narrative-headline" class="text-xl font-bold mb-3 text-cyan-100">—</h3>
+                    
+                    <div class="mb-4">
+                        <h4 class="text-sm font-semibold text-cyan-200/70 mb-2">Points clés</h4>
+                        <ul id="narrative-bullets" class="list-disc list-inside space-y-1 text-sm text-gray-300">
+                        </ul>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <h4 class="text-sm font-semibold text-cyan-200/70 mb-2">Risques</h4>
+                        <div id="narrative-risks" class="flex flex-wrap">
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <h4 class="text-sm font-semibold text-cyan-200/70 mb-2">Next steps</h4>
+                        <ul id="narrative-steps" class="list-disc list-inside space-y-1 text-sm text-gray-300">
+                        </ul>
+                    </div>
+                    
+                    <div class="text-xs text-cyan-200/60 italic border-t border-cyan-900/30 pt-3">
+                        <span id="narrative-oneliner">—</span>
+                    </div>
+                </section>
+            </div>
+        </main>
+
+        <!-- Back Button -->
+        <div class="fixed top-6 left-6">
+            <a href="/" class="glass px-4 py-2 rounded-xl text-sm font-medium hover:scale-105 transition-transform inline-flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                </svg>
+                Retour
+            </a>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            if (window.SNBTaux && typeof window.SNBTaux.init === 'function') {
+                window.SNBTaux.init();
+            }
+        });
+    </script>
+</body>
+</html>
+
