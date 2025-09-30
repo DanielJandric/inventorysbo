@@ -2,6 +2,7 @@ import os
 import time
 import json
 import re
+import uuid
 import requests
 from typing import Optional, Any, Dict, List
 from gpt5_compat import from_responses_simple, extract_output_text
@@ -193,11 +194,11 @@ def chat_task(self, payload: dict):
         "format_output",
     ]
     result = {"events": []}
+    data = payload or {}
     session_id = data.get("session_id") or str(uuid.uuid4())
     history = data.get("history") or []
     # Étape 1: validation input
     self.update_state(state="PROGRESS", meta={"step": steps[0], "pct": 20})
-    data = payload or {}
     msg = (data.get("message") or "").strip()
     if not msg:
         return {"ok": False, "error": "Message requis", "meta": result}
