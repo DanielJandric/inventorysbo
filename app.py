@@ -16,7 +16,7 @@ from enum import Enum
 from functools import lru_cache, wraps
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from flask import Flask, jsonify, render_template, request, Response, stream_with_context, make_response, send_file
+from flask import Flask, jsonify, render_template, request, Response, stream_with_context, make_response, send_file, url_for
 from metrics_api import metrics_bp
 from werkzeug.utils import secure_filename
 from pdf_optimizer import generate_optimized_pdf, create_summary_box, create_item_card_html, format_price_for_pdf
