@@ -3538,13 +3538,18 @@ IMPORTANT: Utilise le mode hybride pour une analyse optimale combinant données 
                 ai_response = (extract_output_text(resp) or "").strip()
                 if not ai_response:
                     logger.warning("⚠️ Responses API returned empty output_text, falling back to Chat Completions")
-                    cc_resp = from_chat_completions_compat(
-                        client=self.client,
-                        model=os.getenv("AI_MODEL", "gpt-5"),
-                        messages=messages,
-                        max_completion_tokens=2000,
-                    )
-                    ai_response = (cc_resp.choices[0].message.get("content") or "").strip()
+                    try:
+                        cc_resp = from_chat_completions_compat(
+                            client=self.client,
+                            model=os.getenv("AI_MODEL", "gpt-5"),
+                            messages=messages,
+                            max_completion_tokens=1200,
+                            timeout=20,
+                        )
+                        ai_response = (cc_resp.choices[0].message.get("content") or "").strip()
+                    except Exception as chat_fallback_error:
+                        logger.error("❌ Chat Completions fallback failed: %s", chat_fallback_error)
+                        ai_response = ""
             
             # Cache la réponse
             smart_cache.set('ai_responses', ai_response, cache_key)
@@ -3700,13 +3705,18 @@ IMPORTANT: Combine données DB et connaissances générales pour une analyse opt
             ai_response = (extract_output_text(resp) or "").strip()
             if not ai_response:
                 logger.warning("⚠️ Responses API returned empty output_text, falling back to Chat Completions")
-                cc_resp = from_chat_completions_compat(
-                    client=self.client,
-                    model=os.getenv("AI_MODEL", "gpt-5"),
-                    messages=messages,
-                    max_completion_tokens=1500,
-                )
-                ai_response = (cc_resp.choices[0].message.get("content") or "").strip()
+                try:
+                    cc_resp = from_chat_completions_compat(
+                        client=self.client,
+                        model=os.getenv("AI_MODEL", "gpt-5"),
+                        messages=messages,
+                        max_completion_tokens=1200,
+                        timeout=20,
+                    )
+                    ai_response = (cc_resp.choices[0].message.get("content") or "").strip()
+                except Exception as chat_fallback_error:
+                    logger.error("❌ Chat Completions fallback failed: %s", chat_fallback_error)
+                    ai_response = ""
             
             # Pas d'indicateur de mémoire - réponses directes
             
@@ -5303,19 +5313,32 @@ Réponds en JSON avec:
 - market_trend (hausse/stable/baisse)
 - price_range (objet avec min et max basés sur le marché)"""
 
-        response = from_responses_simple(
-            client=openai_client,
-            model=os.getenv("AI_MODEL", "gpt-5"),
-            messages=[
-                {"role": "system", "content": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."},
-                {"role": "user", "content": prompt}
-            ],
-            max_output_tokens=800,
-            timeout=20,
-            reasoning_effort="medium"
-        )
-        
-        raw = extract_output_text(response) or ''
+        try:
+            response = from_responses_simple(
+                client=openai_client,
+                model=os.getenv("AI_MODEL", "gpt-5"),
+                messages=[
+                    {"role": "system", "content": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_output_tokens=800,
+                timeout=20,
+                reasoning_effort="medium"
+            )
+            raw = extract_output_text(response) or ''
+        except Exception as resp_error:
+            logger.warning("⚠️ Responses API pricing call failed (%s), using Chat Completions fallback", resp_error)
+            response = from_chat_completions_compat(
+                client=openai_client,
+                model=os.getenv("AI_MODEL", "gpt-5"),
+                messages=[
+                    {"role": "system", "content": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_completion_tokens=800,
+                timeout=20,
+            )
+            raw = (response.choices[0].message.get("content") or "").strip()
         def _safe_parse_json(text: str):
             s = (text or '')
             try:
@@ -5491,19 +5514,32 @@ Réponds en JSON avec:
 - confidence_score (0.1-0.9)
 - market_trend (hausse/stable/baisse)"""
 
-            response = from_responses_simple(
-                client=openai_client,
-                model=os.getenv("AI_MODEL", "gpt-5"),
-                messages=[
-                    {"role": "system", "content": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_output_tokens=800,
-                timeout=20,
-                reasoning_effort="medium"
-            )
-            
-            raw = extract_output_text(response) or ''
+            try:
+                response = from_responses_simple(
+                    client=openai_client,
+                    model=os.getenv("AI_MODEL", "gpt-5"),
+                    messages=[
+                        {"role": "system", "content": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    max_output_tokens=800,
+                    timeout=20,
+                    reasoning_effort="medium"
+                )
+                raw = extract_output_text(response) or ''
+            except Exception as resp_error:
+                logger.warning("⚠️ Responses API pricing call failed (%s), using Chat Completions fallback", resp_error)
+                response = from_chat_completions_compat(
+                    client=openai_client,
+                    model=os.getenv("AI_MODEL", "gpt-5"),
+                    messages=[
+                        {"role": "system", "content": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    max_completion_tokens=800,
+                    timeout=20,
+                )
+                raw = (response.choices[0].message.get("content") or "").strip()
             # Parsing robuste: retirer les code fences et extraire le premier objet JSON équilibré
             def _safe_parse_json(text: str):
                 s = (text or '')
