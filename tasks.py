@@ -313,52 +313,36 @@ def chat_task(self, payload: dict):
         result["events"].append({"step": steps[4], "ok": True})
         return {"ok": True, "answer": fb, "meta": result}
 
-    # Transition vers le moteur LLM complet (portion extraite de l'endpoint web)
-    try:
-        from chatbot_engine import chatbot_engine  # type: ignore
-        from collection_manager import AdvancedDataManager, CollectionItem, is_item_available, is_item_sold  # type: ignore
-        from smart_cache import smart_cache  # type: ignore
-        from conversation_memory import conversation_memory  # type: ignore
-        from ai_engine import ai_engine  # type: ignore
-    except Exception as import_error:
-        return {"ok": False, "error": f"Imports chatbot engine failed: {import_error}", "meta": result}
-
+    # Déléguer au web en mode synchrone (force_sync=1) pour éviter imports complexes
     self.update_state(state="PROGRESS", meta={"step": steps[2], "pct": 55})
-
     try:
-        history_persisted = conversation_memory.get_recent_messages(session_id, limit=12)
-        conversation_history = (history_persisted or []) + (list(history[-8:]) if isinstance(history, list) else [])
-    except Exception:
-        conversation_history = list(history or [])
-
-    try:
-        items = AdvancedDataManager.fetch_all_items()
-        analytics = AdvancedDataManager.calculate_advanced_analytics(items)
-    except Exception as ctx_error:
-        items = []
-        analytics = {}
-        result.setdefault("warnings", []).append(str(ctx_error))
-
-    try:
-        reply = chatbot_engine.generate_response(
-            msg,
-            items=items,
-            analytics=analytics,
-            conversation_history=conversation_history,
-        )
-        conversation_memory.add_message(session_id, "user", msg)
-        conversation_memory.add_message(session_id, "assistant", reply)
-    except Exception as llm_error:
-        return {"ok": False, "error": str(llm_error), "meta": result}
-
-    result["events"].extend([
-        {"step": steps[1], "ok": True},
-        {"step": steps[2], "ok": True},
-        {"step": steps[3], "ok": True},
-        {"step": steps[4], "ok": True},
-    ])
-    self.update_state(state="PROGRESS", meta={"step": steps[4], "pct": 100})
-    return {"ok": True, "answer": reply, "meta": result}
+        url = base.rstrip("/") + "/api/chatbot?force_sync=1"
+        timeout_s = int(os.getenv("CHATBOT_API_TIMEOUT", "60"))
+        headers = {"Content-Type": "application/json"}
+        resp = requests.post(url, headers=headers, data=json.dumps(data), timeout=timeout_s)
+        self.update_state(state="PROGRESS", meta={"step": steps[2], "pct": 70})
+        if resp.status_code == 200:
+            body = resp.json()
+            reply = body.get("reply") or body.get("answer") or body.get("message") or ""
+            if not reply:
+                # Retry once
+                time.sleep(0.5)
+                resp2 = requests.post(url, headers=headers, data=json.dumps(data), timeout=timeout_s)
+                if resp2.status_code == 200:
+                    body2 = resp2.json()
+                    reply = body2.get("reply") or body2.get("answer") or body2.get("message") or ""
+            result["events"].extend([
+                {"step": steps[1], "ok": True},
+                {"step": steps[2], "ok": True},
+                {"step": steps[3], "ok": True},
+                {"step": steps[4], "ok": True},
+            ])
+            self.update_state(state="PROGRESS", meta={"step": steps[4], "pct": 100})
+            return {"ok": True, "answer": reply, "meta": result}
+        else:
+            return {"ok": False, "error": f"web returned {resp.status_code}: {resp.text}", "meta": result}
+    except requests.exceptions.RequestException as e:
+        return {"ok": False, "error": str(e), "meta": result}
 
 
 @celery.task(bind=True, queue="pdf")
