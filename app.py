@@ -17,7 +17,6 @@ from functools import lru_cache, wraps
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from flask import Flask, jsonify, render_template, request, Response, stream_with_context, make_response, send_file
-from flask_login import current_user
 from metrics_api import metrics_bp
 from werkzeug.utils import secure_filename
 from pdf_optimizer import generate_optimized_pdf, create_summary_box, create_item_card_html, format_price_for_pdf
@@ -6089,9 +6088,10 @@ def chatbot():
 
         # Mode worker : envoyer directement la tâche longue au background worker
         if USE_ASYNC and not force_sync:
+            user_identifier = data.get("user_id") or request.headers.get("X-User-Id")
             payload = {
                 "message": query,
-                "user_id": current_user.id if current_user.is_authenticated else None,
+                "user_id": user_identifier,
                 "history": data.get("history") or [],
                 "session_id": data.get("session_id") or request.headers.get("X-Session-Id"),
                 "always_llm": ALWAYS_LLM,
