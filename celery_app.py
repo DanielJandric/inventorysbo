@@ -19,7 +19,7 @@ def make_celery() -> Celery:
     broker = _coerce_rediss(broker)
     backend = _coerce_rediss(backend)
 
-    app = Celery("inventorysbo", broker=broker, backend=backend, include=["tasks"])
+    app = Celery("inventorysbo", broker=broker, backend=backend, include=["tasks", "snb_tasks"])
     app.conf.update(
         task_serializer="json",
         result_serializer="json",
