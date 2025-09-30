@@ -25,8 +25,9 @@ def _to_responses_input(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             # Garder tel quel si déjà formaté
             typed.append({"role": role, "content": content})
         else:
-            # ⭐ TOUS les rôles utilisent input_text pour l'entrée
-            typed.append({"role": role, "content": [{"type": "input_text", "text": str(content)}]})
+            # Utiliser output_text pour l'assistant, input_text sinon
+            content_type = "output_text" if role == "assistant" else "input_text"
+            typed.append({"role": role, "content": [{"type": content_type, "text": str(content)}]})
     return typed
 
 

@@ -3520,9 +3520,10 @@ IMPORTANT: Utilise le mode hybride pour une analyse optimale combinant données 
                 formatted_messages_full = []
                 for m in messages:
                     if isinstance(m.get("content"), str):
+                        content_type = "output_text" if m.get("role") == "assistant" else "input_text"
                         formatted_messages_full.append({
                             "role": m["role"],
-                            "content": [{"type": "input_text", "text": m["content"]}]
+                            "content": [{"type": content_type, "text": m["content"]}]
                         })
                     else:
                         formatted_messages_full.append(m)
@@ -3671,9 +3672,10 @@ IMPORTANT: Combine données DB et connaissances générales pour une analyse opt
             formatted_messages = []
             for m in messages:
                 if isinstance(m.get("content"), str):
+                    content_type = "output_text" if m.get("role") == "assistant" else "input_text"
                     formatted_messages.append({
                         "role": m["role"],
-                        "content": [{"type": "input_text", "text": m["content"]}]
+                        "content": [{"type": content_type, "text": m["content"]}]
                     })
                 else:
                     formatted_messages.append(m)
@@ -5286,8 +5288,8 @@ Réponds en JSON avec:
         response = from_responses_simple(
 client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"),
             messages=[
-                {"role": "system", "content": [{"type": "input_text", "text": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."}]},
-                {"role": "user", "content": [{"type": "input_text", "text": prompt}]}
+                {"role": "system", "content": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."},
+                {"role": "user", "content": prompt}
             ],
             max_output_tokens=800,
             timeout=20,
@@ -5473,8 +5475,8 @@ Réponds en JSON avec:
             response = from_responses_simple(
 client=openai_client, model=os.getenv("AI_MODEL", "gpt-5"),
                 messages=[
-                    {"role": "system", "content": [{"type": "input_text", "text": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."}]},
-                    {"role": "user", "content": [{"type": "input_text", "text": prompt}]}
+                    {"role": "system", "content": "Tu es un expert en évaluation d'objets de luxe et d'actifs financiers avec une connaissance approfondie du marché. Réponds en JSON."},
+                    {"role": "user", "content": prompt}
                 ],
                 max_output_tokens=800,
                 timeout=20,
