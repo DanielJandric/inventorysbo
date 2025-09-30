@@ -6066,14 +6066,11 @@ def chatbot():
         if not query:
             return jsonify({"error": "Message requis"}), 400
 
-        # ===== FIX STABILITÉ CHATBOT v2.0 =====
-        # FORCE traitement synchrone pour éviter timeouts et déconnexions
-        USE_ASYNC = False  # Celery complètement désactivé
-        # LLM d'abord: si ALWAYS_LLM=1 (par défaut), on ignore le chemin ultra-rapide
+        # Par défaut, aiguiller le chat vers le worker Celery pour éviter les timeouts web
+        USE_ASYNC = True
         ALWAYS_LLM = (os.getenv('ALWAYS_LLM', '1') == '1')
-        # FULL CONTEXT: désactivé par défaut. Activer via FULL_CONTEXT_MODE=1 si nécessaire
         FULL_CONTEXT_MODE = (os.getenv('FULL_CONTEXT_MODE', '0') == '1')
-        
+
         # Détection d'intention rapide (uniquement pour guider le prompt LLM)
         query_lower = query.lower()
         intent = 'general'
@@ -6089,7 +6086,25 @@ def chatbot():
         if blocked:
             return jsonify({"reply": blocked, "metadata": {"mode": "guardrail"}})
 
-        # Session et historique
+        # Mode worker : envoyer directement la tâche longue au background worker
+        if USE_ASYNC and not force_sync:
+            payload = {
+                "message": query,
+                "user_id": current_user.id if current_user.is_authenticated else None,
+                "history": data.get("history") or [],
+                "session_id": data.get("session_id") or request.headers.get("X-Session-Id"),
+                "always_llm": ALWAYS_LLM,
+                "full_context": FULL_CONTEXT_MODE,
+                "metadata": {"source": "web_api"},
+            }
+            job = chat_task.apply_async(args=[payload], queue="chat")
+            return jsonify({
+                "status": "queued",
+                "job_id": job.id,
+                "poll_url": url_for("chat_task_status", job_id=job.id, _external=True),
+                "stream_url": url_for("stream_chat_task", task_id=job.id, _external=True),
+            })
+
         session_id = (data.get("session_id") or request.headers.get("X-Session-Id") or str(uuid.uuid4())).strip()
         history_client = data.get("history", [])
         history_persisted = conversation_memory.get_recent_messages(session_id, limit=12)
@@ -7101,6 +7116,25 @@ def chatbot_stream():
         return resp
     except Exception as e:
         logger.error(f"Erreur chatbot_stream: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/chatbot/status/<job_id>", methods=["GET"])
+@login_required
+def chat_task_status(job_id: str):
+    try:
+        ar = AsyncResult(job_id, app=celery)
+        state = ar.state
+        info = ar.info if isinstance(ar.info, dict) else {}
+        if state == "SUCCESS":
+            payload = ar.result
+            return jsonify({"state": state, "result": payload})
+        if state in ("FAILURE", "REVOKED"):
+            tb = getattr(ar, "traceback", None)
+            return jsonify({"state": state, "error": info, "traceback": tb}), 500
+        return jsonify({"state": state, "info": info})
+    except Exception as e:
+        logger.error(f"Erreur chat_task_status: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route("/api/chatbot/stream/<task_id>", methods=["GET"])

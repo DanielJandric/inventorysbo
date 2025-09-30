@@ -50,6 +50,7 @@ def make_celery() -> Celery:
     app.conf.task_queues = (
         Queue(default_q),
         Queue("pdf"),
+        Queue("chat"),
     )
 
     # Enable SSL for Render external Redis (rediss://) or when forced by env
