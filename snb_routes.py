@@ -465,33 +465,81 @@ def explain_model():
         tone = data.get("tone", "concise")
         lang = data.get("lang", "fr-CH")
         
-        # Prompt système
-        system_prompt = f"""Tu es un stratégiste de banque centrale spécialisé dans la politique monétaire suisse.
+        # Prompt système optimisé pour GPT-5
+        system_prompt = f"""Tu es un stratégiste senior de banque centrale spécialisé dans la politique monétaire suisse (BNS).
 
-Explique en {lang} les résultats du modèle BNS en 5 éléments structurés:
-- headline: Titre principal (max 80 caractères)
-- bullets: 3-5 points clés explicatifs
-- risks: 2-4 risques identifiés
-- next_steps: 2-3 actions de suivi
-- one_liner: Synthèse ultra-concise (max 140 caractères)
+Tu dois analyser les résultats du modèle quantitatif de prévision des taux BNS et fournir une explication structurée en {lang}.
 
-Réponds STRICTEMENT en JSON avec ces clés. Ton ton est {tone} et professionnel.
+STRUCTURE OBLIGATOIRE (JSON strict):
+{{
+  "headline": "Titre principal de 60-80 caractères résumant la décision probable",
+  "bullets": [
+    "Point clé 1: Analyse de l'inflation et écart vs cible BNS (1%)",
+    "Point clé 2: Analyse de l'output gap et activité économique",
+    "Point clé 3: Analyse des anticipations de marché (OIS/Futures)",
+    "Point clé 4: Contexte macro (CHF, commerce international, croissance)",
+    "Point clé 5 (optionnel): Facteurs techniques ou calendrier"
+  ],
+  "risks": [
+    "Risque 1: Appréciation CHF",
+    "Risque 2: Ralentissement conjoncture mondiale",
+    "Risque 3-4: Autres risques pertinents"
+  ],
+  "next_steps": [
+    "Action 1: Indicateurs à surveiller (CPI mensuel, KOF)",
+    "Action 2: Événements macro à suivre",
+    "Action 3 (optionnel): Ajustements potentiels"
+  ],
+  "one_liner": "Synthèse ultra-concise de 100-140 caractères (tweet-ready)"
+}}
+
+INSTRUCTIONS:
+- Ton: {tone}, professionnel, factuel
+- Contexte: Utilise les données BNS officielles (MPA sept 2025: taux 0%, prévisions 0.2%/0.5%/0.7%)
+- Chiffres: Cite précisément les valeurs du modèle (%, points de base)
+- Probabilités: Interprète les probs (cut/hold/hike) de manière claire
+- Format: JSON STRICT, pas de texte avant/après, UTF-8
+
+RÉPONDS UNIQUEMENT EN JSON VALIDE. Pas de markdown, pas de ```json```, juste le JSON pur.
 """
         
-        user_prompt = f"Voici le JSON du modèle:\n{json.dumps(model_json, indent=2)}"
+        user_prompt = f"Voici le JSON du modèle BNS à analyser:\n\n{json.dumps(model_json, indent=2, ensure_ascii=False)}"
         
-        # Appel OpenAI (adaptez selon votre version)
+        # Appel OpenAI GPT-5 avec paramètres optimaux
         response = openai_client.chat.completions.create(
-            model="gpt-4o",  # ou "gpt-5-pro" si disponible
+            model="gpt-5",  # GPT-5 forcé
             temperature=0.2,
-            response_format={"type": "json_object"},
+            max_completion_tokens=10000,  # Tokens de sortie maximaux
+            reasoning_effort="high",       # Raisonnement approfondi
+            response_format={
+                "type": "json_object"  # Force JSON strict
+            },
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ]
         )
         
-        explanation = json.loads(response.choices[0].message.content)
+        # Extraction du texte de réponse
+        response_text = response.choices[0].message.content
+        
+        # Parse JSON (avec validation stricte)
+        try:
+            explanation = json.loads(response_text)
+        except json.JSONDecodeError as e:
+            # Si GPT renvoie du texte avant/après le JSON, essayer de l'extraire
+            import re
+            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+            if json_match:
+                explanation = json.loads(json_match.group(0))
+            else:
+                raise ValueError(f"GPT response is not valid JSON: {response_text[:200]}")
+        
+        # Validation des clés obligatoires
+        required_keys = ["headline", "bullets", "risks", "next_steps", "one_liner"]
+        for key in required_keys:
+            if key not in explanation:
+                explanation[key] = f"[{key} manquant]"
         
         return jsonify({"success": True, "explanation": explanation}), 200
     
