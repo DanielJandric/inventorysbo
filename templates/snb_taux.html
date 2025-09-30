@@ -221,6 +221,39 @@
                     <div class="glass-dark p-6 lg:col-span-2">
                         <h3 class="text-lg font-bold mb-4">Chemin des taux (24 mois)</h3>
                         <canvas id="chart-path" height="150"></canvas>
+                        
+                        <!-- Explications des courbes -->
+                        <div class="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                            <div class="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                                <div class="flex items-center gap-2 mb-2">
+                                    <div class="w-8 h-0.5 bg-amber-400"></div>
+                                    <span class="font-semibold text-amber-300">Règle (modèle)</span>
+                                </div>
+                                <p class="text-gray-300 text-xs leading-relaxed">
+                                    Taux optimal calculé selon la <strong>règle de Taylor</strong>. Basé sur l'inflation, l'output gap et le NEER. Vision <strong>fondamentale</strong> de l'économie.
+                                </p>
+                            </div>
+                            
+                            <div class="p-3 rounded-lg bg-blue-500/10 border border-blue-500/30">
+                                <div class="flex items-center gap-2 mb-2">
+                                    <div class="w-8 h-0.5 bg-blue-400"></div>
+                                    <span class="font-semibold text-blue-300">Marché (OIS/Fut.)</span>
+                                </div>
+                                <p class="text-gray-300 text-xs leading-relaxed">
+                                    Anticipations des <strong>marchés financiers</strong> via les Futures SARON 3M (Eurex). Reflète ce que les <strong>traders attendent</strong> comme décisions BNS.
+                                </p>
+                            </div>
+                            
+                            <div class="p-3 rounded-lg bg-cyan-500/10 border border-cyan-500/30">
+                                <div class="flex items-center gap-2 mb-2">
+                                    <div class="w-8 h-0.5 bg-cyan-400"></div>
+                                    <span class="font-semibold text-cyan-300">Fusion (Kalman)</span>
+                                </div>
+                                <p class="text-gray-300 text-xs leading-relaxed">
+                                    <strong>Prévision finale</strong> combinant modèle et marché via filtre de Kalman. Pondération intelligente entre rigueur économique et réactivité du marché.
+                                </p>
+                            </div>
+                        </div>
                     </div>
                 </section>
 
