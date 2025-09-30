@@ -3336,7 +3336,7 @@ class PureOpenAIEngineWithRAG:
                 tools=tools,
                 model=os.getenv("AI_MODEL","gpt-5"),
                 max_output_tokens=400,
-                reasoning_effort="high",
+                reasoning_effort="none",
                 client=self.client
             )
 
@@ -3533,7 +3533,7 @@ IMPORTANT: Utilise le mode hybride pour une analyse optimale combinant données 
                     model=os.getenv("AI_MODEL", "gpt-5"),
                     messages=formatted_messages_full,
                     max_output_tokens=2000,
-                    reasoning_effort="high"
+                    reasoning_effort="none"
                 )
                 ai_response = (extract_output_text(resp) or "").strip()
                 if not ai_response:
@@ -3699,7 +3699,7 @@ IMPORTANT: Combine données DB et connaissances générales pour une analyse opt
                 model=os.getenv("AI_MODEL", "gpt-5"),
                 messages=formatted_messages,
                 max_output_tokens=1500,
-                reasoning_effort="medium"
+                reasoning_effort="none"
             )
             logger.info(f"✅ API call completed, extracting response...")
             ai_response = (extract_output_text(resp) or "").strip()
@@ -5323,7 +5323,7 @@ Réponds en JSON avec:
                 ],
                 max_output_tokens=800,
                 timeout=20,
-                reasoning_effort="medium"
+                reasoning_effort="none"
             )
             raw = extract_output_text(response) or ''
         except Exception as resp_error:
@@ -5524,7 +5524,7 @@ Réponds en JSON avec:
                     ],
                     max_output_tokens=800,
                     timeout=20,
-                    reasoning_effort="medium"
+                    reasoning_effort="none"
                 )
                 raw = extract_output_text(response) or ''
             except Exception as resp_error:
@@ -6069,7 +6069,7 @@ def chatbot():
         force_sync = str(request.args.get("force_sync") or data.get("force_sync") or "0").lower() in {"1", "true", "on", "yes"}
 
         # Par défaut, aiguiller le chat vers le worker Celery pour éviter les timeouts web
-        USE_ASYNC = True
+        USE_ASYNC = False  # Désactivé temporairement - problème de reasoning_effort
         ALWAYS_LLM = (os.getenv('ALWAYS_LLM', '1') == '1')
         FULL_CONTEXT_MODE = (os.getenv('FULL_CONTEXT_MODE', '0') == '1')
 
