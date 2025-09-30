@@ -1,0 +1,83 @@
+# =====================================================
+# Configuration Render Cron Jobs pour SNB Auto-Scraper
+# À intégrer dans render.yaml ou créer séparément
+# =====================================================
+
+services:
+  # Service web existant (à garder)
+  - type: web
+    name: inventorysbo
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn -k gevent -w 4 app:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: SCRAPINGBEE_API_KEY
+        sync: false
+
+  # ===== CRON JOB 1 : Collecte QUOTIDIENNE (OIS) =====
+  - type: cron
+    name: snb-daily-collector
+    env: python
+    schedule: "0 18 * * *"  # Tous les jours à 18h UTC (19h CET)
+    buildCommand: pip install -r requirements.txt
+    startCommand: python snb_auto_scraper.py --daily
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: SCRAPINGBEE_API_KEY
+        sync: false
+      - key: SNB_API_BASE_URL
+        value: https://inventorysbo.onrender.com
+
+  # ===== CRON JOB 2 : Collecte MENSUELLE (CPI + KOF) =====
+  - type: cron
+    name: snb-monthly-collector
+    env: python
+    schedule: "0 9 5 * *"  # Le 5 de chaque mois à 9h UTC
+    buildCommand: pip install -r requirements.txt
+    startCommand: python snb_auto_scraper.py --monthly
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: SCRAPINGBEE_API_KEY
+        sync: false
+      - key: SNB_API_BASE_URL
+        value: https://inventorysbo.onrender.com
+
+  # ===== CRON JOB 3 : Collecte TRIMESTRIELLE (BNS) =====
+  - type: cron
+    name: snb-quarterly-collector
+    env: python
+    schedule: "0 10 15 3,6,9,12 *"  # 15 mars, juin, sept, déc à 10h UTC
+    buildCommand: pip install -r requirements.txt
+    startCommand: python snb_auto_scraper.py --quarterly
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: SCRAPINGBEE_API_KEY
+        sync: false
+      - key: SNB_API_BASE_URL
+        value: https://inventorysbo.onrender.com
+      - key: SNB_NOTIFICATION_EMAIL
+        value: votre-email@exemple.com  # Optionnel
+
