@@ -6066,6 +6066,8 @@ def chatbot():
         if not query:
             return jsonify({"error": "Message requis"}), 400
 
+        force_sync = str(request.args.get("force_sync") or data.get("force_sync") or "0").lower() in {"1", "true", "on", "yes"}
+
         # Par défaut, aiguiller le chat vers le worker Celery pour éviter les timeouts web
         USE_ASYNC = True
         ALWAYS_LLM = (os.getenv('ALWAYS_LLM', '1') == '1')
