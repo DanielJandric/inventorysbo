@@ -277,8 +277,8 @@ class SNBAutoScraper:
         """
         print("\n💹 Génération courbe OIS approximative (fallback)...")
         
-        # Taux directeur BNS actuel (à adapter selon l'actualité)
-        policy_rate = 0.50  # Exemple: 0.50% (à jour dec 2024)
+        # Taux directeur BNS actuel (MPA 25 septembre 2025)
+        policy_rate = 0.00  # 0.00% - Maintenu à 0%
         
         # Approximation : courbe plate avec légère pente
         points = [
@@ -318,16 +318,17 @@ class SNBAutoScraper:
             return None
         
         # Mode simulation : utiliser dernières prévisions connues
-        print("🧪 Utilisation de prévisions par défaut (nécessite parsing PDF manuel)")
+        print("🧪 Utilisation prévisions BNS (MPA 25 septembre 2025)")
         
         current_year = date.today().year
         meeting_date = date.today()
         
-        # Prévisions exemple (à mettre à jour manuellement après chaque MPA)
+        # Prévisions officielles BNS (MPA 25 septembre 2025)
+        # Source: Communiqué BNS du 25.09.2025
         forecast = {
-            str(current_year): 0.7,
-            str(current_year + 1): 1.0,
-            str(current_year + 2): 1.2
+            "2025": 0.2,  # Inflation moyenne 2025: 0.2%
+            "2026": 0.5,  # Inflation moyenne 2026: 0.5%
+            "2027": 0.7   # Inflation moyenne 2027: 0.7%
         }
         
         payload = {

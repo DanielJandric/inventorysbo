@@ -91,13 +91,14 @@ CREATE POLICY "Allow authenticated read access" ON snb_model_runs FOR SELECT USI
 -- CREATE POLICY "Allow service role insert" ON snb_cpi_data FOR INSERT WITH CHECK (true);
 -- (répéter pour les autres tables si nécessaire)
 
--- Table de configuration (optionnel - pour stocker le taux directeur actuel)
+-- Table de configuration (pour stocker le taux directeur actuel et NEER)
 CREATE TABLE IF NOT EXISTS snb_config (
     key TEXT PRIMARY KEY,
     value JSONB NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Taux directeur BNS actuel (MPA 25 septembre 2025)
 INSERT INTO snb_config (key, value) VALUES ('policy_rate_now_pct', '0.0'::jsonb)
-ON CONFLICT (key) DO NOTHING;
+ON CONFLICT (key) DO UPDATE SET value = '0.0'::jsonb, updated_at = NOW();
 
