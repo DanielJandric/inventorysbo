@@ -437,6 +437,77 @@
         }
     }
 
+    // === COLLECTION TRIGGERS ===
+
+    async function triggerCollection(mode) {
+        const statusDiv = document.getElementById('collection-status');
+        const messageDiv = document.getElementById('collection-message');
+        
+        if (!statusDiv || !messageDiv) return;
+        
+        try {
+            // Afficher le statut
+            statusDiv.classList.remove('hidden');
+            statusDiv.querySelector('.p-3').className = 'p-3 rounded-lg border border-blue-500/40 bg-blue-500/10';
+            messageDiv.innerHTML = `
+                <div class="flex items-center gap-2">
+                    <div class="loading-spinner" style="width: 1rem; height: 1rem; border-width: 2px;"></div>
+                    <span class="text-blue-300">Collecte ${mode} en cours... (peut prendre jusqu'à 2 minutes)</span>
+                </div>
+            `;
+            
+            // Appeler l'API
+            const response = await fetch('/api/snb/trigger/collect', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mode })
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok && data.success) {
+                // Succès
+                statusDiv.querySelector('.p-3').className = 'p-3 rounded-lg border border-green-500/40 bg-green-500/10';
+                messageDiv.innerHTML = `
+                    <div class="text-green-300">
+                        <div class="font-semibold mb-1">✅ ${data.message}</div>
+                        <div class="text-xs opacity-80">Le modèle a été recalculé automatiquement</div>
+                    </div>
+                `;
+                
+                // Recharger le modèle après 2 secondes
+                setTimeout(() => {
+                    loadLatestModel();
+                }, 2000);
+                
+                // Masquer après 10 secondes
+                setTimeout(() => {
+                    statusDiv.classList.add('hidden');
+                }, 10000);
+                
+            } else {
+                // Erreur
+                statusDiv.querySelector('.p-3').className = 'p-3 rounded-lg border border-red-500/40 bg-red-500/10';
+                messageDiv.innerHTML = `
+                    <div class="text-red-300">
+                        <div class="font-semibold mb-1">❌ Erreur de collecte</div>
+                        <div class="text-xs opacity-80">${data.error || 'Erreur inconnue'}</div>
+                    </div>
+                `;
+            }
+            
+        } catch (error) {
+            console.error('Collection error:', error);
+            statusDiv.querySelector('.p-3').className = 'p-3 rounded-lg border border-red-500/40 bg-red-500/10';
+            messageDiv.innerHTML = `
+                <div class="text-red-300">
+                    <div class="font-semibold mb-1">❌ Erreur réseau</div>
+                    <div class="text-xs opacity-80">${error.message}</div>
+                </div>
+            `;
+        }
+    }
+
     // === PUBLIC API ===
 
     window.SNBTaux = {
@@ -446,6 +517,7 @@
             loadLatestModel();
         },
         loadLatestModel,
+        triggerCollection,
         state
     };
 })();

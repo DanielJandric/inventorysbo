@@ -490,3 +490,65 @@ def data_summary():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
+
+# === ENDPOINT TRIGGER MANUEL ===
+
+@snb_bp.route('/trigger/collect', methods=['POST'])
+def trigger_manual_collection():
+    """
+    POST /api/snb/trigger/collect
+    
+    Lance manuellement la collecte de données (appelle le scraper)
+    
+    Body: {
+        "mode": "daily" | "monthly" | "quarterly" | "all"
+    }
+    """
+    try:
+        data = request.get_json() or {}
+        mode = data.get("mode", "monthly")
+        
+        # Import du scraper
+        import subprocess
+        import sys
+        
+        # Lancer le scraper en subprocess
+        cmd = [sys.executable, "snb_auto_scraper.py", f"--{mode}"]
+        
+        # Exécuter de manière asynchrone (non-bloquant)
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        
+        # Attendre max 120 secondes
+        try:
+            stdout, stderr = process.communicate(timeout=120)
+            
+            if process.returncode == 0:
+                return jsonify({
+                    "success": True,
+                    "message": f"Collecte {mode} lancée avec succès",
+                    "output": stdout
+                }), 200
+            else:
+                return jsonify({
+                    "success": False,
+                    "error": f"Erreur lors de la collecte: {stderr}",
+                    "output": stdout
+                }), 500
+                
+        except subprocess.TimeoutExpired:
+            process.kill()
+            return jsonify({
+                "success": False,
+                "error": "Timeout (>120s)"
+            }), 408
+    
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
