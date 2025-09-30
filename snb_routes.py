@@ -95,25 +95,21 @@ def ingest_cpi():
             if field not in data:
                 return jsonify({"success": False, "error": f"Missing field: {field}"}), 400
         
-        # Idempotence check
-        if validate_idempotency_key("snb_cpi_data", data["idempotency_key"]):
-            return jsonify({"success": False, "error": "Idempotency key already exists"}), 409
-        
-        # Insert dans Supabase
+        # Insert dans Supabase (upsert pour éviter duplicates)
         supabase = get_supabase_client()
         if not supabase:
             return jsonify({"success": False, "error": "Supabase not available"}), 500
         
-        result = supabase.table("snb_cpi_data").insert({
+        result = supabase.table("snb_cpi_data").upsert({
             "provider": data.get("provider", "BFS"),
             "as_of": data["as_of"],
             "yoy_pct": data["yoy_pct"],
             "mm_pct": data.get("mm_pct"),
             "source_url": data.get("source_url"),
             "idempotency_key": data["idempotency_key"]
-        }).execute()
+        }, on_conflict="idempotency_key").execute()
         
-        return jsonify({"success": True, "id": result.data[0]["id"]}), 201
+        return jsonify({"success": True, "id": result.data[0]["id"]}), 200
     
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
@@ -142,22 +138,19 @@ def ingest_kof():
             if field not in data:
                 return jsonify({"success": False, "error": f"Missing field: {field}"}), 400
         
-        if validate_idempotency_key("snb_kof_data", data["idempotency_key"]):
-            return jsonify({"success": False, "error": "Idempotency key already exists"}), 409
-        
         supabase = get_supabase_client()
         if not supabase:
             return jsonify({"success": False, "error": "Supabase not available"}), 500
         
-        result = supabase.table("snb_kof_data").insert({
+        result = supabase.table("snb_kof_data").upsert({
             "provider": data.get("provider", "KOF"),
             "as_of": data["as_of"],
             "barometer": data["barometer"],
             "source_url": data.get("source_url"),
             "idempotency_key": data["idempotency_key"]
-        }).execute()
+        }, on_conflict="idempotency_key").execute()
         
-        return jsonify({"success": True, "id": result.data[0]["id"]}), 201
+        return jsonify({"success": True, "id": result.data[0]["id"]}), 200
     
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
@@ -186,22 +179,19 @@ def ingest_snb_forecast():
             if field not in data:
                 return jsonify({"success": False, "error": f"Missing field: {field}"}), 400
         
-        if validate_idempotency_key("snb_forecasts", data["idempotency_key"]):
-            return jsonify({"success": False, "error": "Idempotency key already exists"}), 409
-        
         supabase = get_supabase_client()
         if not supabase:
             return jsonify({"success": False, "error": "Supabase not available"}), 500
         
-        result = supabase.table("snb_forecasts").insert({
+        result = supabase.table("snb_forecasts").upsert({
             "meeting_date": data["meeting_date"],
             "forecast": json.dumps(data["forecast"]),
             "source_url": data.get("source_url"),
             "pdf_url": data.get("pdf_url"),
             "idempotency_key": data["idempotency_key"]
-        }).execute()
+        }, on_conflict="idempotency_key").execute()
         
-        return jsonify({"success": True, "id": result.data[0]["id"]}), 201
+        return jsonify({"success": True, "id": result.data[0]["id"]}), 200
     
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
@@ -236,21 +226,19 @@ def ingest_ois():
         if len(data["points"]) < 3:
             return jsonify({"success": False, "error": "At least 3 OIS points required"}), 400
         
-        if validate_idempotency_key("snb_ois_data", data["idempotency_key"]):
-            return jsonify({"success": False, "error": "Idempotency key already exists"}), 409
-        
         supabase = get_supabase_client()
         if not supabase:
             return jsonify({"success": False, "error": "Supabase not available"}), 500
         
-        result = supabase.table("snb_ois_data").insert({
+        # Upsert (insert ou update si existe déjà)
+        result = supabase.table("snb_ois_data").upsert({
             "as_of": data["as_of"],
             "points": json.dumps(data["points"]),
             "source_url": data.get("source_url"),
             "idempotency_key": data["idempotency_key"]
-        }).execute()
+        }, on_conflict="as_of").execute()
         
-        return jsonify({"success": True, "id": result.data[0]["id"]}), 201
+        return jsonify({"success": True, "id": result.data[0]["id"]}), 200
     
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500

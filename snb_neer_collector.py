@@ -35,8 +35,14 @@ def collect_neer_from_snb_api() -> Dict[str, Any]:
         response = requests.get(api_url, timeout=30)
         response.raise_for_status()
         
-        # Parser le CSV
-        df = pd.read_csv(io.StringIO(response.text), sep=';')
+        # Parser le CSV (essayer différents séparateurs)
+        try:
+            df = pd.read_csv(io.StringIO(response.text), sep=';', on_bad_lines='skip')
+        except Exception:
+            try:
+                df = pd.read_csv(io.StringIO(response.text), sep=',', on_bad_lines='skip')
+            except Exception:
+                df = pd.read_csv(io.StringIO(response.text), sep='\t', on_bad_lines='skip')
         
         # Filtrer pour NEER nominal (D0) et valeurs mensuelles
         # Les colonnes SNB sont typiquement: Date, D0 (NEER nominal), D1 (NEER réel)
