@@ -24,12 +24,19 @@ from snb_policy_engine import (
 )
 
 # Import OpenAI (adapté selon votre setup existant)
+OPENAI_AVAILABLE = False
+openai_client = None
+
 try:
     from openai import OpenAI
-    openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    OPENAI_AVAILABLE = True
+    api_key = os.getenv("OPENAI_API_KEY")
+    if api_key:
+        openai_client = OpenAI(api_key=api_key)
+        OPENAI_AVAILABLE = True
+    else:
+        print("WARNING: OpenAI API key not configured")
 except Exception as e:
-    print(f"⚠️  OpenAI non disponible: {e}")
+    print(f"WARNING: OpenAI not available: {e}")
     OPENAI_AVAILABLE = False
 
 # Blueprint Flask
