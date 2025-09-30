@@ -238,9 +238,12 @@ def from_responses_simple(
     
     req: Dict[str, Any] = {
         "model": model,
-        "input": input_messages if instructions_text else typed_input,
-        "reasoning": {"effort": reasoning_effort}
+        "input": input_messages if instructions_text else typed_input
     }
+    
+    # DÉSACTIVER reasoning temporairement (génère seulement reasoning sans texte)
+    # if reasoning_effort and reasoning_effort != "none":
+    #     req["reasoning"] = {"effort": reasoning_effort}
     
     # CRITIQUE: instructions au lieu de system dans input
     if instructions_text:
