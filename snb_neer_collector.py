@@ -50,16 +50,21 @@ def collect_neer_from_snb_api() -> Dict[str, Any]:
         # Nettoyer les noms de colonnes
         df.columns = df.columns.str.strip()
         
-        # Chercher la colonne NEER (peut varier selon la structure)
-        # Typiquement "Value" ou "D0" avec filtre sur type
+        # Debug: afficher les colonnes disponibles
+        print(f"   Colonnes CSV SNB: {list(df.columns)[:10]}")
+        
+        # Chercher la colonne de date (plusieurs formats possibles)
+        date_col = None
+        for col in ['Date', 'date', 'TIME_PERIOD', 'Period', 'Periode', df.columns[0]]:
+            if col in df.columns:
+                date_col = col
+                break
+        
+        if not date_col:
+            raise ValueError(f"Colonne Date non trouvée. Colonnes: {list(df.columns)}")
         
         # Convertir la date
-        if 'Date' in df.columns:
-            df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
-        elif 'date' in df.columns:
-            df['Date'] = pd.to_datetime(df['date'], errors='coerce')
-        else:
-            raise ValueError("Colonne Date non trouvée dans le CSV SNB")
+        df['Date'] = pd.to_datetime(df[date_col], errors='coerce')
         
         # Trouver la colonne de valeur NEER
         value_col = None
