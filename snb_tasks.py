@@ -225,9 +225,14 @@ RÉPONDS UNIQUEMENT EN JSON VALIDE.
         response_text = response.output_text
         
         print(f"✅ GPT-5 réponse reçue")
-        print(f"   Tokens: input={response.usage.input_tokens}, output={response.usage.output_tokens}")
-        if hasattr(response.usage, 'reasoning_tokens'):
+        print(f"   Tokens: input={response.usage.input_tokens}, output={response.usage.output_tokens}, total={response.usage.total_tokens}")
+        # Reasoning tokens (peut ne pas exister selon le modèle)
+        if hasattr(response.usage, 'reasoning_tokens') and response.usage.reasoning_tokens:
             print(f"   Reasoning tokens: {response.usage.reasoning_tokens}")
+        else:
+            print(f"   Reasoning: Non disponible (modèle ne retourne pas reasoning_tokens)")
+        # Debug complet de l'objet usage
+        print(f"   Usage object: {response.usage}")
         print("=" * 80)
         
         self.update_state(state='PROGRESS', meta={'step': 'parsing_json', 'pct': 90})
