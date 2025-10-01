@@ -49,40 +49,33 @@ class SNBAutoScraper:
         self.results = []
         self.errors = []
     
-    def scrape_with_scrapingbee(self, url: str, extract_rules: Dict = None) -> Optional[Dict]:
+    def scrape_with_scrapingbee(self, url: str) -> Optional[Dict]:
         """Scrape une URL avec ScrapingBee"""
         if self.simulation_mode:
             print(f"🧪 Mode simulation pour {url}")
             return None
         
         try:
-            # Paramètres minimaux pour éviter erreur 400
+            # Paramètres ScrapingBee (format officiel)
             params = {
                 "api_key": SCRAPINGBEE_API_KEY,
                 "url": url,
                 "render_js": "true"
             }
             
-            # Extract rules optionnel (pour extraction structurée)
-            if extract_rules:
-                params["extract_rules"] = json.dumps(extract_rules)
-            
             response = requests.get(
-                "https://app.scrapingbee.com/api/v1/",
+                "https://app.scrapingbee.com/api/v1",  # Pas de slash final
                 params=params,
                 timeout=60
             )
             
             if response.status_code == 200:
-                return response.json() if extract_rules else {"content": response.text}
+                # Retourner le contenu HTML brut
+                return {"content": response.text}
             else:
                 # Afficher le détail de l'erreur
                 print(f"❌ ScrapingBee erreur {response.status_code}")
-                try:
-                    error_detail = response.json()
-                    print(f"   Détail: {error_detail}")
-                except:
-                    print(f"   Body: {response.text[:200]}")
+                print(f"   Body: {response.text[:300]}")
                 return None
                 
         except Exception as e:
@@ -95,8 +88,8 @@ class SNBAutoScraper:
         """Collecte automatique du CPI depuis OFS"""
         print("\n📊 Collecte CPI (OFS)...")
         
-        # Scraping sans extract_rules (on va parser le HTML brut)
-        data = self.scrape_with_scrapingbee(OFS_CPI_URL, extract_rules=None)
+        # Scraping du HTML brut
+        data = self.scrape_with_scrapingbee(OFS_CPI_URL)
         
         if not data and not self.simulation_mode:
             self.errors.append("CPI: Scraping échoué")
@@ -140,8 +133,8 @@ class SNBAutoScraper:
         """Collecte automatique du KOF Barometer"""
         print("\n📈 Collecte KOF Barometer...")
         
-        # Scraping sans extract_rules (parser HTML brut)
-        data = self.scrape_with_scrapingbee(KOF_BAROMETER_URL, extract_rules=None)
+        # Scraping du HTML brut
+        data = self.scrape_with_scrapingbee(KOF_BAROMETER_URL)
         
         if not data and not self.simulation_mode:
             self.errors.append("KOF: Scraping échoué")
@@ -188,8 +181,8 @@ class SNBAutoScraper:
         
         eurex_url = "https://www.eurex.com/ex-en/markets/int/mon/saron-futures/saron/3M-SARON-Futures-1410330"
         
-        # Scraper avec ScrapingBee (sans extract_rules, HTML brut)
-        data = self.scrape_with_scrapingbee(eurex_url, extract_rules=None)
+        # Scraping du HTML brut
+        data = self.scrape_with_scrapingbee(eurex_url)
         
         if not data and not self.simulation_mode:
             print("⚠️  Scraping Eurex échoué, utilisation approximation...")
