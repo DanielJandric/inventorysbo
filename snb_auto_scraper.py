@@ -56,14 +56,14 @@ class SNBAutoScraper:
             return None
         
         try:
+            # Paramètres minimaux pour éviter erreur 400
             params = {
                 "api_key": SCRAPINGBEE_API_KEY,
                 "url": url,
-                "render_js": "true",
-                "premium_proxy": "true",
-                "country_code": "ch"
+                "render_js": "true"
             }
             
+            # Extract rules optionnel (pour extraction structurée)
             if extract_rules:
                 params["extract_rules"] = json.dumps(extract_rules)
             
@@ -76,11 +76,19 @@ class SNBAutoScraper:
             if response.status_code == 200:
                 return response.json() if extract_rules else {"content": response.text}
             else:
+                # Afficher le détail de l'erreur
                 print(f"❌ ScrapingBee erreur {response.status_code}")
+                try:
+                    error_detail = response.json()
+                    print(f"   Détail: {error_detail}")
+                except:
+                    print(f"   Body: {response.text[:200]}")
                 return None
                 
         except Exception as e:
             print(f"❌ Erreur scraping: {e}")
+            import traceback
+            traceback.print_exc()
             return None
     
     def collect_cpi(self) -> Optional[Dict[str, Any]]:
