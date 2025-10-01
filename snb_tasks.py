@@ -181,13 +181,17 @@ RÉPONDS UNIQUEMENT EN JSON VALIDE. Pas de markdown, pas de ```json```, juste le
         
         print("=" * 80)
         print("📡 APPEL OPENAI GPT-5 (Background Worker)")
-        print(f"Model: gpt-5 | Reasoning: high | Max tokens: 10000")
+        print(f"Model: gpt-5 | Reasoning: high | Verbosity: high | Max tokens: 10000")
+        print(f"Tone: {tone} | Lang: {lang}")
         print("-" * 80)
         
         # Appel OpenAI GPT-5
         response = client.responses.create(
             model="gpt-5",
-            reasoning={"effort": "high"},
+            reasoning={
+                "effort": "high",      # Raisonnement approfondi
+                "verbosity": "high"    # Verbosité élevée
+            },
             max_output_tokens=10000,
             instructions=system_prompt,
             input=user_prompt
