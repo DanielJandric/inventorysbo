@@ -260,10 +260,10 @@ RÉPONDS UNIQUEMENT EN JSON VALIDE.
             "success": True,
             "explanation": explanation,
             "tokens": {
-                "input": response.usage.input_tokens,
-                "output": response.usage.output_tokens,
-                "total": response.usage.total_tokens,
-                "reasoning": getattr(response.usage, 'reasoning_tokens', 0)
+                "input": int(response.usage.input_tokens) if response.usage.input_tokens else 0,
+                "output": int(response.usage.output_tokens) if response.usage.output_tokens else 0,
+                "total": int(response.usage.total_tokens) if response.usage.total_tokens else 0,
+                "reasoning": int(getattr(response.usage, 'reasoning_tokens', 0) or 0)
             }
         }
     
