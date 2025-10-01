@@ -1307,10 +1307,66 @@
                 const result = await response.json();
                 
                 if (result.success) {
-                    statusDiv.innerHTML = '<span class="text-green-300">✅ Données ingérées ! Calcul du modèle et génération GPT-5 en cours...</span>';
-                    setTimeout(() => {
-                        window.location.href = '/snb-taux';
-                    }, 2000);
+                    statusDiv.innerHTML = '<span class="text-blue-300">✅ Données ingérées ! Calcul du modèle terminé.</span>';
+                    
+                    // Étape 2: Attendre génération GPT-5 (peut prendre 7-10s)
+                    statusDiv.innerHTML = '<span class="text-blue-300">🤖 Génération du narratif GPT-5... (cela peut prendre 10-15 secondes)</span>';
+                    
+                    // Lancer explication GPT-5
+                    const explainResponse = await fetch('/api/snb/explain', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({model: result.model, tone: 'concise', lang: 'fr-CH'})
+                    });
+                    
+                    const explainData = await explainResponse.json();
+                    
+                    if (explainData.task_id) {
+                        // Polling du statut GPT-5
+                        let attempts = 0;
+                        const maxAttempts = 40; // 40 x 2s = 80s max
+                        
+                        while (attempts < maxAttempts) {
+                            await new Promise(r => setTimeout(r, 2000)); // Attendre 2s
+                            
+                            const statusResponse = await fetch(`/api/snb/explain/status/${explainData.task_id}`);
+                            const statusData = await statusResponse.json();
+                            
+                            if (statusData.state === 'SUCCESS') {
+                                statusDiv.innerHTML = '<span class="text-green-300">✅ Narratif GPT-5 généré ! Redirection...</span>';
+                                setTimeout(() => {
+                                    window.location.href = '/snb-taux';
+                                }, 1000);
+                                return;
+                            }
+                            
+                            if (statusData.state === 'FAILURE') {
+                                statusDiv.className = 'mt-6 p-4 rounded-lg bg-orange-500/10 border border-orange-500/30';
+                                statusDiv.innerHTML = '<span class="text-orange-300">⚠️ Modèle calculé mais narratif échoué. Redirection...</span>';
+                                setTimeout(() => {
+                                    window.location.href = '/snb-taux';
+                                }, 2000);
+                                return;
+                            }
+                            
+                            // Afficher progression
+                            const progress = statusData.meta?.pct || 50;
+                            statusDiv.innerHTML = `<span class="text-blue-300">🤖 GPT-5 raisonnement en cours... (${progress}%)</span>`;
+                            attempts++;
+                        }
+                        
+                        // Timeout mais on redirige quand même
+                        statusDiv.innerHTML = '<span class="text-orange-300">⚠️ GPT-5 prend du temps. Redirection (narratif se chargera automatiquement)...</span>';
+                        setTimeout(() => {
+                            window.location.href = '/snb-taux';
+                        }, 2000);
+                    } else {
+                        // Pas de task_id, rediriger directement
+                        statusDiv.innerHTML = '<span class="text-green-300">✅ Terminé ! Redirection...</span>';
+                        setTimeout(() => {
+                            window.location.href = '/snb-taux';
+                        }, 1000);
+                    }
                 } else {
                     statusDiv.className = 'mt-6 p-4 rounded-lg bg-red-500/10 border border-red-500/30';
                     statusDiv.innerHTML = `<span class="text-red-300">❌ Erreur: ${result.error}</span>`;
