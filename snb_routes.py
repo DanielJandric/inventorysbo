@@ -310,11 +310,12 @@ def model_run():
         if not supabase:
             return jsonify({"success": False, "error": "Supabase not available"}), 500
         
-        # Récupérer les dernières données
-        cpi_data = supabase.table("snb_cpi_data").select("*").order("as_of", desc=True).limit(1).execute()
-        kof_data = supabase.table("snb_kof_data").select("*").order("as_of", desc=True).limit(1).execute()
-        snb_data = supabase.table("snb_forecasts").select("*").order("meeting_date", desc=True).limit(1).execute()
-        ois_data = supabase.table("snb_ois_data").select("*").order("as_of", desc=True).limit(1).execute()
+        # Récupérer les dernières données PAR ORDRE D'INSERTION (created_at)
+        # Garantit qu'on utilise les données les plus récemment saisies
+        cpi_data = supabase.table("snb_cpi_data").select("*").order("created_at", desc=True).limit(1).execute()
+        kof_data = supabase.table("snb_kof_data").select("*").order("created_at", desc=True).limit(1).execute()
+        snb_data = supabase.table("snb_forecasts").select("*").order("created_at", desc=True).limit(1).execute()
+        ois_data = supabase.table("snb_ois_data").select("*").order("created_at", desc=True).limit(1).execute()
         
         if not (cpi_data.data and kof_data.data and snb_data.data and ois_data.data):
             return jsonify({"success": False, "error": "Insufficient data (missing CPI/KOF/SNB/OIS)"}), 400
@@ -669,11 +670,22 @@ def manual_ingest_all():
         # 7. Lancer le calcul du modèle (réutiliser la logique directement)
         # Au lieu d'appeler l'endpoint HTTP, réutiliser la logique
         try:
-            # Récupérer les dernières données
-            cpi_data = supabase.table("snb_cpi_data").select("*").order("as_of", desc=True).limit(1).execute()
-            kof_data = supabase.table("snb_kof_data").select("*").order("as_of", desc=True).limit(1).execute()
-            snb_data = supabase.table("snb_forecasts").select("*").order("meeting_date", desc=True).limit(1).execute()
-            ois_data = supabase.table("snb_ois_data").select("*").order("as_of", desc=True).limit(1).execute()
+            # Récupérer les dernières données PAR ORDRE D'INSERTION (created_at)
+            # Cela garantit qu'on utilise les données les plus récemment saisies,
+            # peu importe leur date (utile si on saisit des données historiques)
+            cpi_data = supabase.table("snb_cpi_data").select("*").order("created_at", desc=True).limit(1).execute()
+            kof_data = supabase.table("snb_kof_data").select("*").order("created_at", desc=True).limit(1).execute()
+            snb_data = supabase.table("snb_forecasts").select("*").order("created_at", desc=True).limit(1).execute()
+            ois_data = supabase.table("snb_ois_data").select("*").order("created_at", desc=True).limit(1).execute()
+            
+            print("🔍 DONNÉES RÉCUPÉRÉES DE SUPABASE (dernières INSÉRÉES):")
+            if cpi_data.data:
+                print(f"   CPI: {cpi_data.data[0]['yoy_pct']}% au {cpi_data.data[0]['as_of']} (provider: {cpi_data.data[0].get('provider', 'N/A')})")
+            if kof_data.data:
+                print(f"   KOF: {kof_data.data[0]['barometer']} au {kof_data.data[0]['as_of']} (provider: {kof_data.data[0].get('provider', 'N/A')})")
+            if ois_data.data:
+                print(f"   OIS: {ois_data.data[0]['as_of']} ({len(json.loads(ois_data.data[0]['points']) if isinstance(ois_data.data[0]['points'], str) else ois_data.data[0]['points'])} points)")
+            print("-" * 80)
             
             if not (cpi_data.data and kof_data.data and snb_data.data and ois_data.data):
                 return jsonify({"success": False, "error": "Données insuffisantes après ingestion"}), 400
