@@ -638,22 +638,88 @@ def manual_ingest_all():
                 "value": json.dumps(policy_rate)
             }).execute()
         
-        # 7. Lancer le calcul du modèle (appeler l'endpoint interne)
-        import requests as req
-        model_response = req.post(
-            f"{request.host_url}api/snb/model/run",
-            json={},
-            timeout=30
-        )
-        
-        if model_response.status_code != 200:
-            return jsonify({"success": False, "error": "Model calculation failed"}), 500
-        
-        return jsonify({
-            "success": True,
-            "message": "Données ingérées et modèle recalculé",
-            "model": model_response.json().get("result")
-        }), 200
+        # 7. Lancer le calcul du modèle (réutiliser la logique directement)
+        # Au lieu d'appeler l'endpoint HTTP, réutiliser la logique
+        try:
+            # Récupérer les dernières données
+            cpi_data = supabase.table("snb_cpi_data").select("*").order("as_of", desc=True).limit(1).execute()
+            kof_data = supabase.table("snb_kof_data").select("*").order("as_of", desc=True).limit(1).execute()
+            snb_data = supabase.table("snb_forecasts").select("*").order("meeting_date", desc=True).limit(1).execute()
+            ois_data = supabase.table("snb_ois_data").select("*").order("as_of", desc=True).limit(1).execute()
+            
+            if not (cpi_data.data and kof_data.data and snb_data.data and ois_data.data):
+                return jsonify({"success": False, "error": "Données insuffisantes après ingestion"}), 400
+            
+            # Importer et exécuter le modèle
+            from snb_policy_engine import run_model, model_output_to_dict, parse_ois_points_from_db
+            from datetime import date as date_cls
+            
+            cpi = cpi_data.data[0]
+            kof = kof_data.data[0]
+            snb = snb_data.data[0]
+            ois = ois_data.data[0]
+            
+            snb_forecast = snb["forecast"]
+            if isinstance(snb_forecast, str):
+                snb_forecast = json.loads(snb_forecast)
+            
+            ois_points = parse_ois_points_from_db(ois)
+            
+            # Policy rate
+            policy_config = supabase.table("snb_config").select("value").eq("key", "policy_rate_now_pct").execute()
+            policy_rate_now = 0.0
+            if policy_config.data:
+                policy_value = policy_config.data[0]["value"]
+                if isinstance(policy_value, (int, float)):
+                    policy_rate_now = float(policy_value)
+                elif isinstance(policy_value, str):
+                    policy_rate_now = float(json.loads(policy_value))
+            
+            # NEER
+            neer_config = supabase.table("snb_config").select("value").eq("key", "neer_latest").execute()
+            neer_from_db = 0.0
+            if neer_config.data:
+                neer_val = neer_config.data[0]["value"]
+                if isinstance(neer_val, str):
+                    neer_val = json.loads(neer_val)
+                if isinstance(neer_val, dict):
+                    neer_from_db = float(neer_val.get("neer_change_3m_pct", 0.0))
+            
+            # Run modèle
+            result = run_model(
+                cpi_yoy=float(cpi["yoy_pct"]),
+                kof=float(kof["barometer"]),
+                snb_forecast=snb_forecast,
+                ois_points=ois_points,
+                policy_rate_now=float(policy_rate_now),
+                neer_change_3m=float(neer_from_db),
+                as_of_date=date_cls.fromisoformat(ois["as_of"])
+            )
+            
+            output_dict = model_output_to_dict(result)
+            
+            # Sauvegarder
+            supabase.table("snb_model_runs").insert({
+                "as_of": output_dict["as_of"],
+                "inputs": json.dumps(output_dict["inputs"]),
+                "nowcast": json.dumps(output_dict["nowcast"]),
+                "output_gap_pct": output_dict["output_gap_pct"],
+                "i_star_next_pct": output_dict["i_star_next_pct"],
+                "probs": json.dumps(output_dict["probs"]),
+                "path": json.dumps(output_dict["path"]),
+                "version": output_dict["version"]
+            }).execute()
+            
+            return jsonify({
+                "success": True,
+                "message": "Données ingérées et modèle recalculé",
+                "model": output_dict
+            }), 200
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({"success": False, "error": f"Erreur calcul modèle: {str(e)}"}), 500
     
     except Exception as e:
         import traceback
