@@ -667,103 +667,58 @@ def manual_ingest_all():
                 "value": policy_rate  # Stocker directement le float, pas json.dumps()
             }).execute()
         
-        # 7. Lancer le calcul du modèle (réutiliser la logique directement)
-        # Au lieu d'appeler l'endpoint HTTP, réutiliser la logique
+        # 7. UTILISER DIRECTEMENT LES DONNÉES DU FORMULAIRE (pas de Supabase)
+        # Cela évite tout problème de récupération/tri/cache
         try:
-            # Récupérer les dernières données PAR ORDRE D'INSERTION (created_at)
-            # Cela garantit qu'on utilise les données les plus récemment saisies,
-            # peu importe leur date (utile si on saisit des données historiques)
-            cpi_data = supabase.table("snb_cpi_data").select("*").order("created_at", desc=True).limit(1).execute()
-            kof_data = supabase.table("snb_kof_data").select("*").order("created_at", desc=True).limit(1).execute()
-            snb_data = supabase.table("snb_forecasts").select("*").order("created_at", desc=True).limit(1).execute()
-            ois_data = supabase.table("snb_ois_data").select("*").order("created_at", desc=True).limit(1).execute()
-            
-            print("🔍 DONNÉES RÉCUPÉRÉES DE SUPABASE (dernières INSÉRÉES):")
-            if cpi_data.data:
-                print(f"   CPI: {cpi_data.data[0]['yoy_pct']}% au {cpi_data.data[0]['as_of']} (provider: {cpi_data.data[0].get('provider', 'N/A')}, created: {cpi_data.data[0].get('created_at', 'N/A')})")
-            if kof_data.data:
-                print(f"   KOF: {kof_data.data[0]['barometer']} au {kof_data.data[0]['as_of']} (provider: {kof_data.data[0].get('provider', 'N/A')}, created: {kof_data.data[0].get('created_at', 'N/A')})")
-            if ois_data.data:
-                ois_points_data = json.loads(ois_data.data[0]['points']) if isinstance(ois_data.data[0]['points'], str) else ois_data.data[0]['points']
-                print(f"   OIS: {ois_data.data[0]['as_of']} ({len(ois_points_data)} points, created: {ois_data.data[0].get('created_at', 'N/A')})")
-            if snb_data.data:
-                print(f"   SNB Forecasts: {snb_data.data[0].get('meeting_date')} (created: {snb_data.data[0].get('created_at', 'N/A')})")
-            print(f"   Total rows in tables: CPI={len(cpi_data.data)}, KOF={len(kof_data.data)}, SNB={len(snb_data.data)}, OIS={len(ois_data.data)}")
-            print("-" * 80)
-            
-            if not (cpi_data.data and kof_data.data and snb_data.data and ois_data.data):
-                return jsonify({"success": False, "error": "Données insuffisantes après ingestion"}), 400
-            
-            # Importer et exécuter le modèle
-            from snb_policy_engine import run_model, model_output_to_dict, parse_ois_points_from_db
+            from snb_policy_engine import run_model, model_output_to_dict, OISPoint
             from datetime import date as date_cls
             
-            cpi = cpi_data.data[0]
-            kof = kof_data.data[0]
-            snb = snb_data.data[0]
-            ois = ois_data.data[0]
+            # Construire les données DIRECTEMENT depuis le formulaire
+            cpi_yoy_value = safe_float(data.get('cpi_yoy'), 0.2)  # Fallback
+            kof_value = safe_float(data.get('kof_barometer'), 100.0)  # Fallback
+            neer_value = safe_float(data.get('neer_change_3m'), 0.0)
+            policy_rate_value = safe_float(data.get('policy_rate'), 0.0)
             
-            snb_forecast = snb["forecast"]
-            if isinstance(snb_forecast, str):
-                snb_forecast = json.loads(snb_forecast)
+            # OIS points depuis formulaire
+            ois_points = [
+                OISPoint(tenor_months=3, rate_pct=safe_float(data.get('ois_3m'), 0.0)),
+                OISPoint(tenor_months=6, rate_pct=safe_float(data.get('ois_6m'), 0.05)),
+                OISPoint(tenor_months=9, rate_pct=safe_float(data.get('ois_9m'), 0.08)),
+                OISPoint(tenor_months=12, rate_pct=safe_float(data.get('ois_12m'), 0.10)),
+                OISPoint(tenor_months=18, rate_pct=safe_float(data.get('ois_18m'), 0.15)),
+                OISPoint(tenor_months=24, rate_pct=safe_float(data.get('ois_24m'), 0.20))
+            ]
             
-            ois_points = parse_ois_points_from_db(ois)
+            # Forecasts depuis formulaire
+            snb_forecast = {
+                '2025': safe_float(data.get('forecast_2025'), 0.2),
+                '2026': safe_float(data.get('forecast_2026'), 0.5),
+                '2027': safe_float(data.get('forecast_2027'), 0.7)
+            }
             
-            # Policy rate (normaliser le format JSON)
-            policy_config = supabase.table("snb_config").select("value").eq("key", "policy_rate_now_pct").execute()
-            policy_rate_now = 0.0
-            if policy_config.data:
-                policy_value = policy_config.data[0]["value"]
-                # Gérer différents formats de stockage
-                if isinstance(policy_value, (int, float)):
-                    policy_rate_now = float(policy_value)
-                elif isinstance(policy_value, str):
-                    try:
-                        # Peut être "0.0" ou "{\"value\": 0.0}" 
-                        parsed = json.loads(policy_value)
-                        if isinstance(parsed, (int, float)):
-                            policy_rate_now = float(parsed)
-                        elif isinstance(parsed, dict):
-                            policy_rate_now = float(parsed.get('value', 0.0))
-                    except:
-                        policy_rate_now = float(policy_value) if policy_value else 0.0
-                elif isinstance(policy_value, dict):
-                    policy_rate_now = float(policy_value.get('value', policy_value))
+            # Date de référence
+            as_of_date = date_cls.fromisoformat(data.get('cpi_date', date_cls.today().isoformat()))
             
-            # NEER (normaliser le format JSON)
-            neer_config = supabase.table("snb_config").select("value").eq("key", "neer_latest").execute()
-            neer_from_db = 0.0
-            if neer_config.data:
-                neer_val = neer_config.data[0]["value"]
-                if isinstance(neer_val, str):
-                    try:
-                        neer_val = json.loads(neer_val)
-                    except:
-                        neer_from_db = 0.0
-                if isinstance(neer_val, dict):
-                    neer_from_db = float(neer_val.get("neer_change_3m_pct", 0.0))
-                elif isinstance(neer_val, (int, float)):
-                    neer_from_db = float(neer_val)
-            
-            # Logging des données UTILISÉES par le modèle
-            print("🧮 CALCUL MODÈLE - Données utilisées:")
-            print(f"   CPI YoY: {cpi['yoy_pct']}% (date: {cpi['as_of']})")
-            print(f"   KOF: {kof['barometer']} (date: {kof['as_of']})")
-            print(f"   NEER: {neer_from_db}%")
-            print(f"   Policy rate: {policy_rate_now}%")
-            print(f"   OIS points: {len(ois_points)} tenors")
+            # Logging des données UTILISÉES par le modèle (du formulaire)
+            print("🧮 CALCUL MODÈLE - Données DIRECTEMENT DU FORMULAIRE:")
+            print(f"   CPI YoY: {cpi_yoy_value}% (saisi)")
+            print(f"   KOF: {kof_value} (saisi)")
+            print(f"   NEER: {neer_value}% (saisi)")
+            print(f"   Policy rate: {policy_rate_value}% (saisi)")
+            print(f"   OIS points: 3M={ois_points[0].rate_pct}%, 12M={ois_points[3].rate_pct}%, 24M={ois_points[5].rate_pct}%")
             print(f"   Forecasts: {snb_forecast}")
+            print(f"   Date référence: {as_of_date}")
             print("-" * 80)
             
-            # Run modèle
+            # Run modèle AVEC LES DONNÉES DU FORMULAIRE
             result = run_model(
-                cpi_yoy=float(cpi["yoy_pct"]),
-                kof=float(kof["barometer"]),
+                cpi_yoy=cpi_yoy_value,
+                kof=kof_value,
                 snb_forecast=snb_forecast,
                 ois_points=ois_points,
-                policy_rate_now=float(policy_rate_now),
-                neer_change_3m=float(neer_from_db),
-                as_of_date=date_cls.fromisoformat(ois["as_of"])
+                policy_rate_now=policy_rate_value,
+                neer_change_3m=neer_value,
+                as_of_date=as_of_date
             )
             
             print(f"✅ Modèle calculé: i*={result.i_star_next_pct:.3f}%, Hold={result.probs['hold']:.1%}")

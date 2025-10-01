@@ -1335,7 +1335,8 @@
                             if (statusData.state === 'SUCCESS') {
                                 statusDiv.innerHTML = '<span class="text-green-300">✅ Narratif GPT-5 généré ! Redirection...</span>';
                                 setTimeout(() => {
-                                    window.location.href = '/snb-taux';
+                                    // Force reload pour éviter cache
+                                    window.location.href = '/snb-taux?refresh=' + Date.now();
                                 }, 1000);
                                 return;
                             }

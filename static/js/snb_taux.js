@@ -93,7 +93,14 @@
     // === API CALLS ===
 
     async function fetchLatestModel() {
-        const response = await fetch('/api/snb/model/latest');
+        // Ajouter cache-busting pour éviter cache navigateur
+        const response = await fetch('/api/snb/model/latest?t=' + Date.now(), {
+            cache: 'no-store',
+            headers: {
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache'
+            }
+        });
         const data = await response.json();
         if (!response.ok || !data.success) {
             throw new Error(data.error || 'Failed to fetch model');
