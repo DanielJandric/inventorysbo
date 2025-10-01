@@ -505,10 +505,23 @@ RÉPONDS UNIQUEMENT EN JSON VALIDE. Pas de markdown, pas de ```json```, juste le
         
         user_prompt = f"Voici le JSON du modèle BNS à analyser:\n\n{json.dumps(model_json, indent=2, ensure_ascii=False)}"
         
+        # Logging avant appel OpenAI
+        print("=" * 80)
+        print("📡 APPEL OPENAI GPT-5 - SNB EXPLAIN")
+        print("=" * 80)
+        print(f"Model: gpt-5")
+        print(f"Temperature: 0.2")
+        print(f"Max tokens: 10000")
+        print(f"Reasoning effort: high")
+        print(f"Tone: {tone} | Lang: {lang}")
+        print(f"Input size: {len(user_prompt)} chars")
+        print("-" * 80)
+        
         # Appel OpenAI GPT-5 avec paramètres optimaux
+        # Note: GPT-5 ne supporte pas temperature personnalisée (seulement défaut=1)
         response = openai_client.chat.completions.create(
             model="gpt-5",  # GPT-5 forcé
-            temperature=0.2,
+            # temperature=1,  # Valeur par défaut GPT-5 (obligatoire, non modifiable)
             max_completion_tokens=10000,  # Tokens de sortie maximaux
             reasoning_effort="high",       # Raisonnement approfondi
             response_format={
@@ -522,6 +535,13 @@ RÉPONDS UNIQUEMENT EN JSON VALIDE. Pas de markdown, pas de ```json```, juste le
         
         # Extraction du texte de réponse
         response_text = response.choices[0].message.content
+        
+        # Logging après réception
+        print("✅ Réponse OpenAI reçue")
+        print(f"   Tokens utilisés: prompt={response.usage.prompt_tokens}, completion={response.usage.completion_tokens}, total={response.usage.total_tokens}")
+        print(f"   Taille réponse: {len(response_text)} chars")
+        print(f"   Preview: {response_text[:150]}...")
+        print("=" * 80)
         
         # Parse JSON (avec validation stricte)
         try:
