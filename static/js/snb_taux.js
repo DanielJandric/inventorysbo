@@ -117,16 +117,56 @@
     }
 
     async function fetchExplanation(model) {
+        // Lancer la tâche GPT-5 en background
         const response = await fetch('/api/snb/explain', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ model, tone: 'concise', lang: 'fr-CH' })
         });
         const data = await response.json();
-        if (!response.ok || !data.success) {
+        
+        if (response.status === 202 && data.task_id) {
+            // Tâche lancée, polling du résultat
+            return await pollExplainTask(data.task_id);
+        } else if (data.success && data.explanation) {
+            // Résultat immédiat (fallback)
+            return data.explanation;
+        } else {
             throw new Error(data.error || 'Failed to fetch explanation');
         }
-        return data.explanation;
+    }
+
+    async function pollExplainTask(taskId) {
+        const maxAttempts = 40; // 40 x 2s = 80s max (suffisant pour GPT-5)
+        let attempts = 0;
+        
+        while (attempts < maxAttempts) {
+            try {
+                const response = await fetch(`/api/snb/explain/status/${taskId}`);
+                const data = await response.json();
+                
+                if (data.state === 'SUCCESS' && data.explanation) {
+                    return data.explanation;
+                }
+                
+                if (data.state === 'FAILURE') {
+                    throw new Error(data.error || 'GPT-5 task failed');
+                }
+                
+                // PROGRESS ou PENDING: attendre et réessayer
+                attempts++;
+                await new Promise(resolve => setTimeout(resolve, 2000)); // 2s entre chaque poll
+                
+            } catch (error) {
+                attempts++;
+                if (attempts >= maxAttempts) {
+                    throw error;
+                }
+                await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+        }
+        
+        throw new Error('Timeout: GPT-5 prend trop de temps');
     }
 
     // === RENDER FUNCTIONS ===

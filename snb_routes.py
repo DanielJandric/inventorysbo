@@ -439,23 +439,18 @@ def explain_model():
     """
     POST /api/snb/explain
     
+    Lance l'explication GPT-5 en background via Celery (évite timeout worker)
+    
     Body: {
         "model": { ... le JSON de /model/latest ... },
         "tone": "concise",
         "lang": "fr-CH"
     }
     
-    Retourne: {
-        "headline": "...",
-        "bullets": ["...", "...", "..."],
-        "risks": ["...", "..."],
-        "next_steps": ["...", "..."],
-        "one_liner": "..."
-    }
+    Retourne task_id pour polling (HTTP 202) ou résultat direct si rapide
     """
     try:
-        if not OPENAI_AVAILABLE:
-            return jsonify({"success": False, "error": "OpenAI not configured"}), 503
+        from snb_tasks import snb_explain_task
         
         data = request.get_json()
         if not data or "model" not in data:
@@ -465,106 +460,64 @@ def explain_model():
         tone = data.get("tone", "concise")
         lang = data.get("lang", "fr-CH")
         
-        # Prompt système optimisé pour GPT-5
-        system_prompt = f"""Tu es un stratégiste senior de banque centrale spécialisé dans la politique monétaire suisse (BNS).
-
-Tu dois analyser les résultats du modèle quantitatif de prévision des taux BNS et fournir une explication structurée en {lang}.
-
-STRUCTURE OBLIGATOIRE (JSON strict):
-{{
-  "headline": "Titre principal de 60-80 caractères résumant la décision probable",
-  "bullets": [
-    "Point clé 1: Analyse de l'inflation et écart vs cible BNS (1%)",
-    "Point clé 2: Analyse de l'output gap et activité économique",
-    "Point clé 3: Analyse des anticipations de marché (OIS/Futures)",
-    "Point clé 4: Contexte macro (CHF, commerce international, croissance)",
-    "Point clé 5 (optionnel): Facteurs techniques ou calendrier"
-  ],
-  "risks": [
-    "Risque 1: Appréciation CHF",
-    "Risque 2: Ralentissement conjoncture mondiale",
-    "Risque 3-4: Autres risques pertinents"
-  ],
-  "next_steps": [
-    "Action 1: Indicateurs à surveiller (CPI mensuel, KOF)",
-    "Action 2: Événements macro à suivre",
-    "Action 3 (optionnel): Ajustements potentiels"
-  ],
-  "one_liner": "Synthèse ultra-concise de 100-140 caractères (tweet-ready)"
-}}
-
-INSTRUCTIONS:
-- Ton: {tone}, professionnel, factuel
-- Contexte: Utilise les données BNS officielles (MPA sept 2025: taux 0%, prévisions 0.2%/0.5%/0.7%)
-- Chiffres: Cite précisément les valeurs du modèle (%, points de base)
-- Probabilités: Interprète les probs (cut/hold/hike) de manière claire
-- Format: JSON STRICT, pas de texte avant/après, UTF-8
-
-RÉPONDS UNIQUEMENT EN JSON VALIDE. Pas de markdown, pas de ```json```, juste le JSON pur.
-"""
+        # Lancer la tâche GPT-5 en background (évite timeout)
+        task = snb_explain_task.delay(model_json, tone, lang)
         
-        user_prompt = f"Voici le JSON du modèle BNS à analyser:\n\n{json.dumps(model_json, indent=2, ensure_ascii=False)}"
-        
-        # Logging avant appel OpenAI
-        print("=" * 80)
-        print("📡 APPEL OPENAI GPT-5 - SNB EXPLAIN (Responses API)")
-        print("=" * 80)
-        print(f"Model: gpt-5")
-        print(f"Reasoning effort: high")
-        print(f"Max tokens: 10000")
-        print(f"Tone: {tone} | Lang: {lang}")
-        print(f"Instructions size: {len(system_prompt)} chars")
-        print(f"Input size: {len(user_prompt)} chars")
-        print("-" * 80)
-        
-        # Appel OpenAI GPT-5 avec RESPONSES API (recommandée)
-        # Note: response_format n'existe pas dans Responses API (seulement Chat Completions)
-        # Le JSON est forcé via les instructions système
-        response = openai_client.responses.create(
-            model="gpt-5",
-            reasoning={
-                "effort": "high"  # Raisonnement approfondi
-            },
-            max_output_tokens=10000,  # Tokens de sortie maximaux
-            instructions=system_prompt,  # Instructions système (force JSON)
-            input=user_prompt            # Input utilisateur
-        )
-        
-        # Extraction du texte de réponse (API Responses)
-        response_text = response.output_text
-        
-        # Logging après réception
-        print("✅ Réponse OpenAI reçue")
-        print(f"   Tokens utilisés: input={response.usage.input_tokens}, output={response.usage.output_tokens}, total={response.usage.total_tokens}")
-        if hasattr(response.usage, 'reasoning_tokens') and response.usage.reasoning_tokens:
-            print(f"   Reasoning tokens: {response.usage.reasoning_tokens}")
-        print(f"   Taille réponse: {len(response_text)} chars")
-        print(f"   Preview: {response_text[:150]}...")
-        print("=" * 80)
-        
-        # Parse JSON (avec validation stricte)
-        try:
-            explanation = json.loads(response_text)
-        except json.JSONDecodeError as e:
-            # Si GPT renvoie du texte avant/après le JSON, essayer de l'extraire
-            import re
-            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
-            if json_match:
-                explanation = json.loads(json_match.group(0))
-            else:
-                raise ValueError(f"GPT response is not valid JSON: {response_text[:200]}")
-        
-        # Validation des clés obligatoires
-        required_keys = ["headline", "bullets", "risks", "next_steps", "one_liner"]
-        for key in required_keys:
-            if key not in explanation:
-                explanation[key] = f"[{key} manquant]"
-        
-        return jsonify({"success": True, "explanation": explanation}), 200
+        return jsonify({
+            "success": True,
+            "message": "Explication GPT-5 en cours de generation (background)",
+            "task_id": task.id,
+            "status_url": f"/api/snb/explain/status/{task.id}"
+        }), 202
     
     except Exception as e:
         import traceback
         traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@snb_bp.route('/explain/status/<task_id>', methods=['GET'])
+def get_explain_status(task_id):
+    """
+    GET /api/snb/explain/status/<task_id>
+    
+    Vérifie le statut d'une tâche d'explication GPT-5
+    """
+    try:
+        from celery.result import AsyncResult
+        
+        task = AsyncResult(task_id)
+        
+        if task.state == 'PENDING':
+            response = {
+                "state": task.state,
+                "status": "En attente..."
+            }
+        elif task.state == 'PROGRESS':
+            response = {
+                "state": task.state,
+                "status": "GPT-5 en cours de raisonnement...",
+                "meta": task.info
+            }
+        elif task.state == 'SUCCESS':
+            result = task.info
+            response = {
+                "state": task.state,
+                "status": "Terminé",
+                "success": result.get("success"),
+                "explanation": result.get("explanation"),
+                "tokens": result.get("tokens")
+            }
+        else:  # FAILURE
+            response = {
+                "state": task.state,
+                "status": "Erreur",
+                "error": str(task.info)
+            }
+        
+        return jsonify(response), 200
+    
+    except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
 
