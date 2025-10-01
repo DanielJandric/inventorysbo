@@ -726,7 +726,7 @@ def manual_ingest_all():
             
             output_dict = model_output_to_dict(result)
             
-            # Sauvegarder
+            # Sauvegarder le résultat (avec narratif placeholder pour l'instant)
             supabase.table("snb_model_runs").insert({
                 "as_of": output_dict["as_of"],
                 "inputs": json.dumps(output_dict["inputs"]),
@@ -737,6 +737,13 @@ def manual_ingest_all():
                 "path": json.dumps(output_dict["path"]),
                 "version": output_dict["version"]
             }).execute()
+            
+            # Lancer la tâche GPT-5 en background (non-bloquant)
+            from snb_tasks import snb_explain_task
+            print("🚀 Lancement tâche GPT-5 en background...")
+            task = snb_explain_task.delay(output_dict, 'concise', 'fr-CH')
+            print(f"   Task ID: {task.id}")
+            print("=" * 80)
             
             return jsonify({
                 "success": True,
