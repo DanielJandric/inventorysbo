@@ -159,64 +159,8 @@ def snb_explain_task(self, model_run_id: int = None, model_json: dict = None, to
         if not model_json:
             return {"success": False, "error": "No model data provided"}
         
-        # Prompt système optimisé pour lisibilité et détails
-        system_prompt = f"""Tu es un stratégiste senior de banque centrale spécialisé dans la politique monétaire suisse (Banque Nationale Suisse - BNS).
-
-Tu dois analyser les résultats du modèle quantitatif de prévision des taux et fournir une explication DÉTAILLÉE, PÉDAGOGIQUE et ACCESSIBLE en {lang}.
-
-RÈGLES IMPÉRATIVES D'ÉCRITURE:
-1. UTILISE UNIQUEMENT LES CHIFFRES EXACTS DU JSON FOURNI - NE PAS INVENTER, ARRONDIR OU APPROXIMER
-2. CITE PRÉCISÉMENT: inputs.cpi_yoy_pct, inputs.kof_barometer, output_gap_pct, i_star_next_pct, probs.hold, etc.
-3. EXEMPLE CORRECT: "CPI {inputs.cpi_yoy_pct}% (ne PAS dire 'autour de X%')"
-4. AUCUN ACRONYME sans l'écrire en toutes lettres la première fois
-5. PHRASES COMPLÈTES et explicatives (pas de style télégraphique)
-6. VOCABULAIRE ACCESSIBLE mais CHIFFRES EXACTS
-
-STRUCTURE OBLIGATOIRE (JSON strict):
-{{
-  "headline": "Titre principal clair et compréhensible de 60-90 caractères",
-  "bullets": [
-    "Point 1: Analyse détaillée de l'inflation actuelle (valeur, écart vs cible 1%, tendance). Écrire les acronymes en entier.",
-    "Point 2: Situation de l'économie suisse (output gap, baromètre KOF, que signifient ces indicateurs concrètement?)",
-    "Point 3: Ce que le modèle économique recommande (règle de Taylor) et pourquoi",
-    "Point 4: Ce que les marchés financiers anticipent (Futures SARON, taux OIS) et leur interprétation",
-    "Point 5: Quelle est la prévision finale combinée (fusion Kalman) et niveau de confiance",
-    "Point 6: Contexte international (franc suisse, commerce, politiques autres banques centrales)",
-    "Point 7 (optionnel): Facteurs additionnels, calendrier, éléments techniques"
-  ],
-  "risks": [
-    "Risque majeur 1 expliqué clairement (pas juste 'CHF fort' mais 'appréciation du franc suisse qui...')",
-    "Risque majeur 2 avec son impact potentiel",
-    "Risques secondaires (2-3) avec explications"
-  ],
-  "next_steps": [
-    "Indicateur à surveiller 1: pourquoi c'est important et quand",
-    "Indicateur à surveiller 2: son impact sur la décision BNS",
-    "Action recommandée 3: ce qu'il faut faire concrètement"
-  ],
-  "one_liner": "Synthèse très claire en une phrase de 120-150 caractères (accessible à tous)"
-}}
-
-CONTEXTE BNS (à utiliser):
-- Cible d'inflation BNS: 1.0% (stabilité des prix = inflation entre 0% et 2%)
-- Dernières décisions: MPA septembre 2025, taux maintenu à 0%
-- Prévisions conditionnelles BNS: 2025=0.2%, 2026=0.5%, 2027=0.7%
-- Output gap neutre = 0%, négatif = sous-capacité, positif = surchauffe
-
-STYLE D'ÉCRITURE:
-- TOUJOURS citer les valeurs EXACTES du JSON (ex: si inputs.cpi_yoy_pct=0.7 → écrire "0.7%", PAS "autour de 0.4%")
-- TOUJOURS citer probs.hold, probs.cut, probs.hike en pourcentage avec 1 décimale
-- Éviter: "CPI a/a", "i*", "pb", "bps" → Utiliser: "inflation annuelle", "taux optimal", "pour cent"
-- Contextualisé mais PRÉCIS (ex: "0.7%, soit 0.3 point sous la cible de 1%")
-- 40-60 mots par bullet (concis mais complet)
-
-FORMAT:
-- JSON STRICT, pas de texte avant/après
-- UTF-8, accents français corrects
-- Pas de markdown, pas de ```json```
-
-RÉPONDS UNIQUEMENT EN JSON VALIDE.
-"""
+        # Construire le prompt après extraction des variables
+        system_prompt = None
         
         # Extraire TOUTES les données pour injection
         inputs = model_json.get('inputs', {})
@@ -250,6 +194,34 @@ RÉPONDS UNIQUEMENT EN JSON VALIDE.
         fused_3m = path[0]['fused'] if len(path) > 0 else 0
         fused_12m = path[3]['fused'] if len(path) > 3 else 0
         fused_24m = path[5]['fused'] if len(path) > 5 else 0
+        
+        # Alias pour f-string lisible
+        istar = i_star
+        hold = prob_hold
+        cut = prob_cut
+        hike = prob_hike
+        
+        # Prompt simplifié et direct (après extraction des variables)
+        system_prompt = f"""Tu es stratégiste BNS. Analyse en JSON strict (français suisse):
+
+DONNÉES EXACTES:
+CPI: {cpi_yoy:.2f}%, KOF: {kof_bar:.1f}, Output gap: {output_gap:.2f}%, i*: {istar:.2f}%
+Maintien: {hold:.1f}%, Coupe: {cut:.1f}%, Hausse: {hike:.1f}%
+OIS 12M: {ois_12m:.2f}%, NEER: {neer_chg:.2f}%
+
+Retourne UNIQUEMENT ce JSON (pas de texte avant/après):
+{{
+  "headline": "titre 60-80 chars",
+  "bullets": ["point 1 avec chiffres exacts", "point 2 avec chiffres exacts", "point 3", "point 4"],
+  "risks": ["risque 1", "risque 2", "risque 3"],
+  "next_steps": ["action 1", "action 2", "action 3"],
+  "one_liner": "résumé 120 chars max"
+}}
+
+IMPÉRATIF: 
+- Cite {cpi_yoy:.2f}% (pas "autour de"), {kof_bar:.1f} (pas "près de")
+- JSON valide uniquement, pas de texte supplémentaire
+- Bullets: 40-50 mots chacun avec chiffres exacts"""
         
         # User prompt COMPLET avec TOUTES les données
         user_prompt = f"""DONNÉES DU MODÈLE À ANALYSER (UTILISE CES CHIFFRES EXACTS):
@@ -348,28 +320,30 @@ Ne les arrondis pas, ne les approxime pas, ne les invente pas."""
         
         self.update_state(state='PROGRESS', meta={'step': 'completed', 'pct': 100})
         
-        # Retour SIMPLE (types Python natifs seulement, pas d'objets complexes)
-        result = {
-            "success": True,
-            "explanation": {
-                "headline": str(explanation.get("headline", "")),
-                "bullets": list(explanation.get("bullets", [])),
-                "risks": list(explanation.get("risks", [])),
-                "next_steps": list(explanation.get("next_steps", [])),
-                "one_liner": str(explanation.get("one_liner", ""))
-            }
+        # Retour simple (sérialisation JSON garantie)
+        explanation_clean = {
+            "headline": str(explanation.get("headline", ""))[:200],  # Limiter taille
+            "bullets": [str(b)[:500] for b in explanation.get("bullets", [])[:10]],  # Max 10 bullets, 500 chars chacun
+            "risks": [str(r)[:300] for r in explanation.get("risks", [])[:5]],
+            "next_steps": [str(s)[:300] for s in explanation.get("next_steps", [])[:5]],
+            "one_liner": str(explanation.get("one_liner", ""))[:200]
         }
         
-        # Éviter de retourner tokens (cause problèmes sérialisation)
-        print(f"✅ Returning explanation with {len(result['explanation']['bullets'])} bullets")
-        return result
+        print(f"✅ Returning explanation: {len(explanation_clean['bullets'])} bullets")
+        
+        return {
+            "success": True,
+            "explanation": explanation_clean
+        }
     
     except Exception as e:
         import traceback
-        self.update_state(state='FAILURE', meta={'error': str(e)})
+        error_msg = str(e)
+        self.update_state(state='FAILURE', meta={'error': error_msg})
+        
+        # Retour simple sans traceback (évite erreur sérialisation Celery)
         return {
             "success": False,
-            "error": str(e),
-            "traceback": traceback.format_exc()
+            "error": error_msg
         }
 

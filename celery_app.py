@@ -28,6 +28,8 @@ def make_celery() -> Celery:
         worker_concurrency=int(os.getenv("CELERY_CONCURRENCY", "2")),
         task_acks_late=True,
         worker_prefetch_multiplier=1,
+        task_ignore_result=False,  # On garde les résultats
+        result_expires=300,  # 5 minutes seulement (au lieu de 3600)
         broker_transport_options={
             "visibility_timeout": int(os.getenv("CELERY_VISIBILITY_TIMEOUT", "3600")),
             # Keepalive and health options for Redis/kombu

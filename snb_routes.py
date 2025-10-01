@@ -452,35 +452,22 @@ def model_latest():
 @snb_bp.route('/explain', methods=['POST'])
 def explain_model():
     """
-    POST /api/snb/explain
-    
-    Lance l'explication GPT-5 en background via Celery (évite timeout worker)
-    
-    Body: {
-        "model": { ... le JSON de /model/latest ... },
-        "tone": "concise",
-        "lang": "fr-CH"
-    }
-    
-    Retourne task_id pour polling (HTTP 202) ou résultat direct si rapide
+    POST /api/snb/explain - LANCE LA TÂCHE GPT-5 EN BACKGROUND (Celery)
     """
     try:
-        from snb_tasks import snb_explain_task
-        
         data = request.get_json()
         if not data or "model" not in data:
-            return jsonify({"success": False, "error": "Missing 'model' field"}), 400
+            return jsonify({"success": False, "error": "Missing model"}), 400
         
         model_json = data["model"]
         tone = data.get("tone", "concise")
         lang = data.get("lang", "fr-CH")
         
-        # Lancer la tâche GPT-5 en background (évite timeout)
-        task = snb_explain_task.delay(model_json, tone, lang)
-        
+        # Enfiler la tâche Celery pour exécution en background
+        from snb_tasks import snb_explain_task
+        task = snb_explain_task.delay(model_json=model_json, tone=tone, lang=lang)
         return jsonify({
             "success": True,
-            "message": "Explication GPT-5 en cours de generation (background)",
             "task_id": task.id,
             "status_url": f"/api/snb/explain/status/{task.id}"
         }), 202
@@ -741,7 +728,7 @@ def manual_ingest_all():
             # Lancer la tâche GPT-5 en background (non-bloquant)
             from snb_tasks import snb_explain_task
             print("🚀 Lancement tâche GPT-5 en background...")
-            task = snb_explain_task.delay(output_dict, 'concise', 'fr-CH')
+            task = snb_explain_task.delay(model_json=output_dict, tone='concise', lang='fr-CH')
             print(f"   Task ID: {task.id}")
             print("=" * 80)
             
