@@ -142,27 +142,37 @@
     }
 
     async function pollExplainTask(taskId) {
-        const maxAttempts = 40; // 40 x 2s = 80s max (suffisant pour GPT-5)
+        console.log('🔍 Polling GPT-5 task:', taskId);
+        const maxAttempts = 40; // 40 x 2s = 80s max
         let attempts = 0;
         
         while (attempts < maxAttempts) {
             try {
                 const response = await fetch(`/api/snb/explain/status/${taskId}`);
                 const data = await response.json();
+                console.log(`📊 Poll attempt ${attempts + 1}:`, data.state, data.meta);
                 
-                if (data.state === 'SUCCESS' && data.explanation) {
-                    return data.explanation;
+                if (data.state === 'SUCCESS') {
+                    console.log('✅ GPT-5 SUCCESS, explanation:', data.explanation ? 'présent' : 'MANQUANT');
+                    if (data.explanation) {
+                        return data.explanation;
+                    } else {
+                        console.error('❌ SUCCESS mais pas d\'explanation dans la réponse!');
+                        throw new Error('Explanation missing in success response');
+                    }
                 }
                 
                 if (data.state === 'FAILURE') {
+                    console.error('❌ GPT-5 FAILURE:', data.error);
                     throw new Error(data.error || 'GPT-5 task failed');
                 }
                 
                 // PROGRESS ou PENDING: attendre et réessayer
                 attempts++;
-                await new Promise(resolve => setTimeout(resolve, 2000)); // 2s entre chaque poll
+                await new Promise(resolve => setTimeout(resolve, 2000));
                 
             } catch (error) {
+                console.error('Polling error:', error);
                 attempts++;
                 if (attempts >= maxAttempts) {
                     throw error;
@@ -171,6 +181,7 @@
             }
         }
         
+        console.error('❌ Timeout après', maxAttempts, 'tentatives');
         throw new Error('Timeout: GPT-5 prend trop de temps');
     }
 
@@ -379,35 +390,48 @@
     }
 
     function renderNarrative(explanation) {
+        console.log('🎨 renderNarrative appelé avec:', explanation);
+        
         if (!explanation) {
+            console.warn('⚠️ Explanation est null/undefined, section cachée');
             els.narrativeSection?.classList.add('hidden');
             return;
         }
 
+        console.log('✅ Affichage du narratif...');
         els.narrativeSection?.classList.remove('hidden');
 
         if (els.narrativeHeadline) {
-            els.narrativeHeadline.textContent = explanation.headline || '—';
+            const headline = explanation.headline || '—';
+            console.log('  Headline:', headline.substring(0, 50) + '...');
+            els.narrativeHeadline.textContent = headline;
         }
 
         if (els.narrativeBullets) {
             const bullets = explanation.bullets || [];
+            console.log('  Bullets:', bullets.length, 'points');
             els.narrativeBullets.innerHTML = bullets.map(b => `<li>${b}</li>`).join('');
         }
 
         if (els.narrativeRisks) {
             const risks = explanation.risks || [];
+            console.log('  Risks:', risks.length, 'risques');
             els.narrativeRisks.innerHTML = risks.map(r => `<span class="risk-tag">${r}</span>`).join('');
         }
 
         if (els.narrativeSteps) {
             const steps = explanation.next_steps || [];
+            console.log('  Next steps:', steps.length, 'actions');
             els.narrativeSteps.innerHTML = steps.map(s => `<li>${s}</li>`).join('');
         }
 
         if (els.narrativeOneliner) {
-            els.narrativeOneliner.textContent = explanation.one_liner || '—';
+            const oneliner = explanation.one_liner || '—';
+            console.log('  One-liner:', oneliner.substring(0, 50) + '...');
+            els.narrativeOneliner.textContent = oneliner;
         }
+        
+        console.log('✅ Narratif affiché avec succès');
     }
 
     function renderModel(model) {
