@@ -405,6 +405,207 @@
                 </div>
             </div>
 
+            <!-- SNB Taux - Administration -->
+            <div class="glassmorphism rounded-xl p-6 lg:col-span-2">
+                <h3 class="text-xl font-semibold text-bonvin-gold mb-4">🏦 SNB Taux - Mise à Jour Manuelle</h3>
+                <p class="text-sm text-gray-400 mb-6">Saisie manuelle des données pour le modèle de prévision BNS (mensuelle recommandée)</p>
+                
+                <form id="snb-data-form" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <!-- CPI (Inflation) -->
+                    <div class="glassmorphism-dark p-4 rounded-xl">
+                        <h4 class="font-semibold text-cyan-300 mb-3">📊 CPI (Inflation OFS)</h4>
+                        <div class="space-y-3">
+                            <div>
+                                <label class="block text-sm text-gray-300 mb-1">Date</label>
+                                <input type="date" name="cpi_date" class="w-full bg-black/30 border border-white/20 rounded-lg px-3 py-2 text-white" required />
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-300 mb-1">Inflation YoY (%)</label>
+                                <input type="number" step="0.01" name="cpi_yoy" placeholder="Ex: 0.7" class="w-full bg-black/30 border border-white/20 rounded-lg px-3 py-2 text-white" required />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- KOF (Baromètre) -->
+                    <div class="glassmorphism-dark p-4 rounded-xl">
+                        <h4 class="font-semibold text-cyan-300 mb-3">📈 KOF (Baromètre ETH)</h4>
+                        <div class="space-y-3">
+                            <div>
+                                <label class="block text-sm text-gray-300 mb-1">Date</label>
+                                <input type="date" name="kof_date" class="w-full bg-black/30 border border-white/20 rounded-lg px-3 py-2 text-white" required />
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-300 mb-1">Baromètre</label>
+                                <input type="number" step="0.1" name="kof_barometer" placeholder="Ex: 101.2" class="w-full bg-black/30 border border-white/20 rounded-lg px-3 py-2 text-white" required />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- NEER -->
+                    <div class="glassmorphism-dark p-4 rounded-xl">
+                        <h4 class="font-semibold text-cyan-300 mb-3">💱 NEER (Taux de change)</h4>
+                        <div class="space-y-3">
+                            <div>
+                                <label class="block text-sm text-gray-300 mb-1">Variation 3M (%)</label>
+                                <input type="number" step="0.01" name="neer_change_3m" placeholder="Ex: -0.5" class="w-full bg-black/30 border border-white/20 rounded-lg px-3 py-2 text-white" />
+                                <div class="text-xs text-gray-500 mt-1">Laisser vide = 0.0%</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- OIS / Futures SARON -->
+                    <div class="glassmorphism-dark p-4 rounded-xl lg:col-span-3">
+                        <h4 class="font-semibold text-cyan-300 mb-3">💹 OIS / Futures SARON (Courbe des taux)</h4>
+                        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                            <div>
+                                <label class="block text-sm text-gray-300 mb-1">3M (%)</label>
+                                <input type="number" step="0.001" name="ois_3m" placeholder="0.00" class="w-full bg-black/30 border border-white/20 rounded-lg px-3 py-2 text-white" required />
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-300 mb-1">6M (%)</label>
+                                <input type="number" step="0.001" name="ois_6m" placeholder="0.05" class="w-full bg-black/30 border border-white/20 rounded-lg px-3 py-2 text-white" required />
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-300 mb-1">9M (%)</label>
+                                <input type="number" step="0.001" name="ois_9m" placeholder="0.08" class="w-full bg-black/30 border border-white/20 rounded-lg px-3 py-2 text-white" required />
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-300 mb-1">12M (%)</label>
+                                <input type="number" step="0.001" name="ois_12m" placeholder="0.10" class="w-full bg-black/30 border border-white/20 rounded-lg px-3 py-2 text-white" required />
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-300 mb-1">18M (%)</label>
+                                <input type="number" step="0.001" name="ois_18m" placeholder="0.15" class="w-full bg-black/30 border border-white/20 rounded-lg px-3 py-2 text-white" required />
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-300 mb-1">24M (%)</label>
+                                <input type="number" step="0.001" name="ois_24m" placeholder="0.20" class="w-full bg-black/30 border border-white/20 rounded-lg px-3 py-2 text-white" required />
+                            </div>
+                        </div>
+                        <div class="text-xs text-gray-500 mt-2">Source: Eurex 3M SARON Futures ou approximation</div>
+                    </div>
+
+                    <!-- Prévisions BNS -->
+                    <div class="glassmorphism-dark p-4 rounded-xl md:col-span-2">
+                        <h4 class="font-semibold text-cyan-300 mb-3">🏦 Prévisions BNS (MPA)</h4>
+                        <div class="grid grid-cols-3 gap-3">
+                            <div>
+                                <label class="block text-sm text-gray-300 mb-1">2025 (%)</label>
+                                <input type="number" step="0.01" name="forecast_2025" value="0.2" class="w-full bg-black/30 border border-white/20 rounded-lg px-3 py-2 text-white" required />
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-300 mb-1">2026 (%)</label>
+                                <input type="number" step="0.01" name="forecast_2026" value="0.5" class="w-full bg-black/30 border border-white/20 rounded-lg px-3 py-2 text-white" required />
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-300 mb-1">2027 (%)</label>
+                                <input type="number" step="0.01" name="forecast_2027" value="0.7" class="w-full bg-black/30 border border-white/20 rounded-lg px-3 py-2 text-white" required />
+                            </div>
+                        </div>
+                        <div class="text-xs text-gray-500 mt-2">Dernières valeurs : MPA 25 septembre 2025</div>
+                    </div>
+
+                    <!-- Taux directeur actuel -->
+                    <div class="glassmorphism-dark p-4 rounded-xl">
+                        <h4 class="font-semibold text-cyan-300 mb-3">🔢 Taux directeur BNS</h4>
+                        <div>
+                            <label class="block text-sm text-gray-300 mb-1">Taux actuel (%)</label>
+                            <input type="number" step="0.01" name="policy_rate" value="0.0" class="w-full bg-black/30 border border-white/20 rounded-lg px-3 py-2 text-white" required />
+                        </div>
+                        <div class="text-xs text-gray-500 mt-2">Décision BNS 25 sept 2025 : 0.0%</div>
+                    </div>
+
+                    <!-- Bouton Submit -->
+                    <div class="lg:col-span-3 flex justify-end gap-4">
+                        <button type="reset" class="px-6 py-3 bg-gray-600 hover:bg-gray-700 rounded-lg font-semibold transition-colors">
+                            🔄 Réinitialiser
+                        </button>
+                        <button type="submit" class="px-8 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 rounded-lg font-semibold transition-all transform hover:scale-105 shadow-lg">
+                            🚀 RECALCULER MODÈLE + GÉNÉRER NARRATIF
+                        </button>
+                    </div>
+                </form>
+
+                <div id="snb-submit-status" class="mt-6 p-4 rounded-lg hidden"></div>
+            </div>
+
+            <!-- SNB Taux - Upload Bulk (XLS/CSV) -->
+            <div class="glassmorphism rounded-xl p-6 lg:col-span-2">
+                <h3 class="text-xl font-semibold text-bonvin-gold mb-4">📁 SNB Taux - Import Bulk (XLS/CSV)</h3>
+                <p class="text-sm text-gray-400 mb-6">Importez des données historiques en masse pour NEER, CPI, KOF, OIS (nécessaire pour calculs de tendances et variations)</p>
+                
+                <!-- Templates à télécharger -->
+                <div class="glassmorphism-dark p-4 rounded-xl mb-6">
+                    <h4 class="font-semibold text-cyan-300 mb-3">📥 Templates Excel</h4>
+                    <p class="text-xs text-gray-400 mb-3">Téléchargez les templates, remplissez-les, puis uploadez</p>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <a href="/api/snb/template/cpi" download class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-center text-sm font-semibold transition-colors">
+                            📊 CPI Template
+                        </a>
+                        <a href="/api/snb/template/kof" download class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-center text-sm font-semibold transition-colors">
+                            📈 KOF Template
+                        </a>
+                        <a href="/api/snb/template/neer" download class="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-center text-sm font-semibold transition-colors">
+                            💱 NEER Template
+                        </a>
+                        <a href="/api/snb/template/ois" download class="px-4 py-2 bg-orange-600 hover:bg-orange-700 rounded-lg text-center text-sm font-semibold transition-colors">
+                            💹 OIS Template
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Formulaires d'upload -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Upload CPI -->
+                    <div class="glassmorphism-dark p-4 rounded-xl">
+                        <h4 class="font-semibold text-cyan-300 mb-3">📊 Upload CPI (Historique)</h4>
+                        <form id="upload-cpi-form" class="space-y-3">
+                            <input type="file" accept=".xlsx,.xls,.csv" name="file" class="w-full text-sm text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-cyan-600 file:text-white hover:file:bg-cyan-700" required />
+                            <button type="submit" class="w-full px-4 py-2 bg-cyan-600 hover:bg-cyan-700 rounded-lg font-semibold transition-colors">
+                                📤 Upload CPI
+                            </button>
+                        </form>
+                        <div id="upload-cpi-status" class="mt-2 text-xs"></div>
+                    </div>
+
+                    <!-- Upload KOF -->
+                    <div class="glassmorphism-dark p-4 rounded-xl">
+                        <h4 class="font-semibold text-cyan-300 mb-3">📈 Upload KOF (Historique)</h4>
+                        <form id="upload-kof-form" class="space-y-3">
+                            <input type="file" accept=".xlsx,.xls,.csv" name="file" class="w-full text-sm text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-green-600 file:text-white hover:file:bg-green-700" required />
+                            <button type="submit" class="w-full px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg font-semibold transition-colors">
+                                📤 Upload KOF
+                            </button>
+                        </form>
+                        <div id="upload-kof-status" class="mt-2 text-xs"></div>
+                    </div>
+
+                    <!-- Upload NEER -->
+                    <div class="glassmorphism-dark p-4 rounded-xl">
+                        <h4 class="font-semibold text-cyan-300 mb-3">💱 Upload NEER (Historique)</h4>
+                        <form id="upload-neer-form" class="space-y-3">
+                            <input type="file" accept=".xlsx,.xls,.csv" name="file" class="w-full text-sm text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-purple-600 file:text-white hover:file:bg-purple-700" required />
+                            <button type="submit" class="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg font-semibold transition-colors">
+                                📤 Upload NEER
+                            </button>
+                        </form>
+                        <div id="upload-neer-status" class="mt-2 text-xs"></div>
+                    </div>
+
+                    <!-- Upload OIS -->
+                    <div class="glassmorphism-dark p-4 rounded-xl">
+                        <h4 class="font-semibold text-cyan-300 mb-3">💹 Upload OIS (Historique)</h4>
+                        <form id="upload-ois-form" class="space-y-3">
+                            <input type="file" accept=".xlsx,.xls,.csv" name="file" class="w-full text-sm text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-orange-600 file:text-white hover:file:bg-orange-700" required />
+                            <button type="submit" class="w-full px-4 py-2 bg-orange-600 hover:bg-orange-700 rounded-lg font-semibold transition-colors">
+                                📤 Upload OIS
+                            </button>
+                        </form>
+                        <div id="upload-ois-status" class="mt-2 text-xs"></div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Data Management -->
             <div class="glassmorphism rounded-xl p-6">
                 <h3 class="text-xl font-semibold text-bonvin-gold mb-4">📊 Data Management</h3>
@@ -1079,6 +1280,102 @@
                 button.textContent = '📧 Envoyer Rapport de Marché';
             }
         });
+
+        // SNB Data Form Submit
+        document.getElementById('snb-data-form')?.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const statusDiv = document.getElementById('snb-submit-status');
+            const submitBtn = this.querySelector('button[type="submit"]');
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = '🔄 Ingestion et calcul en cours...';
+            statusDiv.className = 'mt-6 p-4 rounded-lg bg-blue-500/10 border border-blue-500/30';
+            statusDiv.classList.remove('hidden');
+            statusDiv.innerHTML = '<span class="text-blue-300">⏳ Étape 1/3 : Ingestion des données...</span>';
+            
+            try {
+                const formData = new FormData(this);
+                const data = Object.fromEntries(formData.entries());
+                
+                // Appel endpoint d'ingestion manuelle
+                const response = await fetch('/api/snb/manual/ingest-all', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    statusDiv.innerHTML = '<span class="text-green-300">✅ Données ingérées ! Calcul du modèle et génération GPT-5 en cours...</span>';
+                    setTimeout(() => {
+                        window.location.href = '/snb-taux';
+                    }, 2000);
+                } else {
+                    statusDiv.className = 'mt-6 p-4 rounded-lg bg-red-500/10 border border-red-500/30';
+                    statusDiv.innerHTML = `<span class="text-red-300">❌ Erreur: ${result.error}</span>`;
+                }
+            } catch (error) {
+                statusDiv.className = 'mt-6 p-4 rounded-lg bg-red-500/10 border border-red-500/30';
+                statusDiv.innerHTML = `<span class="text-red-300">❌ Erreur: ${error.message}</span>`;
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = '🚀 RECALCULER MODÈLE + GÉNÉRER NARRATIF';
+            }
+        });
+
+        // Upload handlers
+        async function handleSNBUpload(formId, endpoint, statusId) {
+            const form = document.getElementById(formId);
+            if (!form) return;
+            
+            form.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                const statusDiv = document.getElementById(statusId);
+                const submitBtn = this.querySelector('button[type="submit"]');
+                const fileInput = this.querySelector('input[type="file"]');
+                
+                if (!fileInput.files.length) {
+                    statusDiv.innerHTML = '<span class="text-red-400">⚠️ Sélectionnez un fichier</span>';
+                    return;
+                }
+                
+                submitBtn.disabled = true;
+                const originalText = submitBtn.textContent;
+                submitBtn.textContent = '⏳ Upload...';
+                statusDiv.innerHTML = '<span class="text-blue-400">📤 Upload en cours...</span>';
+                
+                try {
+                    const formData = new FormData();
+                    formData.append('file', fileInput.files[0]);
+                    
+                    const response = await fetch(endpoint, {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        statusDiv.innerHTML = `<span class="text-green-400">✅ ${data.inserted || 0} lignes importées</span>`;
+                        fileInput.value = '';
+                    } else {
+                        statusDiv.innerHTML = `<span class="text-red-400">❌ ${data.error}</span>`;
+                    }
+                } catch (error) {
+                    statusDiv.innerHTML = `<span class="text-red-400">❌ Erreur: ${error.message}</span>`;
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = originalText;
+                }
+            });
+        }
+
+        // Initialize upload handlers
+        handleSNBUpload('upload-cpi-form', '/api/snb/bulk/upload-cpi', 'upload-cpi-status');
+        handleSNBUpload('upload-kof-form', '/api/snb/bulk/upload-kof', 'upload-kof-status');
+        handleSNBUpload('upload-neer-form', '/api/snb/bulk/upload-neer', 'upload-neer-status');
+        handleSNBUpload('upload-ois-form', '/api/snb/bulk/upload-ois', 'upload-ois-status');
 
         // Auto-refresh every 30 seconds
         setInterval(loadAllStatus, 30000);
