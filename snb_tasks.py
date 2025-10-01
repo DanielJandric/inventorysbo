@@ -165,12 +165,12 @@ def snb_explain_task(self, model_run_id: int = None, model_json: dict = None, to
 Tu dois analyser les résultats du modèle quantitatif de prévision des taux et fournir une explication DÉTAILLÉE, PÉDAGOGIQUE et ACCESSIBLE en {lang}.
 
 RÈGLES IMPÉRATIVES D'ÉCRITURE:
-1. AUCUN ACRONYME sans l'écrire en toutes lettres la première fois (ex: "Indice des Prix à la Consommation (CPI)" pas juste "CPI")
-2. PHRASES COMPLÈTES et explicatives (pas de style télégraphique)
-3. CONTEXTE ET EXPLICATIONS pour chaque chiffre (pourquoi c'est important?)
-4. COMPARAISONS avec les cibles BNS (inflation cible 1%, output gap neutre 0%)
-5. INTERPRÉTATIONS claires des probabilités (ex: "85% de maintien signifie quasi-certitude")
-6. VOCABULAIRE ACCESSIBLE (éviter jargon technique sauf si explicité)
+1. UTILISE UNIQUEMENT LES CHIFFRES EXACTS DU JSON FOURNI - NE PAS INVENTER, ARRONDIR OU APPROXIMER
+2. CITE PRÉCISÉMENT: inputs.cpi_yoy_pct, inputs.kof_barometer, output_gap_pct, i_star_next_pct, probs.hold, etc.
+3. EXEMPLE CORRECT: "CPI {inputs.cpi_yoy_pct}% (ne PAS dire 'autour de X%')"
+4. AUCUN ACRONYME sans l'écrire en toutes lettres la première fois
+5. PHRASES COMPLÈTES et explicatives (pas de style télégraphique)
+6. VOCABULAIRE ACCESSIBLE mais CHIFFRES EXACTS
 
 STRUCTURE OBLIGATOIRE (JSON strict):
 {{
@@ -204,10 +204,11 @@ CONTEXTE BNS (à utiliser):
 - Output gap neutre = 0%, négatif = sous-capacité, positif = surchauffe
 
 STYLE D'ÉCRITURE:
-- Phrases fluides et naturelles (comme si tu expliquais à un investisseur intelligent mais non-expert)
-- Éviter: "CPI a/a", "i*", "pb", "bps", "YoY" → Utiliser: "inflation annuelle", "taux optimal", "pour cent", "variation sur un an"
-- Chaque chiffre doit être CONTEXTUALISÉ (ex: pas "0.2%" mais "0.2%, soit largement sous la cible de 1%")
-- Minimum 50-70 mots par bullet point (soyez exhaustif et pédagogique)
+- TOUJOURS citer les valeurs EXACTES du JSON (ex: si inputs.cpi_yoy_pct=0.7 → écrire "0.7%", PAS "autour de 0.4%")
+- TOUJOURS citer probs.hold, probs.cut, probs.hike en pourcentage avec 1 décimale
+- Éviter: "CPI a/a", "i*", "pb", "bps" → Utiliser: "inflation annuelle", "taux optimal", "pour cent"
+- Contextualisé mais PRÉCIS (ex: "0.7%, soit 0.3 point sous la cible de 1%")
+- 40-60 mots par bullet (concis mais complet)
 
 FORMAT:
 - JSON STRICT, pas de texte avant/après
@@ -217,7 +218,76 @@ FORMAT:
 RÉPONDS UNIQUEMENT EN JSON VALIDE.
 """
         
-        user_prompt = f"Voici le JSON du modèle BNS à analyser:\n\n{json.dumps(model_json, indent=2, ensure_ascii=False)}"
+        # Extraire TOUTES les données pour injection
+        inputs = model_json.get('inputs', {})
+        cpi_yoy = inputs.get('cpi_yoy_pct', 0)
+        kof_bar = inputs.get('kof_barometer', 100)
+        neer_chg = inputs.get('neer_change_3m_pct', 0)
+        policy_rate = inputs.get('policy_rate_now_pct', 0)
+        snb_forecasts = inputs.get('snb_forecast', {})
+        
+        nowcast = model_json.get('nowcast', {})
+        pi_3m = nowcast.get('pi_3m', 0)
+        pi_6m = nowcast.get('pi_6m', 0)
+        pi_12m = nowcast.get('pi_12m', 0)
+        
+        output_gap = model_json.get('output_gap_pct', 0)
+        i_star = model_json.get('i_star_next_pct', 0)
+        
+        probs = model_json.get('probs', {})
+        prob_hold = probs.get('hold', 0) * 100
+        prob_cut = probs.get('cut', 0) * 100
+        prob_hike = probs.get('hike', 0) * 100
+        
+        # Extraire courbe OIS/SARON (points clés)
+        path = model_json.get('path', [])
+        ois_3m = path[0]['market'] if len(path) > 0 else 0
+        ois_6m = path[1]['market'] if len(path) > 1 else 0
+        ois_12m = path[3]['market'] if len(path) > 3 else 0
+        ois_24m = path[5]['market'] if len(path) > 5 else 0
+        
+        # Chemin fusion Kalman (prévision finale)
+        fused_3m = path[0]['fused'] if len(path) > 0 else 0
+        fused_12m = path[3]['fused'] if len(path) > 3 else 0
+        fused_24m = path[5]['fused'] if len(path) > 5 else 0
+        
+        # User prompt COMPLET avec TOUTES les données
+        user_prompt = f"""DONNÉES DU MODÈLE À ANALYSER (UTILISE CES CHIFFRES EXACTS):
+
+═══ INPUTS (données mesurées) ═══
+• Indice des Prix à la Consommation (CPI) variation annuelle: {cpi_yoy:.2f}%
+• Baromètre économique KOF: {kof_bar:.1f}
+• Variation NEER (franc suisse effectif) 3 mois: {neer_chg:+.2f}%
+• Taux directeur BNS actuel: {policy_rate:.2f}%
+• Prévisions BNS: {snb_forecasts.get('2025', 0):.1f}% (2025), {snb_forecasts.get('2026', 0):.1f}% (2026), {snb_forecasts.get('2027', 0):.1f}% (2027)
+
+═══ NOWCAST INFLATION (modèle) ═══
+• Inflation anticipée 3 mois: {pi_3m:.2f}%
+• Inflation anticipée 6 mois: {pi_6m:.2f}%
+• Inflation anticipée 12 mois: {pi_12m:.2f}%
+
+═══ RÉSULTATS MODÈLE ═══
+• Output gap (écart de production): {output_gap:.2f}%
+• Taux optimal règle de Taylor (i*): {i_star:.2f}%
+
+═══ ANTICIPATIONS MARCHÉ (Futures SARON/OIS) ═══
+• OIS 3 mois: {ois_3m:.3f}%
+• OIS 6 mois: {ois_6m:.3f}%
+• OIS 12 mois: {ois_12m:.3f}%
+• OIS 24 mois: {ois_24m:.3f}%
+
+═══ PRÉVISION FINALE (Fusion Kalman) ═══
+• Taux prévu 3 mois: {fused_3m:.3f}%
+• Taux prévu 12 mois: {fused_12m:.3f}%
+• Taux prévu 24 mois: {fused_24m:.3f}%
+
+═══ PROBABILITÉS DÉCISION PROCHAINE RÉUNION ═══
+• Probabilité MAINTIEN à 0%: {prob_hold:.1f}%
+• Probabilité BAISSE (passage en négatif): {prob_cut:.1f}%
+• Probabilité HAUSSE (vers 0.25% ou plus): {prob_hike:.1f}%
+
+IMPÉRATIF: Utilise UNIQUEMENT et EXACTEMENT ces chiffres dans ton analyse.
+Ne les arrondis pas, ne les approxime pas, ne les invente pas."""
         
         self.update_state(state='PROGRESS', meta={'step': 'gpt5_reasoning', 'pct': 50})
         
