@@ -552,48 +552,61 @@ def manual_ingest_all():
         if not supabase:
             return jsonify({"success": False, "error": "Supabase not available"}), 500
         
+        # Helper pour convertir en float avec gestion des vides
+        def safe_float(value, default=None):
+            if value is None or value == '':
+                return default
+            try:
+                return float(value)
+            except (ValueError, TypeError):
+                return default
+        
         # 1. Ingérer CPI
-        if data.get('cpi_date') and data.get('cpi_yoy') is not None:
+        cpi_yoy = safe_float(data.get('cpi_yoy'))
+        if data.get('cpi_date') and cpi_yoy is not None:
             supabase.table("snb_cpi_data").upsert({
                 "provider": "Manual",
                 "as_of": data['cpi_date'],
-                "yoy_pct": float(data['cpi_yoy']),
+                "yoy_pct": cpi_yoy,
                 "source_url": "Manual entry from Settings",
                 "idempotency_key": f"manual-cpi-{data['cpi_date']}"
             }, on_conflict="idempotency_key").execute()
         
         # 2. Ingérer KOF
-        if data.get('kof_date') and data.get('kof_barometer') is not None:
+        kof_bar = safe_float(data.get('kof_barometer'))
+        if data.get('kof_date') and kof_bar is not None:
             supabase.table("snb_kof_data").upsert({
                 "provider": "Manual",
                 "as_of": data['kof_date'],
-                "barometer": float(data['kof_barometer']),
+                "barometer": kof_bar,
                 "source_url": "Manual entry from Settings",
                 "idempotency_key": f"manual-kof-{data['kof_date']}"
             }, on_conflict="idempotency_key").execute()
         
-        # 3. Ingérer NEER
-        if data.get('neer_change_3m') is not None:
+        # 3. Ingérer NEER (optionnel)
+        neer_value = data.get('neer_change_3m', '').strip()
+        if neer_value:  # Seulement si non vide
             from datetime import date as date_module
             supabase.table("snb_config").upsert({
                 "key": "neer_latest",
                 "value": json.dumps({
                     "as_of": data.get('cpi_date', date_module.today().isoformat()),
-                    "neer_change_3m_pct": float(data['neer_change_3m']),
+                    "neer_change_3m_pct": float(neer_value),
                     "source_url": "Manual entry from Settings",
                     "idempotency_key": f"manual-neer-{date_module.today().isoformat()}"
                 })
             }).execute()
         
         # 4. Ingérer OIS
-        if all(data.get(f'ois_{m}m') is not None for m in [3, 6, 9, 12, 18, 24]):
+        ois_values = [safe_float(data.get(f'ois_{m}m')) for m in [3, 6, 9, 12, 18, 24]]
+        if all(v is not None for v in ois_values):
             ois_points = [
-                {"tenor_months": 3, "rate_pct": float(data['ois_3m'])},
-                {"tenor_months": 6, "rate_pct": float(data['ois_6m'])},
-                {"tenor_months": 9, "rate_pct": float(data['ois_9m'])},
-                {"tenor_months": 12, "rate_pct": float(data['ois_12m'])},
-                {"tenor_months": 18, "rate_pct": float(data['ois_18m'])},
-                {"tenor_months": 24, "rate_pct": float(data['ois_24m'])}
+                {"tenor_months": 3, "rate_pct": ois_values[0]},
+                {"tenor_months": 6, "rate_pct": ois_values[1]},
+                {"tenor_months": 9, "rate_pct": ois_values[2]},
+                {"tenor_months": 12, "rate_pct": ois_values[3]},
+                {"tenor_months": 18, "rate_pct": ois_values[4]},
+                {"tenor_months": 24, "rate_pct": ois_values[5]}
             ]
             supabase.table("snb_ois_data").upsert({
                 "as_of": data.get('cpi_date', date_module.today().isoformat()),
@@ -603,24 +616,26 @@ def manual_ingest_all():
             }, on_conflict="as_of").execute()
         
         # 5. Ingérer prévisions BNS
-        if all(data.get(f'forecast_{y}') is not None for y in [2025, 2026, 2027]):
+        forecast_values = {
+            '2025': safe_float(data.get('forecast_2025')),
+            '2026': safe_float(data.get('forecast_2026')),
+            '2027': safe_float(data.get('forecast_2027'))
+        }
+        if all(v is not None for v in forecast_values.values()):
             from datetime import date as date_module
             supabase.table("snb_forecasts").upsert({
                 "meeting_date": date_module.today().isoformat(),
-                "forecast": json.dumps({
-                    "2025": float(data['forecast_2025']),
-                    "2026": float(data['forecast_2026']),
-                    "2027": float(data['forecast_2027'])
-                }),
+                "forecast": json.dumps(forecast_values),
                 "source_url": "Manual entry from Settings",
                 "idempotency_key": f"manual-forecast-{date_module.today().isoformat()}"
             }, on_conflict="idempotency_key").execute()
         
         # 6. Mettre à jour taux directeur
-        if data.get('policy_rate') is not None:
+        policy_rate = safe_float(data.get('policy_rate'))
+        if policy_rate is not None:
             supabase.table("snb_config").upsert({
                 "key": "policy_rate_now_pct",
-                "value": json.dumps(float(data['policy_rate']))
+                "value": json.dumps(policy_rate)
             }).execute()
         
         # 7. Lancer le calcul du modèle (appeler l'endpoint interne)
