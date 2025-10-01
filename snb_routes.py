@@ -544,6 +544,8 @@ def manual_ingest_all():
     }
     """
     try:
+        from datetime import date as date_module
+        
         data = request.get_json()
         if not data:
             return jsonify({"success": False, "error": "No JSON body"}), 400
@@ -586,7 +588,6 @@ def manual_ingest_all():
         # 3. Ingérer NEER (optionnel)
         neer_value = data.get('neer_change_3m', '').strip()
         if neer_value:  # Seulement si non vide
-            from datetime import date as date_module
             supabase.table("snb_config").upsert({
                 "key": "neer_latest",
                 "value": json.dumps({
@@ -622,7 +623,6 @@ def manual_ingest_all():
             '2027': safe_float(data.get('forecast_2027'))
         }
         if all(v is not None for v in forecast_values.values()):
-            from datetime import date as date_module
             supabase.table("snb_forecasts").upsert({
                 "meeting_date": date_module.today().isoformat(),
                 "forecast": json.dumps(forecast_values),
