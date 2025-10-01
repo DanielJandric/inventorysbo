@@ -184,16 +184,17 @@ def snb_explain_task(self, model_run_id: int = None, model_json: dict = None, to
         prob_hike = probs.get('hike', 0) * 100
         
         # Extraire courbe OIS/SARON (points clés)
+        # path est 0-indexé, month_ahead commence à 1 ⇒ 3m=idx2, 6m=idx5, 12m=idx11, 24m=idx23
         path = model_json.get('path', [])
-        ois_3m = path[0]['market'] if len(path) > 0 else 0
-        ois_6m = path[1]['market'] if len(path) > 1 else 0
-        ois_12m = path[3]['market'] if len(path) > 3 else 0
-        ois_24m = path[5]['market'] if len(path) > 5 else 0
+        ois_3m = path[2]['market'] if len(path) > 2 else 0
+        ois_6m = path[5]['market'] if len(path) > 5 else 0
+        ois_12m = path[11]['market'] if len(path) > 11 else 0
+        ois_24m = path[23]['market'] if len(path) > 23 else 0
         
         # Chemin fusion Kalman (prévision finale)
-        fused_3m = path[0]['fused'] if len(path) > 0 else 0
-        fused_12m = path[3]['fused'] if len(path) > 3 else 0
-        fused_24m = path[5]['fused'] if len(path) > 5 else 0
+        fused_3m = path[2]['fused'] if len(path) > 2 else 0
+        fused_12m = path[11]['fused'] if len(path) > 11 else 0
+        fused_24m = path[23]['fused'] if len(path) > 23 else 0
         
         # Alias pour f-string lisible
         istar = i_star
@@ -337,11 +338,9 @@ Ne les arrondis pas, ne les approxime pas, ne les invente pas."""
         }
     
     except Exception as e:
-        import traceback
+        # Ne pas marquer FAILURE (Celery attend un objet exception sérialisable)
+        # Retourner un résultat simple et sérialisable pour éviter l'erreur
         error_msg = str(e)
-        self.update_state(state='FAILURE', meta={'error': error_msg})
-        
-        # Retour simple sans traceback (évite erreur sérialisation Celery)
         return {
             "success": False,
             "error": error_msg
