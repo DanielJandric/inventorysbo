@@ -270,24 +270,29 @@ RÉPONDS UNIQUEMENT EN JSON VALIDE.
             else:
                 raise ValueError("GPT response is not valid JSON")
         
-        # Validation
+        # Validation clés requises
         required_keys = ["headline", "bullets", "risks", "next_steps", "one_liner"]
         for key in required_keys:
             if key not in explanation:
-                explanation[key] = f"[{key} manquant]"
+                explanation[key] = "" if key in ["headline", "one_liner"] else []
         
         self.update_state(state='PROGRESS', meta={'step': 'completed', 'pct': 100})
         
-        return {
+        # Retour SIMPLE (types Python natifs seulement, pas d'objets complexes)
+        result = {
             "success": True,
-            "explanation": explanation,
-            "tokens": {
-                "input": int(response.usage.input_tokens) if response.usage.input_tokens else 0,
-                "output": int(response.usage.output_tokens) if response.usage.output_tokens else 0,
-                "total": int(response.usage.total_tokens) if response.usage.total_tokens else 0,
-                "reasoning": int(getattr(response.usage, 'reasoning_tokens', 0) or 0)
+            "explanation": {
+                "headline": str(explanation.get("headline", "")),
+                "bullets": list(explanation.get("bullets", [])),
+                "risks": list(explanation.get("risks", [])),
+                "next_steps": list(explanation.get("next_steps", [])),
+                "one_liner": str(explanation.get("one_liner", ""))
             }
         }
+        
+        # Éviter de retourner tokens (cause problèmes sérialisation)
+        print(f"✅ Returning explanation with {len(result['explanation']['bullets'])} bullets")
+        return result
     
     except Exception as e:
         import traceback
