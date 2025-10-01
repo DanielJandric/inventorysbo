@@ -95,15 +95,8 @@ class SNBAutoScraper:
         """Collecte automatique du CPI depuis OFS"""
         print("\n📊 Collecte CPI (OFS)...")
         
-        # Extraction rules pour ScrapingBee
-        extract_rules = {
-            "yoy_text": {
-                "selector": "body",
-                "type": "text"
-            }
-        }
-        
-        data = self.scrape_with_scrapingbee(OFS_CPI_URL, extract_rules)
+        # Scraping sans extract_rules (on va parser le HTML brut)
+        data = self.scrape_with_scrapingbee(OFS_CPI_URL, extract_rules=None)
         
         if not data and not self.simulation_mode:
             self.errors.append("CPI: Scraping échoué")
@@ -115,19 +108,20 @@ class SNBAutoScraper:
             yoy_pct = 0.7  # Exemple
             as_of = date.today().replace(day=1)
         else:
-            # Parser le texte pour extraire YoY
-            text = data.get("yoy_text", "")
+            # Parser le HTML content pour extraire YoY
+            html_content = data.get("content", "")
             
-            # Regex pour trouver "X.X%" ou "X,X%"
-            match = re.search(r'(\d+[.,]\d+)\s*%.*?(sur un an|year-on-year|annual)', text, re.IGNORECASE)
+            # Regex pour trouver "X.X%" ou "X,X%" avec contexte "sur un an"
+            match = re.search(r'(\d+[.,]\d+)\s*%.*?(sur un an|année|year-on-year|jährlich)', html_content, re.IGNORECASE | re.DOTALL)
             
             if match:
                 yoy_str = match.group(1).replace(',', '.')
                 yoy_pct = float(yoy_str)
                 as_of = date.today().replace(day=1)
+                print(f"   Extrait du HTML: {yoy_pct}%")
             else:
-                print("⚠️  Impossible d'extraire YoY, utilisation valeur par défaut")
-                yoy_pct = 0.5
+                print("⚠️  Impossible d'extraire YoY du HTML, utilisation valeur par défaut")
+                yoy_pct = 0.7
                 as_of = date.today().replace(day=1)
         
         payload = {
@@ -146,14 +140,8 @@ class SNBAutoScraper:
         """Collecte automatique du KOF Barometer"""
         print("\n📈 Collecte KOF Barometer...")
         
-        extract_rules = {
-            "barometer_text": {
-                "selector": "body",
-                "type": "text"
-            }
-        }
-        
-        data = self.scrape_with_scrapingbee(KOF_BAROMETER_URL, extract_rules)
+        # Scraping sans extract_rules (parser HTML brut)
+        data = self.scrape_with_scrapingbee(KOF_BAROMETER_URL, extract_rules=None)
         
         if not data and not self.simulation_mode:
             self.errors.append("KOF: Scraping échoué")
@@ -165,17 +153,18 @@ class SNBAutoScraper:
             barometer = 101.2  # Exemple
             as_of = date.today()
         else:
-            # Parser pour trouver la valeur du baromètre (typiquement 90-110)
-            text = data.get("barometer_text", "")
-            match = re.search(r'(\d{2,3}[.,]\d+)\s*(points?|Punkte)', text)
+            # Parser le HTML pour trouver la valeur du baromètre (typiquement 90-110)
+            html_content = data.get("content", "")
+            match = re.search(r'(\d{2,3}[.,]\d+)\s*(points?|Punkte|punti)', html_content, re.IGNORECASE)
             
             if match:
                 bar_str = match.group(1).replace(',', '.')
                 barometer = float(bar_str)
                 as_of = date.today()
+                print(f"   Extrait du HTML: {barometer}")
             else:
-                print("⚠️  Impossible d'extraire barometer, utilisation valeur par défaut")
-                barometer = 100.0
+                print("⚠️  Impossible d'extraire barometer du HTML, utilisation valeur par défaut")
+                barometer = 101.2
                 as_of = date.today()
         
         payload = {
@@ -199,19 +188,8 @@ class SNBAutoScraper:
         
         eurex_url = "https://www.eurex.com/ex-en/markets/int/mon/saron-futures/saron/3M-SARON-Futures-1410330"
         
-        # Scraper avec ScrapingBee
-        extract_rules = {
-            "order_book": {
-                "selector": "#orderBookTable",
-                "type": "table"
-            },
-            "prices_text": {
-                "selector": "body",
-                "type": "text"
-            }
-        }
-        
-        data = self.scrape_with_scrapingbee(eurex_url, extract_rules)
+        # Scraper avec ScrapingBee (sans extract_rules, HTML brut)
+        data = self.scrape_with_scrapingbee(eurex_url, extract_rules=None)
         
         if not data and not self.simulation_mode:
             print("⚠️  Scraping Eurex échoué, utilisation approximation...")
@@ -228,11 +206,11 @@ class SNBAutoScraper:
             
             # Extraire les prix des contrats par échéance
             # Format Eurex: contrats trimestriels (Mar, Jun, Sep, Dec)
-            text = data.get("prices_text", "")
+            html_content = data.get("content", "")
             
-            # Regex pour trouver les prix (format: 99.XXX)
+            # Regex pour trouver les prix (format: 99.XXX ou 100.XXX)
             # Les contrats sont listés par échéance (le plus proche en premier)
-            matches = re.findall(r'(99\.\d{2,3}|100\.\d{2,3})', text)
+            matches = re.findall(r'(99\.\d{2,3}|100\.\d{2,3})', html_content)
             
             if not matches or len(matches) < 4:
                 print("⚠️  Pas assez de données Eurex, utilisation approximation")

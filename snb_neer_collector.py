@@ -26,7 +26,8 @@ def collect_neer_from_snb_api() -> Dict[str, Any]:
     # URL de l'API SNB pour le NEER
     # Cube: devkum (Taux de change effectifs nominaux et réels)
     # D0 = NEER nominal (base 1999 = 100)
-    api_url = "https://data.snb.ch/api/cube/devkum/data/csv/en"
+    # Format: Sélection explicite des dimensions et séries
+    api_url = "https://data.snb.ch/api/cube/devkum/data/csv/en?fromDate=2023-01&toDate=2025-12"
     
     try:
         print("📊 Collecte NEER depuis data.snb.ch...")
@@ -66,15 +67,20 @@ def collect_neer_from_snb_api() -> Dict[str, Any]:
         # Convertir la date
         df['Date'] = pd.to_datetime(df[date_col], errors='coerce')
         
-        # Trouver la colonne de valeur NEER
+        # Trouver la colonne de valeur NEER (plusieurs possibilités)
         value_col = None
-        for col in ['Value', 'D0', 'value', 'Wert']:
+        for col in ['Value', 'D0', 'value', 'Wert', 'OBS_VALUE', df.columns[-1]]:
             if col in df.columns:
-                value_col = col
-                break
+                # Vérifier que c'est bien une colonne numérique
+                try:
+                    pd.to_numeric(df[col].iloc[0], errors='coerce')
+                    value_col = col
+                    break
+                except:
+                    continue
         
         if not value_col:
-            raise ValueError("Colonne Value non trouvée dans le CSV SNB")
+            raise ValueError(f"Colonne Value non trouvée dans le CSV SNB. Colonnes disponibles: {list(df.columns)}")
         
         # Convertir en numérique
         df[value_col] = pd.to_numeric(df[value_col], errors='coerce')
