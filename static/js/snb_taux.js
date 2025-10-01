@@ -51,9 +51,7 @@
     }
 
     function bindEvents() {
-        if (els.scenarioForm) {
-            els.scenarioForm.addEventListener('submit', handleScenarioSubmit);
-        }
+        // Pas de formulaire scénario, tout se fait dans Settings
     }
 
     function setLoading(loading) {
@@ -415,43 +413,7 @@
 
     // === EVENT HANDLERS ===
 
-    async function handleScenarioSubmit(event) {
-        event.preventDefault();
-        if (state.loading) return;
-
-        try {
-            setLoading(true);
-
-            const formData = new FormData(els.scenarioForm);
-            const overrides = {};
-
-            for (const [key, value] of formData.entries()) {
-                if (value.trim() !== '') {
-                    overrides[key] = parseFloat(value);
-                }
-            }
-
-            // Run scenario
-            const model = await runScenario(overrides);
-            renderModel(model);
-            showMainContent();
-
-            // Fetch explanation
-            try {
-                const explanation = await fetchExplanation(model);
-                renderNarrative(explanation);
-            } catch (err) {
-                console.error('Failed to fetch explanation:', err);
-                // Non-blocking
-            }
-
-        } catch (error) {
-            console.error('Scenario error:', error);
-            showError(error.message || 'Erreur lors du calcul du scénario');
-        } finally {
-            setLoading(false);
-        }
-    }
+    // Fonction handleScenarioSubmit retirée - scénarios gérés dans Settings
 
     async function loadLatestModel() {
         try {
@@ -477,125 +439,7 @@
         }
     }
 
-    // === COLLECTION TRIGGERS ===
-
-    async function triggerCollection(mode) {
-        const statusDiv = document.getElementById('collection-status');
-        const messageDiv = document.getElementById('collection-message');
-        
-        if (!statusDiv || !messageDiv) return;
-        
-        try {
-            // Afficher le statut
-            statusDiv.classList.remove('hidden');
-            statusDiv.querySelector('.p-3').className = 'p-3 rounded-lg border border-blue-500/40 bg-blue-500/10';
-            messageDiv.innerHTML = `
-                <div class="flex items-center gap-2">
-                    <div class="loading-spinner" style="width: 1rem; height: 1rem; border-width: 2px;"></div>
-                    <span class="text-blue-300">Collecte ${mode} lancée en background... (polling status)</span>
-                </div>
-            `;
-            
-            // Appeler l'API (retourne immédiatement avec task_id)
-            const response = await fetch('/api/snb/trigger/collect', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ mode })
-            });
-            
-            const data = await response.json();
-            
-            if (response.status === 202 && data.task_id) {
-                // Tâche lancée, polling du statut
-                await pollTaskStatus(data.task_id, mode, statusDiv, messageDiv);
-            } else if (response.ok && data.success) {
-                // Succès immédiat (fallback)
-                showSuccessMessage(data.message, statusDiv, messageDiv);
-            } else {
-                // Erreur
-                showErrorMessage(data.error || 'Erreur inconnue', statusDiv, messageDiv);
-            }
-            
-        } catch (error) {
-            console.error('Collection error:', error);
-            showErrorMessage(error.message, statusDiv, messageDiv);
-        }
-    }
-
-    async function pollTaskStatus(taskId, mode, statusDiv, messageDiv) {
-        const maxAttempts = 60; // 60 x 3s = 3 minutes max
-        let attempts = 0;
-        
-        const poll = async () => {
-            try {
-                const response = await fetch(`/api/snb/trigger/status/${taskId}`);
-                const data = await response.json();
-                
-                if (data.state === 'SUCCESS') {
-                    const result = data.result || {};
-                    if (result.success) {
-                        showSuccessMessage(result.message || `Collecte ${mode} terminée`, statusDiv, messageDiv);
-                        setTimeout(() => loadLatestModel(), 2000);
-                    } else {
-                        showErrorMessage(result.error || 'Erreur lors de la collecte', statusDiv, messageDiv);
-                    }
-                    return;
-                }
-                
-                if (data.state === 'FAILURE') {
-                    showErrorMessage(data.error || 'La collecte a échoué', statusDiv, messageDiv);
-                    return;
-                }
-                
-                // PROGRESS ou PENDING: continuer le polling
-                attempts++;
-                if (attempts < maxAttempts) {
-                    const progress = data.meta?.pct || 30;
-                    messageDiv.innerHTML = `
-                        <div class="flex items-center gap-2">
-                            <div class="loading-spinner" style="width: 1rem; height: 1rem; border-width: 2px;"></div>
-                            <span class="text-blue-300">Collecte ${mode} en cours... (${progress}%)</span>
-                        </div>
-                    `;
-                    setTimeout(poll, 3000); // Poll toutes les 3 secondes
-                } else {
-                    showErrorMessage('Timeout: La collecte prend trop de temps', statusDiv, messageDiv);
-                }
-                
-            } catch (error) {
-                console.error('Polling error:', error);
-                attempts++;
-                if (attempts < maxAttempts) {
-                    setTimeout(poll, 3000);
-                } else {
-                    showErrorMessage('Erreur de polling du statut', statusDiv, messageDiv);
-                }
-            }
-        };
-        
-        poll();
-    }
-
-    function showSuccessMessage(message, statusDiv, messageDiv) {
-        statusDiv.querySelector('.p-3').className = 'p-3 rounded-lg border border-green-500/40 bg-green-500/10';
-        messageDiv.innerHTML = `
-            <div class="text-green-300">
-                <div class="font-semibold mb-1">✅ ${message}</div>
-                <div class="text-xs opacity-80">Le modèle a été recalculé automatiquement</div>
-            </div>
-        `;
-        setTimeout(() => statusDiv.classList.add('hidden'), 10000);
-    }
-
-    function showErrorMessage(error, statusDiv, messageDiv) {
-        statusDiv.querySelector('.p-3').className = 'p-3 rounded-lg border border-red-500/40 bg-red-500/10';
-        messageDiv.innerHTML = `
-            <div class="text-red-300">
-                <div class="font-semibold mb-1">❌ Erreur de collecte</div>
-                <div class="text-xs opacity-80">${error}</div>
-            </div>
-        `;
-    }
+    // Fonctions de collecte retirées - tout géré dans Settings maintenant
 
     // === PUBLIC API ===
 
@@ -606,7 +450,6 @@
             loadLatestModel();
         },
         loadLatestModel,
-        triggerCollection,
         state
     };
 })();

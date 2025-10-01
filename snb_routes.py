@@ -521,6 +521,307 @@ def get_explain_status(task_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+# === ENDPOINT INGESTION MANUELLE (depuis formulaire Settings) ===
+
+@snb_bp.route('/manual/ingest-all', methods=['POST'])
+def manual_ingest_all():
+    """
+    POST /api/snb/manual/ingest-all
+    
+    Ingestion manuelle depuis le formulaire Settings
+    Ingère toutes les données, lance le calcul et génère le narratif GPT-5
+    
+    Body: {
+        "cpi_date": "2025-09-30",
+        "cpi_yoy": 0.7,
+        "kof_date": "2025-09-30",
+        "kof_barometer": 101.2,
+        "neer_change_3m": -0.5,
+        "ois_3m": 0.00, "ois_6m": 0.05, "ois_9m": 0.08,
+        "ois_12m": 0.10, "ois_18m": 0.15, "ois_24m": 0.20,
+        "forecast_2025": 0.2, "forecast_2026": 0.5, "forecast_2027": 0.7,
+        "policy_rate": 0.0
+    }
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "error": "No JSON body"}), 400
+        
+        supabase = get_supabase_client()
+        if not supabase:
+            return jsonify({"success": False, "error": "Supabase not available"}), 500
+        
+        # 1. Ingérer CPI
+        if data.get('cpi_date') and data.get('cpi_yoy') is not None:
+            supabase.table("snb_cpi_data").upsert({
+                "provider": "Manual",
+                "as_of": data['cpi_date'],
+                "yoy_pct": float(data['cpi_yoy']),
+                "source_url": "Manual entry from Settings",
+                "idempotency_key": f"manual-cpi-{data['cpi_date']}"
+            }, on_conflict="idempotency_key").execute()
+        
+        # 2. Ingérer KOF
+        if data.get('kof_date') and data.get('kof_barometer') is not None:
+            supabase.table("snb_kof_data").upsert({
+                "provider": "Manual",
+                "as_of": data['kof_date'],
+                "barometer": float(data['kof_barometer']),
+                "source_url": "Manual entry from Settings",
+                "idempotency_key": f"manual-kof-{data['kof_date']}"
+            }, on_conflict="idempotency_key").execute()
+        
+        # 3. Ingérer NEER
+        if data.get('neer_change_3m') is not None:
+            from datetime import date as date_module
+            supabase.table("snb_config").upsert({
+                "key": "neer_latest",
+                "value": json.dumps({
+                    "as_of": data.get('cpi_date', date_module.today().isoformat()),
+                    "neer_change_3m_pct": float(data['neer_change_3m']),
+                    "source_url": "Manual entry from Settings",
+                    "idempotency_key": f"manual-neer-{date_module.today().isoformat()}"
+                })
+            }).execute()
+        
+        # 4. Ingérer OIS
+        if all(data.get(f'ois_{m}m') is not None for m in [3, 6, 9, 12, 18, 24]):
+            ois_points = [
+                {"tenor_months": 3, "rate_pct": float(data['ois_3m'])},
+                {"tenor_months": 6, "rate_pct": float(data['ois_6m'])},
+                {"tenor_months": 9, "rate_pct": float(data['ois_9m'])},
+                {"tenor_months": 12, "rate_pct": float(data['ois_12m'])},
+                {"tenor_months": 18, "rate_pct": float(data['ois_18m'])},
+                {"tenor_months": 24, "rate_pct": float(data['ois_24m'])}
+            ]
+            supabase.table("snb_ois_data").upsert({
+                "as_of": data.get('cpi_date', date_module.today().isoformat()),
+                "points": json.dumps(ois_points),
+                "source_url": "Manual entry from Settings",
+                "idempotency_key": f"manual-ois-{data.get('cpi_date', date_module.today().isoformat())}"
+            }, on_conflict="as_of").execute()
+        
+        # 5. Ingérer prévisions BNS
+        if all(data.get(f'forecast_{y}') is not None for y in [2025, 2026, 2027]):
+            from datetime import date as date_module
+            supabase.table("snb_forecasts").upsert({
+                "meeting_date": date_module.today().isoformat(),
+                "forecast": json.dumps({
+                    "2025": float(data['forecast_2025']),
+                    "2026": float(data['forecast_2026']),
+                    "2027": float(data['forecast_2027'])
+                }),
+                "source_url": "Manual entry from Settings",
+                "idempotency_key": f"manual-forecast-{date_module.today().isoformat()}"
+            }, on_conflict="idempotency_key").execute()
+        
+        # 6. Mettre à jour taux directeur
+        if data.get('policy_rate') is not None:
+            supabase.table("snb_config").upsert({
+                "key": "policy_rate_now_pct",
+                "value": json.dumps(float(data['policy_rate']))
+            }).execute()
+        
+        # 7. Lancer le calcul du modèle (appeler l'endpoint interne)
+        import requests as req
+        model_response = req.post(
+            f"{request.host_url}api/snb/model/run",
+            json={},
+            timeout=30
+        )
+        
+        if model_response.status_code != 200:
+            return jsonify({"success": False, "error": "Model calculation failed"}), 500
+        
+        return jsonify({
+            "success": True,
+            "message": "Données ingérées et modèle recalculé",
+            "model": model_response.json().get("result")
+        }), 200
+    
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+# === ENDPOINTS BULK UPLOAD (XLS/CSV) ===
+
+@snb_bp.route('/bulk/upload-<data_type>', methods=['POST'])
+def bulk_upload(data_type):
+    """
+    POST /api/snb/bulk/upload-cpi (ou kof, neer, ois)
+    
+    Upload bulk de données historiques via XLS/CSV
+    """
+    try:
+        if 'file' not in request.files:
+            return jsonify({"success": False, "error": "No file uploaded"}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({"success": False, "error": "Empty filename"}), 400
+        
+        # Parse Excel/CSV
+        import pandas as pd
+        import io
+        
+        if file.filename.endswith('.csv'):
+            df = pd.read_csv(io.BytesIO(file.read()))
+        else:  # xlsx, xls
+            df = pd.read_excel(io.BytesIO(file.read()))
+        
+        supabase = get_supabase_client()
+        if not supabase:
+            return jsonify({"success": False, "error": "Supabase not available"}), 500
+        
+        inserted = 0
+        
+        # Ingestion selon le type
+        if data_type == 'cpi':
+            for _, row in df.iterrows():
+                supabase.table("snb_cpi_data").upsert({
+                    "provider": row.get('provider', 'Bulk upload'),
+                    "as_of": str(row['date']),
+                    "yoy_pct": float(row['yoy_pct']),
+                    "mm_pct": float(row['mm_pct']) if pd.notna(row.get('mm_pct')) else None,
+                    "source_url": row.get('source_url', 'Bulk upload'),
+                    "idempotency_key": f"bulk-cpi-{row['date']}"
+                }, on_conflict="idempotency_key").execute()
+                inserted += 1
+        
+        elif data_type == 'kof':
+            for _, row in df.iterrows():
+                supabase.table("snb_kof_data").upsert({
+                    "provider": row.get('provider', 'Bulk upload'),
+                    "as_of": str(row['date']),
+                    "barometer": float(row['barometer']),
+                    "source_url": row.get('source_url', 'Bulk upload'),
+                    "idempotency_key": f"bulk-kof-{row['date']}"
+                }, on_conflict="idempotency_key").execute()
+                inserted += 1
+        
+        elif data_type == 'neer':
+            # Pour NEER, on stocke juste la dernière valeur dans config
+            last_row = df.iloc[-1]
+            supabase.table("snb_config").upsert({
+                "key": "neer_latest",
+                "value": json.dumps({
+                    "as_of": str(last_row['date']),
+                    "neer_value": float(last_row.get('neer_value', 100.0)),
+                    "neer_change_3m_pct": float(last_row['neer_change_3m_pct']),
+                    "source_url": "Bulk upload",
+                    "idempotency_key": f"bulk-neer-{last_row['date']}"
+                })
+            }).execute()
+            inserted = len(df)
+        
+        elif data_type == 'ois':
+            for _, row in df.iterrows():
+                # Chaque ligne = 1 observation avec 6 points
+                points = [
+                    {"tenor_months": 3, "rate_pct": float(row['ois_3m'])},
+                    {"tenor_months": 6, "rate_pct": float(row['ois_6m'])},
+                    {"tenor_months": 9, "rate_pct": float(row['ois_9m'])},
+                    {"tenor_months": 12, "rate_pct": float(row['ois_12m'])},
+                    {"tenor_months": 18, "rate_pct": float(row['ois_18m'])},
+                    {"tenor_months": 24, "rate_pct": float(row['ois_24m'])}
+                ]
+                supabase.table("snb_ois_data").upsert({
+                    "as_of": str(row['date']),
+                    "points": json.dumps(points),
+                    "source_url": row.get('source_url', 'Bulk upload'),
+                    "idempotency_key": f"bulk-ois-{row['date']}"
+                }, on_conflict="as_of").execute()
+                inserted += 1
+        
+        return jsonify({"success": True, "inserted": inserted, "message": f"{inserted} lignes importées"}), 200
+    
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+# === ENDPOINTS TEMPLATES EXCEL ===
+
+@snb_bp.route('/template/<data_type>', methods=['GET'])
+def download_template(data_type):
+    """
+    GET /api/snb/template/cpi (ou kof, neer, ois)
+    
+    Télécharge un template Excel pré-rempli
+    """
+    try:
+        import pandas as pd
+        from io import BytesIO
+        from flask import send_file
+        from datetime import date, timedelta
+        
+        # Générer données d'exemple (3 derniers mois)
+        today = date.today()
+        dates = [(today - timedelta(days=30*i)).isoformat() for i in range(3, 0, -1)]
+        
+        if data_type == 'cpi':
+            df = pd.DataFrame({
+                'date': dates,
+                'yoy_pct': [0.7, 0.6, 0.5],
+                'mm_pct': [0.1, 0.0, -0.1],
+                'provider': ['BFS', 'BFS', 'BFS'],
+                'source_url': ['https://www.bfs.admin.ch']*3
+            })
+        
+        elif data_type == 'kof':
+            df = pd.DataFrame({
+                'date': dates,
+                'barometer': [101.2, 100.8, 100.5],
+                'provider': ['KOF', 'KOF', 'KOF'],
+                'source_url': ['https://kof.ethz.ch']*3
+            })
+        
+        elif data_type == 'neer':
+            df = pd.DataFrame({
+                'date': dates,
+                'neer_value': [101.5, 101.8, 102.0],
+                'neer_change_3m_pct': [-0.5, -0.3, -0.1],
+                'source_url': ['https://data.snb.ch']*3
+            })
+        
+        elif data_type == 'ois':
+            df = pd.DataFrame({
+                'date': dates,
+                'ois_3m': [0.00, 0.00, 0.00],
+                'ois_6m': [0.05, 0.04, 0.03],
+                'ois_9m': [0.08, 0.07, 0.06],
+                'ois_12m': [0.10, 0.09, 0.08],
+                'ois_18m': [0.15, 0.14, 0.13],
+                'ois_24m': [0.20, 0.19, 0.18],
+                'source_url': ['https://www.eurex.com']*3
+            })
+        
+        else:
+            return jsonify({"success": False, "error": "Invalid data type"}), 400
+        
+        # Créer fichier Excel
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df.to_excel(writer, sheet_name='Data', index=False)
+        output.seek(0)
+        
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=f'snb_{data_type}_template.xlsx'
+        )
+    
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 # === ENDPOINTS UTILITAIRES ===
 
 @snb_bp.route('/data/summary', methods=['GET'])
