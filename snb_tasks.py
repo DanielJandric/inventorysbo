@@ -108,7 +108,7 @@ def snb_neer_collect_task(self):
 
 
 @celery.task(bind=True, name='snb_tasks.snb_explain_task')
-def snb_explain_task(self, model_json: dict, tone: str = 'concise', lang: str = 'fr-CH'):
+def snb_explain_task(self, model_run_id: int = None, model_json: dict = None, tone: str = 'concise', lang: str = 'fr-CH'):
     """
     Tâche Celery pour générer l'explication GPT-5 en background
     Évite le timeout Gunicorn worker (GPT-5 reasoning_effort=high prend 7-10s)
@@ -136,6 +136,28 @@ def snb_explain_task(self, model_json: dict, tone: str = 'concise', lang: str = 
             }
         
         client = OpenAI(api_key=api_key)
+        
+        # Si model_run_id fourni, récupérer depuis Supabase (plus simple à sérialiser)
+        if model_run_id and not model_json:
+            from flask import current_app
+            supabase = current_app.config.get('SUPABASE_CLIENT')
+            if supabase:
+                result = supabase.table("snb_model_runs").select("*").eq("id", model_run_id).execute()
+                if result.data:
+                    run = result.data[0]
+                    model_json = {
+                        "as_of": run["as_of"],
+                        "inputs": json.loads(run["inputs"]) if isinstance(run["inputs"], str) else run["inputs"],
+                        "nowcast": json.loads(run["nowcast"]) if isinstance(run["nowcast"], str) else run["nowcast"],
+                        "output_gap_pct": run["output_gap_pct"],
+                        "i_star_next_pct": run["i_star_next_pct"],
+                        "probs": json.loads(run["probs"]) if isinstance(run["probs"], str) else run["probs"],
+                        "path": json.loads(run["path"]) if isinstance(run["path"], str) else run["path"],
+                        "version": run["version"]
+                    }
+        
+        if not model_json:
+            return {"success": False, "error": "No model data provided"}
         
         # Prompt système optimisé pour lisibilité et détails
         system_prompt = f"""Tu es un stratégiste senior de banque centrale spécialisé dans la politique monétaire suisse (Banque Nationale Suisse - BNS).
