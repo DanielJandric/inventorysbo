@@ -341,7 +341,7 @@ def model_run():
         kof_bar = overrides.get("kof_barometer", kof["barometer"])
         neer = overrides.get("neer_change_3m_pct", 0.0)
         
-        # Policy rate actuel (depuis config ou override)
+        # Policy rate actuel (depuis config ou override) - normalisation
         policy_config = supabase.table("snb_config").select("value").eq("key", "policy_rate_now_pct").execute()
         policy_rate_now = 0.0
         if policy_config.data:
@@ -349,19 +349,33 @@ def model_run():
             if isinstance(policy_value, (int, float)):
                 policy_rate_now = float(policy_value)
             elif isinstance(policy_value, str):
-                policy_rate_now = float(policy_value)
+                try:
+                    parsed = json.loads(policy_value)
+                    if isinstance(parsed, (int, float)):
+                        policy_rate_now = float(parsed)
+                    elif isinstance(parsed, dict):
+                        policy_rate_now = float(parsed.get('value', 0.0))
+                except:
+                    policy_rate_now = float(policy_value) if policy_value else 0.0
+            elif isinstance(policy_value, dict):
+                policy_rate_now = float(policy_value.get('value', policy_value))
         policy_rate_now = overrides.get("policy_rate_now_pct", policy_rate_now)
         
-        # NEER (depuis config ou override)
+        # NEER (depuis config ou override) - normalisation
         neer_config = supabase.table("snb_config").select("value").eq("key", "neer_latest").execute()
         neer_from_db = 0.0
         if neer_config.data:
             neer_value = neer_config.data[0]["value"]
             if isinstance(neer_value, str):
-                neer_value = json.loads(neer_value)
+                try:
+                    neer_value = json.loads(neer_value)
+                except:
+                    neer_from_db = 0.0
             if isinstance(neer_value, dict):
                 neer_from_db = float(neer_value.get("neer_change_3m_pct", 0.0))
-        neer = overrides.get("neer_change_3m_pct", neer if neer != 0.0 else neer_from_db)
+            elif isinstance(neer_value, (int, float)):
+                neer_from_db = float(neer_value)
+        neer = overrides.get("neer_change_3m_pct", neer_from_db)
         
         # Run modèle
         result = run_model(
@@ -563,9 +577,21 @@ def manual_ingest_all():
             except (ValueError, TypeError):
                 return default
         
+        # Logging des données reçues
+        print("=" * 80)
+        print("📝 INGESTION MANUELLE SNB - Données reçues du formulaire:")
+        print(f"   CPI: date={data.get('cpi_date')}, yoy={data.get('cpi_yoy')}")
+        print(f"   KOF: date={data.get('kof_date')}, bar={data.get('kof_barometer')}")
+        print(f"   NEER: {data.get('neer_change_3m')}")
+        print(f"   OIS: 3M={data.get('ois_3m')}, 6M={data.get('ois_6m')}, 12M={data.get('ois_12m')}, 24M={data.get('ois_24m')}")
+        print(f"   Forecasts: 2025={data.get('forecast_2025')}, 2026={data.get('forecast_2026')}, 2027={data.get('forecast_2027')}")
+        print(f"   Policy rate: {data.get('policy_rate')}")
+        print("-" * 80)
+        
         # 1. Ingérer CPI
         cpi_yoy = safe_float(data.get('cpi_yoy'))
         if data.get('cpi_date') and cpi_yoy is not None:
+            print(f"✅ Ingestion CPI: {cpi_yoy}% au {data['cpi_date']}")
             supabase.table("snb_cpi_data").upsert({
                 "provider": "Manual",
                 "as_of": data['cpi_date'],
@@ -577,6 +603,7 @@ def manual_ingest_all():
         # 2. Ingérer KOF
         kof_bar = safe_float(data.get('kof_barometer'))
         if data.get('kof_date') and kof_bar is not None:
+            print(f"✅ Ingestion KOF: {kof_bar} au {data['kof_date']}")
             supabase.table("snb_kof_data").upsert({
                 "provider": "Manual",
                 "as_of": data['kof_date'],
@@ -633,9 +660,10 @@ def manual_ingest_all():
         # 6. Mettre à jour taux directeur
         policy_rate = safe_float(data.get('policy_rate'))
         if policy_rate is not None:
+            # Stocker comme JSONB nombre (pas string)
             supabase.table("snb_config").upsert({
                 "key": "policy_rate_now_pct",
-                "value": json.dumps(policy_rate)
+                "value": policy_rate  # Stocker directement le float, pas json.dumps()
             }).execute()
         
         # 7. Lancer le calcul du modèle (réutiliser la logique directement)
@@ -665,25 +693,51 @@ def manual_ingest_all():
             
             ois_points = parse_ois_points_from_db(ois)
             
-            # Policy rate
+            # Policy rate (normaliser le format JSON)
             policy_config = supabase.table("snb_config").select("value").eq("key", "policy_rate_now_pct").execute()
             policy_rate_now = 0.0
             if policy_config.data:
                 policy_value = policy_config.data[0]["value"]
+                # Gérer différents formats de stockage
                 if isinstance(policy_value, (int, float)):
                     policy_rate_now = float(policy_value)
                 elif isinstance(policy_value, str):
-                    policy_rate_now = float(json.loads(policy_value))
+                    try:
+                        # Peut être "0.0" ou "{\"value\": 0.0}" 
+                        parsed = json.loads(policy_value)
+                        if isinstance(parsed, (int, float)):
+                            policy_rate_now = float(parsed)
+                        elif isinstance(parsed, dict):
+                            policy_rate_now = float(parsed.get('value', 0.0))
+                    except:
+                        policy_rate_now = float(policy_value) if policy_value else 0.0
+                elif isinstance(policy_value, dict):
+                    policy_rate_now = float(policy_value.get('value', policy_value))
             
-            # NEER
+            # NEER (normaliser le format JSON)
             neer_config = supabase.table("snb_config").select("value").eq("key", "neer_latest").execute()
             neer_from_db = 0.0
             if neer_config.data:
                 neer_val = neer_config.data[0]["value"]
                 if isinstance(neer_val, str):
-                    neer_val = json.loads(neer_val)
+                    try:
+                        neer_val = json.loads(neer_val)
+                    except:
+                        neer_from_db = 0.0
                 if isinstance(neer_val, dict):
                     neer_from_db = float(neer_val.get("neer_change_3m_pct", 0.0))
+                elif isinstance(neer_val, (int, float)):
+                    neer_from_db = float(neer_val)
+            
+            # Logging des données UTILISÉES par le modèle
+            print("🧮 CALCUL MODÈLE - Données utilisées:")
+            print(f"   CPI YoY: {cpi['yoy_pct']}% (date: {cpi['as_of']})")
+            print(f"   KOF: {kof['barometer']} (date: {kof['as_of']})")
+            print(f"   NEER: {neer_from_db}%")
+            print(f"   Policy rate: {policy_rate_now}%")
+            print(f"   OIS points: {len(ois_points)} tenors")
+            print(f"   Forecasts: {snb_forecast}")
+            print("-" * 80)
             
             # Run modèle
             result = run_model(
@@ -695,6 +749,9 @@ def manual_ingest_all():
                 neer_change_3m=float(neer_from_db),
                 as_of_date=date_cls.fromisoformat(ois["as_of"])
             )
+            
+            print(f"✅ Modèle calculé: i*={result.i_star_next_pct:.3f}%, Hold={result.probs['hold']:.1%}")
+            print("=" * 80)
             
             output_dict = model_output_to_dict(result)
             
