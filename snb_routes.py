@@ -486,9 +486,9 @@ def get_explain_status(task_id):
     Vérifie le statut d'une tâche d'explication GPT-5
     """
     try:
-        from celery.result import AsyncResult
+        from celery_app import celery
         
-        task = AsyncResult(task_id)
+        task = celery.AsyncResult(task_id)
         
         if task.state == 'PENDING':
             response = {
@@ -1003,9 +1003,9 @@ def get_collection_status(task_id):
     Vérifie le statut d'une tâche de collecte
     """
     try:
-        from celery.result import AsyncResult
+        from celery_app import celery
         
-        task = AsyncResult(task_id)
+        task = celery.AsyncResult(task_id)
         
         if task.state == 'PENDING':
             response = {
