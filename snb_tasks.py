@@ -137,42 +137,62 @@ def snb_explain_task(self, model_json: dict, tone: str = 'concise', lang: str = 
         
         client = OpenAI(api_key=api_key)
         
-        # Prompt système
-        system_prompt = f"""Tu es un stratégiste senior de banque centrale spécialisé dans la politique monétaire suisse (BNS).
+        # Prompt système optimisé pour lisibilité et détails
+        system_prompt = f"""Tu es un stratégiste senior de banque centrale spécialisé dans la politique monétaire suisse (Banque Nationale Suisse - BNS).
 
-Tu dois analyser les résultats du modèle quantitatif de prévision des taux BNS et fournir une explication structurée en {lang}.
+Tu dois analyser les résultats du modèle quantitatif de prévision des taux et fournir une explication DÉTAILLÉE, PÉDAGOGIQUE et ACCESSIBLE en {lang}.
+
+RÈGLES IMPÉRATIVES D'ÉCRITURE:
+1. AUCUN ACRONYME sans l'écrire en toutes lettres la première fois (ex: "Indice des Prix à la Consommation (CPI)" pas juste "CPI")
+2. PHRASES COMPLÈTES et explicatives (pas de style télégraphique)
+3. CONTEXTE ET EXPLICATIONS pour chaque chiffre (pourquoi c'est important?)
+4. COMPARAISONS avec les cibles BNS (inflation cible 1%, output gap neutre 0%)
+5. INTERPRÉTATIONS claires des probabilités (ex: "85% de maintien signifie quasi-certitude")
+6. VOCABULAIRE ACCESSIBLE (éviter jargon technique sauf si explicité)
 
 STRUCTURE OBLIGATOIRE (JSON strict):
 {{
-  "headline": "Titre principal de 60-80 caractères résumant la décision probable",
+  "headline": "Titre principal clair et compréhensible de 60-90 caractères",
   "bullets": [
-    "Point clé 1: Analyse de l'inflation et écart vs cible BNS (1%)",
-    "Point clé 2: Analyse de l'output gap et activité économique",
-    "Point clé 3: Analyse des anticipations de marché (OIS/Futures)",
-    "Point clé 4: Contexte macro (CHF, commerce international, croissance)",
-    "Point clé 5 (optionnel): Facteurs techniques ou calendrier"
+    "Point 1: Analyse détaillée de l'inflation actuelle (valeur, écart vs cible 1%, tendance). Écrire les acronymes en entier.",
+    "Point 2: Situation de l'économie suisse (output gap, baromètre KOF, que signifient ces indicateurs concrètement?)",
+    "Point 3: Ce que le modèle économique recommande (règle de Taylor) et pourquoi",
+    "Point 4: Ce que les marchés financiers anticipent (Futures SARON, taux OIS) et leur interprétation",
+    "Point 5: Quelle est la prévision finale combinée (fusion Kalman) et niveau de confiance",
+    "Point 6: Contexte international (franc suisse, commerce, politiques autres banques centrales)",
+    "Point 7 (optionnel): Facteurs additionnels, calendrier, éléments techniques"
   ],
   "risks": [
-    "Risque 1: Appréciation CHF",
-    "Risque 2: Ralentissement conjoncture mondiale",
-    "Risque 3-4: Autres risques pertinents"
+    "Risque majeur 1 expliqué clairement (pas juste 'CHF fort' mais 'appréciation du franc suisse qui...')",
+    "Risque majeur 2 avec son impact potentiel",
+    "Risques secondaires (2-3) avec explications"
   ],
   "next_steps": [
-    "Action 1: Indicateurs à surveiller (CPI mensuel, KOF)",
-    "Action 2: Événements macro à suivre",
-    "Action 3 (optionnel): Ajustements potentiels"
+    "Indicateur à surveiller 1: pourquoi c'est important et quand",
+    "Indicateur à surveiller 2: son impact sur la décision BNS",
+    "Action recommandée 3: ce qu'il faut faire concrètement"
   ],
-  "one_liner": "Synthèse ultra-concise de 100-140 caractères (tweet-ready)"
+  "one_liner": "Synthèse très claire en une phrase de 120-150 caractères (accessible à tous)"
 }}
 
-INSTRUCTIONS:
-- Ton: {tone}, professionnel, factuel
-- Contexte: Utilise les données BNS officielles (MPA sept 2025: taux 0%, prévisions 0.2%/0.5%/0.7%)
-- Chiffres: Cite précisément les valeurs du modèle (%, points de base)
-- Probabilités: Interprète les probs (cut/hold/hike) de manière claire
-- Format: JSON STRICT, pas de texte avant/après, UTF-8
+CONTEXTE BNS (à utiliser):
+- Cible d'inflation BNS: 1.0% (stabilité des prix = inflation entre 0% et 2%)
+- Dernières décisions: MPA septembre 2025, taux maintenu à 0%
+- Prévisions conditionnelles BNS: 2025=0.2%, 2026=0.5%, 2027=0.7%
+- Output gap neutre = 0%, négatif = sous-capacité, positif = surchauffe
 
-RÉPONDS UNIQUEMENT EN JSON VALIDE. Pas de markdown, pas de ```json```, juste le JSON pur.
+STYLE D'ÉCRITURE:
+- Phrases fluides et naturelles (comme si tu expliquais à un investisseur intelligent mais non-expert)
+- Éviter: "CPI a/a", "i*", "pb", "bps", "YoY" → Utiliser: "inflation annuelle", "taux optimal", "pour cent", "variation sur un an"
+- Chaque chiffre doit être CONTEXTUALISÉ (ex: pas "0.2%" mais "0.2%, soit largement sous la cible de 1%")
+- Minimum 50-70 mots par bullet point (soyez exhaustif et pédagogique)
+
+FORMAT:
+- JSON STRICT, pas de texte avant/après
+- UTF-8, accents français corrects
+- Pas de markdown, pas de ```json```
+
+RÉPONDS UNIQUEMENT EN JSON VALIDE.
 """
         
         user_prompt = f"Voici le JSON du modèle BNS à analyser:\n\n{json.dumps(model_json, indent=2, ensure_ascii=False)}"

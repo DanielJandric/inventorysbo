@@ -423,12 +423,37 @@
             renderModel(model);
             showMainContent();
 
-            // Fetch explanation (non-blocking)
+            // Fetch explanation avec retry automatique
             try {
                 const explanation = await fetchExplanation(model);
-                renderNarrative(explanation);
+                if (explanation) {
+                    renderNarrative(explanation);
+                } else {
+                    // Retry après 3 secondes si pas de résultat
+                    console.log('Narratif vide, retry dans 3s...');
+                    setTimeout(async () => {
+                        try {
+                            const retryExplanation = await fetchExplanation(model);
+                            if (retryExplanation) {
+                                renderNarrative(retryExplanation);
+                            }
+                        } catch (retryErr) {
+                            console.error('Retry failed:', retryErr);
+                        }
+                    }, 3000);
+                }
             } catch (err) {
                 console.error('Failed to fetch explanation:', err);
+                // Afficher une section avec message d'erreur au lieu de cacher
+                if (els.narrativeSection) {
+                    els.narrativeSection.classList.remove('hidden');
+                    if (els.narrativeHeadline) {
+                        els.narrativeHeadline.textContent = 'Analyse en cours de génération...';
+                    }
+                    if (els.narrativeBullets) {
+                        els.narrativeBullets.innerHTML = '<li class="text-gray-400">Le narratif GPT-5 est en cours de génération. Rafraîchissez la page dans quelques secondes.</li>';
+                    }
+                }
             }
 
         } catch (error) {
