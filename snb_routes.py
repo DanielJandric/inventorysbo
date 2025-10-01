@@ -518,17 +518,16 @@ RÉPONDS UNIQUEMENT EN JSON VALIDE. Pas de markdown, pas de ```json```, juste le
         print("-" * 80)
         
         # Appel OpenAI GPT-5 avec RESPONSES API (recommandée)
+        # Note: response_format n'existe pas dans Responses API (seulement Chat Completions)
+        # Le JSON est forcé via les instructions système
         response = openai_client.responses.create(
             model="gpt-5",
             reasoning={
                 "effort": "high"  # Raisonnement approfondi
             },
             max_output_tokens=10000,  # Tokens de sortie maximaux
-            instructions=system_prompt,  # Instructions système
-            input=user_prompt,           # Input utilisateur
-            response_format={
-                "type": "json_object"    # Force JSON strict
-            }
+            instructions=system_prompt,  # Instructions système (force JSON)
+            input=user_prompt            # Input utilisateur
         )
         
         # Extraction du texte de réponse (API Responses)
