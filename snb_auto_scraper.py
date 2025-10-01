@@ -50,27 +50,31 @@ class SNBAutoScraper:
         self.errors = []
     
     def scrape_with_scrapingbee(self, url: str) -> Optional[Dict]:
-        """Scrape une URL avec ScrapingBee"""
+        """Scrape une URL avec ScrapingBee (plan payant avec premium features)"""
         if self.simulation_mode:
             print(f"🧪 Mode simulation pour {url}")
             return None
         
         try:
-            # Paramètres ScrapingBee (format officiel)
+            # Paramètres ScrapingBee optimaux (plan payant)
             params = {
                 "api_key": SCRAPINGBEE_API_KEY,
                 "url": url,
-                "render_js": "true"
+                "render_js": "true",
+                "premium_proxy": "true",      # Premium proxies (plan payant)
+                "country_code": "ch",         # Proxies suisses
+                "block_ads": "true",          # Bloquer publicités
+                "return_page_text": "true"    # Texte propre (LLM-friendly)
             }
             
             response = requests.get(
-                "https://app.scrapingbee.com/api/v1",  # Pas de slash final
+                "https://app.scrapingbee.com/api/v1",
                 params=params,
                 timeout=60
             )
             
             if response.status_code == 200:
-                # Retourner le contenu HTML brut
+                # Retourner le contenu HTML/texte propre
                 return {"content": response.text}
             else:
                 # Afficher le détail de l'erreur
