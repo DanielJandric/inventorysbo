@@ -680,11 +680,15 @@ def manual_ingest_all():
             
             print("🔍 DONNÉES RÉCUPÉRÉES DE SUPABASE (dernières INSÉRÉES):")
             if cpi_data.data:
-                print(f"   CPI: {cpi_data.data[0]['yoy_pct']}% au {cpi_data.data[0]['as_of']} (provider: {cpi_data.data[0].get('provider', 'N/A')})")
+                print(f"   CPI: {cpi_data.data[0]['yoy_pct']}% au {cpi_data.data[0]['as_of']} (provider: {cpi_data.data[0].get('provider', 'N/A')}, created: {cpi_data.data[0].get('created_at', 'N/A')})")
             if kof_data.data:
-                print(f"   KOF: {kof_data.data[0]['barometer']} au {kof_data.data[0]['as_of']} (provider: {kof_data.data[0].get('provider', 'N/A')})")
+                print(f"   KOF: {kof_data.data[0]['barometer']} au {kof_data.data[0]['as_of']} (provider: {kof_data.data[0].get('provider', 'N/A')}, created: {kof_data.data[0].get('created_at', 'N/A')})")
             if ois_data.data:
-                print(f"   OIS: {ois_data.data[0]['as_of']} ({len(json.loads(ois_data.data[0]['points']) if isinstance(ois_data.data[0]['points'], str) else ois_data.data[0]['points'])} points)")
+                ois_points_data = json.loads(ois_data.data[0]['points']) if isinstance(ois_data.data[0]['points'], str) else ois_data.data[0]['points']
+                print(f"   OIS: {ois_data.data[0]['as_of']} ({len(ois_points_data)} points, created: {ois_data.data[0].get('created_at', 'N/A')})")
+            if snb_data.data:
+                print(f"   SNB Forecasts: {snb_data.data[0].get('meeting_date')} (created: {snb_data.data[0].get('created_at', 'N/A')})")
+            print(f"   Total rows in tables: CPI={len(cpi_data.data)}, KOF={len(kof_data.data)}, SNB={len(snb_data.data)}, OIS={len(ois_data.data)}")
             print("-" * 80)
             
             if not (cpi_data.data and kof_data.data and snb_data.data and ois_data.data):
