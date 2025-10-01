@@ -507,38 +507,38 @@ RÉPONDS UNIQUEMENT EN JSON VALIDE. Pas de markdown, pas de ```json```, juste le
         
         # Logging avant appel OpenAI
         print("=" * 80)
-        print("📡 APPEL OPENAI GPT-5 - SNB EXPLAIN")
+        print("📡 APPEL OPENAI GPT-5 - SNB EXPLAIN (Responses API)")
         print("=" * 80)
         print(f"Model: gpt-5")
-        print(f"Temperature: 0.2")
-        print(f"Max tokens: 10000")
         print(f"Reasoning effort: high")
+        print(f"Max tokens: 10000")
         print(f"Tone: {tone} | Lang: {lang}")
+        print(f"Instructions size: {len(system_prompt)} chars")
         print(f"Input size: {len(user_prompt)} chars")
         print("-" * 80)
         
-        # Appel OpenAI GPT-5 avec paramètres optimaux
-        # Note: GPT-5 ne supporte pas temperature personnalisée (seulement défaut=1)
-        response = openai_client.chat.completions.create(
-            model="gpt-5",  # GPT-5 forcé
-            # temperature=1,  # Valeur par défaut GPT-5 (obligatoire, non modifiable)
-            max_completion_tokens=10000,  # Tokens de sortie maximaux
-            reasoning_effort="high",       # Raisonnement approfondi
-            response_format={
-                "type": "json_object"  # Force JSON strict
+        # Appel OpenAI GPT-5 avec RESPONSES API (recommandée)
+        response = openai_client.responses.create(
+            model="gpt-5",
+            reasoning={
+                "effort": "high"  # Raisonnement approfondi
             },
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ]
+            max_output_tokens=10000,  # Tokens de sortie maximaux
+            instructions=system_prompt,  # Instructions système
+            input=user_prompt,           # Input utilisateur
+            response_format={
+                "type": "json_object"    # Force JSON strict
+            }
         )
         
-        # Extraction du texte de réponse
-        response_text = response.choices[0].message.content
+        # Extraction du texte de réponse (API Responses)
+        response_text = response.output_text
         
         # Logging après réception
         print("✅ Réponse OpenAI reçue")
-        print(f"   Tokens utilisés: prompt={response.usage.prompt_tokens}, completion={response.usage.completion_tokens}, total={response.usage.total_tokens}")
+        print(f"   Tokens utilisés: input={response.usage.input_tokens}, output={response.usage.output_tokens}, total={response.usage.total_tokens}")
+        if hasattr(response.usage, 'reasoning_tokens') and response.usage.reasoning_tokens:
+            print(f"   Reasoning tokens: {response.usage.reasoning_tokens}")
         print(f"   Taille réponse: {len(response_text)} chars")
         print(f"   Preview: {response_text[:150]}...")
         print("=" * 80)
