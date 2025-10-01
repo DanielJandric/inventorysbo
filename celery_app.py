@@ -29,7 +29,7 @@ def make_celery() -> Celery:
         task_acks_late=True,
         worker_prefetch_multiplier=1,
         task_ignore_result=False,  # On garde les résultats
-        result_expires=300,  # 5 minutes seulement (au lieu de 3600)
+        result_expires=300,  # 5 minutes (unique, éviter doublon)
         broker_transport_options={
             "visibility_timeout": int(os.getenv("CELERY_VISIBILITY_TIMEOUT", "3600")),
             # Keepalive and health options for Redis/kombu
@@ -43,7 +43,7 @@ def make_celery() -> Celery:
             "interval_step": float(os.getenv("CELERY_BROKER_RETRY_STEP", "0.2")),
             "interval_max": float(os.getenv("CELERY_BROKER_RETRY_MAX", "5")),
         },
-        result_expires=3600,
+        # result_expires déjà défini ci-dessus
         broker_connection_retry_on_startup=True,
         task_default_queue=os.getenv("LLM_QUEUE", "celery"),
     )
