@@ -675,6 +675,23 @@ class MarketAnalysisWorker:
         geo_analysis = geo_chess if geo_chess else (legacy_geo if isinstance(legacy_geo, dict) else {})
         analytics_data = market_snapshot.get('analytics', {}) if isinstance(market_snapshot, dict) else {}
 
+        # Définir un style et un titre d'en-tête par défaut selon le type d'analyse
+        try:
+            header_style = (
+                "background: linear-gradient(135deg, #7f1d1d 0%, #dc2626 60%, #ef4444 100%);" if is_swiss else
+                ("background: linear-gradient(135deg, #042f2e 0%, #0d9488 40%, #5eead4 100%);" if is_global else
+                 ("background: linear-gradient(135deg, #2d0f66 0%, #6d28d9 50%, #c084fc 100%);" if is_collection_news else
+                  "background: linear-gradient(135deg, #0f172a 0%, #1d4ed8 40%, #60a5fa 100%);"))
+            )
+        except Exception:
+            header_style = "background: linear-gradient(135deg, #0f172a 0%, #1d4ed8 40%, #60a5fa 100%);"
+
+        header_title = (
+            "Swiss Market Update" if is_swiss else
+            ("🌐 GLOBAL MARKET UPDATE" if is_global else
+             ("📰 Bonvin Collection News" if is_collection_news else "📊 RAPPORT D'ANALYSE DE MARCHÉ"))
+        )
+
         # Market pulse (headline): extraire après normalisation de result/structured_data
         market_pulse = {}
         try:
@@ -688,11 +705,13 @@ class MarketAnalysisWorker:
                         market_pulse = sd_mp
         except Exception:
             market_pulse = {}
-        # Titre: utiliser celui du LLM si présent, sinon générique
-            header_title = (
-                (market_pulse.get('main_title') if isinstance(market_pulse, dict) else None) or
-                ("Swiss Market Update" if is_swiss else ("🌐 GLOBAL MARKET UPDATE" if is_global else ("📰 Bonvin Collection News" if is_collection_news else "📊 RAPPORT D'ANALYSE DE MARCHÉ")))
-            )
+        # Titre: utiliser celui du LLM si présent, sinon garder le défaut
+        try:
+            mt = (market_pulse.get('main_title') if isinstance(market_pulse, dict) else None)
+            if isinstance(mt, str) and mt.strip():
+                header_title = mt.strip()
+        except Exception:
+            pass
 
         # Ne pas afficher ni rendre de sources pour garder un narratif épuré
         sources_html = ""
