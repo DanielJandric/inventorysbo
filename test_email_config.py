@@ -86,7 +86,10 @@ def test_email_config():
             </div>
         </body>
         </html>
-        """.format(email_host=email_host, email_port=email_port, email_user=email_user, recipients=", ".join(recipients))
+        """.replace("{email_host}", str(email_host))\
+           .replace("{email_port}", str(email_port))\
+           .replace("{email_user}", str(email_user))\
+           .replace("{recipients}", ", ".join(recipients))
         
         msg.attach(MIMEText(html_content, 'html', 'utf-8'))
         
