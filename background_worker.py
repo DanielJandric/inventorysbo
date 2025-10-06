@@ -521,8 +521,24 @@ class MarketAnalysisWorker:
                 logger.warning(f"⚠️ Impossible de récupérer l'analyse #{task_id} pour l'email")
                 return
             
+            # Choix du template (aligner avec le web):
+            #  - EMAIL_FORCE_LEGACY_TEMPLATE=1  -> utilise le template "legacy" (simple et très compatible)
+            #  - EMAIL_MARKET_TEMPLATE=legacy   -> idem
+            #  Par défaut: template riche (worker)
+            force_legacy = False
+            try:
+                force_legacy = (
+                    str(os.getenv("EMAIL_FORCE_LEGACY_TEMPLATE", "0")).lower() in ("1","true","yes","on") or
+                    str(os.getenv("EMAIL_MARKET_TEMPLATE", "v2")).lower() == "legacy"
+                )
+            except Exception:
+                force_legacy = False
+
             # Préparer le contenu HTML
-            html_content = self._generate_market_analysis_html(analysis, analysis_result)
+            if force_legacy:
+                html_content = self._generate_market_analysis_html_legacy(analysis, analysis_result)
+            else:
+                html_content = self._generate_market_analysis_html(analysis, analysis_result)
             
             # Créer et envoyer l'email (horodatage CET/CEST par défaut: Europe/Zurich)
             # Utiliser multipart/alternative pour forcer l'affichage inline (HTML en dernier)
@@ -595,6 +611,111 @@ class MarketAnalysisWorker:
             
         except Exception as e:
             logger.error(f"❌ Erreur envoi email rapport #{task_id}: {e}")
+
+    def _generate_market_analysis_html_legacy(self, analysis: 'MarketAnalysis', result: Dict) -> str:
+        """Template email 'legacy' proche du rendu web historique pour une compatibilité maximale.
+        Contenu minimal: en-tête brandé, executive summary, résumé, points clés.
+        """
+        try:
+            analysis_type = (getattr(analysis, 'analysis_type', '') or '').strip().lower()
+        except Exception:
+            analysis_type = ''
+
+        is_swiss = analysis_type in { 'swiss', 'suisse', 'ch', 'swiss_market' }
+        is_global = analysis_type in { 'global_market_update', 'global', 'gmu' }
+        is_collection_news = analysis_type in { 'bonvin_collection_news', 'collection_news', 'bonvin_news' }
+
+        # Style d'en-tête et titre
+        header_style = (
+            "background-color:#b91c1c;background:linear-gradient(135deg,#7f1d1d 0%,#dc2626 60%,#ef4444 100%);color:#ffffff;" if is_swiss else
+            ("background-color:#0f766e;background:linear-gradient(135deg,#042f2e 0%,#0d9488 40%,#5eead4 100%);color:#ffffff;" if is_global else
+             ("background-color:#4c1d95;background:linear-gradient(135deg,#2d0f66 0%,#6d28d9 50%,#c084fc 100%);color:#ffffff;" if is_collection_news else
+              "background-color:#1e3a8a;background:linear-gradient(135deg,#1e3a8a,#3b82f6);color:#ffffff;"))
+        )
+        header_title = (
+            "Swiss Market Update" if is_swiss else
+            ("🌐 GLOBAL MARKET UPDATE" if is_global else
+             ("📰 Bonvin Collection News" if is_collection_news else "📰 Rapport de Marché"))
+        )
+
+        # Date/heure locale Zurich
+        try:
+            tz_name = os.getenv("REPORT_TIMEZONE", "Europe/Zurich")
+            if ZoneInfo:
+                now_local = datetime.now(ZoneInfo(tz_name))
+            else:
+                now_local = datetime.utcnow()
+            ts_str = now_local.strftime('%d/%m/%Y à %H:%M %Z')
+        except Exception:
+            ts_str = datetime.utcnow().strftime('%d/%m/%Y à %H:%M UTC')
+
+        # Executive summary (liste courte)
+        def _normalize_list(val):
+            try:
+                if not val:
+                    return []
+                if isinstance(val, list):
+                    return [str(x).strip() for x in val if str(x).strip()]
+                if isinstance(val, str):
+                    raw = val.replace('\r','\n')
+                    parts = [p.strip(' -•*\t') for p in raw.split('\n')]
+                    return [p for p in parts if p]
+                return [str(val)] if str(val).strip() else []
+            except Exception:
+                return []
+
+        exec_summary = _normalize_list(getattr(analysis, 'executive_summary', None) or result.get('executive_summary', []))
+        key_points = _normalize_list(getattr(analysis, 'key_points', None) or result.get('key_points', []))
+
+        # Summary texte
+        summary_text = getattr(analysis, 'summary', None) or ''
+        if not summary_text:
+            summary_text = str(result.get('summary', '') or '')
+
+        # HTML simple, proche de app._create_market_report_html
+        html = f"""
+        <!DOCTYPE html>
+        <html lang="fr">
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>{header_title}</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333333; background-color: #f5f5f5; margin: 0; padding: 20px; }}
+                .container {{ max-width: 700px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); overflow: hidden; }}
+                .header {{ {header_style} padding: 24px; text-align: center; }}
+                .header h1 {{ margin: 0; font-size: 24px; font-weight: bold; color: #ffffff; }}
+                .subtitle {{ margin-top: 8px; font-size: 14px; opacity: 0.95; color: #ffffff; }}
+                .content {{ padding: 24px; }}
+                .section {{ margin-bottom: 18px; }}
+                .section h3 {{ margin: 0 0 10px 0; color: #1e3a8a; font-size: 18px; }}
+                .footer {{ background-color: #f8fafc; padding: 16px; text-align: center; font-size: 12px; color: #6b7280; }}
+                ul {{ margin: 0 0 0 18px; }}
+                pre {{ white-space: pre-wrap; font-family: 'Courier New', monospace; font-size: 14px; line-height: 1.6; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>{header_title}</h1>
+                    <div class="subtitle">{ts_str}</div>
+                </div>
+                <div class="content">
+                    {('' if not exec_summary else '<div class="section"><h3>🎯 Executive Summary</h3><ul>' + ''.join([f'<li>{x}</li>' for x in exec_summary]) + '</ul></div>')}
+                    <div class="section">
+                        <h3>📝 Résumé</h3>
+                        {('<pre>'+ (summary_text or 'Aucun contenu disponible') +'</pre>')}
+                    </div>
+                    {('' if not key_points else '<div class="section"><h3>🔑 Points Clés</h3><ul>' + ''.join([f'<li>{x}</li>' for x in key_points]) + '</ul></div>')}
+                </div>
+                <div class="footer">
+                    <p><strong>BONVIN Collection</strong> — Rapport généré automatiquement</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        return html
 
     def _generate_market_analysis_html(self, analysis: 'MarketAnalysis', result: Dict) -> str:
         """Génère le contenu HTML pour l'email."""
