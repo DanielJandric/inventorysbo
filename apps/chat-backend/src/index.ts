@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import { createAgent, hostedMcpTool } from '@openai/agents';
 
 const app = express();
@@ -7,7 +7,7 @@ app.use(express.json());
 
 // Basic CORS without external dependency
 const allowedOrigin = process.env.ALLOWED_ORIGIN || '*';
-app.use((req, res, next) => {
+app.use((req: Request, res: Response, next: NextFunction) => {
   res.header('Access-Control-Allow-Origin', allowedOrigin);
   res.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-user-jwt');
@@ -44,17 +44,17 @@ const agent = createAgent({
   tools: [inventoryTool],
 });
 
-app.get('/health', (_req, res) => {
+app.get('/health', (_req: Request, res: Response) => {
   res.json({ ok: true });
 });
 
-app.post('/chat', forwardJwtToMcp, async (req, res) => {
+app.post('/chat', forwardJwtToMcp, async (req: Request, res: Response) => {
   const { message } = req.body as { message: string };
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
   const stream = await agent.respond({ input: message, stream: true, request: req });
-  for await (const chunk of stream) {
+  for await (const chunk of stream as AsyncIterable<any>) {
     res.write(`data: ${typeof chunk === 'string' ? chunk : JSON.stringify(chunk)}\n\n`);
   }
   res.end();
