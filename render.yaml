@@ -79,7 +79,7 @@ services:
   - type: web
     name: mcp-server
     env: node
-    buildCommand: "bash -lc 'npm --prefix apps/mcp-server ci && npm --prefix apps/mcp-server run build'"
+    buildCommand: "bash -lc 'npm --prefix apps/mcp-server install && npm --prefix apps/mcp-server run build'"
     startCommand: "node apps/mcp-server/dist/index.js"
     healthCheckPath: /health
     envVars:
@@ -97,7 +97,7 @@ services:
   - type: web
     name: chat-backend
     env: node
-    buildCommand: "bash -lc 'npm --prefix apps/chat-backend ci && npm --prefix apps/chat-backend run build'" 
+    buildCommand: "bash -lc 'npm --prefix apps/chat-backend install && npm --prefix apps/chat-backend run build'" 
     startCommand: "node apps/chat-backend/dist/index.js"
     healthCheckPath: /health
     envVars:
