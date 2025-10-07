@@ -15,7 +15,7 @@
     "resolveJsonModule": true,
     "declaration": true,
     "sourceMap": true,
-    "types": ["node"]
+    "types": []
   },
   "include": ["src/**/*.ts", "src/**/*.d.ts"],
   "ts-node": {

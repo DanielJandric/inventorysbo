@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { SupabaseClient } from '../lib/supabase.ts';
+import type { SupabaseClient } from '../lib/supabase.js';
 
 type ToolHandlerContext = { supabase: SupabaseClient; headers: Record<string, any> | undefined; signal: AbortSignal };
 
@@ -14,12 +14,12 @@ function defineTool<I extends z.ZodTypeAny, O>(def: ToolDef<I, O>): ToolDef<I, O
   return def;
 }
 
-import { itemsTools } from './tools/items.ts';
-import { bankingTools } from './tools/banking.ts';
-import { marketTools } from './tools/market.ts';
-import { realestateTools } from './tools/realestate.ts';
-import { tradesTools } from './tools/trades.ts';
-import { exportsTools } from './tools/exports.ts';
+import { itemsTools } from './tools/items.js';
+import { bankingTools } from './tools/banking.js';
+import { marketTools } from './tools/market.js';
+import { realestateTools } from './tools/realestate.js';
+import { tradesTools } from './tools/trades.js';
+import { exportsTools } from './tools/exports.js';
 
 export const registry: Registry = {
   ...itemsTools(defineTool),

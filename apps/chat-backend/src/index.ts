@@ -35,7 +35,7 @@ const inventoryTool = hostedMcpTool({
     'exports.generate'
   ],
   timeout_ms: 120000,
-  extra_headers: (req) => ({ 'x-user-jwt': (req.headers['x-user-jwt'] as string) ?? '' }),
+  extra_headers: (req: Request) => ({ 'x-user-jwt': (req.headers['x-user-jwt'] as string) ?? '' }),
 });
 
 const agent = createAgent({

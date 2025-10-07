@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { buildRange, datetimeSchema, paginationSchema } from '../../lib/validation.ts';
+import { buildRange, datetimeSchema, paginationSchema } from '../../lib/validation.js';
 import type { Registry } from '../index.js';
 
 export function marketTools(tool: <I extends z.ZodTypeAny, O>(def: { input: I; handler: any }) => any): Registry {

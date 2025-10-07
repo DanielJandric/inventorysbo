@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { buildRange, dateSchema, moneySchema, paginationSchema } from '../../lib/validation.ts';
+import { buildRange, dateSchema, moneySchema, paginationSchema } from '../../lib/validation.js';
 import type { Registry } from '../index.js';
 import OpenAI from 'openai';
 
