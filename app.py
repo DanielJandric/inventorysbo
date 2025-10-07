@@ -6100,6 +6100,24 @@ def chatbot():
         if not query:
             return jsonify({"error": "Message requis"}), 400
 
+        # Proxy vers le nouvel agent si activé
+        try:
+            use_agent = (os.getenv('USE_AGENT', '1') == '1')
+            agent_url = os.getenv('AGENT_CHAT_URL')
+            if use_agent and agent_url:
+                reply_text = ""
+                with requests.post(agent_url, json={"message": query}, stream=True, timeout=(5, 60)) as r:
+                    r.raise_for_status()
+                    for line in r.iter_lines(decode_unicode=True):
+                        if not line:
+                            continue
+                        if line.startswith('data: '):
+                            reply_text += line[6:]
+                if reply_text:
+                    return jsonify({"reply": reply_text, "metadata": {"mode": "agent"}})
+        except Exception as _agent_err:
+            logger.warning(f"Agent proxy failed: {_agent_err}")
+
         force_sync = str(request.args.get("force_sync") or data.get("force_sync") or "0").lower() in {"1", "true", "on", "yes"}
 
         # Par défaut, aiguiller le chat vers le worker Celery pour éviter les timeouts web

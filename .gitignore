@@ -1,3 +1,9 @@
+node_modules/
+dist/
+.env
+apps/**/.env
+exports/
+.DS_Store
 # Environment variables
 .env
 .env.local

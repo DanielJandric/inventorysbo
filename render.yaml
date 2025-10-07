@@ -48,6 +48,10 @@ services:
         value: "5"
       - key: REDIS_USE_SSL
         value: "0"
+      - key: USE_AGENT
+        value: "1"
+      - key: AGENT_CHAT_URL
+        sync: false
 
   - type: worker
     name: inventorysbo-llm-worker
@@ -70,6 +74,38 @@ services:
       - key: CELERY_BROKER_URL
         sync: false
       - key: CELERY_RESULT_BACKEND
+        sync: false
+
+  - type: web
+    name: mcp-server
+    env: node
+    buildCommand: "bash -lc 'corepack enable && pnpm -C apps/mcp-server install && pnpm -C apps/mcp-server build'"
+    startCommand: "node apps/mcp-server/dist/index.js"
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: LOG_LEVEL
+        value: "info"
+
+  - type: web
+    name: chat-backend
+    env: node
+    buildCommand: "bash -lc 'corepack enable && pnpm -C apps/chat-backend install && pnpm -C apps/chat-backend build'"
+    startCommand: "node apps/chat-backend/dist/index.js"
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: MCP_URL
+        sync: false
+      - key: ALLOWED_ORIGIN
         sync: false
 
   - type: worker
