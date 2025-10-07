@@ -79,8 +79,8 @@ services:
   - type: web
     name: mcp-server
     env: node
-    buildCommand: "bash -lc 'export NPM_CONFIG_PRODUCTION=false && npm --prefix apps/mcp-server install --include=dev'"
-    startCommand: "npx tsx apps/mcp-server/src/index.ts"
+    buildCommand: "bash -lc 'npm --prefix apps/mcp-server install'"
+    startCommand: "node apps/mcp-server/index.js"
     healthCheckPath: /health
     envVars:
       - key: NODE_VERSION
@@ -97,8 +97,8 @@ services:
   - type: web
     name: chat-backend
     env: node
-    buildCommand: "bash -lc 'export NPM_CONFIG_PRODUCTION=false && npm --prefix apps/chat-backend install --include=dev'"
-    startCommand: "npx tsx apps/chat-backend/src/index.ts"
+    buildCommand: "bash -lc 'npm --prefix apps/chat-backend install'"
+    startCommand: "node apps/chat-backend/index.js"
     healthCheckPath: /health
     envVars:
       - key: NODE_VERSION
@@ -106,6 +106,8 @@ services:
       - key: MCP_URL
         sync: false
       - key: ALLOWED_ORIGIN
+        sync: false
+      - key: OPENAI_API_KEY
         sync: false
 
   - type: worker
