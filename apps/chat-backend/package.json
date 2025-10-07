@@ -4,7 +4,7 @@
   "private": true,
   "engines": { "node": ">=20" },
   "scripts": {
-    "build": "echo no-op build",
+    "build": "node -e \"require('fs').mkdirSync('dist',{recursive:true}); require('fs').copyFileSync('index.js','dist/index.js');\"",
     "start": "node index.js",
     "dev": "node index.js"
   },
