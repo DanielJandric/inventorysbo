@@ -135,7 +135,9 @@ services:
     name: inventorysbo-redis
     plan: free
 
-cronJobs:
-  - name: precompute-snapshots
+  - type: cron
+    name: precompute-snapshots
+    env: python
     schedule: "*/15 * * * *"
-    command: "bash -lc 'python - <<PY\nfrom tasks import chat_task\nprint(\"cron ok\")\nPY'"
+    buildCommand: "./build.sh"
+    startCommand: "bash -lc 'python - <<PY\nfrom tasks import chat_task\nprint(\"cron ok\")\nPY'"
