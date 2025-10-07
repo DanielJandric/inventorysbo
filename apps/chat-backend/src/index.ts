@@ -1,14 +1,15 @@
-import 'dotenv/config';
 import express, { Request, Response, NextFunction } from 'express';
 
 let createAgent: any;
 let hostedMcpTool: any;
+let agentsAvailable = false;
 
 async function loadAgents() {
   try {
     const mod = await import('@openai/agents');
     createAgent = (mod as any).createAgent;
     hostedMcpTool = (mod as any).hostedMcpTool;
+    agentsAvailable = true;
   } catch (e) {
     console.warn('Agents SDK not available; falling back to stub.');
     createAgent = (cfg: any) => ({ respond: async ({ input }: any) => `Agents SDK indisponible. Message: ${input}` });
@@ -70,6 +71,7 @@ app.post('/chat', forwardJwtToMcp, async (req: Request, res: Response) => {
   }
 
   const { message } = req.body as { message: string };
+  res.setHeader('x-agent-mode', agentsAvailable ? 'agents' : 'fallback');
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
