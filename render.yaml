@@ -80,7 +80,7 @@ services:
     name: mcp-server
     env: node
     buildCommand: "bash -lc 'export NPM_CONFIG_PRODUCTION=false && npm --prefix apps/mcp-server install --include=dev'"
-    startCommand: "node --loader tsx apps/mcp-server/src/index.ts"
+    startCommand: "npx tsx apps/mcp-server/src/index.ts"
     healthCheckPath: /health
     envVars:
       - key: NODE_VERSION
