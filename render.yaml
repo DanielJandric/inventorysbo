@@ -97,8 +97,8 @@ services:
   - type: web
     name: chat-backend
     env: node
-    buildCommand: "bash -lc 'export NPM_CONFIG_PRODUCTION=false && npm --prefix apps/chat-backend install --include=dev && npm --prefix apps/chat-backend run build'"
-    startCommand: "node apps/chat-backend/dist/index.js"
+    buildCommand: "bash -lc 'export NPM_CONFIG_PRODUCTION=false && npm --prefix apps/chat-backend install --include=dev'"
+    startCommand: "npx tsx apps/chat-backend/src/index.ts"
     healthCheckPath: /health
     envVars:
       - key: NODE_VERSION
