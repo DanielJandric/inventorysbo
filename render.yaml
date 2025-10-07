@@ -131,8 +131,8 @@ services:
       - key: CELERY_RESULT_BACKEND
         sync: false
 
-databases:
-  - name: inventorysbo-redis
+  - type: redis
+    name: inventorysbo-redis
     plan: free
 
 cronJobs:
