@@ -29,6 +29,12 @@
   },
   "devDependencies": {
     "@types/node": "^20.12.12",
+    "@types/estree": "^1.0.5",
+    "@types/json-schema": "^7.0.15",
+    "@types/json5": "^0.0.30",
+    "@types/node-fetch": "^2.6.4",
+    "@types/phoenix": "^1.6.5",
+    "@types/ws": "^8.5.10",
     "eslint": "^9.10.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-import": "^2.29.1",
