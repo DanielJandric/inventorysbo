@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { datetimeSchema, moneySchema } from '../../lib/validation.js';
+import { datetimeSchema, moneySchema } from '../../lib/validation.ts';
 import type { Registry } from '../index.js';
 import { createHash } from 'crypto';
 

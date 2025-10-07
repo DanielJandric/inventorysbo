@@ -8,6 +8,8 @@
     "strict": true,
     "noImplicitAny": false,
     "esModuleInterop": true,
+    "allowArbitraryExtensions": true,
+    "moduleSuffixes": [".ts", ".d.ts", ".js"],
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,

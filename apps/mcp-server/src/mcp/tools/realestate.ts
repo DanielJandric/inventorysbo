@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { dateSchema, moneySchema } from '../../lib/validation.js';
+import { dateSchema, moneySchema } from '../../lib/validation.ts';
 import type { Registry } from '../index.js';
 
 export function realestateTools(tool: <I extends z.ZodTypeAny, O>(def: { input: I; handler: any }) => any): Registry {

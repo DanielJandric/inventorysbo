@@ -2,9 +2,9 @@ import fastify, { FastifyInstance } from 'fastify';
 import rateLimit from '@fastify/rate-limit';
 import sensible from '@fastify/sensible';
 import dotenv from 'dotenv';
-import { createAuditLogger, withAudit } from './lib/audit.js';
-import { createSupabaseClient } from './lib/supabase.js';
-import { registry } from './mcp/index.js';
+import { createAuditLogger, withAudit } from './lib/audit.ts';
+import { createSupabaseClient } from './lib/supabase.ts';
+import { registry } from './mcp/index.ts';
 
 dotenv.config();
 
