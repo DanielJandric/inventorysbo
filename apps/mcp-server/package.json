@@ -6,6 +6,7 @@
     "node": ">=20"
   },
   "scripts": {
+    "build": "echo no-op build",
     "start": "node index.js",
     "dev": "node index.js"
   },
