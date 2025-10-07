@@ -1,6 +1,20 @@
 import 'dotenv/config';
 import express, { Request, Response, NextFunction } from 'express';
-import { createAgent, hostedMcpTool } from '@openai/agents';
+
+let createAgent: any;
+let hostedMcpTool: any;
+
+async function loadAgents() {
+  try {
+    const mod = await import('@openai/agents');
+    createAgent = (mod as any).createAgent;
+    hostedMcpTool = (mod as any).hostedMcpTool;
+  } catch (e) {
+    console.warn('Agents SDK not available; falling back to stub.');
+    createAgent = (cfg: any) => ({ respond: async ({ input }: any) => `Agents SDK indisponible. Message: ${input}` });
+    hostedMcpTool = (_cfg: any) => ({ label: 'stub', url: '', allowed_tools: [] });
+  }
+}
 
 const app = express();
 app.use(express.json());
@@ -22,33 +36,39 @@ const forwardJwtToMcp: express.RequestHandler = (req, _res, next) => {
   next();
 };
 
-const inventoryTool = hostedMcpTool({
-  label: 'inventory-supabase',
-  url: process.env.MCP_URL || 'http://localhost:8787/mcp',
-  allowed_tools: [
-    'items.search', 'items.get', 'items.similar',
-    'items.update_status', 'items.set_prices',
-    'banking.classes.list', 'banking.summary',
-    'market.analyses.search', 'market.analyses.get', 'market.analyses.upsert',
-    'realestate.listings.search',
-    'trades.list', 'trades.record', 'trades.close',
-    'exports.generate'
-  ],
-  timeout_ms: 120000,
-  extra_headers: (req: Request) => ({ 'x-user-jwt': (req.headers['x-user-jwt'] as string) ?? '' }),
-});
-
-const agent = createAgent({
-  model: 'gpt-4.1-mini',
-  system: "Assistant portefeuille. N'invente pas de chiffres: utilise les outils MCP.",
-  tools: [inventoryTool],
-});
+let agent: any;
 
 app.get('/health', (_req: Request, res: Response) => {
   res.json({ ok: true });
 });
 
 app.post('/chat', forwardJwtToMcp, async (req: Request, res: Response) => {
+  if (!createAgent) {
+    await loadAgents();
+    if (!agent) {
+      const inventoryTool = hostedMcpTool({
+        label: 'inventory-supabase',
+        url: process.env.MCP_URL || 'http://localhost:8787/mcp',
+        allowed_tools: [
+          'items.search', 'items.get', 'items.similar',
+          'items.update_status', 'items.set_prices',
+          'banking.classes.list', 'banking.summary',
+          'market.analyses.search', 'market.analyses.get', 'market.analyses.upsert',
+          'realestate.listings.search',
+          'trades.list', 'trades.record', 'trades.close',
+          'exports.generate'
+        ],
+        timeout_ms: 120000,
+        extra_headers: (req: Request) => ({ 'x-user-jwt': (req.headers['x-user-jwt'] as string) ?? '' }),
+      });
+      agent = createAgent({
+        model: 'gpt-4.1-mini',
+        system: "Assistant portefeuille. N'invente pas de chiffres: utilise les outils MCP.",
+        tools: [inventoryTool],
+      });
+    }
+  }
+
   const { message } = req.body as { message: string };
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
