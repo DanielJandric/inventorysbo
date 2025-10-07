@@ -134,6 +134,9 @@ services:
   - type: redis
     name: inventorysbo-redis
     plan: free
+    ipAllowList:
+      - source: 0.0.0.0/0
+        description: allow all (temporary)
 
   - type: cron
     name: precompute-snapshots
