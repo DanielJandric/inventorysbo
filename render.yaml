@@ -97,7 +97,7 @@ services:
   - type: web
     name: chat-backend
     env: node
-    buildCommand: "bash -lc 'export NPM_CONFIG_PRODUCTION=false && npm --prefix apps/chat-backend install --include=dev && npm --prefix apps/chat-backend run build'" 
+    buildCommand: "bash -lc 'export NPM_CONFIG_PRODUCTION=false && npm --prefix apps/chat-backend install --include=dev && npm --prefix apps/chat-backend run build'"
     startCommand: "node apps/chat-backend/dist/index.js"
     healthCheckPath: /health
     envVars:
@@ -143,4 +143,4 @@ services:
     env: python
     schedule: "*/15 * * * *"
     buildCommand: "./build.sh"
-    startCommand: "bash -lc 'python - <<PY\nfrom tasks import chat_task\nprint(\"cron ok\")\nPY'"
+    startCommand: "bash -lc 'python - <<PY\nfrom tasks import chat_task\nprint("cron ok")\nPY'"
