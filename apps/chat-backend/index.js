@@ -108,12 +108,12 @@ function getToolDefs() {
 
 function mkInput(systemText, history, userText) {
   const arr = [];
-  if (systemText) arr.push({ role: 'system', content: [{ type: 'text', text: String(systemText) }] });
+  if (systemText) arr.push({ role: 'system', content: [{ type: 'input_text', text: String(systemText) }] });
   for (const h of history || []) {
     if (!h || !h.role) continue;
-    arr.push({ role: h.role, content: [{ type: 'text', text: String(h.content || '') }] });
+    arr.push({ role: h.role, content: [{ type: 'input_text', text: String(h.content || '') }] });
   }
-  if (userText) arr.push({ role: 'user', content: [{ type: 'text', text: String(userText) }] });
+  if (userText) arr.push({ role: 'user', content: [{ type: 'input_text', text: String(userText) }] });
   return arr;
 }
 
@@ -127,7 +127,8 @@ function extractOutputText(resp) {
         const c = o && o.content;
         if (Array.isArray(c)) {
           for (const p of c) {
-            if (p && (p.type === 'output_text' || p.type === 'text') && typeof p.text === 'string') txt += p.text;
+            if (!p || typeof p.text !== 'string') continue;
+            if (p.type === 'output_text' || p.type === 'summary_text') txt += p.text;
           }
         }
       }
