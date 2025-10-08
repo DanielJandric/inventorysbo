@@ -517,7 +517,12 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { tools: buildToolList() });
     }
     // Some SDKs request per-server label paths like /mcp/servers/<label>/tools
-    const match = url.match(/^\/mcp\/servers\/[^/]+\/tools\/?$/);
+    let match = url.match(/^\/mcp\/servers\/[^/]+\/(tools|list_tools|list-tools)\/?$/);
+    if (match) {
+      return sendJson(res, 200, { tools: buildToolList() });
+    }
+    // Also accept non-prefixed server paths (some clients omit /mcp)
+    match = url.match(/^\/servers\/[^/]+\/(tools|list_tools|list-tools)\/?$/);
     if (match) {
       return sendJson(res, 200, { tools: buildToolList() });
     }
