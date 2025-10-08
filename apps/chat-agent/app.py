@@ -66,7 +66,6 @@ async def run_with_mcp(prompt: str) -> str:
             "server_label": "inventory_mcp",
             "server_url": MCP_SERVER_URL,
             "require_approval": "never",
-            "request_timeout_ms": 15000,
         }
         tools.append(HostedMCPTool(tool_config=cfg))
 
@@ -74,7 +73,10 @@ async def run_with_mcp(prompt: str) -> str:
         name="Site Assistant",
         instructions=(
             "Tu es l’assistant du site. Réponds clairement, cite si utile. "
-            "Utilise les outils MCP quand c’est pertinent. N'invente pas de chiffres: privilégie les données MCP."
+            "Utilise les outils MCP quand c’est pertinent. N'invente pas de chiffres: privilégie les données MCP. "
+            "Pour une question comme 'ma voiture la plus prestigieuse', interroge l'inventaire via MCP (items.search), "
+            "exclue par défaut les véhicules vendus et classe par valeur actuelle (current_value) décroissante; "
+            "retourne la meilleure correspondance (marque, modèle, année, valeur) avec une phrase concise."
         ),
         model="gpt-5",
         model_settings=ModelSettings(
