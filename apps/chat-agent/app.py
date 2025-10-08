@@ -61,27 +61,33 @@ async def run_with_mcp(prompt: str) -> str:
         agent = make_agent()
         return (await Runner.run(agent, prompt)).final_output or ""
 
-    async with MCPServerStreamableHttp(
-        name="inventory_mcp_stream",
-        params={
-            "url": MCP_SERVER_URL,
-            "timeout": 20,
-        },
-        cache_tools_list=True,
-    ) as server:
-        agent = Agent(
-            name="Site Assistant",
-            instructions=(
-                "Tu es l’assistant du site. Réponds clairement, cite si utile. "
-                "Utilise les outils MCP quand c’est pertinent. N'invente pas de chiffres: privilégie les données MCP."
-            ),
-            model="gpt-5",
-            model_settings=ModelSettings(
-                reasoning=Reasoning(effort="high"),
-                verbosity="medium",
-            ),
-            mcp_servers=[server],
-        )
+    try:
+        async with MCPServerStreamableHttp(
+            name="inventory_mcp_stream",
+            params={
+                "url": MCP_SERVER_URL,
+                "timeout": 20,
+            },
+            cache_tools_list=True,
+        ) as server:
+            agent = Agent(
+                name="Site Assistant",
+                instructions=(
+                    "Tu es l’assistant du site. Réponds clairement, cite si utile. "
+                    "Utilise les outils MCP quand c’est pertinent. N'invente pas de chiffres: privilégie les données MCP."
+                ),
+                model="gpt-5",
+                model_settings=ModelSettings(
+                    reasoning=Reasoning(effort="high"),
+                    verbosity="medium",
+                ),
+                mcp_servers=[server],
+            )
+            return (await Runner.run(agent, prompt)).final_output or ""
+    except Exception as e:
+        logger.exception("mcp_connect_failed")
+        # Fallback sans MCP
+        agent = make_agent()
         return (await Runner.run(agent, prompt)).final_output or ""
 
 
