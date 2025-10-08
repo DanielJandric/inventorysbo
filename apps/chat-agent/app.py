@@ -7,7 +7,7 @@ from flask import Flask, request, jsonify, send_from_directory
 from supabase import create_client
 
 # Agents SDK (Python)
-from agents import Agent, Runner, HostedMCPTool, ModelSettings
+from agents import Agent, Runner, ModelSettings
 from openai.types.shared import Reasoning
 
 
@@ -60,23 +60,15 @@ def make_agent() -> Agent:
 
 async def run_with_mcp(prompt: str) -> str:
     # Agent avec HostedMCPTool (le serveur expose /tools et POST d'invocation)
-    tools = []
-    if MCP_SERVER_URL:
-        cfg = {
-            "type": "mcp",
-            "server_label": "inventory_mcp",
-            "server_url": MCP_SERVER_URL,
-            "require_approval": "never",
-        }
-        tools.append(HostedMCPTool(tool_config=cfg))
+    tools = []  # Désactivé: HostedMCPTool (évite 424 tool-list)
 
     agent = Agent(
         name="Site Assistant",
         instructions=(
             "Tu es l’assistant du site. Réponds clairement, cite si utile. "
-            "Utilise les outils MCP quand c’est pertinent. N'invente pas de chiffres: privilégie les données MCP. "
-            "Pour 'ma voiture la plus prestigieuse', si le pré-contexte contient top_by_value_cars, utilise-le pour répondre. "
-            "Sinon, interroge MCP (items.search) catégorie 'Voitures', exclue 'sold', tri current_value décroissant, et retourne la meilleure correspondance (nom + valeur) de façon concise."
+            "Utilise en priorité le pré-contexte fourni (résumé/top). N'invente pas de chiffres. "
+            "Pour 'ma voiture la plus prestigieuse', si top_by_value_cars est présent, réponds avec l’entrée en tête (nom + valeur). "
+            "Sinon, demande une confirmation pour lancer une recherche détaillée."
         ),
         model="gpt-5",
         model_settings=ModelSettings(
@@ -112,7 +104,7 @@ def fetch_inventory_overview() -> dict | None:
         # 2) Top valeur (hors vendus)
         search_body_all = {
             "page": 1,
-            "page_size": 25,
+            "page_size": 15,
             "sort": "current_value_desc",
             "filters": {"exclude_sold": True},
         }
@@ -126,7 +118,7 @@ def fetch_inventory_overview() -> dict | None:
         try:
             search_body_cars = {
                 "page": 1,
-                "page_size": 25,
+                "page_size": 15,
                 "sort": "current_value_desc",
                 "filters": {"exclude_sold": True, "category": "Voitures"},
             }
