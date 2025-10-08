@@ -6105,9 +6105,16 @@ def chatbot():
             use_agent = (os.getenv('USE_AGENT', '1') == '1')
             agent_url = os.getenv('AGENT_CHAT_URL')
             if use_agent and agent_url:
-                r = requests.post(agent_url, json={"message": query}, timeout=(5, 60))
+                # Augmente les timeouts (conn, read) pour éviter les coupures côté proxy
+                r = requests.post(agent_url, json={"message": query}, timeout=(10, 120))
                 r.raise_for_status()
-                agent_resp = r.json() if r.content else {}
+                # Tolérant: si pas JSON, tente un texte brut
+                agent_resp = {}
+                if r.content:
+                    try:
+                        agent_resp = r.json()
+                    except Exception:
+                        agent_resp = {"output": r.text}
                 reply_text = (agent_resp.get("output") or agent_resp.get("reply") or agent_resp.get("message") or "").strip()
                 if reply_text:
                     logger.info("Agent proxy success (len=%d)", len(reply_text))
