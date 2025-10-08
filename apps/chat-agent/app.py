@@ -5,7 +5,8 @@ from flask import Flask, request, jsonify, send_from_directory
 from supabase import create_client
 
 # Agents SDK (Python)
-from agents import Agent, Runner, HostedMCPTool, ModelSettings
+from agents import Agent, Runner, ModelSettings
+from agents.mcp import MCPServerStreamableHttp
 from openai.types.shared import Reasoning
 
 
@@ -40,18 +41,6 @@ def save_message(chat_id: str, role: str, content: str):
 
 # --- Agent factory (GPT-5 + MCP) ---
 def make_agent() -> Agent:
-    tools = []
-    if MCP_SERVER_URL:
-        tools.append(
-            HostedMCPTool(
-                tool_config={
-                    "type": "mcp",
-                    "server_label": "inventory_mcp",
-                    "server_url": MCP_SERVER_URL,
-                    "require_approval": "never",
-                }
-            )
-        )
     return Agent(
         name="Site Assistant",
         instructions=(
@@ -63,8 +52,37 @@ def make_agent() -> Agent:
             reasoning=Reasoning(effort="high"),  # reasoning high
             verbosity="medium",                   # verbosity medium
         ),
-        tools=tools,
     )
+
+
+async def run_with_mcp(prompt: str) -> str:
+    if not MCP_SERVER_URL:
+        # Pas de MCP configuré: agent sans serveur MCP
+        agent = make_agent()
+        return (await Runner.run(agent, prompt)).final_output or ""
+
+    async with MCPServerStreamableHttp(
+        name="inventory_mcp_stream",
+        params={
+            "url": MCP_SERVER_URL,
+            "timeout": 20,
+        },
+        cache_tools_list=True,
+    ) as server:
+        agent = Agent(
+            name="Site Assistant",
+            instructions=(
+                "Tu es l’assistant du site. Réponds clairement, cite si utile. "
+                "Utilise les outils MCP quand c’est pertinent. N'invente pas de chiffres: privilégie les données MCP."
+            ),
+            model="gpt-5",
+            model_settings=ModelSettings(
+                reasoning=Reasoning(effort="high"),
+                verbosity="medium",
+            ),
+            mcp_servers=[server],
+        )
+        return (await Runner.run(agent, prompt)).final_output or ""
 
 
 @app.route("/chat", methods=["POST"])
@@ -89,10 +107,8 @@ def chat():
         logger.exception("supabase_save_user_failed")
 
     try:
-        agent = make_agent()
         # Run l’agent (synchrone via asyncio.run le temps d’une requête)
-        result = asyncio.run(Runner.run(agent, user_msg))
-        assistant_msg = result.final_output or ""
+        assistant_msg = asyncio.run(run_with_mcp(user_msg))
         try:
             save_message(chat_id, "assistant", assistant_msg)
         except Exception:
