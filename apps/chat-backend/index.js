@@ -1,7 +1,7 @@
 const http = require('http');
 const OpenAI = require('openai');
 const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
-const MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+const MODEL = process.env.OPENAI_MODEL || 'gpt-5';
 const MAX_OUTPUT_TOKENS = Number(process.env.OPENAI_MAX_OUTPUT_TOKENS || 2048);
 const REASONING_EFFORT = process.env.OPENAI_REASONING_EFFORT || 'high';
 const allowedTools = [
@@ -20,6 +20,13 @@ const allowedOrigin = process.env.ALLOWED_ORIGIN || '*';
 const MCP_URL = process.env.MCP_URL || 'http://localhost:8787/mcp';
 
 const sessions = new Map(); // sessionId -> [{role, content}]
+
+function logInfo(event, payload) {
+  try { console.log(JSON.stringify({ level: 'info', ts: new Date().toISOString(), event, ...payload })); } catch { /* noop */ }
+}
+function logError(event, payload) {
+  try { console.error(JSON.stringify({ level: 'error', ts: new Date().toISOString(), event, ...payload })); } catch { /* noop */ }
+}
 
 function getSessionId(req, body) {
   return (
@@ -142,6 +149,7 @@ async function runWithTools(message, req) {
 
   // Build input for Responses API
   const input = mkInput(sys.content, history.slice(-6), user.content);
+  const createStartedAt = Date.now();
   let resp = await openai.responses.create({
     model: MODEL,
     input,
@@ -150,12 +158,14 @@ async function runWithTools(message, req) {
     max_output_tokens: MAX_OUTPUT_TOKENS,
     reasoning: { effort: REASONING_EFFORT },
   });
+  logInfo('responses.create.ok', { response_id: resp?.id, model: MODEL, ms: Date.now() - createStartedAt });
 
   // Handle tool calls iteratively
   for (let step = 0; step < 4; step++) {
     const required = resp && resp.required_action;
     const calls = required && required.type === 'submit_tool_outputs' ? (required.submit_tool_outputs?.tool_calls || []) : [];
     if (!calls.length) break;
+    logInfo('responses.required_action', { response_id: resp?.id, step, tool_calls: calls.map(c => ({ id: c.id, name: c.name })) });
 
     const tool_outputs = [];
     for (const c of calls) {
@@ -173,12 +183,16 @@ async function runWithTools(message, req) {
       let result;
       try {
         result = await callMcp(args.tool, args.input || {}, req);
+        logInfo('mcp.call.ok', { tool: args.tool });
       } catch (e) {
         result = { error: String(e && e.message) };
+        logError('mcp.call.err', { tool: args.tool, error: String(e && e.message) });
       }
       tool_outputs.push({ tool_call_id: c.id, output: JSON.stringify(result).slice(0, 20000) });
     }
+    const submitStartedAt = Date.now();
     resp = await openai.responses.submitToolOutputs(resp.id, { tool_outputs });
+    logInfo('responses.submitToolOutputs.ok', { response_id: resp?.id, ms: Date.now() - submitStartedAt });
   }
 
   const text = extractOutputText(resp) || 'Pas de réponse.';
@@ -225,18 +239,21 @@ function pickHorsepower(it) {
 }
 
 async function answerFastestCar(req, res, allowedOrigin) {
+  const t0 = Date.now();
   let result = null;
   try {
     result = await callMcp('items.search', { page: 1, page_size: 200, filters: { category: 'Voitures', exclude_sold: true } }, req);
+    logInfo('fastest_car.items_search.ok', { count: (result && result.items && result.items.length) || 0 });
   } catch {}
   const items = (result && result.items) || [];
   if (!items.length) {
     const text = "Je n'ai pas trouvé de voitures actives dans votre collection.";
     res.writeHead(200, { 'Access-Control-Allow-Origin': allowedOrigin, 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache', Connection: 'keep-alive', 'x-agent-mode': 'deterministic' });
     res.write(`data: ${JSON.stringify({ type: 'text', text })}\n\n`);
-    res.end();
-    return;
-  }
+      res.end();
+    logInfo('fastest_car.done', { ms: Date.now() - t0, mode: 'no-items' });
+      return;
+    }
 
   // Try rank using available numeric attributes
   const ranked = items.map(it => {
@@ -260,6 +277,7 @@ async function answerFastestCar(req, res, allowedOrigin) {
     res.writeHead(200, { 'Access-Control-Allow-Origin': allowedOrigin, 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache', Connection: 'keep-alive', 'x-agent-mode': 'deterministic' });
     res.write(`data: ${JSON.stringify({ type: 'text', text })}\n\n`);
     res.end();
+    logInfo('fastest_car.done', { ms: Date.now() - t0, mode: 'metrics' });
     return;
   }
 
@@ -290,6 +308,7 @@ async function answerFastestCar(req, res, allowedOrigin) {
   res.writeHead(200, { 'Access-Control-Allow-Origin': allowedOrigin, 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache', Connection: 'keep-alive', 'x-agent-mode': 'openai-judgement' });
   res.write(`data: ${JSON.stringify({ type: 'text', text })}\n\n`);
   res.end();
+  logInfo('fastest_car.done', { ms: Date.now() - t0, mode: 'judgement' });
 }
 
 function handleOptions(req, res) {
@@ -345,6 +364,8 @@ const server = http.createServer(async (req, res) => {
       const body = await parseJsonBody(req);
       const message = (body && (body.message || body.input)) || '';
       if (!message) return sendJson(res, 400, { error: 'Missing input' });
+      const reqStart = Date.now();
+      logInfo('chat.request', { model: MODEL, message: String(message).slice(0, 200) });
 
       // Handle explicit counting queries deterministically (no hallucinations)
       const countIntent = detectCountQuery(message);
@@ -393,8 +414,12 @@ const server = http.createServer(async (req, res) => {
           Connection: 'keep-alive',
           'x-agent-mode': 'deterministic',
         });
+        res.write(`data: ${JSON.stringify({ type: 'status', status: 'processing' })}\n\n`);
+        const hb = setInterval(() => { try { res.write(': ping\n\n'); } catch {} }, 5000);
         res.write(`data: ${JSON.stringify({ type: 'text', text })}\n\n`);
         res.end();
+        clearInterval(hb);
+        logInfo('chat.done', { mode: 'deterministic', ms: Date.now() - reqStart });
         return;
       }
 
@@ -406,8 +431,6 @@ const server = http.createServer(async (req, res) => {
 
       // Intelligent fallback: tool-augmented with OpenAI function calling if key provided
       if (openai) {
-        const text = await runWithTools(message, req);
-
         res.writeHead(200, {
           'Access-Control-Allow-Origin': allowedOrigin,
           'Content-Type': 'text/event-stream; charset=utf-8',
@@ -415,9 +438,20 @@ const server = http.createServer(async (req, res) => {
           Connection: 'keep-alive',
           'x-agent-mode': 'openai+tools+mcp',
         });
+        res.write(`data: ${JSON.stringify({ type: 'status', status: 'processing' })}\n\n`);
+        const hb = setInterval(() => { try { res.write(': ping\n\n'); } catch {} }, 5000);
+        let text;
+        try {
+          text = await runWithTools(message, req);
+        } catch (e) {
+          logError('chat.runWithTools.err', { error: String(e && e.message) });
+          text = "Désolé, une erreur est survenue.";
+        }
         res.write(`data: ${JSON.stringify({ type: 'text', text })}\n\n`);
-      res.end();
-      return;
+        res.end();
+        clearInterval(hb);
+        logInfo('chat.done', { mode: 'responses+tools', ms: Date.now() - reqStart });
+        return;
     }
 
       // Pure fallback SSE (no OpenAI key)
@@ -429,10 +463,12 @@ const server = http.createServer(async (req, res) => {
         'x-agent-mode': 'fallback',
       });
       const response = { type: 'text', text: `Fallback: reçu "${message}". Ajoute OPENAI_API_KEY pour activer le mode intelligent (MCP).` };
-    res.write(`data: ${JSON.stringify(response)}\n\n`);
+      res.write(`data: ${JSON.stringify(response)}\n\n`);
       res.end();
+      logInfo('chat.done', { mode: 'fallback', ms: Date.now() - reqStart });
       return;
     } catch (e) {
+      logError('chat.exception', { error: String(e && e.message) });
       return sendJson(res, 500, { error: 'Internal server error' });
     }
   }
