@@ -33,6 +33,21 @@ function inferIntent(message) {
   return { tool: 'items.search', input: { q: message, page: 1, page_size: 10 } };
 }
 
+function detectCountQuery(message) {
+  const m = String(message || '').toLowerCase();
+  const isHowMany = /(combien|how many)/.test(m);
+  if (!isHowMany) return null;
+  if (/voitures?/.test(m)) {
+    const fourSeats = /(4\s*(places|p))/i.test(message);
+    const q = fourSeats ? '4 places' : undefined;
+    return { category: 'Voitures', q };
+  }
+  if (/bateaux?/.test(m) || /(yacht|sunseeker|axopar)/.test(m)) {
+    return { category: 'Bateaux' };
+  }
+  return null;
+}
+
 function handleOptions(req, res) {
   res.writeHead(204, {
     'Access-Control-Allow-Origin': allowedOrigin,
@@ -86,6 +101,33 @@ const server = http.createServer(async (req, res) => {
       const body = await parseJsonBody(req);
       const message = (body && (body.message || body.input)) || '';
       if (!message) return sendJson(res, 400, { error: 'Missing input' });
+
+      // Handle explicit counting queries deterministically (no hallucinations)
+      const countIntent = detectCountQuery(message);
+      if (countIntent) {
+        const input = { page: 1, page_size: 1, filters: { category: countIntent.category } };
+        if (countIntent.q) input.q = countIntent.q;
+        let result;
+        try {
+          result = await callMcp('items.search', input, req);
+        } catch (e) {
+          result = null;
+        }
+        const total = (result && typeof result.total === 'number') ? result.total : 0;
+        const label = countIntent.category.toLowerCase();
+        const suffix = countIntent.q ? ` (${countIntent.q})` : '';
+        const text = `Vous avez ${total} ${label}${suffix ? suffix : ''}.`;
+        res.writeHead(200, {
+          'Access-Control-Allow-Origin': allowedOrigin,
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          Connection: 'keep-alive',
+          'x-agent-mode': 'deterministic',
+        });
+        res.write(`data: ${JSON.stringify({ type: 'text', text })}\n\n`);
+        res.end();
+        return;
+      }
 
       // Intelligent fallback: call MCP + summarize with OpenAI if key provided
       if (openai) {
