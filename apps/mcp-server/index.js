@@ -137,6 +137,20 @@ async function handleItemsSetPrices(ctx, input) {
   return { status: 'updated', item: resp.data };
 }
 
+async function handleItemsCreate(ctx, input) {
+  const record = (input && typeof input === 'object') ? { ...input } : {};
+  // guard minimal: name or category required
+  if (!record.name && !record.category) {
+    const e = new Error('Missing minimal fields: name or category'); e.statusCode = 400; throw e;
+  }
+  // Auto fields
+  record.created_at = new Date().toISOString();
+  if (record.sale_status === 'sold') record.for_sale = false;
+  const resp = await ctx.supabase.from('items').insert(record).select('*').single();
+  if (resp.error) throw resp.error;
+  return { status: 'created', item: resp.data };
+}
+
 async function handleItemsSummary(ctx, input) {
   const filters = (input && typeof input === 'object' ? input.filters : null) || {};
   // Sélection minimale (certaines bases n'ont pas brand/model)
@@ -432,6 +446,7 @@ const registry = {
   'items.update_status': handleItemsUpdateStatus,
   'items.set_prices': handleItemsSetPrices,
   'items.summary': handleItemsSummary,
+  'items.create': handleItemsCreate,
   // New items helpers
   'items.top_by_value': handleItemsTopByValue,
   'banking.classes.list': handleBankingClassesList,
@@ -462,6 +477,7 @@ function buildToolList() {
     'items.update_status': "Mettre à jour le statut d'un item.",
     'items.set_prices': "Mettre à jour les prix et statut d'un item.",
     'items.summary': 'Résumé agrégé des items (par catégorie, statut).',
+    'items.create': "Créer un nouvel item (record: {...}).",
     'items.top_by_value': 'Top items par valeur (option catégorie, hors vendus).',
     'banking.classes.list': 'Lister les classes d’actifs bancaires (major/minor).',
     'banking.summary': 'Résumé agrégé des classes bancaires.',
