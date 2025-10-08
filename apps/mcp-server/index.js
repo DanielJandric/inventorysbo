@@ -512,6 +512,7 @@ const server = http.createServer(async (req, res) => {
 
   // Minimal MCP tool listing for Agents SDK HostedMCPTool and Streamable MCP
   if (method === 'GET') {
+    console.log(`[mcp] discovery GET ${url}`);
     // Common discovery endpoints
     if (url === '/mcp/tools' || url === '/mcp/list_tools' || url === '/mcp/list-tools' || url === '/tools' || url === '/mcp') {
       return sendJson(res, 200, { tools: buildToolList() });
@@ -519,6 +520,11 @@ const server = http.createServer(async (req, res) => {
     // Some SDKs request per-server label paths like /mcp/servers/<label>/tools
     let match = url.match(/^\/mcp\/servers\/[^/]+\/(tools|list_tools|list-tools)\/?$/);
     if (match) {
+      return sendJson(res, 200, { tools: buildToolList() });
+    }
+    // Extremely tolerant: any path that ends with tools/list_tools/list-tools
+    const tail = url.split('?')[0];
+    if (/(^|\/)tools\/?$/.test(tail) || /(^|\/)list_tools\/?$/.test(tail) || /(^|\/)list-tools\/?$/.test(tail)) {
       return sendJson(res, 200, { tools: buildToolList() });
     }
     // Also accept non-prefixed server paths (some clients omit /mcp)
