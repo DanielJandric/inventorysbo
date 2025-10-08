@@ -75,9 +75,8 @@ async def run_with_mcp(prompt: str) -> str:
         instructions=(
             "Tu es l’assistant du site. Réponds clairement, cite si utile. "
             "Utilise les outils MCP quand c’est pertinent. N'invente pas de chiffres: privilégie les données MCP. "
-            "Pour une question comme 'ma voiture la plus prestigieuse', interroge l'inventaire via MCP (items.search), "
-            "exclue par défaut les véhicules vendus et classe par valeur actuelle (current_value) décroissante; "
-            "retourne la meilleure correspondance (marque, modèle, année, valeur) avec une phrase concise."
+            "Pour 'ma voiture la plus prestigieuse', si le pré-contexte contient top_by_value_cars, utilise-le pour répondre. "
+            "Sinon, interroge MCP (items.search) catégorie 'Voitures', exclue 'sold', tri current_value décroissant, et retourne la meilleure correspondance (nom + valeur) de façon concise."
         ),
         model="gpt-5",
         model_settings=ModelSettings(
@@ -111,16 +110,32 @@ def fetch_inventory_overview() -> dict | None:
         summary = (j1 or {}).get("result") or {}
 
         # 2) Top valeur (hors vendus)
-        search_body = {
+        search_body_all = {
             "page": 1,
             "page_size": 25,
             "sort": "current_value_desc",
             "filters": {"exclude_sold": True},
         }
-        r2 = client.post(f"{base}/mcp", json={"tool": "items.search", "input": search_body})
+        r2 = client.post(f"{base}/mcp", json={"tool": "items.search", "input": search_body_all})
         r2.raise_for_status()
         j2 = r2.json()
         items = ((j2 or {}).get("result") or {}).get("items") or []
+
+        # 3) Top valeur (hors vendus) restreint aux voitures si le champ category existe
+        top_cars = []
+        try:
+            search_body_cars = {
+                "page": 1,
+                "page_size": 25,
+                "sort": "current_value_desc",
+                "filters": {"exclude_sold": True, "category": "Voitures"},
+            }
+            r3 = client.post(f"{base}/mcp", json={"tool": "items.search", "input": search_body_cars})
+            if r3.status_code == 200:
+                j3 = r3.json()
+                top_cars = ((j3 or {}).get("result") or {}).get("items") or []
+        except Exception:
+            pass
         # Ne garder qu'un sous-ensemble de champs pertinents pour le contexte
         slim = []
         for it in items:
@@ -132,7 +147,21 @@ def fetch_inventory_overview() -> dict | None:
                 "value": it.get("current_value"),
                 "sale_status": it.get("sale_status"),
             })
-        return {"summary": summary, "top_by_value": slim}
+        def slim_fields(rows):
+            out = []
+            for it in rows:
+                out.append({
+                    "id": it.get("id"),
+                    "name": it.get("name"),
+                    "category": it.get("category"),
+                    "year": it.get("construction_year"),
+                    "value": it.get("current_value"),
+                    "sale_status": it.get("sale_status"),
+                })
+            return out
+
+        top_cars_slim = slim_fields(top_cars)
+        return {"summary": summary, "top_by_value": slim, "top_by_value_cars": top_cars_slim}
     except Exception:
         logger.exception("inventory_overview_failed")
         return None
