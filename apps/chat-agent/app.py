@@ -1,5 +1,6 @@
 import os
 import json
+import httpx
 import asyncio
 import logging
 from flask import Flask, request, jsonify, send_from_directory
@@ -94,6 +95,49 @@ async def run_with_mcp(prompt: str) -> str:
         return (await Runner.run(agent2, prompt)).final_output or ""
 
 
+def fetch_inventory_overview() -> dict | None:
+    """Pré-contexte minimal: résumé + top par valeur (hors vendus) via MCP HTTP.
+    Retourne un petit JSON sérialisable ou None si indisponible.
+    """
+    if not MCP_SERVER_URL:
+        return None
+    base = MCP_SERVER_URL.rstrip('/')
+    try:
+        client = httpx.Client(timeout=10.0)
+        # 1) Résumé
+        r1 = client.post(f"{base}/mcp", json={"tool": "items.summary", "input": {}})
+        r1.raise_for_status()
+        j1 = r1.json()
+        summary = (j1 or {}).get("result") or {}
+
+        # 2) Top valeur (hors vendus)
+        search_body = {
+            "page": 1,
+            "page_size": 25,
+            "sort": "current_value_desc",
+            "filters": {"exclude_sold": True},
+        }
+        r2 = client.post(f"{base}/mcp", json={"tool": "items.search", "input": search_body})
+        r2.raise_for_status()
+        j2 = r2.json()
+        items = ((j2 or {}).get("result") or {}).get("items") or []
+        # Ne garder qu'un sous-ensemble de champs pertinents pour le contexte
+        slim = []
+        for it in items:
+            slim.append({
+                "id": it.get("id"),
+                "brand": it.get("brand"),
+                "model": it.get("model"),
+                "year": it.get("construction_year"),
+                "value": it.get("current_value"),
+                "sale_status": it.get("sale_status"),
+            })
+        return {"summary": summary, "top_by_value": slim}
+    except Exception:
+        logger.exception("inventory_overview_failed")
+        return None
+
+
 @app.route("/chat", methods=["POST"])
 def chat():
     try:
@@ -116,8 +160,24 @@ def chat():
         logger.exception("supabase_save_user_failed")
 
     try:
+        # Pré-contexte inventaire (vue d'ensemble) injecté avant la question
+        overview = fetch_inventory_overview()
+        if overview:
+            try:
+                ctx_json = json.dumps(overview, ensure_ascii=False)
+                prefixed = (
+                    "[Contexte inventaire - aperçu]\n" + ctx_json + "\n\n"
+                    "[Question]\n" + user_msg
+                )
+                user_payload = prefixed
+            except Exception:
+                logger.exception("overview_serialize_failed")
+                user_payload = user_msg
+        else:
+            user_payload = user_msg
+
         # Run l’agent (synchrone via asyncio.run le temps d’une requête)
-        assistant_msg = asyncio.run(run_with_mcp(user_msg))
+        assistant_msg = asyncio.run(run_with_mcp(user_payload))
         try:
             save_message(chat_id, "assistant", assistant_msg)
         except Exception:
