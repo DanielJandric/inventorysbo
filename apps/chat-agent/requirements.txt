@@ -1,5 +1,5 @@
-openai>=2.2.0
-openai-agents>=0.3.3
+openai>=1.107.1,<2
+openai-agents==0.3.3
 flask>=3.0
 gunicorn>=21.2
 supabase>=2.0
