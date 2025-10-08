@@ -151,6 +151,109 @@ async function runWithTools(message, req) {
   return text;
 }
 
+function detectFastestCarQuery(message) {
+  const m = String(message || '').toLowerCase();
+  const triggers = ['plus rapide', 'vitesse', '0-100', '0 à 100', '0 a 100'];
+  const hasCar = /voitures?/.test(m) || /auto|car|supercar/.test(m);
+  return hasCar && triggers.some(t => m.includes(t));
+}
+
+function parseNumber(v) {
+  if (v == null) return null;
+  const n = Number(String(v).replace(/[^0-9.\-]/g, ''));
+  return Number.isFinite(n) ? n : null;
+}
+
+function pickTopSpeed(it) {
+  const keys = ['top_speed', 'speed_max', 'vitesse_max', 'max_speed'];
+  for (const k of keys) {
+    if (it[k] != null) return parseNumber(it[k]);
+  }
+  return null;
+}
+
+function pickZeroToHundred(it) {
+  const keys = ['zero_to_hundred', 'zero_to_sixty', 'zero_100', 'zero100', 'acceleration_0_100'];
+  for (const k of keys) {
+    if (it[k] != null) return parseNumber(it[k]);
+  }
+  return null;
+}
+
+function pickHorsepower(it) {
+  const keys = ['horsepower', 'hp', 'power_hp', 'puissance_ch'];
+  for (const k of keys) {
+    if (it[k] != null) return parseNumber(it[k]);
+  }
+  return null;
+}
+
+async function answerFastestCar(req, res, allowedOrigin) {
+  let result = null;
+  try {
+    result = await callMcp('items.search', { page: 1, page_size: 200, filters: { category: 'Voitures', exclude_sold: true } }, req);
+  } catch {}
+  const items = (result && result.items) || [];
+  if (!items.length) {
+    const text = "Je n'ai pas trouvé de voitures actives dans votre collection.";
+    res.writeHead(200, { 'Access-Control-Allow-Origin': allowedOrigin, 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache', Connection: 'keep-alive', 'x-agent-mode': 'deterministic' });
+    res.write(`data: ${JSON.stringify({ type: 'text', text })}\n\n`);
+    res.end();
+    return;
+  }
+
+  // Try rank using available numeric attributes
+  const ranked = items.map(it => {
+    const ts = pickTopSpeed(it);
+    const z = pickZeroToHundred(it);
+    const hp = pickHorsepower(it);
+    // Composite: prioritize top speed; fallback to 0-100 (lower is better), then horsepower
+    const score = (ts != null ? ts * 1000 : 0) + (z != null ? (500 - z) * 10 : 0) + (hp != null ? hp : 0);
+    return { it, ts, z, hp, score };
+  });
+  const anyMetrics = ranked.some(r => r.ts != null || r.z != null || r.hp != null);
+  if (anyMetrics) {
+    ranked.sort((a, b) => b.score - a.score);
+    const best = ranked[0];
+    const label = best.it.name || `${best.it.brand || ''} ${best.it.model || ''}`.trim();
+    const details = [];
+    if (best.ts != null) details.push(`${best.ts} km/h`);
+    if (best.z != null) details.push(`${best.z} s (0-100)`);
+    if (best.hp != null) details.push(`${best.hp} ch`);
+    const text = `La voiture la plus rapide est ${label}${details.length ? ` (${details.join(', ')})` : ''}.`;
+    res.writeHead(200, { 'Access-Control-Allow-Origin': allowedOrigin, 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache', Connection: 'keep-alive', 'x-agent-mode': 'deterministic' });
+    res.write(`data: ${JSON.stringify({ type: 'text', text })}\n\n`);
+    res.end();
+    return;
+  }
+
+  // Otherwise, ask OpenAI to pick based on brand/model knowledge
+  const brief = items.map(it => ({ id: it.id, brand: it.brand, model: it.model, name: it.name })).slice(0, 200);
+  let winner = null;
+  let why = '';
+  if (openai) {
+    const comp = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      temperature: 0,
+      messages: [
+        { role: 'system', content: "Choisis la voiture la plus rapide (top speed prioritaire; sinon 0-100 le plus bas; sinon puissance). Réponds JSON: {id:number, reason:string}." },
+        { role: 'user', content: JSON.stringify(brief) },
+      ],
+    });
+    try {
+      const txt = comp.choices?.[0]?.message?.content || '{}';
+      const obj = JSON.parse(txt);
+      winner = items.find(it => Number(it.id) === Number(obj.id));
+      why = String(obj.reason || '').slice(0, 300);
+    } catch {}
+  }
+  const label = winner ? (winner.name || `${winner.brand || ''} ${winner.model || ''}`.trim()) : 'indéterminée';
+  const text = winner ? `La voiture la plus rapide est ${label}.${why ? ` Raison: ${why}` : ''}` : "Je n'ai pas pu déterminer la voiture la plus rapide.";
+  res.writeHead(200, { 'Access-Control-Allow-Origin': allowedOrigin, 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache', Connection: 'keep-alive', 'x-agent-mode': 'openai-judgement' });
+  res.write(`data: ${JSON.stringify({ type: 'text', text })}\n\n`);
+  res.end();
+}
+
 function handleOptions(req, res) {
   res.writeHead(204, {
     'Access-Control-Allow-Origin': allowedOrigin,
@@ -252,6 +355,12 @@ const server = http.createServer(async (req, res) => {
         });
         res.write(`data: ${JSON.stringify({ type: 'text', text })}\n\n`);
         res.end();
+        return;
+      }
+
+      // Fastest car query shortcut
+      if (detectFastestCarQuery(message)) {
+        await answerFastestCar(req, res, allowedOrigin);
         return;
       }
 
