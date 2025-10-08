@@ -1,4 +1,3 @@
-require('dotenv').config();
 const http = require('http');
 
 const PORT = Number(process.env.PORT || 8787);
