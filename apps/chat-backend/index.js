@@ -178,7 +178,7 @@ async function runWithTools(message, req) {
       }
       tool_outputs.push({ tool_call_id: c.id, output: JSON.stringify(result).slice(0, 20000) });
     }
-    resp = await openai.responses.submitToolOutputs({ response_id: resp.id, tool_outputs });
+    resp = await openai.responses.submitToolOutputs(resp.id, { tool_outputs });
   }
 
   const text = extractOutputText(resp) || 'Pas de réponse.';
