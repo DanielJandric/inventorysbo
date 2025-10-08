@@ -78,7 +78,8 @@ async def run_with_mcp(prompt: str) -> str:
         except Exception:
             logger.exception("invalid_mcp_headers_json")
 
-        async with MCPServerStreamableHttp(
+        async def _run() -> str:
+            async with MCPServerStreamableHttp(
             name="inventory_mcp_stream",
             params={
                 "url": MCP_SERVER_URL,
@@ -86,22 +87,25 @@ async def run_with_mcp(prompt: str) -> str:
                 **({"headers": headers} if headers else {}),
             },
             cache_tools_list=True,
-        ) as server:
-            agent = Agent(
-                name="Site Assistant",
-                instructions=(
-                    "Tu es l’assistant du site. Réponds clairement, cite si utile. "
-                    "Utilise les outils MCP quand c’est pertinent. N'invente pas de chiffres: privilégie les données MCP."
-                ),
-                model="gpt-5",
-                model_settings=ModelSettings(
-                    reasoning=Reasoning(effort="high"),
-                    verbosity="medium",
-                ),
-                mcp_servers=[server],
-            )
-            return (await Runner.run(agent, prompt)).final_output or ""
-    except Exception as e:
+            ) as server:
+                agent = Agent(
+                    name="Site Assistant",
+                    instructions=(
+                        "Tu es l’assistant du site. Réponds clairement, cite si utile. "
+                        "Utilise les outils MCP quand c’est pertinent. N'invente pas de chiffres: privilégie les données MCP."
+                    ),
+                    model="gpt-5",
+                    model_settings=ModelSettings(
+                        reasoning=Reasoning(effort="high"),
+                        verbosity="medium",
+                    ),
+                    mcp_servers=[server],
+                )
+                return (await Runner.run(agent, prompt)).final_output or ""
+
+        # Timeout de connexion/usage MCP pour éviter les blocages
+        return await asyncio.wait_for(_run(), timeout=12)
+    except BaseException:
         logger.exception("mcp_connect_failed")
         # Fallback sans MCP
         agent = make_agent()
