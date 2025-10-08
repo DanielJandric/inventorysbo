@@ -5,6 +5,7 @@
   "engines": { "node": ">=20" },
   "scripts": {
     "build": "node -e \"require('fs').mkdirSync('dist',{recursive:true}); require('fs').copyFileSync('index.js','dist/index.js');\"",
+    "postinstall": "npm run build",
     "start": "node index.js",
     "dev": "node index.js"
   },
