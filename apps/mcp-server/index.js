@@ -135,6 +135,30 @@ async function handleItemsSetPrices(ctx, input) {
   return { status: 'updated', item: resp.data };
 }
 
+async function handleItemsSummary(ctx, input) {
+  const filters = (input && typeof input === 'object' ? input.filters : null) || {};
+  let q = ctx.supabase.from('items').select('id,category,status,for_sale');
+  if (filters.category) q = q.eq('category', filters.category);
+  if (filters.status) q = q.eq('status', filters.status);
+  if (typeof filters.for_sale === 'boolean') q = q.eq('for_sale', filters.for_sale);
+  const resp = await q;
+  if (resp.error) throw resp.error;
+  const rows = resp.data || [];
+  const total = rows.length;
+  const byCategory = {};
+  for (const r of rows) {
+    const c = r.category || 'Autres';
+    byCategory[c] = (byCategory[c] || 0) + 1;
+  }
+  const onSale = rows.filter(r => r.for_sale === true).length;
+  const byStatus = {};
+  for (const r of rows) {
+    const s = r.status || 'unknown';
+    byStatus[s] = (byStatus[s] || 0) + 1;
+  }
+  return { total, on_sale: onSale, by_category: byCategory, by_status: byStatus };
+}
+
 async function handleBankingClassesList(ctx, input) {
   const major = await ctx.supabase.from('banking_asset_classes_major').select('*').order('id');
   if (major.error) throw major.error;
@@ -325,6 +349,7 @@ const registry = {
   'items.similar': handleItemsSimilar,
   'items.update_status': handleItemsUpdateStatus,
   'items.set_prices': handleItemsSetPrices,
+  'items.summary': handleItemsSummary,
   'banking.classes.list': handleBankingClassesList,
   'banking.summary': handleBankingSummary,
   'market.analyses.search': handleMarketSearch,
