@@ -1,18 +1,37 @@
 const http = require('http');
-
-let agentsAvailable = false;
-let createAgent;
-let hostedMcpTool;
-try {
-  ({ createAgent, hostedMcpTool } = require('@openai/agents'));
-  agentsAvailable = true;
-} catch (e) {
-  // Agents SDK not available; will use fallback
-}
+const OpenAI = require('openai');
+const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
 
 const PORT = Number(process.env.PORT || process.env.CHAT_PORT || 3000);
 const allowedOrigin = process.env.ALLOWED_ORIGIN || '*';
 const MCP_URL = process.env.MCP_URL || 'http://localhost:8787/mcp';
+
+async function callMcp(tool, input, req) {
+  const headers = { 'content-type': 'application/json' };
+  const userJwt = req.headers['x-user-jwt'] || req.headers['X-User-Jwt'];
+  if (userJwt) headers['x-user-jwt'] = String(userJwt);
+  const resp = await fetch(MCP_URL, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ tool, input }),
+  });
+  const data = await resp.json();
+  if (!resp.ok || !data.ok) {
+    const err = new Error((data && data.error) || `MCP error ${resp.status}`);
+    err.statusCode = resp.status;
+    throw err;
+  }
+  return data.result;
+}
+
+function inferIntent(message) {
+  const m = String(message || '').toLowerCase();
+  if (/(trade|position|ouvrir|fermer|achat|vente)/.test(m)) return { tool: 'trades.list', input: { open_only: true } };
+  if (/(banque|classe|allocation|actifs)/.test(m)) return { tool: 'banking.summary', input: {} };
+  if (/(immobilier|appartement|rendement|loyer|lausanne|genève)/.test(m)) return { tool: 'realestate.listings.search', input: { location: message } };
+  if (/(marché|analyse|risque|opportunités)/.test(m)) return { tool: 'market.analyses.search', input: { page: 1, page_size: 10 } };
+  return { tool: 'items.search', input: { q: message, page: 1, page_size: 10 } };
+}
 
 function handleOptions(req, res) {
   res.writeHead(204, {
@@ -68,51 +87,36 @@ const server = http.createServer(async (req, res) => {
       const message = (body && (body.message || body.input)) || '';
       if (!message) return sendJson(res, 400, { error: 'Missing input' });
 
-      const keyPresent = Boolean(process.env.OPENAI_API_KEY);
-      const canUseAgents = agentsAvailable && keyPresent;
-
-      if (canUseAgents) {
-        // Lazy agent init with hosted MCP tool
-        if (!server._agent) {
-          const tool = hostedMcpTool({
-            label: 'inventory-supabase',
-            url: MCP_URL,
-            allowed_tools: [
-              'items.search', 'items.get', 'items.similar',
-              'items.update_status', 'items.set_prices',
-              'banking.classes.list', 'banking.summary',
-              'market.analyses.search', 'market.analyses.get', 'market.analyses.upsert',
-              'realestate.listings.search',
-              'trades.list', 'trades.record', 'trades.close',
-              'exports.generate'
-            ],
-            timeout_ms: 120000,
-            extra_headers: (_req) => ({ 'x-user-jwt': _req.headers['x-user-jwt'] || '' }),
-          });
-          server._agent = createAgent({
-            model: 'gpt-4.1-mini',
-            system: "Assistant portefeuille. N'invente pas de chiffres: utilise les outils MCP.",
-            tools: [tool],
-          });
+      // Intelligent fallback: call MCP + summarize with OpenAI if key provided
+      if (openai) {
+        const intent = inferIntent(message);
+        let toolResult = null;
+        try {
+          toolResult = await callMcp(intent.tool, intent.input, req);
+        } catch (e) {
+          toolResult = { error: String(e && e.message) };
         }
+
+        const prompt = [
+          { role: 'system', content: "Assistant portefeuille. Réponds en français, concis. Utilise STRICTEMENT les données JSON fournies (résultats MCP). N'invente pas de chiffres." },
+          { role: 'user', content: `Question:\n${message}\n\nRésultats MCP (${intent.tool}):\n${JSON.stringify(toolResult).slice(0, 15000)}` },
+        ];
+        const completion = await openai.chat.completions.create({ model: 'gpt-4o-mini', temperature: 0.3, messages: prompt });
+        const text = completion?.choices?.[0]?.message?.content || 'Je n\'ai pas pu générer de réponse.';
 
         res.writeHead(200, {
           'Access-Control-Allow-Origin': allowedOrigin,
           'Content-Type': 'text/event-stream',
           'Cache-Control': 'no-cache',
           Connection: 'keep-alive',
-          'x-agent-mode': 'agents',
+          'x-agent-mode': 'openai+mcp',
         });
+        res.write(`data: ${JSON.stringify({ type: 'text', text })}\n\n`);
+      res.end();
+      return;
+    }
 
-        const stream = await server._agent.respond({ input: message, stream: true, request: req });
-        for await (const chunk of stream) {
-          res.write(`data: ${typeof chunk === 'string' ? chunk : JSON.stringify(chunk)}\n\n`);
-        }
-        res.end();
-        return;
-      }
-
-      // Fallback SSE mode
+      // Pure fallback SSE (no OpenAI key)
       res.writeHead(200, {
         'Access-Control-Allow-Origin': allowedOrigin,
         'Content-Type': 'text/event-stream',
@@ -120,8 +124,8 @@ const server = http.createServer(async (req, res) => {
         Connection: 'keep-alive',
         'x-agent-mode': 'fallback',
       });
-      const response = { type: 'text', text: `Fallback mode: Received message "${message}". Agents SDK not available or OPENAI_API_KEY missing.` };
-      res.write(`data: ${JSON.stringify(response)}\n\n`);
+      const response = { type: 'text', text: `Fallback: reçu "${message}". Ajoute OPENAI_API_KEY pour activer le mode intelligent (MCP).` };
+    res.write(`data: ${JSON.stringify(response)}\n\n`);
       res.end();
       return;
     } catch (e) {
