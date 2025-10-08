@@ -268,16 +268,18 @@ async function answerFastestCar(req, res, allowedOrigin) {
   let winner = null;
   let why = '';
   if (openai) {
-    const comp = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      temperature: 0,
-      messages: [
-        { role: 'system', content: "Choisis la voiture la plus rapide (top speed prioritaire; sinon 0-100 le plus bas; sinon puissance). Réponds JSON: {id:number, reason:string}." },
-        { role: 'user', content: JSON.stringify(brief) },
-      ],
+    const comp = await openai.responses.create({
+      model: MODEL,
+      input: mkInput(
+        "Choisis la voiture la plus rapide (top speed prioritaire; sinon 0-100 le plus bas; sinon puissance). Réponds JSON: {id:number, reason:string}.",
+        [],
+        JSON.stringify(brief)
+      ),
+      max_output_tokens: MAX_OUTPUT_TOKENS,
+      reasoning: { effort: REASONING_EFFORT },
     });
     try {
-      const txt = comp.choices?.[0]?.message?.content || '{}';
+      const txt = extractOutputText(comp) || '{}';
       const obj = JSON.parse(txt);
       winner = items.find(it => Number(it.id) === Number(obj.id));
       why = String(obj.reason || '').slice(0, 300);
@@ -365,18 +367,18 @@ const server = http.createServer(async (req, res) => {
           } catch { full = null; }
           const items = (full && full.items) || [];
           const brief = items.map(it => ({ id: it.id, brand: it.brand, model: it.model, name: it.name })).slice(0, 200);
-          const judge = await openai.chat.completions.create({
+          const judge = await openai.responses.create({
             model: MODEL,
-            temperature: 0,
-            messages: [
-              { role: 'system', content: "Tu es un classifieur: pour chaque voiture (brand, model, name), dis '4p' si c'est un modèle 4 places, sinon 'autre'. Réponds uniquement une liste JSON d'ids 4 places." },
-              { role: 'user', content: JSON.stringify(brief) },
-            ],
+            input: mkInput(
+              "Tu es un classifieur: pour chaque voiture (brand, model, name), dis '4p' si c'est un modèle 4 places, sinon 'autre'. Réponds uniquement une liste JSON d'ids 4 places.",
+              [],
+              JSON.stringify(brief)
+            ),
             max_output_tokens: MAX_OUTPUT_TOKENS,
             reasoning: { effort: REASONING_EFFORT },
           });
           try {
-            const txt = judge.choices?.[0]?.message?.content || '[]';
+            const txt = extractOutputText(judge) || '[]';
             const ids = JSON.parse(txt).map(Number).filter(n => Number.isInteger(n));
             total = ids.length;
           } catch {}
