@@ -15,6 +15,24 @@ const PORT = Number(process.env.PORT || process.env.CHAT_PORT || 3000);
 const allowedOrigin = process.env.ALLOWED_ORIGIN || '*';
 const MCP_URL = process.env.MCP_URL || 'http://localhost:8787/mcp';
 
+const sessions = new Map(); // sessionId -> [{role, content}]
+
+function getSessionId(req, body) {
+  return (
+    (body && (body.session_id || body.sessionId)) ||
+    req.headers['x-session-id'] ||
+    `${req.socket.remoteAddress || 'anon'}:${req.headers['user-agent'] || ''}`
+  );
+}
+
+function pushHistory(sessionId, role, content) {
+  if (!sessionId) return;
+  const arr = sessions.get(sessionId) || [];
+  arr.push({ role, content: String(content).slice(0, 4000) });
+  while (arr.length > 12) arr.shift();
+  sessions.set(sessionId, arr);
+}
+
 async function callMcp(tool, input, req) {
   const headers = { 'content-type': 'application/json' };
   const userJwt = req.headers['x-user-jwt'] || req.headers['X-User-Jwt'];
@@ -79,45 +97,48 @@ function getToolDefs() {
 }
 
 async function runWithTools(message, req) {
+  const sessionId = getSessionId(req, { message });
+  const history = sessions.get(sessionId) || [];
   const sys = {
     role: 'system',
-    content: "Assistant portefeuille BONVIN. Réponds en français, concis et fiable. Utilise les outils MCP via la fonction call_mcp quand nécessaire. N'invente pas de chiffres: privilégie les données MCP.",
+    content:
+      "Assistant portefeuille BONVIN. Réponds en français, concis et fiable. Utilise les outils MCP via la fonction call_mcp quand nécessaire. N'invente pas de chiffres: privilégie les données MCP.",
   };
   const user = { role: 'user', content: String(message) };
 
-  // First pass: allow tool selection
+  const baseMessages = [sys, ...history.slice(-6), user];
   const first = await openai.chat.completions.create({
     model: 'gpt-4o-mini',
     temperature: 0.2,
-    messages: [sys, user],
+    messages: baseMessages,
     tools: getToolDefs(),
     tool_choice: 'auto',
   });
 
   const msg = first.choices?.[0]?.message;
   const toolCalls = msg?.tool_calls || [];
-  if (!toolCalls.length) {
-    return msg?.content || "Je n'ai pas de réponse.";
-  }
-
-  const convo = [sys, user, msg];
-  for (const call of toolCalls) {
-    if (call.type !== 'function' || !call.function) continue;
-    const fn = call.function.name;
-    let args = {};
-    try { args = JSON.parse(call.function.arguments || '{}'); } catch {}
-    if (fn !== 'call_mcp' || !args.tool) continue;
-    if (!allowedTools.includes(args.tool)) {
-      convo.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: 'Tool not allowed' }) });
-      continue;
+  const convo = [...baseMessages, msg];
+  if (toolCalls.length) {
+    for (const call of toolCalls) {
+      if (call.type !== 'function' || !call.function) continue;
+      const fn = call.function.name;
+      let args = {};
+      try {
+        args = JSON.parse(call.function.arguments || '{}');
+      } catch {}
+      if (fn !== 'call_mcp' || !args.tool) continue;
+      if (!allowedTools.includes(args.tool)) {
+        convo.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: 'Tool not allowed' }) });
+        continue;
+      }
+      let result;
+      try {
+        result = await callMcp(args.tool, args.input || {}, req);
+      } catch (e) {
+        result = { error: String(e && e.message) };
+      }
+      convo.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(result).slice(0, 20000) });
     }
-    let result;
-    try {
-      result = await callMcp(args.tool, args.input || {}, req);
-    } catch (e) {
-      result = { error: String(e && e.message) };
-    }
-    convo.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(result).slice(0, 20000) });
   }
 
   const second = await openai.chat.completions.create({
@@ -125,7 +146,10 @@ async function runWithTools(message, req) {
     temperature: 0.2,
     messages: convo,
   });
-  return second.choices?.[0]?.message?.content || 'Pas de réponse.';
+  const text = second.choices?.[0]?.message?.content || 'Pas de réponse.';
+  pushHistory(sessionId, 'user', message);
+  pushHistory(sessionId, 'assistant', text);
+  return text;
 }
 
 function handleOptions(req, res) {
