@@ -6100,21 +6100,21 @@ def chatbot():
         if not query:
             return jsonify({"error": "Message requis"}), 400
 
-        # Proxy vers le nouvel agent si activé
+        # Proxy vers le nouvel agent si activé (JSON direct, pas SSE)
         try:
             use_agent = (os.getenv('USE_AGENT', '1') == '1')
             agent_url = os.getenv('AGENT_CHAT_URL')
             if use_agent and agent_url:
-                reply_text = ""
-                with requests.post(agent_url, json={"message": query}, stream=True, timeout=(5, 60)) as r:
-                    r.raise_for_status()
-                    for line in r.iter_lines(decode_unicode=True):
-                        if not line:
-                            continue
-                        if line.startswith('data: '):
-                            reply_text += line[6:]
+                r = requests.post(agent_url, json={"message": query}, timeout=(5, 60))
+                r.raise_for_status()
+                agent_resp = r.json() if r.content else {}
+                reply_text = (agent_resp.get("output") or agent_resp.get("reply") or agent_resp.get("message") or "").strip()
                 if reply_text:
-                    return jsonify({"reply": reply_text, "metadata": {"mode": "agent"}})
+                    logger.info("Agent proxy success (len=%d)", len(reply_text))
+                    out = {"reply": reply_text, "metadata": {"mode": "agent"}}
+                    if isinstance(agent_resp, dict) and agent_resp.get("chat_id"):
+                        out["chat_id"] = agent_resp["chat_id"]
+                    return jsonify(out)
         except Exception as _agent_err:
             logger.warning(f"Agent proxy failed: {_agent_err}")
 

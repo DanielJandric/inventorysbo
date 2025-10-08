@@ -405,9 +405,11 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (method === 'POST' && (url === '/mcp' || url === '/mcp/invoke' || url === '/invoke' || url === '/call')) {
+    console.log(`[mcp] invoke ${url}`);
     const start = Date.now();
     try {
       const body = await parseJsonBody(req);
+      console.log('[mcp] body', JSON.stringify(body).slice(0, 500));
       if (!body || typeof body !== 'object') {
         return sendJson(res, 400, { ok: false, error: 'Invalid JSON body' });
       }
@@ -425,10 +427,12 @@ const server = http.createServer(async (req, res) => {
       const supabase = createSupabaseClient(req.headers);
       const out = await handler({ supabase, headers: req.headers }, args);
   const latency = Date.now() - start;
+      console.log(`[mcp] done ${toolName} in ${latency}ms`);
       return sendJson(res, 200, { ok: true, tool: toolName, result: out }, { 'x-latency-ms': String(latency) });
     } catch (err) {
       const status = err && err.statusCode ? Number(err.statusCode) : 400;
       const message = err && err.message ? String(err.message) : 'Bad Request';
+      console.error('[mcp] error', status, message);
       return sendJson(res, status, { ok: false, error: message });
     }
   }
