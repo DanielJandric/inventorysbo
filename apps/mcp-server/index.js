@@ -511,8 +511,16 @@ const server = http.createServer(async (req, res) => {
   }
 
   // Minimal MCP tool listing for Agents SDK HostedMCPTool and Streamable MCP
-  if (method === 'GET' && (url === '/mcp/tools' || url === '/mcp/list_tools' || url === '/mcp/list-tools' || url === '/tools')) {
-    return sendJson(res, 200, { tools: buildToolList() });
+  if (method === 'GET') {
+    // Common discovery endpoints
+    if (url === '/mcp/tools' || url === '/mcp/list_tools' || url === '/mcp/list-tools' || url === '/tools' || url === '/mcp') {
+      return sendJson(res, 200, { tools: buildToolList() });
+    }
+    // Some SDKs request per-server label paths like /mcp/servers/<label>/tools
+    const match = url.match(/^\/mcp\/servers\/[^/]+\/tools\/?$/);
+    if (match) {
+      return sendJson(res, 200, { tools: buildToolList() });
+    }
   }
 
   if (method === 'POST' && (url === '/mcp' || url === '/mcp/invoke' || url === '/invoke' || url === '/call')) {
