@@ -1,6 +1,9 @@
 const http = require('http');
 const OpenAI = require('openai');
 const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
+const MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+const MAX_OUTPUT_TOKENS = Number(process.env.OPENAI_MAX_OUTPUT_TOKENS || 2048);
+const REASONING_EFFORT = process.env.OPENAI_REASONING_EFFORT || 'high';
 const allowedTools = [
       'items.search', 'items.get', 'items.similar',
       'items.update_status', 'items.set_prices',
@@ -96,6 +99,37 @@ function getToolDefs() {
   ];
 }
 
+function mkInput(systemText, history, userText) {
+  const arr = [];
+  if (systemText) arr.push({ role: 'system', content: [{ type: 'text', text: String(systemText) }] });
+  for (const h of history || []) {
+    if (!h || !h.role) continue;
+    arr.push({ role: h.role, content: [{ type: 'text', text: String(h.content || '') }] });
+  }
+  if (userText) arr.push({ role: 'user', content: [{ type: 'text', text: String(userText) }] });
+  return arr;
+}
+
+function extractOutputText(resp) {
+  try {
+    if (resp && typeof resp.output_text === 'string' && resp.output_text) return resp.output_text;
+    const out = resp && resp.output;
+    if (Array.isArray(out)) {
+      let txt = '';
+      for (const o of out) {
+        const c = o && o.content;
+        if (Array.isArray(c)) {
+          for (const p of c) {
+            if (p && (p.type === 'output_text' || p.type === 'text') && typeof p.text === 'string') txt += p.text;
+          }
+        }
+      }
+      if (txt) return txt;
+    }
+  } catch {}
+  return '';
+}
+
 async function runWithTools(message, req) {
   const sessionId = getSessionId(req, { message });
   const history = sessions.get(sessionId) || [];
@@ -106,33 +140,34 @@ async function runWithTools(message, req) {
   };
   const user = { role: 'user', content: String(message) };
 
-  let convo = [sys, ...history.slice(-6), user];
-  for (let step = 0; step < 3; step++) {
-    const comp = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      temperature: 0.2,
-      messages: convo,
-      tools: getToolDefs(),
-      tool_choice: 'auto',
-    });
-    const msg = comp.choices?.[0]?.message;
-    if (!msg) break;
-    convo.push(msg);
-    const toolCalls = msg.tool_calls || [];
-    if (!toolCalls.length) {
-      const text = msg.content || 'Pas de réponse.';
-      pushHistory(sessionId, 'user', message);
-      pushHistory(sessionId, 'assistant', text);
-      return text;
-    }
-    for (const call of toolCalls) {
-      if (call.type !== 'function' || !call.function) continue;
-      const fn = call.function.name;
+  // Build input for Responses API
+  const input = mkInput(sys.content, history.slice(-6), user.content);
+  let resp = await openai.responses.create({
+    model: MODEL,
+    input,
+    tools: getToolDefs(),
+    temperature: 0.2,
+    max_output_tokens: MAX_OUTPUT_TOKENS,
+    reasoning: { effort: REASONING_EFFORT },
+  });
+
+  // Handle tool calls iteratively
+  for (let step = 0; step < 4; step++) {
+    const required = resp && resp.required_action;
+    const calls = required && required.type === 'submit_tool_outputs' ? (required.submit_tool_outputs?.tool_calls || []) : [];
+    if (!calls.length) break;
+
+    const tool_outputs = [];
+    for (const c of calls) {
+      const name = c.name;
+      if (name !== 'call_mcp') {
+        tool_outputs.push({ tool_call_id: c.id, output: JSON.stringify({ error: 'Unknown tool' }) });
+        continue;
+      }
       let args = {};
-      try { args = JSON.parse(call.function.arguments || '{}'); } catch {}
-      if (fn !== 'call_mcp' || !args.tool) continue;
-      if (!allowedTools.includes(args.tool)) {
-        convo.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: 'Tool not allowed' }) });
+      try { args = JSON.parse(c.arguments || '{}'); } catch {}
+      if (!args.tool || !allowedTools.includes(args.tool)) {
+        tool_outputs.push({ tool_call_id: c.id, output: JSON.stringify({ error: 'Tool not allowed' }) });
         continue;
       }
       let result;
@@ -141,13 +176,15 @@ async function runWithTools(message, req) {
       } catch (e) {
         result = { error: String(e && e.message) };
       }
-      convo.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(result).slice(0, 20000) });
+      tool_outputs.push({ tool_call_id: c.id, output: JSON.stringify(result).slice(0, 20000) });
     }
+    resp = await openai.responses.submitToolOutputs({ response_id: resp.id, tool_outputs });
   }
-  const fallback = 'Je n\'ai pas pu produire de réponse complète.';
+
+  const text = extractOutputText(resp) || 'Pas de réponse.';
   pushHistory(sessionId, 'user', message);
-  pushHistory(sessionId, 'assistant', fallback);
-  return fallback;
+  pushHistory(sessionId, 'assistant', text);
+  return text;
 }
 
 function detectFastestCarQuery(message) {
@@ -329,12 +366,14 @@ const server = http.createServer(async (req, res) => {
           const items = (full && full.items) || [];
           const brief = items.map(it => ({ id: it.id, brand: it.brand, model: it.model, name: it.name })).slice(0, 200);
           const judge = await openai.chat.completions.create({
-            model: 'gpt-4o-mini',
+            model: MODEL,
             temperature: 0,
             messages: [
               { role: 'system', content: "Tu es un classifieur: pour chaque voiture (brand, model, name), dis '4p' si c'est un modèle 4 places, sinon 'autre'. Réponds uniquement une liste JSON d'ids 4 places." },
               { role: 'user', content: JSON.stringify(brief) },
             ],
+            max_output_tokens: MAX_OUTPUT_TOKENS,
+            reasoning: { effort: REASONING_EFFORT },
           });
           try {
             const txt = judge.choices?.[0]?.message?.content || '[]';
