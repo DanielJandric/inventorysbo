@@ -139,7 +139,8 @@ async function handleItemsSetPrices(ctx, input) {
 
 async function handleItemsSummary(ctx, input) {
   const filters = (input && typeof input === 'object' ? input.filters : null) || {};
-  let q = ctx.supabase.from('items').select('id,category,status,for_sale,sale_status,brand,model');
+  // Sélection minimale (certaines bases n'ont pas brand/model)
+  let q = ctx.supabase.from('items').select('id,category,status,for_sale,sale_status');
   if (filters.category) q = q.eq('category', filters.category);
   if (filters.status) q = q.eq('status', filters.status);
   if (filters.sale_status) q = q.eq('sale_status', filters.sale_status);
