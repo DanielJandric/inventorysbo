@@ -1,4 +1,5 @@
 import os
+import json
 import asyncio
 import logging
 from flask import Flask, request, jsonify, send_from_directory
@@ -15,6 +16,8 @@ OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 MCP_SERVER_URL = os.getenv("MCP_SERVER_URL")  # optionnel
+MCP_SERVER_TOKEN = os.getenv("MCP_SERVER_TOKEN")  # optionnel (Authorization: Bearer ...)
+MCP_SERVER_HEADERS = os.getenv("MCP_SERVER_HEADERS")  # optionnel (JSON dict)
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -62,11 +65,25 @@ async def run_with_mcp(prompt: str) -> str:
         return (await Runner.run(agent, prompt)).final_output or ""
 
     try:
+        # Construit les headers MCP optionnels
+        headers: dict | None = None
+        try:
+            extra = json.loads(MCP_SERVER_HEADERS) if MCP_SERVER_HEADERS else None
+            if MCP_SERVER_TOKEN or extra:
+                headers = {}
+                if MCP_SERVER_TOKEN:
+                    headers["Authorization"] = f"Bearer {MCP_SERVER_TOKEN}"
+                if isinstance(extra, dict):
+                    headers.update({str(k): str(v) for k, v in extra.items()})
+        except Exception:
+            logger.exception("invalid_mcp_headers_json")
+
         async with MCPServerStreamableHttp(
             name="inventory_mcp_stream",
             params={
                 "url": MCP_SERVER_URL,
                 "timeout": 20,
+                **({"headers": headers} if headers else {}),
             },
             cache_tools_list=True,
         ) as server:
