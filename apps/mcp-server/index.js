@@ -399,8 +399,8 @@ const server = http.createServer(async (req, res) => {
     return sendJson(res, 200, { ok: true });
   }
 
-  // Minimal MCP tool listing for Agents SDK HostedMCPTool
-  if (method === 'GET' && (url === '/mcp/tools' || url === '/mcp/list_tools' || url === '/mcp/list-tools')) {
+  // Minimal MCP tool listing for Agents SDK HostedMCPTool and Streamable MCP
+  if (method === 'GET' && (url === '/mcp/tools' || url === '/mcp/list_tools' || url === '/mcp/list-tools' || url === '/tools')) {
     return sendJson(res, 200, { tools: buildToolList() });
   }
 
