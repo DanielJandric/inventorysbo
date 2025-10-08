@@ -62,7 +62,6 @@ def make_agent() -> Agent:
         model_settings=ModelSettings(
             reasoning=Reasoning(effort="high"),  # reasoning high
             verbosity="medium",                   # verbosity medium
-            temperature=0.2,
         ),
         tools=tools,
     )
