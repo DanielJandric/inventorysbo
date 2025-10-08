@@ -1,6 +1,15 @@
 const http = require('http');
 const OpenAI = require('openai');
 const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
+const allowedTools = [
+      'items.search', 'items.get', 'items.similar',
+      'items.update_status', 'items.set_prices',
+      'banking.classes.list', 'banking.summary',
+      'market.analyses.search', 'market.analyses.get', 'market.analyses.upsert',
+      'realestate.listings.search',
+      'trades.list', 'trades.record', 'trades.close',
+      'exports.generate'
+];
 
 const PORT = Number(process.env.PORT || process.env.CHAT_PORT || 3000);
 const allowedOrigin = process.env.ALLOWED_ORIGIN || '*';
@@ -46,6 +55,77 @@ function detectCountQuery(message) {
     return { category: 'Bateaux' };
   }
   return null;
+}
+
+function getToolDefs() {
+  return [
+    {
+      type: 'function',
+      function: {
+        name: 'call_mcp',
+        description: 'Call an MCP tool exposed by the inventory MCP server',
+        parameters: {
+          type: 'object',
+          properties: {
+            tool: { type: 'string', enum: allowedTools },
+            input: { type: 'object', additionalProperties: true },
+          },
+          required: ['tool', 'input'],
+          additionalProperties: false,
+        },
+      },
+    },
+  ];
+}
+
+async function runWithTools(message, req) {
+  const sys = {
+    role: 'system',
+    content: "Assistant portefeuille BONVIN. Réponds en français, concis et fiable. Utilise les outils MCP via la fonction call_mcp quand nécessaire. N'invente pas de chiffres: privilégie les données MCP.",
+  };
+  const user = { role: 'user', content: String(message) };
+
+  // First pass: allow tool selection
+  const first = await openai.chat.completions.create({
+    model: 'gpt-4o-mini',
+    temperature: 0.2,
+    messages: [sys, user],
+    tools: getToolDefs(),
+    tool_choice: 'auto',
+  });
+
+  const msg = first.choices?.[0]?.message;
+  const toolCalls = msg?.tool_calls || [];
+  if (!toolCalls.length) {
+    return msg?.content || "Je n'ai pas de réponse.";
+  }
+
+  const convo = [sys, user, msg];
+  for (const call of toolCalls) {
+    if (call.type !== 'function' || !call.function) continue;
+    const fn = call.function.name;
+    let args = {};
+    try { args = JSON.parse(call.function.arguments || '{}'); } catch {}
+    if (fn !== 'call_mcp' || !args.tool) continue;
+    if (!allowedTools.includes(args.tool)) {
+      convo.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: 'Tool not allowed' }) });
+      continue;
+    }
+    let result;
+    try {
+      result = await callMcp(args.tool, args.input || {}, req);
+    } catch (e) {
+      result = { error: String(e && e.message) };
+    }
+    convo.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(result).slice(0, 20000) });
+  }
+
+  const second = await openai.chat.completions.create({
+    model: 'gpt-4o-mini',
+    temperature: 0.2,
+    messages: convo,
+  });
+  return second.choices?.[0]?.message?.content || 'Pas de réponse.';
 }
 
 function handleOptions(req, res) {
@@ -129,29 +209,16 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      // Intelligent fallback: call MCP + summarize with OpenAI if key provided
+      // Intelligent fallback: tool-augmented with OpenAI function calling if key provided
       if (openai) {
-        const intent = inferIntent(message);
-        let toolResult = null;
-        try {
-          toolResult = await callMcp(intent.tool, intent.input, req);
-        } catch (e) {
-          toolResult = { error: String(e && e.message) };
-        }
-
-        const prompt = [
-          { role: 'system', content: "Assistant portefeuille. Réponds en français, concis. Utilise STRICTEMENT les données JSON fournies (résultats MCP). N'invente pas de chiffres." },
-          { role: 'user', content: `Question:\n${message}\n\nRésultats MCP (${intent.tool}):\n${JSON.stringify(toolResult).slice(0, 15000)}` },
-        ];
-        const completion = await openai.chat.completions.create({ model: 'gpt-4o-mini', temperature: 0.3, messages: prompt });
-        const text = completion?.choices?.[0]?.message?.content || 'Je n\'ai pas pu générer de réponse.';
+        const text = await runWithTools(message, req);
 
         res.writeHead(200, {
           'Access-Control-Allow-Origin': allowedOrigin,
           'Content-Type': 'text/event-stream',
           'Cache-Control': 'no-cache',
           Connection: 'keep-alive',
-          'x-agent-mode': 'openai+mcp',
+          'x-agent-mode': 'openai+tools+mcp',
         });
         res.write(`data: ${JSON.stringify({ type: 'text', text })}\n\n`);
       res.end();
