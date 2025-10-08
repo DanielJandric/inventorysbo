@@ -66,8 +66,7 @@ function detectCountQuery(message) {
   if (!isHowMany) return null;
   if (/voitures?/.test(m)) {
     const fourSeats = /(4\s*(places|p))/i.test(message);
-    const q = fourSeats ? '4 places' : undefined;
-    return { category: 'Voitures', q };
+    return { category: 'Voitures', fourSeats };
   }
   if (/bateaux?/.test(m) || /(yacht|sunseeker|axopar)/.test(m)) {
     return { category: 'Bateaux' };
@@ -209,18 +208,41 @@ const server = http.createServer(async (req, res) => {
       // Handle explicit counting queries deterministically (no hallucinations)
       const countIntent = detectCountQuery(message);
       if (countIntent) {
-        const input = { page: 1, page_size: 1, filters: { category: countIntent.category } };
-        if (countIntent.q) input.q = countIntent.q;
+        const input = { page: 1, page_size: 1, filters: { category: countIntent.category, exclude_sold: true } };
         let result;
         try {
           result = await callMcp('items.search', input, req);
         } catch (e) {
           result = null;
         }
-        const total = (result && typeof result.total === 'number') ? result.total : 0;
+        let total = (result && typeof result.total === 'number') ? result.total : 0;
+
+        // If 4 places requested, refine with OpenAI brand/model heuristic
+        if (countIntent.fourSeats && total > 0 && openai) {
+          const pageSize = Math.min(Math.max(total, 1), 200);
+          let full;
+          try {
+            full = await callMcp('items.search', { page: 1, page_size: pageSize, filters: { category: countIntent.category, exclude_sold: true } }, req);
+          } catch { full = null; }
+          const items = (full && full.items) || [];
+          const brief = items.map(it => ({ id: it.id, brand: it.brand, model: it.model, name: it.name })).slice(0, 200);
+          const judge = await openai.chat.completions.create({
+            model: 'gpt-4o-mini',
+            temperature: 0,
+            messages: [
+              { role: 'system', content: "Tu es un classifieur: pour chaque voiture (brand, model, name), dis '4p' si c'est un modèle 4 places, sinon 'autre'. Réponds uniquement une liste JSON d'ids 4 places." },
+              { role: 'user', content: JSON.stringify(brief) },
+            ],
+          });
+          try {
+            const txt = judge.choices?.[0]?.message?.content || '[]';
+            const ids = JSON.parse(txt).map(Number).filter(n => Number.isInteger(n));
+            total = ids.length;
+          } catch {}
+        }
         const label = countIntent.category.toLowerCase();
-        const suffix = countIntent.q ? ` (${countIntent.q})` : '';
-        const text = `Vous avez ${total} ${label}${suffix ? suffix : ''}.`;
+        const suffix = countIntent.fourSeats ? ' (4 places)' : '';
+        const text = `Vous avez ${total} ${label}${suffix}.`;
         res.writeHead(200, {
           'Access-Control-Allow-Origin': allowedOrigin,
           'Content-Type': 'text/event-stream',

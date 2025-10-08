@@ -69,6 +69,8 @@ async function handleItemsSearch(ctx, input) {
   const f = (input.filters && typeof input.filters === 'object') ? input.filters : {};
   if (f.category) q = q.eq('category', f.category);
   if (f.status) q = q.eq('status', f.status);
+  if (f.sale_status) q = q.eq('sale_status', f.sale_status);
+  if (String(f.exclude_sold || 'false') === 'true') q = q.neq('sale_status', 'sold');
   if (typeof f.for_sale === 'boolean') q = q.eq('for_sale', f.for_sale);
   if (f.location) q = q.ilike('location', `%${f.location}%`);
   if (typeof f.price_min === 'number') q = q.gte('current_value', f.price_min);
@@ -137,9 +139,11 @@ async function handleItemsSetPrices(ctx, input) {
 
 async function handleItemsSummary(ctx, input) {
   const filters = (input && typeof input === 'object' ? input.filters : null) || {};
-  let q = ctx.supabase.from('items').select('id,category,status,for_sale');
+  let q = ctx.supabase.from('items').select('id,category,status,for_sale,sale_status,brand,model');
   if (filters.category) q = q.eq('category', filters.category);
   if (filters.status) q = q.eq('status', filters.status);
+  if (filters.sale_status) q = q.eq('sale_status', filters.sale_status);
+  if (String(filters.exclude_sold || 'false') === 'true') q = q.neq('sale_status', 'sold');
   if (typeof filters.for_sale === 'boolean') q = q.eq('for_sale', filters.for_sale);
   const resp = await q;
   if (resp.error) throw resp.error;
