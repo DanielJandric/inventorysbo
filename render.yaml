@@ -161,4 +161,8 @@ services:
     env: python
     schedule: "*/15 * * * *"
     buildCommand: "./build.sh"
-    startCommand: "bash -lc 'python - <<PY\nfrom tasks import chat_task\nprint("cron ok")\nPY'"
+    startCommand: |
+      bash -lc 'python - <<PY
+      from tasks import chat_task
+      print("cron ok")
+      PY'
