@@ -366,11 +366,42 @@ const registry = {
   'exports.generate': handleExportsGenerate,
 };
 
+function buildToolList() {
+  const descriptions = {
+    'items.search': 'Rechercher des items avec filtres et pagination.',
+    'items.get': 'Récupérer un item par id.',
+    'items.similar': 'Trouver des items similaires par texte.',
+    'items.update_status': "Mettre à jour le statut d'un item.",
+    'items.set_prices': "Mettre à jour les prix et statut d'un item.",
+    'items.summary': 'Résumé agrégé des items (par catégorie, statut).',
+    'banking.classes.list': 'Lister les classes d’actifs bancaires (major/minor).',
+    'banking.summary': 'Résumé agrégé des classes bancaires.',
+    'market.analyses.search': 'Rechercher des analyses de marché.',
+    'market.analyses.get': 'Obtenir une analyse de marché par id.',
+    'market.analyses.upsert': 'Insérer ou mettre à jour une analyse de marché.',
+    'realestate.listings.search': 'Rechercher des annonces immobilières.',
+    'trades.list': 'Lister les transactions.',
+    'trades.record': 'Enregistrer une nouvelle transaction.',
+    'trades.close': 'Clôturer une transaction.',
+    'exports.generate': 'Générer un export de données (csv/xlsx/pdf).',
+  };
+  return Object.keys(registry).map((name) => ({
+    name,
+    description: descriptions[name] || name,
+    input_schema: { type: 'object', additionalProperties: true },
+  }));
+}
+
 const server = http.createServer(async (req, res) => {
   const { method, url } = req;
 
   if (method === 'GET' && url === '/health') {
     return sendJson(res, 200, { ok: true });
+  }
+
+  // Minimal MCP tool listing for Agents SDK HostedMCPTool
+  if (method === 'GET' && (url === '/mcp/tools' || url === '/mcp/list_tools' || url === '/mcp/list-tools')) {
+    return sendJson(res, 200, { tools: buildToolList() });
   }
 
   if (method === 'POST' && url === '/mcp') {
