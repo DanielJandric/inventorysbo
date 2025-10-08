@@ -4,6 +4,7 @@ const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPE
 const allowedTools = [
       'items.search', 'items.get', 'items.similar',
       'items.update_status', 'items.set_prices',
+  'items.summary',
       'banking.classes.list', 'banking.summary',
       'market.analyses.search', 'market.analyses.get', 'market.analyses.upsert',
       'realestate.listings.search',
@@ -105,26 +106,30 @@ async function runWithTools(message, req) {
   };
   const user = { role: 'user', content: String(message) };
 
-  const baseMessages = [sys, ...history.slice(-6), user];
-  const first = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
-    temperature: 0.2,
-    messages: baseMessages,
-    tools: getToolDefs(),
-    tool_choice: 'auto',
-  });
-
-  const msg = first.choices?.[0]?.message;
-  const toolCalls = msg?.tool_calls || [];
-  const convo = [...baseMessages, msg];
-  if (toolCalls.length) {
+  let convo = [sys, ...history.slice(-6), user];
+  for (let step = 0; step < 3; step++) {
+    const comp = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      temperature: 0.2,
+      messages: convo,
+      tools: getToolDefs(),
+      tool_choice: 'auto',
+    });
+    const msg = comp.choices?.[0]?.message;
+    if (!msg) break;
+    convo.push(msg);
+    const toolCalls = msg.tool_calls || [];
+    if (!toolCalls.length) {
+      const text = msg.content || 'Pas de réponse.';
+      pushHistory(sessionId, 'user', message);
+      pushHistory(sessionId, 'assistant', text);
+      return text;
+    }
     for (const call of toolCalls) {
       if (call.type !== 'function' || !call.function) continue;
       const fn = call.function.name;
       let args = {};
-      try {
-        args = JSON.parse(call.function.arguments || '{}');
-      } catch {}
+      try { args = JSON.parse(call.function.arguments || '{}'); } catch {}
       if (fn !== 'call_mcp' || !args.tool) continue;
       if (!allowedTools.includes(args.tool)) {
         convo.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: 'Tool not allowed' }) });
@@ -139,16 +144,10 @@ async function runWithTools(message, req) {
       convo.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(result).slice(0, 20000) });
     }
   }
-
-  const second = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
-    temperature: 0.2,
-    messages: convo,
-  });
-  const text = second.choices?.[0]?.message?.content || 'Pas de réponse.';
+  const fallback = 'Je n\'ai pas pu produire de réponse complète.';
   pushHistory(sessionId, 'user', message);
-  pushHistory(sessionId, 'assistant', text);
-  return text;
+  pushHistory(sessionId, 'assistant', fallback);
+  return fallback;
 }
 
 function detectFastestCarQuery(message) {
@@ -348,7 +347,7 @@ const server = http.createServer(async (req, res) => {
         const text = `Vous avez ${total} ${label}${suffix}.`;
         res.writeHead(200, {
           'Access-Control-Allow-Origin': allowedOrigin,
-          'Content-Type': 'text/event-stream',
+          'Content-Type': 'text/event-stream; charset=utf-8',
           'Cache-Control': 'no-cache',
           Connection: 'keep-alive',
           'x-agent-mode': 'deterministic',
@@ -370,7 +369,7 @@ const server = http.createServer(async (req, res) => {
 
         res.writeHead(200, {
           'Access-Control-Allow-Origin': allowedOrigin,
-          'Content-Type': 'text/event-stream',
+          'Content-Type': 'text/event-stream; charset=utf-8',
           'Cache-Control': 'no-cache',
           Connection: 'keep-alive',
           'x-agent-mode': 'openai+tools+mcp',
