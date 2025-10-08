@@ -1,0 +1,95 @@
+import os
+import asyncio
+from flask import Flask, request, jsonify, send_from_directory
+from supabase import create_client
+
+# Agents SDK (Python)
+from agents import Agent, Runner, HostedMCPTool, ModelSettings
+from openai.types.shared import Reasoning
+
+
+# --- Config externes ---
+OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
+SUPABASE_URL = os.environ["SUPABASE_URL"]
+SUPABASE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+MCP_SERVER_URL = os.getenv("MCP_SERVER_URL")  # optionnel
+
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+app = Flask(__name__, static_url_path="", static_folder="static")
+
+
+# --- Helpers Supabase ---
+def ensure_chat(chat_id: str | None) -> str:
+    if chat_id:
+        return chat_id
+    res = supabase.table("chats").insert({"title": "New chat"}).execute()
+    return res.data[0]["id"]
+
+
+def save_message(chat_id: str, role: str, content: str):
+    supabase.table("messages").insert(
+        {"chat_id": chat_id, "role": role, "content": content}
+    ).execute()
+
+
+# --- Agent factory (GPT-5 + MCP) ---
+def make_agent() -> Agent:
+    tools = []
+    if MCP_SERVER_URL:
+        tools.append(
+            HostedMCPTool(
+                tool_config={
+                    "type": "mcp",
+                    "server_label": "inventory_mcp",
+                    "server_url": MCP_SERVER_URL,
+                    "require_approval": "never",
+                }
+            )
+        )
+    return Agent(
+        name="Site Assistant",
+        instructions=(
+            "Tu es l’assistant du site. Réponds clairement, cite si utile. "
+            "Utilise les outils MCP quand c’est pertinent. N'invente pas de chiffres: privilégie les données MCP."
+        ),
+        model="gpt-5",
+        model_settings=ModelSettings(
+            reasoning=Reasoning(effort="high"),  # reasoning high
+            verbosity="medium",                   # verbosity medium
+            temperature=0.2,
+        ),
+        tools=tools,
+    )
+
+
+@app.route("/chat", methods=["POST"])
+def chat():
+    data = request.get_json(force=True)
+    user_msg = (data.get("message") or data.get("input") or "").strip()
+    chat_id = ensure_chat(data.get("chat_id"))
+
+    if not user_msg:
+        return jsonify({"error": "message manquant"}), 400
+
+    save_message(chat_id, "user", user_msg)
+
+    agent = make_agent()
+    # Run l’agent (synchrone via asyncio.run le temps d’une requête)
+    result = asyncio.run(Runner.run(agent, user_msg))
+    assistant_msg = result.final_output or ""
+
+    save_message(chat_id, "assistant", assistant_msg)
+    return jsonify({"chat_id": chat_id, "output": assistant_msg})
+
+
+@app.route("/")
+def index():
+    return send_from_directory("static", "index.html")
+
+
+if __name__ == "__main__":
+    # Pour local: `python apps/chat-agent/app.py`
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", "8000")), debug=True)
+
+

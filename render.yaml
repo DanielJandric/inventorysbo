@@ -110,6 +110,22 @@ services:
       - key: OPENAI_API_KEY
         sync: false
 
+  - type: web
+    name: chat-agent
+    env: python
+    buildCommand: "pip install -r apps/chat-agent/requirements.txt"
+    startCommand: "bash -lc 'cd apps/chat-agent && gunicorn app:app'"
+    autoDeploy: yes
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: MCP_SERVER_URL
+        sync: false
+
   - type: worker
     name: inventorysbo-pdf-worker
     env: python

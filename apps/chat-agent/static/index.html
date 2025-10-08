@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Chat GPT-5 (Render)</title>
+  <style>
+    body { font: 16px/1.4 system-ui, sans-serif; margin: 2rem; }
+    #log { white-space: pre-wrap; border: 1px solid #ddd; padding: 1rem; border-radius: 8px; min-height: 200px; }
+    input, button { font: inherit; padding: .6rem .8rem; }
+  </style>
+  </head>
+<body>
+  <h1>Assistant du site (GPT-5)</h1>
+  <div id="log"></div>
+  <form id="f" style="margin-top:1rem">
+    <input id="msg" placeholder="Pose ta question…" size="60" />
+    <button>Envoyer</button>
+  </form>
+  <script>
+    let chatId = null;
+    const f = document.getElementById("f");
+    const msg = document.getElementById("msg");
+    const log = document.getElementById("log");
+
+    f.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const text = msg.value.trim(); if (!text) return;
+      log.textContent += `\n👤 ${text}`;
+      msg.value = "";
+
+      const r = await fetch("/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: chatId, message: text }),
+      });
+      const data = await r.json();
+      if (data.error) { log.textContent += `\n⚠️ ${data.error}`; return; }
+      chatId = data.chat_id;
+      log.textContent += `\n🤖 ${data.output}\n`;
+    });
+  </script>
+</body>
+</html>
+
+
