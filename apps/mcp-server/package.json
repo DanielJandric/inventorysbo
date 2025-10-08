@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",
-    "json2csv": "^6.0.0",
+    "json2csv": "^5.0.7",
     "xlsx": "^0.18.5"
   }
 }
