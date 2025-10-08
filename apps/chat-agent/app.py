@@ -1,5 +1,6 @@
 import os
 import asyncio
+import logging
 from flask import Flask, request, jsonify, send_from_directory
 from supabase import create_client
 
@@ -17,6 +18,10 @@ MCP_SERVER_URL = os.getenv("MCP_SERVER_URL")  # optionnel
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 app = Flask(__name__, static_url_path="", static_folder="static")
+
+# Logging de base (stdout pour Render)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
+logger = logging.getLogger(__name__)
 
 
 # --- Helpers Supabase ---
@@ -65,22 +70,39 @@ def make_agent() -> Agent:
 
 @app.route("/chat", methods=["POST"])
 def chat():
-    data = request.get_json(force=True)
-    user_msg = (data.get("message") or data.get("input") or "").strip()
-    chat_id = ensure_chat(data.get("chat_id"))
+    try:
+        data = request.get_json(force=True)
+    except Exception:
+        logger.exception("invalid_json")
+        return jsonify({"error": "invalid json"}), 400
+
+    user_msg = (data.get("message") or data.get("input") or "").strip() if isinstance(data, dict) else ""
+    chat_id = ensure_chat((data or {}).get("chat_id") if isinstance(data, dict) else None)
 
     if not user_msg:
+        logger.info("chat_request_empty")
         return jsonify({"error": "message manquant"}), 400
 
-    save_message(chat_id, "user", user_msg)
+    logger.info("chat_request start chat_id=%s len=%d", chat_id, len(user_msg))
+    try:
+        save_message(chat_id, "user", user_msg)
+    except Exception:
+        logger.exception("supabase_save_user_failed")
 
-    agent = make_agent()
-    # Run l’agent (synchrone via asyncio.run le temps d’une requête)
-    result = asyncio.run(Runner.run(agent, user_msg))
-    assistant_msg = result.final_output or ""
-
-    save_message(chat_id, "assistant", assistant_msg)
-    return jsonify({"chat_id": chat_id, "output": assistant_msg})
+    try:
+        agent = make_agent()
+        # Run l’agent (synchrone via asyncio.run le temps d’une requête)
+        result = asyncio.run(Runner.run(agent, user_msg))
+        assistant_msg = result.final_output or ""
+        try:
+            save_message(chat_id, "assistant", assistant_msg)
+        except Exception:
+            logger.exception("supabase_save_assistant_failed")
+        logger.info("chat_request done chat_id=%s out_len=%d", chat_id, len(assistant_msg))
+        return jsonify({"chat_id": chat_id, "output": assistant_msg})
+    except Exception:
+        logger.exception("agent_run_failed")
+        return jsonify({"error": "agent error"}), 500
 
 
 @app.route("/")
