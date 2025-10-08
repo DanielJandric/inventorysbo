@@ -251,6 +251,83 @@ function sha256Hex(s) {
   return crypto.createHash('sha256').update(s).digest('hex');
 }
 
+// New handlers
+async function handleItemsTopByValue(ctx, input) {
+  const category = input.category || null;
+  const page_size = Math.min(Math.max(Number(input.page_size || 10) || 10, 1), 50);
+  let q = ctx.supabase.from('items').select('*').order('current_value', { ascending: false }).limit(page_size);
+  if (category) q = q.eq('category', category);
+  if (String(input.exclude_sold || 'true') === 'true') q = q.neq('sale_status', 'sold');
+  const resp = await q;
+  if (resp.error) throw resp.error;
+  return { items: resp.data || [] };
+}
+
+async function handleChatsList(ctx, input) {
+  const resp = await ctx.supabase.from('chats').select('id,title,created_at').order('created_at', { ascending: false }).limit(200);
+  if (resp.error) throw resp.error;
+  return { chats: resp.data || [] };
+}
+
+async function handleMessagesList(ctx, input) {
+  const chat_id = input.chat_id;
+  if (!chat_id) {
+    const e = new Error('chat_id is required'); e.statusCode = 400; throw e;
+  }
+  const resp = await ctx.supabase.from('messages').select('id,chat_id,role,content,created_at').eq('chat_id', chat_id).order('created_at', { ascending: true }).limit(1000);
+  if (resp.error) throw resp.error;
+  return { messages: resp.data || [] };
+}
+
+async function handleMessagesAdd(ctx, input) {
+  const record = { chat_id: input.chat_id, role: input.role, content: input.content };
+  if (!record.chat_id || !record.role || !record.content) {
+    const e = new Error('chat_id, role, content are required'); e.statusCode = 400; throw e;
+  }
+  const resp = await ctx.supabase.from('messages').insert(record).select('id,created_at').single();
+  if (resp.error) throw resp.error;
+  return { status: 'inserted', id: resp.data.id, created_at: resp.data.created_at };
+}
+
+async function handleSchemaTables(ctx, input) {
+  const resp = await ctx.supabase.rpc('http_get_tables');
+  if (resp.error) {
+    // Fallback simple en interrogeant pg_catalog si rpc absent
+    const sql = `select table_name from information_schema.tables where table_schema = 'public' order by table_name`;
+    const { data, error } = await ctx.supabase.rpc('exec_sql', { q: sql });
+    if (error) throw error;
+    return { tables: data || [] };
+  }
+  return { tables: resp.data || [] };
+}
+
+async function handleSchemaColumns(ctx, input) {
+  const table = input.table;
+  if (!table) { const e = new Error('table is required'); e.statusCode = 400; throw e; }
+  const sql = `select column_name, data_type from information_schema.columns where table_schema = 'public' and table_name = '${table}' order by ordinal_position`;
+  const { data, error } = await ctx.supabase.rpc('exec_sql', { q: sql });
+  if (error) throw error;
+  return { columns: data || [] };
+}
+
+async function handleDbQuery(ctx, input) {
+  const table = input.table;
+  if (!table) { const e = new Error('table is required'); e.statusCode = 400; throw e; }
+  // Whitelist simple de tables usuelles
+  const allowed = new Set(['items','trades','market_analyses','real_estate_listings','banking_asset_classes_major','banking_asset_classes_minor','banking_asset_class_summary','chats','messages']);
+  if (!allowed.has(table)) { const e = new Error('table not allowed'); e.statusCode = 403; throw e; }
+  let q = ctx.supabase.from(table).select('*');
+  const filters = (input.filters && typeof input.filters === 'object') ? input.filters : {};
+  for (const [k, v] of Object.entries(filters)) {
+    if (v === null) q = q.is(k, null);
+    else q = q.eq(k, v);
+  }
+  if (input.order_by) q = q.order(input.order_by, { ascending: input.ascending !== false });
+  if (input.limit) q = q.limit(Math.min(Math.max(Number(input.limit) || 50, 1), 200));
+  const resp = await q;
+  if (resp.error) throw resp.error;
+  return { rows: resp.data || [] };
+}
 async function handleTradesList(ctx, input) {
   let q = ctx.supabase.from('trades').select('*').order('entry_date', { ascending: false }).limit(500);
   if (input.symbol) q = q.eq('symbol', input.symbol);
@@ -355,6 +432,8 @@ const registry = {
   'items.update_status': handleItemsUpdateStatus,
   'items.set_prices': handleItemsSetPrices,
   'items.summary': handleItemsSummary,
+  // New items helpers
+  'items.top_by_value': handleItemsTopByValue,
   'banking.classes.list': handleBankingClassesList,
   'banking.summary': handleBankingSummary,
   'market.analyses.search': handleMarketSearch,
@@ -364,6 +443,14 @@ const registry = {
   'trades.list': handleTradesList,
   'trades.record': handleTradesRecord,
   'trades.close': handleTradesClose,
+  // Chat persistence helpers
+  'chats.list': handleChatsList,
+  'messages.list': handleMessagesList,
+  'messages.add': handleMessagesAdd,
+  // Generic DB tools
+  'schema.tables': handleSchemaTables,
+  'schema.columns': handleSchemaColumns,
+  'db.query': handleDbQuery,
   'exports.generate': handleExportsGenerate,
 };
 
@@ -375,6 +462,7 @@ function buildToolList() {
     'items.update_status': "Mettre à jour le statut d'un item.",
     'items.set_prices': "Mettre à jour les prix et statut d'un item.",
     'items.summary': 'Résumé agrégé des items (par catégorie, statut).',
+    'items.top_by_value': 'Top items par valeur (option catégorie, hors vendus).',
     'banking.classes.list': 'Lister les classes d’actifs bancaires (major/minor).',
     'banking.summary': 'Résumé agrégé des classes bancaires.',
     'market.analyses.search': 'Rechercher des analyses de marché.',
@@ -384,6 +472,12 @@ function buildToolList() {
     'trades.list': 'Lister les transactions.',
     'trades.record': 'Enregistrer une nouvelle transaction.',
     'trades.close': 'Clôturer une transaction.',
+    'chats.list': 'Lister les chats (id, title, created_at).',
+    'messages.list': 'Lister les messages d’un chat (ordre chronologique).',
+    'messages.add': 'Ajouter un message (chat_id, role, content).',
+    'schema.tables': 'Lister les tables (public).',
+    'schema.columns': 'Lister les colonnes pour une table donnée.',
+    'db.query': 'Requête générique (table whitelist), select/filters/order/limit.',
     'exports.generate': 'Générer un export de données (csv/xlsx/pdf).',
   };
   return Object.keys(registry).map((name) => ({
