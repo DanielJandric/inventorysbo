@@ -114,7 +114,7 @@ services:
     name: chat-agent
     env: python
     buildCommand: "pip install -r apps/chat-agent/requirements.txt"
-    startCommand: "bash -lc 'cd apps/chat-agent && gunicorn app:app'"
+    startCommand: "bash -lc 'cd apps/chat-agent && exec gunicorn -b 0.0.0.0:$PORT app:app'"
     autoDeploy: yes
     envVars:
       - key: OPENAI_API_KEY
