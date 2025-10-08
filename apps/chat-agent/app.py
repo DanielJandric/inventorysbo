@@ -7,7 +7,7 @@ from flask import Flask, request, jsonify, send_from_directory
 from supabase import create_client
 
 # Agents SDK (Python)
-from agents import Agent, Runner, ModelSettings
+from agents import Agent, Runner, HostedMCPTool, ModelSettings
 from openai.types.shared import Reasoning
 
 
@@ -60,7 +60,19 @@ def make_agent() -> Agent:
 
 async def run_with_mcp(prompt: str) -> str:
     # Agent avec HostedMCPTool (le serveur expose /tools et POST d'invocation)
-    tools = []  # Désactivé: HostedMCPTool (évite 424 tool-list)
+    tools = []
+    if MCP_SERVER_URL:
+        try:
+            cfg = {
+                "type": "mcp",
+                "server_label": "inventory_mcp",
+                "server_url": MCP_SERVER_URL,  # ex: https://mcp-server-xxx.onrender.com
+                "require_approval": "never",
+            }
+            tools.append(HostedMCPTool(tool_config=cfg))
+            logger.info("HostedMCPTool enabled url=%s", MCP_SERVER_URL)
+        except Exception:
+            logger.exception("HostedMCPTool_enable_failed")
 
     agent = Agent(
         name="Site Assistant",
