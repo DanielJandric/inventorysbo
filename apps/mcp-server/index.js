@@ -404,7 +404,7 @@ const server = http.createServer(async (req, res) => {
     return sendJson(res, 200, { tools: buildToolList() });
   }
 
-  if (method === 'POST' && url === '/mcp') {
+  if (method === 'POST' && (url === '/mcp' || url === '/mcp/invoke' || url === '/invoke' || url === '/call')) {
     const start = Date.now();
     try {
       const body = await parseJsonBody(req);
@@ -412,8 +412,8 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 400, { ok: false, error: 'Invalid JSON body' });
       }
 
-      const toolName = body.tool || body.name;
-      const args = body.input || body.arguments || body.params || {};
+      const toolName = body.tool || body.name || body.method;
+      const args = body.input || body.arguments || body.params || body.args || {};
   if (!toolName || typeof toolName !== 'string') {
         return sendJson(res, 400, { ok: false, error: 'Missing tool name' });
       }

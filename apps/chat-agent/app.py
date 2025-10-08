@@ -6,8 +6,7 @@ from flask import Flask, request, jsonify, send_from_directory
 from supabase import create_client
 
 # Agents SDK (Python)
-from agents import Agent, Runner, ModelSettings
-from agents.mcp import MCPServerStreamableHttp
+from agents import Agent, Runner, HostedMCPTool, ModelSettings
 from openai.types.shared import Reasoning
 
 
@@ -59,57 +58,38 @@ def make_agent() -> Agent:
 
 
 async def run_with_mcp(prompt: str) -> str:
-    if not MCP_SERVER_URL:
-        # Pas de MCP configuré: agent sans serveur MCP
-        agent = make_agent()
-        return (await Runner.run(agent, prompt)).final_output or ""
+    # Agent avec HostedMCPTool (le serveur expose /tools et POST d'invocation)
+    tools = []
+    if MCP_SERVER_URL:
+        cfg = {
+            "type": "mcp",
+            "server_label": "inventory_mcp",
+            "server_url": MCP_SERVER_URL,
+            "require_approval": "never",
+            "request_timeout_ms": 15000,
+        }
+        tools.append(HostedMCPTool(tool_config=cfg))
 
+    agent = Agent(
+        name="Site Assistant",
+        instructions=(
+            "Tu es l’assistant du site. Réponds clairement, cite si utile. "
+            "Utilise les outils MCP quand c’est pertinent. N'invente pas de chiffres: privilégie les données MCP."
+        ),
+        model="gpt-5",
+        model_settings=ModelSettings(
+            reasoning=Reasoning(effort="high"),
+            verbosity="medium",
+        ),
+        tools=tools,
+    )
     try:
-        # Construit les headers MCP optionnels
-        headers: dict | None = None
-        try:
-            extra = json.loads(MCP_SERVER_HEADERS) if MCP_SERVER_HEADERS else None
-            if MCP_SERVER_TOKEN or extra:
-                headers = {}
-                if MCP_SERVER_TOKEN:
-                    headers["Authorization"] = f"Bearer {MCP_SERVER_TOKEN}"
-                if isinstance(extra, dict):
-                    headers.update({str(k): str(v) for k, v in extra.items()})
-        except Exception:
-            logger.exception("invalid_mcp_headers_json")
-
-        async def _run() -> str:
-            async with MCPServerStreamableHttp(
-            name="inventory_mcp_stream",
-            params={
-                "url": MCP_SERVER_URL,
-                "timeout": 20,
-                **({"headers": headers} if headers else {}),
-            },
-            cache_tools_list=True,
-            ) as server:
-                agent = Agent(
-                    name="Site Assistant",
-                    instructions=(
-                        "Tu es l’assistant du site. Réponds clairement, cite si utile. "
-                        "Utilise les outils MCP quand c’est pertinent. N'invente pas de chiffres: privilégie les données MCP."
-                    ),
-                    model="gpt-5",
-                    model_settings=ModelSettings(
-                        reasoning=Reasoning(effort="high"),
-                        verbosity="medium",
-                    ),
-                    mcp_servers=[server],
-                )
-                return (await Runner.run(agent, prompt)).final_output or ""
-
-        # Timeout de connexion/usage MCP pour éviter les blocages
-        return await asyncio.wait_for(_run(), timeout=12)
-    except BaseException:
-        logger.exception("mcp_connect_failed")
-        # Fallback sans MCP
-        agent = make_agent()
         return (await Runner.run(agent, prompt)).final_output or ""
+    except Exception:
+        logger.exception("mcp_hosted_failed")
+        # Fallback sans MCP
+        agent2 = make_agent()
+        return (await Runner.run(agent2, prompt)).final_output or ""
 
 
 @app.route("/chat", methods=["POST"])
