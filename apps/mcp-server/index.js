@@ -342,6 +342,81 @@ async function handleDbQuery(ctx, input) {
   if (resp.error) throw resp.error;
   return { rows: resp.data || [] };
 }
+
+function validateTableName(name) {
+  return typeof name === 'string' && /^[A-Za-z0-9_]+$/.test(name);
+}
+
+// Generic, unrestricted helpers over public schema
+async function handleDbSelect(ctx, input) {
+  const table = input.table;
+  if (!validateTableName(table)) { const e = new Error('invalid table'); e.statusCode = 400; throw e; }
+  const columns = typeof input.columns === 'string' && input.columns.trim() ? input.columns : '*';
+  let q = ctx.supabase.from(table).select(columns, { count: 'exact' });
+  const filters = (input.filters && typeof input.filters === 'object') ? input.filters : {};
+  for (const [k, v] of Object.entries(filters)) {
+    if (v === null) q = q.is(k, null); else q = q.eq(k, v);
+  }
+  const ilike = (input.ilike && typeof input.ilike === 'object') ? input.ilike : {};
+  for (const [k, v] of Object.entries(ilike)) {
+    if (typeof v === 'string') q = q.ilike(k, v);
+  }
+  if (Array.isArray(input.order_by)) {
+    for (const ob of input.order_by) {
+      if (typeof ob === 'string') q = q.order(ob, { ascending: input.ascending !== false });
+      else if (ob && typeof ob === 'object' && ob.column) q = q.order(ob.column, { ascending: ob.ascending !== false, nullsFirst: !!ob.nullsFirst });
+    }
+  } else if (input.order_by) {
+    q = q.order(input.order_by, { ascending: input.ascending !== false });
+  }
+  if (input.limit) q = q.limit(Math.min(Math.max(Number(input.limit) || 100, 1), 2000));
+  if (input.range && typeof input.range === 'object') {
+    const from = Math.max(Number(input.range.from) || 0, 0);
+    const to = Math.max(Number(input.range.to) || (from + 99), from);
+    q = q.range(from, to);
+  }
+  const resp = await q;
+  if (resp.error) throw resp.error;
+  return { rows: resp.data || [], total: resp.count ?? null };
+}
+
+async function handleDbInsert(ctx, input) {
+  const table = input.table;
+  if (!validateTableName(table)) { const e = new Error('invalid table'); e.statusCode = 400; throw e; }
+  const records = Array.isArray(input.records) ? input.records : (input.record ? [input.record] : []);
+  if (!records.length) { const e = new Error('records (array) or record is required'); e.statusCode = 400; throw e; }
+  const resp = await ctx.supabase.from(table).insert(records).select('*');
+  if (resp.error) throw resp.error;
+  return { inserted: resp.data || [], count: Array.isArray(resp.data) ? resp.data.length : 0 };
+}
+
+async function handleDbUpdate(ctx, input) {
+  const table = input.table;
+  if (!validateTableName(table)) { const e = new Error('invalid table'); e.statusCode = 400; throw e; }
+  const match = (input.match && typeof input.match === 'object') ? input.match : null;
+  const patch = (input.patch && typeof input.patch === 'object') ? input.patch : null;
+  if (!match || !patch) { const e = new Error('match and patch are required'); e.statusCode = 400; throw e; }
+  let q = ctx.supabase.from(table).update(patch);
+  for (const [k, v] of Object.entries(match)) q = q.eq(k, v);
+  if (input.limit) q = q.limit(Math.min(Math.max(Number(input.limit) || 100, 1), 2000));
+  q = q.select('*');
+  const resp = await q;
+  if (resp.error) throw resp.error;
+  return { updated: resp.data || [], count: Array.isArray(resp.data) ? resp.data.length : 0 };
+}
+
+async function handleDbDelete(ctx, input) {
+  const table = input.table;
+  if (!validateTableName(table)) { const e = new Error('invalid table'); e.statusCode = 400; throw e; }
+  const match = (input.match && typeof input.match === 'object') ? input.match : null;
+  if (!match) { const e = new Error('match is required'); e.statusCode = 400; throw e; }
+  let q = ctx.supabase.from(table).delete();
+  for (const [k, v] of Object.entries(match)) q = q.eq(k, v);
+  q = q.select('*');
+  const resp = await q;
+  if (resp.error) throw resp.error;
+  return { deleted: resp.data || [], count: Array.isArray(resp.data) ? resp.data.length : 0 };
+}
 async function handleTradesList(ctx, input) {
   let q = ctx.supabase.from('trades').select('*').order('entry_date', { ascending: false }).limit(500);
   if (input.symbol) q = q.eq('symbol', input.symbol);
@@ -466,6 +541,11 @@ const registry = {
   'schema.tables': handleSchemaTables,
   'schema.columns': handleSchemaColumns,
   'db.query': handleDbQuery,
+  // Unrestricted public schema helpers
+  'db.select': handleDbSelect,
+  'db.insert': handleDbInsert,
+  'db.update': handleDbUpdate,
+  'db.delete': handleDbDelete,
   'exports.generate': handleExportsGenerate,
 };
 
@@ -494,6 +574,10 @@ function buildToolList() {
     'schema.tables': 'Lister les tables (public).',
     'schema.columns': 'Lister les colonnes pour une table donnée.',
     'db.query': 'Requête générique (table whitelist), select/filters/order/limit.',
+    'db.select': 'Sélection générique (toutes tables publiques): table, columns, filters, order, limit.',
+    'db.insert': 'Insertion générique: table, records[].',
+    'db.update': 'Mise à jour générique: table, match{}, patch{}, limit?',
+    'db.delete': 'Suppression générique: table, match{}, limit?',
     'exports.generate': 'Générer un export de données (csv/xlsx/pdf).',
   };
   return Object.keys(registry).map((name) => ({
