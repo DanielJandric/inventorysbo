@@ -981,6 +981,43 @@ class MarketAnalysisWorker:
         except Exception:
             headlines_html = ''
 
+        # Préparer sous-blocs HTML header (évite f-strings imbriquées dans f-strings)
+        try:
+            subtitle_html = ''
+            try:
+                _sub = market_pulse.get('subtitle') if isinstance(market_pulse, dict) else ''
+                if isinstance(_sub, str) and _sub.strip():
+                    subtitle_html = '<div style="margin-top:8px;font-size:14px;color:rgba(255,255,255,0.95);font-weight:600;">' + html.escape(_sub[:180]) + '</div>'
+            except Exception:
+                subtitle_html = ''
+
+            verdict_trinity_html = ''
+            try:
+                _vt = market_pulse.get('verdict_trinity') if isinstance(market_pulse, dict) else None
+                if isinstance(_vt, list) and _vt:
+                    chips = []
+                    for v in _vt:
+                        chips.append('<td style="padding:4px 5px;">\n<span style="display:inline-block;background:rgba(0,0,0,0.25);padding:6px 10px;border-radius:999px;font-size:12px;font-weight:700;color:#fff;">' + html.escape(str(v)) + '</span>\n</td>')
+                    verdict_trinity_html = '<table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin-top:10px;"><tr>' + ''.join(chips) + '</tr></table>'
+            except Exception:
+                verdict_trinity_html = ''
+
+            key_metric_html = ''
+            try:
+                _km = market_pulse.get('key_metric') if isinstance(market_pulse, dict) else None
+                if isinstance(_km, dict) and (_km.get('name') or _km.get('value')):
+                    _name = html.escape(str(_km.get('name', '')))
+                    _val = html.escape(str(_km.get('value', '')))
+                    _chg = html.escape(str(_km.get('change', '')))
+                    _sig = html.escape(str(_km.get('significance', '')))
+                    key_metric_html = '<div style="margin-top:8px;font-size:13px;color:rgba(255,255,255,0.9);">' + _name + ': <strong>' + _val + '</strong> (' + _chg + ') — ' + _sig + '</div>'
+            except Exception:
+                key_metric_html = ''
+        except Exception:
+            subtitle_html = ''
+            verdict_trinity_html = ''
+            key_metric_html = ''
+
         # Générer le HTML optimisé pour mobile (ordre: titre -> executive summary -> summary -> reste)
         html_content = f"""
         <!DOCTYPE html>
@@ -1210,9 +1247,9 @@ class MarketAnalysisWorker:
             <div class="container">
                 <div class="header" style="{header_style}color:#ffffff;padding:24px 16px;text-align:center;">
                     <h1 style="margin:0;font-size:22px;letter-spacing:1px;text-transform:uppercase;font-weight:800;color:#ffffff;">{header_title}</h1>
-                    {('' if not market_pulse.get('subtitle') else f'<div style="margin-top:8px;font-size:14px;color:rgba(255,255,255,0.95);font-weight:600;">{html.escape(str(market_pulse.get("subtitle"))[:180])}</div>')}
-                    {('' if not market_pulse.get('verdict_trinity') else '<table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin-top:10px;"><tr>' + ''.join([f'<td style="padding:4px 5px;">\n<span style="display:inline-block;background:rgba(0,0,0,0.25);padding:6px 10px;border-radius:999px;font-size:12px;font-weight:700;color:#fff;">{html.escape(str(v))}</span>\n</td>' for v in (market_pulse.get('verdict_trinity') or [])]) + '</tr></table>')}
-                    {('' if not market_pulse.get('key_metric') else f'<div style="margin-top:8px;font-size:13px;color:rgba(255,255,255,0.9);">{html.escape(str((market_pulse.get("key_metric") or {}).get("name", "")))}: <strong>{html.escape(str((market_pulse.get("key_metric") or {}).get("value", "")))}</strong> ({html.escape(str((market_pulse.get("key_metric") or {}).get("change", "")))}) — {html.escape(str((market_pulse.get("key_metric") or {}).get("significance", "")))}</div>')}
+                    {subtitle_html}
+                    {verdict_trinity_html}
+                    {key_metric_html}
                     {headlines_html}
                     <div class="date" style="margin-top:6px;font-size:13px;font-weight:500;color:rgba(255,255,255,0.92);">Généré le {ts_str}</div>
                 </div>
