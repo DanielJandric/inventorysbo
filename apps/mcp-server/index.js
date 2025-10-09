@@ -15,6 +15,10 @@ if (AUTH_TOKENS.length === 0) {
   throw new Error('MCP server requires MCP_SERVER_TOKEN (comma separated for multiple tokens)');
 }
 const EXPORTS_ENABLED = String(process.env.MCP_ENABLE_EXPORTS || '').toLowerCase() === 'true';
+const DEFAULT_ITEM_COLUMNS =
+  'id,name,category,brand,model,current_value,construction_year,' +
+  'last_action_date,sale_status,for_sale,location,created_at,updated_at';
+const TRUNCATE_MAX = Number(process.env.MCP_TRUNCATE_MAX || 200);
 
 function sendJson(res, statusCode, data, extraHeaders) {
   const headers = Object.assign(
@@ -110,7 +114,12 @@ async function handleItemsSearch(ctx, input) {
   const page_size = Math.min(Math.max(Number(input.page_size || 25) || 25, 1), 50);
   const from = (page - 1) * page_size;
   const to = from + page_size - 1;
-  const fields = (typeof input.fields === 'string' && input.fields.trim()) ? input.fields : '*';
+  let fields = '*';
+  if (typeof input.fields === 'string' && input.fields.trim()) {
+    fields = input.fields.trim();
+  } else {
+    fields = DEFAULT_ITEM_COLUMNS;
+  }
   let q = ctx.supabase.from('items').select(fields, { count: 'exact' });
   const f = (input.filters && typeof input.filters === 'object') ? input.filters : {};
   if (Array.isArray(f.category_in) && f.category_in.length) {
@@ -140,7 +149,8 @@ async function handleItemsSearch(ctx, input) {
   }
   const resp = await q.range(from, to);
   if (resp.error) throw resp.error;
-  return { items: resp.data || [], total: resp.count ?? 0, page, page_size };
+  const items = Array.isArray(resp.data) ? resp.data.map((row) => sanitizeItemRow(row)) : [];
+  return { items, total: resp.count ?? 0, page, page_size };
 }
 
 async function handleItemsGet(ctx, input) {
@@ -155,11 +165,19 @@ async function handleItemsSimilar(ctx, input) {
   const k = Math.min(Math.max(Number(input.k || 10) || 10, 1), 50);
   const resp = await ctx.supabase
     .from('items')
-    .select('id,name,description')
+    .select('id,name,category,brand,model,description')
     .or(`name.ilike.%${query}%,description.ilike.%${query}%`)
     .limit(k);
   if (resp.error) throw resp.error;
-  const matches = (resp.data || []).map(r => ({ id: r.id, name: r.name, score: 0.0 }));
+  const matches = (resp.data || []).map((r) => ({
+    id: r.id,
+    name: r.name,
+    category: r.category,
+    brand: r.brand,
+    model: r.model,
+    preview: truncateString(r.description || ''),
+    score: 0.0,
+  }));
   return { matches };
 }
 
@@ -342,12 +360,35 @@ function sha256Hex(s) {
 async function handleItemsTopByValue(ctx, input) {
   const category = input.category || null;
   const page_size = Math.min(Math.max(Number(input.page_size || 10) || 10, 1), 50);
-  let q = ctx.supabase.from('items').select('*').order('current_value', { ascending: false }).limit(page_size);
+  let q = ctx.supabase
+    .from('items')
+    .select(DEFAULT_ITEM_COLUMNS)
+    .order('current_value', { ascending: false })
+    .limit(page_size);
   if (category) q = q.eq('category', category);
   if (String(input.exclude_sold || 'true') === 'true') q = q.neq('sale_status', 'sold');
   const resp = await q;
   if (resp.error) throw resp.error;
-  return { items: resp.data || [] };
+  const items = Array.isArray(resp.data) ? resp.data.map((row) => sanitizeItemRow(row)) : [];
+  return { items };
+}
+
+function sanitizeItemRow(row) {
+  if (!row || typeof row !== 'object') return row;
+  const cleaned = { ...row };
+  if ('description' in cleaned) cleaned.description = truncateString(cleaned.description);
+  if ('notes' in cleaned) cleaned.notes = truncateString(cleaned.notes);
+  if ('comments' in cleaned) cleaned.comments = truncateString(cleaned.comments);
+  if ('embedding' in cleaned) delete cleaned.embedding;
+  if ('raw_json' in cleaned) delete cleaned.raw_json;
+  if ('history' in cleaned) delete cleaned.history;
+  return cleaned;
+}
+
+function truncateString(value, maxLen = TRUNCATE_MAX) {
+  if (!value || typeof value !== 'string') return value;
+  if (value.length <= maxLen) return value;
+  return `${value.slice(0, maxLen)}…`;
 }
 
 function buildLabel(row) {
@@ -626,7 +667,13 @@ async function handleDbDelete(ctx, input) {
   return { deleted: resp.data || [], count: Array.isArray(resp.data) ? resp.data.length : 0 };
 }
 async function handleTradesList(ctx, input) {
-  let q = ctx.supabase.from('trades').select('*').order('entry_date', { ascending: false }).limit(500);
+  let q = ctx.supabase
+    .from('trades')
+    .select(
+      'id,symbol,direction,strategy,entry_date,entry_price,exit_date,exit_price,is_option,option_type,size,tags,notes'
+    )
+    .order('entry_date', { ascending: false })
+    .limit(500);
   if (input.symbol) q = q.eq('symbol', input.symbol);
   if (typeof input.is_option === 'boolean') q = q.eq('is_option', input.is_option);
   if (input.date_from) q = q.gte('entry_date', input.date_from);
@@ -634,7 +681,13 @@ async function handleTradesList(ctx, input) {
   if (String(input.open_only || 'false') === 'true') q = q.is('exit_date', null);
   const resp = await q;
   if (resp.error) throw resp.error;
-  return { items: resp.data || [] };
+  const items = Array.isArray(resp.data)
+    ? resp.data.map((row) => ({
+        ...row,
+        notes: truncateString(row.notes || '', TRUNCATE_MAX),
+      }))
+    : [];
+  return { items };
 }
 
 async function handleTradesRecord(ctx, input) {
