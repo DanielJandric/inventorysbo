@@ -337,6 +337,63 @@ async function handleItemsCountTwoSeatStrict(ctx, input) {
   return { total_considered: total, two_seat_strict: twoSeat, ids };
 }
 
+function metersFromRow(row) {
+  const length_m = Number(row.length_m);
+  if (!Number.isNaN(length_m) && length_m > 0) return length_m;
+  const loa_meters = Number(row.loa_meters);
+  if (!Number.isNaN(loa_meters) && loa_meters > 0) return loa_meters;
+  const length = Number(row.length);
+  if (!Number.isNaN(length) && length > 0) return length;
+  const length_ft = Number(row.length_ft);
+  if (!Number.isNaN(length_ft) && length_ft > 0) return length_ft * 0.3048;
+  return null;
+}
+
+function flagshipScore(row) {
+  const label = buildLabel(row);
+  let score = 0;
+  const meters = metersFromRow(row);
+  if (meters) score += meters * 10;
+  const value = Number(row.current_value);
+  if (!Number.isNaN(value) && value > 0) score += Math.log10(value + 1) * 50;
+  const shipyardBoosts = [
+    ['feadship', 1000], ['lurssen', 900], ['benetti', 800], ['amels', 800], ['oceanco', 800],
+    ['heesen', 700], ['abeking', 700], ['crn', 650], ['sanlorenzo', 600], ['perini', 600],
+    ['nobiskrug', 650], ['rossinavi', 600], ['baglietto', 600], ['turquoise', 550]
+  ];
+  for (const [yard, boost] of shipyardBoosts) if (label.includes(yard)) score += boost;
+  const penalties = ['tender', 'axopar', 'jetski', 'jet ski', 'mastercraft', 'dinghy'];
+  for (const n of penalties) if (label.includes(n)) score -= 500;
+  return score;
+}
+
+async function handleItemsFlagshipVessel(ctx, input) {
+  const filters = (input && typeof input === 'object') ? input : {};
+  const categories = Array.isArray(filters.categories) && filters.categories.length
+    ? filters.categories
+    : ['Bateaux', 'Yachts', 'Yacht', 'Bateau', 'Boat', 'Boats'];
+  let q = ctx.supabase.from('items').select('*').limit(5000);
+  if (categories && categories.length) q = q.in('category', categories);
+  if (String(filters.exclude_sold || 'true') === 'true') q = q.neq('sale_status', 'sold');
+  const resp = await q;
+  if (resp.error) throw resp.error;
+  const rows = Array.isArray(resp.data) ? resp.data : [];
+  if (rows.length === 0) return { flagship: null, reason: 'no_vessels_found' };
+  let best = null;
+  let bestScore = -Infinity;
+  for (const r of rows) {
+    const s = flagshipScore(r);
+    if (s > bestScore) { bestScore = s; best = r; }
+  }
+  if (!best) return { flagship: null, reason: 'no_candidate' };
+  const meters = metersFromRow(best);
+  const why = [];
+  if (buildLabel(best).includes('feadship')) why.push('shipyard=Feadship');
+  if (meters) why.push(`length≈${meters.toFixed(1)}m`);
+  if (best.current_value) why.push(`value≈${best.current_value}`);
+  return { flagship: { id: best.id, name: best.name, brand: best.brand, model: best.model, category: best.category, length_m: meters, current_value: best.current_value }, score: bestScore, explanation: why.join(', ') };
+}
+
 async function handleChatsList(ctx, input) {
   const resp = await ctx.supabase.from('chats').select('id,title,created_at').order('created_at', { ascending: false }).limit(200);
   if (resp.error) throw resp.error;
@@ -607,6 +664,7 @@ const registry = {
   // New items helpers
   'items.top_by_value': handleItemsTopByValue,
   'items.count_two_seat_strict': handleItemsCountTwoSeatStrict,
+  'items.flagship_vessel': handleItemsFlagshipVessel,
   'banking.classes.list': handleBankingClassesList,
   'banking.summary': handleBankingSummary,
   'market.analyses.search': handleMarketSearch,
@@ -656,6 +714,7 @@ function buildToolList(intent) {
     'items.create': "Créer un nouvel item (record: {...}).",
     'items.top_by_value': 'Top items par valeur (option catégorie, hors vendus).',
     'items.count_two_seat_strict': 'Compter les biplaces strictes (heuristique marque/modèle).',
+    'items.flagship_vessel': 'Identifier le vaisseau amiral (longueur/valeur/chantier).',
     'banking.classes.list': 'Lister les classes d’actifs bancaires (major/minor).',
     'banking.summary': 'Résumé agrégé des classes bancaires.',
     'market.analyses.search': 'Rechercher des analyses de marché.',
@@ -679,7 +738,7 @@ function buildToolList(intent) {
   };
   // Filtre de base: outilage le plus utile (≤ 15)
   const preferred = new Set([
-    'items.search','items.get','items.summary','items.top_by_value','items.count_two_seat_strict','items.create',
+    'items.search','items.get','items.summary','items.top_by_value','items.count_two_seat_strict','items.flagship_vessel','items.create',
     'trades.list','trades.record','trades.close',
     'market.analyses.search','market.analyses.get',
     'realestate.listings.search',
