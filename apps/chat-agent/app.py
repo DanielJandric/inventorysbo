@@ -5,6 +5,7 @@ import asyncio
 import logging
 from flask import Flask, request, jsonify, send_from_directory
 from supabase import create_client
+from typing import Dict, Optional
 
 # Agents SDK (Python)
 from agents import Agent, Runner, HostedMCPTool, ModelSettings
@@ -19,6 +20,12 @@ SUPABASE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 MCP_SERVER_URL = os.getenv("MCP_SERVER_URL")  # optionnel
 MCP_SERVER_TOKEN = os.getenv("MCP_SERVER_TOKEN")  # optionnel (Authorization: Bearer ...)
 MCP_SERVER_HEADERS = os.getenv("MCP_SERVER_HEADERS")  # optionnel (JSON dict)
+_chat_tokens_raw = os.getenv("CHAT_AGENT_API_TOKENS") or os.getenv("CHAT_AGENT_API_TOKEN")
+if not _chat_tokens_raw:
+    raise RuntimeError("CHAT_AGENT_API_TOKEN (or CHAT_AGENT_API_TOKENS) is required")
+CHAT_AGENT_API_TOKENS = {token.strip() for token in _chat_tokens_raw.split(",") if token.strip()}
+if not CHAT_AGENT_API_TOKENS:
+    raise RuntimeError("CHAT_AGENT_API_TOKEN (or CHAT_AGENT_API_TOKENS) must contain at least one token")
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -29,74 +36,58 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(mess
 logger = logging.getLogger(__name__)
 
 
+def _authorized_request(req_headers: dict) -> bool:
+    header = req_headers.get("Authorization", "")
+    token = ""
+    if isinstance(header, str) and header.startswith("Bearer "):
+        token = header[7:].strip()
+    elif isinstance(req_headers.get("X-API-Key"), str):
+        token = req_headers["X-API-Key"].strip()
+    return token in CHAT_AGENT_API_TOKENS
+
+
+def _build_mcp_headers() -> Optional[Dict[str, str]]:
+    headers: Dict[str, str] = {}
+    if MCP_SERVER_TOKEN:
+        headers["Authorization"] = f"Bearer {MCP_SERVER_TOKEN}"
+    if MCP_SERVER_HEADERS:
+        try:
+            extra = json.loads(MCP_SERVER_HEADERS)
+            if isinstance(extra, dict):
+                headers.update({str(k): str(v) for k, v in extra.items()})
+        except Exception:
+            logger.warning("invalid JSON in MCP_SERVER_HEADERS")
+    return headers or None
+
+
+
+
 # --- Helpers Supabase ---
 SYSTEM_INSTRUCTIONS = (
     """
-System Instructions — Concierge Expert
-Tu es le concierge personnel et le curateur expert de l'utilisateur. Ton rôle n'est pas seulement de répondre, mais d'apporter de la clarté, du contexte et de la valeur ajoutée à chaque interaction. Tu analyses le patrimoine de l'utilisateur pour en révéler la signification, les points forts et le potentiel.
+System Instructions - Concierge Expert
+Tu es le concierge personnel et le curateur expert de l'utilisateur. Ta mission est de livrer contexte, analyse et valeur a chaque echange. Tu relies les donnees factuelles du MCP a une lecture experte du marche du luxe.
 
-Ta marque de fabrique est de ne jamais te contenter de lister des faits. Tu les interprètes.
+Philosophie
+- Donnees (MCP) + Intelligence (LLM) = Insight.
+- Les donnees apportent la verite factuelle, ton intelligence transforme ces faits en perspective strategique.
 
-PHILOSOPHIE CENTRALE : L'INSIGHT
+Methode
+1. Identifier l'intention derriere la demande: performance, prestige, rendement ou experience.
+2. Interroger le MCP avec precision: selectionner les outils minimaux et justifier chaque appel.
+3. Produire une synthese: comparer aux benchmarks mondiaux, expliquer la valeur, signaler les lacunes de la collection et croiser les categories quand cela apporte un insight.
+4. Conseiller avec finesse: proposer une interpretation exploitable (opportunite, risque, potentiel d'image) et, si pertinent, ouvrir sur la suite.
 
-Ta valeur ne réside pas dans l'accès aux données (MCP), mais dans la fusion de ces données avec ton intelligence du monde réel. Ta formule est simple :
-Données (MCP) + Intelligence (LLM) = Insight
+Style de reponse
+- Debut clair avec la reponse directe.
+- Analyse structuree (contexte marche, comparaison, impact pour l'utilisateur).
+- Conclusion facultative: question de relance ou recommandation concrete.
+- Indication de source MCP en fin de reponse.
 
-Données : La vérité factuelle et indiscutable issue de la base de l'utilisateur.
-
-Intelligence : Ta connaissance approfondie du marché, de l'histoire des marques, de la culture du luxe, de la technologie et des dynamiques de collection.
-
-Insight : La conclusion à haute valeur ajoutée que tu produis : une perspective, une analyse stratégique, une mise en contexte pertinente.
-
-⚙️ MÉTHODE STRATÉGIQUE
-
-Décoder l'Intention Profonde
-Analyse la question pour comprendre le besoin sous-jacent. "La plus rapide" n'est pas qu'une question de km/h, c'est une question de performance et de caractère. "La plus chère" est une question de statut, de rareté et d'investissement. Cherche toujours la "question derrière la question".
-
-Consulter les Données (MCP)
-Interroge le MCP pour obtenir la liste des actifs concernés et leurs attributs clés (valeur, année, marque, spécificités). C'est ton ancrage factuel.
-
-Synthétiser et Enrichir (Ton Intelligence)
-C'est ici que tu crées de la valeur. Ne te contente pas des données brutes. Va plus loin :
-
-Mise en Contexte : Compare un actif non pas aux autres actifs de l'utilisateur, mais aux icônes et aux standards du marché mondial. Un yacht de 80m n'est pas juste "grand", il appartient à l'élite des superyachts. Une Ferrari V12 n'est pas juste "rapide", c'est l'héritière d'une lignée légendaire.
-
-Analyse de la Collection : Traite les actifs comme une collection cohérente. Identifie un thème, une philosophie (ex. "une collection axée sur les V12 atmosphériques", "un portefeuille horloger centré sur les icônes du 20e siècle"). Souligne les forces, la cohérence, ou même les "gaps" intéressants.
-
-Inférences Sophistiquées : Au lieu de simplement déduire des attributs manquants (ex. nombre de places), déduis des concepts abstraits : le potentiel d'investissement, le type d'expérience (ex. "parfaite pour les grands voyages" vs "optimale pour les journées circuit"), ou le statut iconique.
-
-Connexions Transversales : Si pertinent, tisse des liens entre différentes catégories d'actifs. "Votre goût pour les designs intemporels se retrouve aussi bien dans votre montre Patek Philippe Calatrava que dans votre Porsche 911 classique."
-
-Formuler la Réponse Experte
-Structure tes réponses pour maximiser l'impact :
-
-Réponse Directe et Incisive : Commence par la réponse claire à la question posée.
-
-Analyse et Justification : Développe ton raisonnement. C'est ici que tu apportes le contexte, la comparaison, l'analyse. Explique pourquoi cet actif est la réponse, et ce que cela signifie.
-
-(Optionnel) Perspective ou Conseil : Si l'opportunité se présente, ouvre la discussion avec une question pertinente ou une suggestion subtile.
-
-Source : Termine par la source pour maintenir la confiance.
-
-🧭 EXEMPLES DE RAISONNEMENT AVANCÉ
-
-"Quelle est ma voiture la plus prestigieuse ?"
-
-Votre Ferrari 812 GTS est, sans aucun doute, la plus prestigieuse.
-Au-delà de sa valeur, elle incarne le summum du grand tourisme à moteur V12 atmosphérique, une architecture noble et une lignée en voie de disparition chez Ferrari. C'est une icône moderne qui se situe au-dessus de vos autres véhicules, même très performants, par son héritage et son exclusivité.
-(Source: MCP: vehicles)
-
-"Quel est mon vaisseau amiral ?"
-
-Votre Feadship de 80m est votre vaisseau amiral incontesté.
-Ce n'est pas seulement une question de taille. Feadship est une référence absolue dans la haute plaisance, synonyme de construction sur-mesure et de qualité exceptionnelle. Une unité de cette taille vous place dans le cercle très fermé des superyachts les plus remarquables au monde, bien au-delà de votre second plus grand yacht.
-(Source: MCP: yachts)
-
-"Que penses-tu de ma collection de montres ?" (Question ouverte)
-
-Votre collection est très cohérente, axée sur deux piliers : les plongeuses iconiques et les chronographes de prestige.
-La Rolex Submariner et la Blancpain Fifty Fathoms représentent le meilleur de l'horlogerie sous-marine historique. À côté, l'Omega Speedmaster et le Patek Philippe 5170 montrent un goût certain pour les chronographes légendaires. La pièce maîtresse est clairement la Patek, qui allie prestige de la marque et excellence mécanique.
-Il serait intéressant d'y ajouter une pièce à grande complication ou issue d'un horloger indépendant pour diversifier encore sa personnalité.
+Exemples de raisonnement expert
+- Voiture la plus prestigieuse: insister sur le pedigree, la rarete et la place dans la collection.
+- Vaisseau amiral: relier dimensions, chantier et standing international.
+- Evaluation de collection horlogere: decrire les themes dominants, la coherence et les pistes d'enrichissement.
 """
 )
 def ensure_chat(chat_id: str | None) -> str:
@@ -131,18 +122,7 @@ async def run_with_mcp(prompt: str) -> str:
         agent = make_agent()
         return (await Runner.run(agent, prompt)).final_output or ""
 
-    # Construire d'éventuels headers d'auth
-    headers = None
-    try:
-        extra = json.loads(MCP_SERVER_HEADERS) if MCP_SERVER_HEADERS else None
-        if MCP_SERVER_TOKEN or extra:
-            headers = {}
-            if MCP_SERVER_TOKEN:
-                headers["Authorization"] = f"Bearer {MCP_SERVER_TOKEN}"
-            if isinstance(extra, dict):
-                headers.update({str(k): str(v) for k, v in extra.items()})
-    except Exception:
-        headers = None
+    headers = _build_mcp_headers()
 
     try:
         async with MCPServerStreamableHttp(
@@ -171,74 +151,71 @@ async def run_with_mcp(prompt: str) -> str:
         return (await Runner.run(agent2, prompt)).final_output or ""
 
 
-def fetch_inventory_overview() -> dict | None:
-    """Pré-contexte minimal: résumé + top par valeur (hors vendus) via MCP HTTP.
-    Retourne un petit JSON sérialisable ou None si indisponible.
-    """
+
+
+def fetch_inventory_overview() -> Optional[dict]:
+    """Minimal MCP context: summary + top assets."""
     if not MCP_SERVER_URL:
         return None
     base = MCP_SERVER_URL.rstrip('/')
+    headers = _build_mcp_headers()
+    client_kwargs: Dict[str, object] = {"timeout": 10.0}
+    if headers:
+        client_kwargs["headers"] = headers
     try:
-        client = httpx.Client(timeout=10.0)
-        # 1) Résumé
-        r1 = client.post(f"{base}/mcp", json={"tool": "items.summary", "input": {}})
-        r1.raise_for_status()
-        j1 = r1.json()
-        summary = (j1 or {}).get("result") or {}
+        with httpx.Client(**client_kwargs) as client:
+            r1 = client.post(f"{base}/mcp", json={"tool": "items.summary", "input": {}})
+            r1.raise_for_status()
+            summary = (r1.json() or {}).get("result") or {}
 
-        # 2) Top valeur (hors vendus)
-        search_body_all = {
-            "page": 1,
-            "page_size": 15,
-            "sort": "current_value_desc",
-            "filters": {"exclude_sold": True},
-        }
-        r2 = client.post(f"{base}/mcp", json={"tool": "items.search", "input": search_body_all})
-        r2.raise_for_status()
-        j2 = r2.json()
-        items = ((j2 or {}).get("result") or {}).get("items") or []
+            search_body_all = {
+                "page": 1,
+                "page_size": 15,
+                "sort": "current_value_desc",
+                "filters": {"exclude_sold": True},
+            }
+            r2 = client.post(f"{base}/mcp", json={"tool": "items.search", "input": search_body_all})
+            r2.raise_for_status()
+            j2 = r2.json() or {}
+            items = (j2.get("result") or {}).get("items") or []
 
-        # 3) Top valeur (hors vendus) restreint aux voitures si le champ category existe
-        top_cars = []
-        try:
-            search_body_cars = {
+            top_cars = []
+            car_payload = {
                 "page": 1,
                 "page_size": 15,
                 "sort": "current_value_desc",
                 "filters": {"exclude_sold": True, "category": "Voitures"},
             }
-            r3 = client.post(f"{base}/mcp", json={"tool": "items.search", "input": search_body_cars})
-            if r3.status_code == 200:
-                j3 = r3.json()
-                top_cars = ((j3 or {}).get("result") or {}).get("items") or []
-        except Exception:
-            pass
-        # Ne garder qu'un sous-ensemble de champs pertinents pour le contexte
-        slim = []
-        for it in items:
-            slim.append({
-                "id": it.get("id"),
-                "brand": it.get("brand"),
-                "model": it.get("model"),
-                "year": it.get("construction_year"),
-                "value": it.get("current_value"),
-                "sale_status": it.get("sale_status"),
-            })
-        def slim_fields(rows):
-            out = []
-            for it in rows:
-                out.append({
-                    "id": it.get("id"),
-                    "name": it.get("name"),
-                    "category": it.get("category"),
-                    "year": it.get("construction_year"),
-                    "value": it.get("current_value"),
-                    "sale_status": it.get("sale_status"),
-                })
-            return out
+            try:
+                r3 = client.post(f"{base}/mcp", json={"tool": "items.search", "input": car_payload})
+                if r3.status_code == 200:
+                    j3 = r3.json() or {}
+                    top_cars = (j3.get("result") or {}).get("items") or []
+            except Exception:
+                pass
 
-        top_cars_slim = slim_fields(top_cars)
-        return {"summary": summary, "top_by_value": slim, "top_by_value_cars": top_cars_slim}
+            def _slim(rows):
+                slimmed = []
+                for row in rows:
+                    slimmed.append(
+                        {
+                            "id": row.get("id"),
+                            "name": row.get("name"),
+                            "brand": row.get("brand"),
+                            "model": row.get("model"),
+                            "category": row.get("category"),
+                            "year": row.get("construction_year"),
+                            "value": row.get("current_value"),
+                            "sale_status": row.get("sale_status"),
+                        }
+                    )
+                return slimmed
+
+            return {
+                "summary": summary,
+                "top_by_value": _slim(items),
+                "top_by_value_cars": _slim(top_cars),
+            }
     except Exception:
         logger.exception("inventory_overview_failed")
         return None
@@ -246,6 +223,9 @@ def fetch_inventory_overview() -> dict | None:
 
 @app.route("/chat", methods=["POST"])
 def chat():
+    if not _authorized_request(request.headers):
+        return jsonify({"error": "unauthorized"}), 401
+
     try:
         data = request.get_json(force=True)
     except Exception:
@@ -266,11 +246,7 @@ def chat():
         logger.exception("supabase_save_user_failed")
 
     try:
-        # Pas de pré-contexte: envoyer uniquement la question brute à l'agent
-        user_payload = user_msg
-
-        # Run l’agent (synchrone via asyncio.run le temps d’une requête)
-        assistant_msg = asyncio.run(run_with_mcp(user_payload))
+        assistant_msg = asyncio.run(run_with_mcp(user_msg))
         try:
             save_message(chat_id, "assistant", assistant_msg)
         except Exception:

@@ -6,6 +6,15 @@ const { mkdirSync, writeFileSync } = require('fs');
 const { join } = require('path');
 
 const PORT = Number(process.env.PORT || 8787);
+const rawTokens = process.env.MCP_SERVER_TOKENS || process.env.MCP_SERVER_TOKEN || '';
+const AUTH_TOKENS = rawTokens
+  .split(',')
+  .map((t) => t.trim())
+  .filter((t) => t.length > 0);
+if (AUTH_TOKENS.length === 0) {
+  throw new Error('MCP server requires MCP_SERVER_TOKEN (comma separated for multiple tokens)');
+}
+const EXPORTS_ENABLED = String(process.env.MCP_ENABLE_EXPORTS || '').toLowerCase() === 'true';
 
 function sendJson(res, statusCode, data, extraHeaders) {
   const headers = Object.assign(
@@ -58,6 +67,25 @@ function createSupabaseClient(headers) {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
     global: impersonate ? { headers: { Authorization: `Bearer ${userJwt}` } } : undefined,
   });
+}
+
+function isAuthorized(req) {
+  if (AUTH_TOKENS.length === 0) return false;
+  const header = req.headers && (req.headers.authorization || req.headers.Authorization);
+  if (typeof header !== 'string' || header.length === 0) return false;
+  const prefix = 'Bearer ';
+  if (!header.startsWith(prefix)) return false;
+  const token = header.slice(prefix.length).trim();
+  return AUTH_TOKENS.includes(token);
+}
+
+function rejectUnauthorized(res) {
+  return sendJson(
+    res,
+    401,
+    { ok: false, error: 'Unauthorized' },
+    { 'WWW-Authenticate': 'Bearer realm="mcp"' },
+  );
 }
 
 function categorySynonyms(inputCategory) {
@@ -663,6 +691,11 @@ async function fetchDataset(ctx, dataset, filters) {
 }
 
 async function handleExportsGenerate(ctx, input) {
+  if (!EXPORTS_ENABLED) {
+    const e = new Error('Exports tool disabled');
+    e.statusCode = 403;
+    throw e;
+  }
   const dataset = String(input.dataset);
   const format = String(input.format);
   const filters = (input.filters && typeof input.filters === 'object') ? input.filters : {};
@@ -723,14 +756,12 @@ const registry = {
   // Generic DB tools
   'schema.tables': handleSchemaTables,
   'schema.columns': handleSchemaColumns,
-  'db.query': handleDbQuery,
-  // Unrestricted public schema helpers
-  'db.select': handleDbSelect,
-  'db.insert': handleDbInsert,
-  'db.update': handleDbUpdate,
-  'db.delete': handleDbDelete,
   'exports.generate': handleExportsGenerate,
 };
+
+if (!EXPORTS_ENABLED) {
+  delete registry['exports.generate'];
+}
 
 function resolveToolName(name) {
   if (!name) return null;
@@ -772,11 +803,6 @@ function buildToolList(intent) {
     'messages.add': 'Ajouter un message (chat_id, role, content).',
     'schema.tables': 'Lister les tables (public).',
     'schema.columns': 'Colonnes d’une table (ex: table=items)',
-    'db.query': 'Requête générique (table whitelist), select/filters/order/limit.',
-    'db.select': 'Sélection générique (toutes tables publiques): table, columns, filters, order, limit.',
-    'db.insert': 'Insertion générique: table, records[].',
-    'db.update': 'Mise à jour générique: table, match{}, patch{}, limit?',
-    'db.delete': 'Suppression générique: table, match{}, limit?',
     'exports.generate': 'Générer un export de données (csv/xlsx/pdf).',
   };
   // Filtre de base: outilage le plus utile (≤ 15)
@@ -785,7 +811,8 @@ function buildToolList(intent) {
     'trades.list','trades.record','trades.close',
     'market.analyses.search','market.analyses.get',
     'realestate.listings.search',
-    'schema.tables','schema.columns'
+    'schema.tables','schema.columns',
+    ...(EXPORTS_ENABLED ? ['exports.generate'] : []),
   ]);
   const names = Object.keys(registry).filter(n => preferred.has(n)).slice(0, 15);
   return names.map((origName) => {
@@ -808,6 +835,9 @@ const server = http.createServer(async (req, res) => {
 
   if (method === 'GET' && url === '/health') {
     return sendJson(res, 200, { ok: true });
+  }
+  if (!isAuthorized(req)) {
+    return rejectUnauthorized(res);
   }
 
   // Minimal MCP tool listing for Agents SDK HostedMCPTool and Streamable MCP
@@ -839,7 +869,6 @@ const server = http.createServer(async (req, res) => {
     const start = Date.now();
     try {
       const body = await parseJsonBody(req);
-      console.log('[mcp] body', JSON.stringify(body).slice(0, 500));
       // Minimal JSON-RPC support for Cursor MCP client
       if (body && body.jsonrpc === '2.0' && typeof body.method === 'string') {
         const rpcId = body.id ?? null;
