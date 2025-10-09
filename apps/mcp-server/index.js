@@ -374,8 +374,9 @@ function validateTableName(name) {
 
 // Generic, unrestricted helpers over public schema
 async function handleDbSelect(ctx, input) {
-  const table = input.table;
-  if (!validateTableName(table)) { const e = new Error('invalid table'); e.statusCode = 400; throw e; }
+  let table = input.table;
+  // Par défaut, cibler 'items' si aucun nom de table valide n'est fourni
+  if (!validateTableName(table)) table = 'items';
   const columns = typeof input.columns === 'string' && input.columns.trim() ? input.columns : '*';
   let q = ctx.supabase.from(table).select(columns, { count: 'exact' });
   const filters = (input.filters && typeof input.filters === 'object') ? input.filters : {};
