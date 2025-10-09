@@ -1286,24 +1286,15 @@ L'objet "<strong>{item_data.get('name', 'N/A')}</strong>" de la catégorie "<str
 
             subject = f"{header_title} - {report_date}" if header_title != "📰 Rapport de Marché" else f"📰 Rapport de Marché - {report_date}"
             
-            # Choix du template: forcer l'ancien template si demandé via env
-            try:
-                force_legacy = (
-                    str(os.getenv('EMAIL_FORCE_LEGACY_TEMPLATE', '0')).lower() in ('1','true','yes','on')
-                    or str(os.getenv('EMAIL_MARKET_TEMPLATE', 'v2')).lower() == 'legacy'
-                )
-            except Exception:
-                force_legacy = False
+            # Choix du template: toujours utiliser la version v2 (désactive legacy)
+            force_legacy = False
 
-            if force_legacy:
+            # Utiliser systématiquement la version robuste (fallback en cas d'erreur)
+            try:
+                html_content = self._create_market_report_html_v2(report_date, report_time, report_content, header_title=header_title, header_style=header_style, suppress_price_sections=is_swiss)
+            except Exception as _e_html_v2:
+                logger.warning(f"email_v2: fallback vers rendu simple: {_e_html_v2}")
                 html_content = self._create_market_report_html(report_date, report_time, report_content, header_title=header_title, header_style=header_style)
-            else:
-                # Utiliser systématiquement la version robuste (fallback en cas d'erreur)
-                try:
-                    html_content = self._create_market_report_html_v2(report_date, report_time, report_content, header_title=header_title, header_style=header_style, suppress_price_sections=is_swiss)
-                except Exception as _e_html_v2:
-                    logger.warning(f"email_v2: fallback vers rendu simple: {_e_html_v2}")
-                    html_content = self._create_market_report_html(report_date, report_time, report_content, header_title=header_title, header_style=header_style)
             
             # Créer le contenu texte
             text_content = self._create_market_report_text(report_date, report_time, report_content)
