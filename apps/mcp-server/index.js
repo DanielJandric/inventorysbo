@@ -630,8 +630,9 @@ const server = http.createServer(async (req, res) => {
         const methodName = String(body.method);
         const params = (body.params && typeof body.params === 'object') ? body.params : {};
         if (methodName === 'initialize') {
+          // Return capability objects (not booleans) per MCP spec
           const result = {
-            capabilities: { tools: true, prompts: true, resources: true, logging: false },
+            capabilities: { tools: {}, prompts: {}, resources: {}, logging: {} },
             protocolVersion: '2025-06-18',
             serverInfo: { name: 'inventory_mcp', version: '1.0.0' },
           };
