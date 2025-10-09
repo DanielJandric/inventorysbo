@@ -16,7 +16,7 @@ if (AUTH_TOKENS.length === 0) {
 }
 const EXPORTS_ENABLED = String(process.env.MCP_ENABLE_EXPORTS || '').toLowerCase() === 'true';
 const DEFAULT_ITEM_COLUMNS =
-  'id,name,category,brand,model,current_value,construction_year,' +
+  'id,name,category,current_value,construction_year,' +
   'last_action_date,sale_status,for_sale,location,created_at,updated_at';
 const TRUNCATE_MAX = Number(process.env.MCP_TRUNCATE_MAX || 200);
 
@@ -165,7 +165,7 @@ async function handleItemsSimilar(ctx, input) {
   const k = Math.min(Math.max(Number(input.k || 10) || 10, 1), 50);
   const resp = await ctx.supabase
     .from('items')
-    .select('id,name,category,brand,model,description')
+    .select('id,name,category,description')
     .or(`name.ilike.%${query}%,description.ilike.%${query}%`)
     .limit(k);
   if (resp.error) throw resp.error;
@@ -173,8 +173,6 @@ async function handleItemsSimilar(ctx, input) {
     id: r.id,
     name: r.name,
     category: r.category,
-    brand: r.brand,
-    model: r.model,
     preview: truncateString(r.description || ''),
     score: 0.0,
   }));
