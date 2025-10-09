@@ -264,6 +264,26 @@ async function handleRealEstateSearch(ctx, input) {
   return { items: resp.data || [] };
 }
 
+// Vessels list (explicit exposure of yacht-relevant fields)
+async function handleVesselsList(ctx, input) {
+  const categories = Array.isArray(input?.categories) && input.categories.length
+    ? input.categories
+    : ['Bateaux', 'Yachts', 'Yacht', 'Bateau', 'Boat', 'Boats'];
+  const fields = (typeof input?.fields === 'string' && input.fields.trim())
+    ? input.fields
+    : 'id,name,brand,model,shipyard,length_m,current_value,category,sale_status';
+  let q = ctx.supabase.from('items').select(fields).limit(Math.min(Math.max(Number(input?.limit || 1000) || 1000, 1), 5000));
+  if (categories && categories.length) q = q.in('category', categories);
+  if (String(input?.exclude_sold || 'true') === 'true') q = q.neq('sale_status', 'sold');
+  const sort = String(input?.sort || 'length_desc');
+  if (sort === 'value_desc') q = q.order('current_value', { ascending: false });
+  else if (sort === 'name_asc') q = q.order('name', { ascending: true });
+  else q = q.order('length_m', { ascending: false, nullsFirst: false });
+  const resp = await q;
+  if (resp.error) throw resp.error;
+  return { items: resp.data || [] };
+}
+
 function sha256Hex(s) {
   const crypto = require('crypto');
   return crypto.createHash('sha256').update(s).digest('hex');
@@ -671,6 +691,7 @@ const registry = {
   'market.analyses.get': handleMarketGet,
   'market.analyses.upsert': handleMarketUpsert,
   'realestate.listings.search': handleRealEstateSearch,
+  'vessels.list': handleVesselsList,
   'trades.list': handleTradesList,
   'trades.record': handleTradesRecord,
   'trades.close': handleTradesClose,
@@ -721,6 +742,7 @@ function buildToolList(intent) {
     'market.analyses.get': 'Obtenir une analyse de marché par id.',
     'market.analyses.upsert': 'Insérer ou mettre à jour une analyse de marché.',
     'realestate.listings.search': 'Rechercher des annonces immobilières.',
+    'vessels.list': 'Lister les bateaux/yachts (champs longueur, chantier, valeur).',
     'trades.list': 'Lister les transactions.',
     'trades.record': 'Enregistrer une nouvelle transaction.',
     'trades.close': 'Clôturer une transaction.',
@@ -741,7 +763,7 @@ function buildToolList(intent) {
     'items.search','items.get','items.summary','items.top_by_value','items.count_two_seat_strict','items.flagship_vessel','items.create',
     'trades.list','trades.record','trades.close',
     'market.analyses.search','market.analyses.get',
-    'realestate.listings.search',
+    'realestate.listings.search','vessels.list',
     'schema.tables','schema.columns'
   ]);
   const names = Object.keys(registry).filter(n => preferred.has(n)).slice(0, 15);
