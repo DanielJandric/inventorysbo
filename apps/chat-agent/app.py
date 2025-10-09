@@ -254,21 +254,8 @@ def chat():
         logger.exception("supabase_save_user_failed")
 
     try:
-        # Pré-contexte inventaire (vue d'ensemble) injecté avant la question
-        overview = fetch_inventory_overview()
-        if overview:
-            try:
-                ctx_json = json.dumps(overview, ensure_ascii=False)
-                prefixed = (
-                    "[Contexte inventaire - aperçu]\n" + ctx_json + "\n\n"
-                    "[Question]\n" + user_msg
-                )
-                user_payload = prefixed
-            except Exception:
-                logger.exception("overview_serialize_failed")
-                user_payload = user_msg
-        else:
-            user_payload = user_msg
+        # Pas de pré-contexte: envoyer uniquement la question brute à l'agent
+        user_payload = user_msg
 
         # Run l’agent (synchrone via asyncio.run le temps d’une requête)
         assistant_msg = asyncio.run(run_with_mcp(user_payload))
