@@ -281,6 +281,62 @@ async function handleItemsTopByValue(ctx, input) {
   return { items: resp.data || [] };
 }
 
+function buildLabel(row) {
+  const parts = [];
+  if (row.brand) parts.push(String(row.brand));
+  if (row.model) parts.push(String(row.model));
+  if (row.name) parts.push(String(row.name));
+  if (!parts.length && row.description) parts.push(String(row.description));
+  return parts.join(' ').toLowerCase();
+}
+
+function isTwoSeatStrictLabel(label) {
+  if (!label) return false;
+  const l = String(label).toLowerCase();
+  const neg = [
+    '911 ', ' 911', 'db11', 'db12', 'db9', 'roma', 'portofino', 'gtc4', 'lusso', 'gran turismo', 'granturismo',
+    'continental gt', 'panamera', 'cayenne', 'macan', 'four door', '4-door', '4 door', 'grand coupe'
+  ];
+  for (const n of neg) if (l.includes(n)) return false;
+  const pos = [
+    'huracan', 'aventador', 'gallardo', 'centenario', 'sian',
+    '296 ', 'f8', '488', '458', '430 ', '360 ', 'f50', 'f40', 'laferrari', '812 ', '812gts', '812 gts', 'sf90',
+    'mclaren', '720s', '765lt', '650s', '600lt', '570s', '540c', 'artura', 'p1 ', 'senna',
+    'amg gt', 'mercedes-amg gt', 'ford gt', 'audi r8', 'corvette', 'c8 ', 'c7 ', 'c6 ',
+    'lotus elise', 'lotus exige', 'lotus emira', 'alfa 4c', 'mx-5', 'miata', 'z4 ', 'z3 ', 'z8 ',
+    '718 ', 'cayman', 'boxster', 'spyder'
+  ];
+  for (const p of pos) if (l.includes(p)) return true;
+  if (l.includes('lamborghini') && !l.includes('urus')) return true;
+  if (l.includes('mclaren')) return true;
+  if (l.includes('ferrari') && !neg.some(n => l.includes(n))) return true;
+  if (l.includes('porsche') && (l.includes('718') || l.includes('cayman') || l.includes('boxster'))) return true;
+  return false;
+}
+
+async function handleItemsCountTwoSeatStrict(ctx, input) {
+  const filters = (input && typeof input === 'object') ? input : {};
+  let q = ctx.supabase.from('items').select('id,brand,model,name,description,category,sale_status').limit(2000);
+  const category = filters.category || 'Voitures';
+  if (category) q = q.eq('category', category);
+  if (String(filters.exclude_sold || 'false') === 'true') q = q.neq('sale_status', 'sold');
+  const resp = await q;
+  if (resp.error) throw resp.error;
+  const rows = Array.isArray(resp.data) ? resp.data : [];
+  let total = 0;
+  let twoSeat = 0;
+  const ids = [];
+  for (const r of rows) {
+    total += 1;
+    const label = buildLabel(r);
+    if (isTwoSeatStrictLabel(label)) {
+      twoSeat += 1;
+      ids.push(r.id);
+    }
+  }
+  return { total_considered: total, two_seat_strict: twoSeat, ids };
+}
+
 async function handleChatsList(ctx, input) {
   const resp = await ctx.supabase.from('chats').select('id,title,created_at').order('created_at', { ascending: false }).limit(200);
   if (resp.error) throw resp.error;
@@ -550,6 +606,7 @@ const registry = {
   'items.create': handleItemsCreate,
   // New items helpers
   'items.top_by_value': handleItemsTopByValue,
+  'items.count_two_seat_strict': handleItemsCountTwoSeatStrict,
   'banking.classes.list': handleBankingClassesList,
   'banking.summary': handleBankingSummary,
   'market.analyses.search': handleMarketSearch,
@@ -598,6 +655,7 @@ function buildToolList(intent) {
     'items.summary': 'Résumé agrégé des items (par catégorie, statut).',
     'items.create': "Créer un nouvel item (record: {...}).",
     'items.top_by_value': 'Top items par valeur (option catégorie, hors vendus).',
+    'items.count_two_seat_strict': 'Compter les biplaces strictes (heuristique marque/modèle).',
     'banking.classes.list': 'Lister les classes d’actifs bancaires (major/minor).',
     'banking.summary': 'Résumé agrégé des classes bancaires.',
     'market.analyses.search': 'Rechercher des analyses de marché.',
@@ -621,7 +679,7 @@ function buildToolList(intent) {
   };
   // Filtre de base: outilage le plus utile (≤ 15)
   const preferred = new Set([
-    'items.search','items.get','items.summary','items.top_by_value','items.create',
+    'items.search','items.get','items.summary','items.top_by_value','items.count_two_seat_strict','items.create',
     'trades.list','trades.record','trades.close',
     'market.analyses.search','market.analyses.get',
     'realestate.listings.search',
