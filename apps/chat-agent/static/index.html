@@ -9,12 +9,12 @@
     #log { white-space: pre-wrap; border: 1px solid #ddd; padding: 1rem; border-radius: 8px; min-height: 200px; }
     input, button { font: inherit; padding: .6rem .8rem; }
   </style>
-  </head>
+</head>
 <body>
   <h1>Assistant du site (GPT-5)</h1>
   <div id="log"></div>
   <form id="f" style="margin-top:1rem">
-    <input id="msg" placeholder="Pose ta question…" size="60" />
+    <input id="msg" placeholder="Pose ta question" size="60" />
     <button>Envoyer</button>
   </form>
   <script>
@@ -22,25 +22,68 @@
     const f = document.getElementById("f");
     const msg = document.getElementById("msg");
     const log = document.getElementById("log");
+    const TOKEN_STORAGE_KEY = "chat_agent_token";
+    let apiToken = localStorage.getItem(TOKEN_STORAGE_KEY) || "";
+
+    function appendLine(prefix, content) {
+      log.textContent += "\n" + prefix + " " + content;
+    }
+
+    function ensureToken() {
+      if (apiToken && apiToken.trim().length > 0) {
+        return apiToken;
+      }
+      const entered = window.prompt("Entrez le token API (Authorization Bearer):", apiToken);
+      if (entered && entered.trim().length > 0) {
+        apiToken = entered.trim();
+        localStorage.setItem(TOKEN_STORAGE_KEY, apiToken);
+        return apiToken;
+      }
+      return "";
+    }
 
     f.addEventListener("submit", async (e) => {
       e.preventDefault();
-      const text = msg.value.trim(); if (!text) return;
-      log.textContent += `\n👤 ${text}`;
+      const text = msg.value.trim();
+      if (!text) {
+        return;
+      }
+
+      appendLine(">>", text);
       msg.value = "";
 
-      const r = await fetch("/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_id: chatId, message: text }),
-      });
-      const data = await r.json();
-      if (data.error) { log.textContent += `\n⚠️ ${data.error}`; return; }
-      chatId = data.chat_id;
-      log.textContent += `\n🤖 ${data.output}\n`;
+      const token = ensureToken();
+      const headers = { "Content-Type": "application/json" };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+
+      try {
+        const response = await fetch("/chat", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ chat_id: chatId, message: text }),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          appendLine("!!", `Erreur ${response.status}: ${errorText}`);
+          return;
+        }
+
+        const data = await response.json();
+        if (data.error) {
+          appendLine("!!", data.error);
+          return;
+        }
+
+        chatId = data.chat_id;
+        appendLine("<<", data.output);
+      } catch (err) {
+        const message = err && err.message ? err.message : "Erreur reseau";
+        appendLine("!!", message);
+      }
     });
   </script>
 </body>
 </html>
-
-
