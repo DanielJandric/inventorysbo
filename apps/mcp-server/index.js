@@ -580,11 +580,16 @@ function buildToolList() {
     'db.delete': 'Suppression générique: table, match{}, limit?',
     'exports.generate': 'Générer un export de données (csv/xlsx/pdf).',
   };
-  return Object.keys(registry).map((name) => ({
-    name,
+  return Object.keys(registry).map((origName) => {
+    // Tools names must match ^[a-zA-Z0-9_-]+$ for Agents SDK
+    const safeName = String(origName).replace(/[^A-Za-z0-9_-]/g, '-');
+    const name = safeName.replace(/\.+/g, '-');
+    return {
+      name,
     description: descriptions[name] || name,
     inputSchema: { type: 'object', additionalProperties: true },
-  }));
+    };
+  });
 }
 
 const server = http.createServer(async (req, res) => {
