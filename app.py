@@ -6100,55 +6100,11 @@ def chatbot():
         if not query:
             return jsonify({"error": "Message requis"}), 400
 
-        # Proxy vers le nouvel agent si activé (JSON direct, pas SSE)
-        try:
-            use_agent = (os.getenv('USE_AGENT', '1') == '1')
-            agent_url = os.getenv('AGENT_CHAT_URL')
-            if use_agent and agent_url:
-                # Augmente les timeouts (conn, read) pour éviter les coupures côté proxy
-                r = requests.post(agent_url, json={"message": query}, timeout=(10, 120))
-                r.raise_for_status()
-                # Tolérant: si pas JSON, tente un texte brut
-                agent_resp = {}
-                if r.content:
-                    try:
-                        agent_resp = r.json()
-                    except Exception:
-                        agent_resp = {"output": r.text}
-                reply_text = (agent_resp.get("output") or agent_resp.get("reply") or agent_resp.get("message") or "").strip()
-                if reply_text:
-                    logger.info("Agent proxy success (len=%d)", len(reply_text))
-                    out = {"reply": reply_text, "metadata": {"mode": "agent"}}
-                    if isinstance(agent_resp, dict) and agent_resp.get("chat_id"):
-                        out["chat_id"] = agent_resp["chat_id"]
-                    return jsonify(out)
-        except Exception as _agent_err:
-            logger.warning(f"Agent proxy failed: {_agent_err}")
-
+        # Décider d'abord si on passe en asynchrone (évite tout timeout web)
         force_sync = str(request.args.get("force_sync") or data.get("force_sync") or "0").lower() in {"1", "true", "on", "yes"}
-
-        # Par défaut, aiguiller le chat vers le worker Celery pour éviter les timeouts web
-        # Activer le mode asynchrone via Celery si ASYNC_CHAT=1 (par défaut 1)
         USE_ASYNC = (os.getenv('ASYNC_CHAT', '1') == '1')
         ALWAYS_LLM = (os.getenv('ALWAYS_LLM', '1') == '1')
         FULL_CONTEXT_MODE = (os.getenv('FULL_CONTEXT_MODE', '0') == '1')
-
-        # Détection d'intention rapide (uniquement pour guider le prompt LLM)
-        query_lower = query.lower()
-        intent = 'general'
-        if any(word in query_lower for word in ['valeur', 'total', 'combien', 'prix']):
-            intent = 'value_analysis'
-        elif any(word in query_lower for word in ['ajouter', 'créer', 'nouveau']):
-            intent = 'create_item'
-        elif any(word in query_lower for word in ['vendre', 'vente', 'sold']):
-            intent = 'sales_analysis'
-        
-        # Guardrails
-        blocked = _should_block_query(query)
-        if blocked:
-            return jsonify({"reply": blocked, "metadata": {"mode": "guardrail"}})
-
-        # Mode worker : envoyer directement la tâche longue au background worker
         if USE_ASYNC and not force_sync:
             user_identifier = data.get("user_id") or request.headers.get("X-User-Id")
             payload = {
@@ -6167,6 +6123,50 @@ def chatbot():
                 "poll_url": url_for("chat_task_status", job_id=job.id, _external=True),
                 "stream_url": url_for("stream_chat_task", task_id=job.id, _external=True),
             }), 202
+
+        # Proxy synchrone vers le nouvel agent si force_sync explicitement demandé
+        try:
+            use_agent = (os.getenv('USE_AGENT', '1') == '1')
+            agent_url = os.getenv('AGENT_CHAT_URL')
+            if use_agent and agent_url:
+                # Timeouts bornés pour ne pas dépasser le timeout gunicorn web
+                r = requests.post(agent_url, json={"message": query}, timeout=(5, 45))
+                r.raise_for_status()
+                # Tolérant: si pas JSON, tente un texte brut
+                agent_resp = {}
+                if r.content:
+                    try:
+                        agent_resp = r.json()
+                    except Exception:
+                        agent_resp = {"output": r.text}
+                reply_text = (agent_resp.get("output") or agent_resp.get("reply") or agent_resp.get("message") or "").strip()
+                if reply_text:
+                    logger.info("Agent proxy success (len=%d)", len(reply_text))
+                    out = {"reply": reply_text, "metadata": {"mode": "agent"}}
+                    if isinstance(agent_resp, dict) and agent_resp.get("chat_id"):
+                        out["chat_id"] = agent_resp["chat_id"]
+                    return jsonify(out)
+        except Exception as _agent_err:
+            logger.warning(f"Agent proxy failed: {_agent_err}")
+
+        # (force_sync==True) continue en mode synchrone ci-dessous
+
+        # Détection d'intention rapide (uniquement pour guider le prompt LLM)
+        query_lower = query.lower()
+        intent = 'general'
+        if any(word in query_lower for word in ['valeur', 'total', 'combien', 'prix']):
+            intent = 'value_analysis'
+        elif any(word in query_lower for word in ['ajouter', 'créer', 'nouveau']):
+            intent = 'create_item'
+        elif any(word in query_lower for word in ['vendre', 'vente', 'sold']):
+            intent = 'sales_analysis'
+        
+        # Guardrails
+        blocked = _should_block_query(query)
+        if blocked:
+            return jsonify({"reply": blocked, "metadata": {"mode": "guardrail"}})
+
+        # (sinon) on reste en mode synchrone local
 
         session_id = (data.get("session_id") or request.headers.get("X-Session-Id") or str(uuid.uuid4())).strip()
         history_client = data.get("history", [])
