@@ -2393,7 +2393,8 @@ async function handleChatSubmit(event) {
             body: JSON.stringify({
                 message: message,
                 history: conversationHistory.slice(-10),
-                session_id: window.chatSessionId
+                session_id: window.chatSessionId,
+                force_sync: true
             })
         });
         
