@@ -8,6 +8,7 @@ from supabase import create_client
 
 # Agents SDK (Python)
 from agents import Agent, Runner, HostedMCPTool, ModelSettings
+from agents.mcp import MCPServerStreamableHttp
 from openai.types.shared import Reasoning
 
 
@@ -125,36 +126,47 @@ def make_agent() -> Agent:
 
 
 async def run_with_mcp(prompt: str) -> str:
-    # Agent avec HostedMCPTool (le serveur expose /tools et POST d'invocation)
-    tools = []
-    if MCP_SERVER_URL:
-        try:
-            cfg = {
-                "type": "mcp",
-                "server_label": "inventory_mcp",
-                "server_url": MCP_SERVER_URL,  # ex: https://mcp-server-xxx.onrender.com
-                "require_approval": "never",
-            }
-            tools.append(HostedMCPTool(tool_config=cfg))
-            logger.info("HostedMCPTool enabled url=%s", MCP_SERVER_URL)
-        except Exception:
-            logger.exception("HostedMCPTool_enable_failed")
-
-    agent = Agent(
-        name="Site Assistant",
-        instructions=SYSTEM_INSTRUCTIONS,
-        model="gpt-5",
-        model_settings=ModelSettings(
-            reasoning=Reasoning(effort="high"),
-            verbosity="medium",
-        ),
-        tools=tools,
-    )
-    try:
+    # Intégration Streamable HTTP MCP (avec headers optionnels)
+    if not MCP_SERVER_URL:
+        agent = make_agent()
         return (await Runner.run(agent, prompt)).final_output or ""
+
+    # Construire d'éventuels headers d'auth
+    headers = None
+    try:
+        extra = json.loads(MCP_SERVER_HEADERS) if MCP_SERVER_HEADERS else None
+        if MCP_SERVER_TOKEN or extra:
+            headers = {}
+            if MCP_SERVER_TOKEN:
+                headers["Authorization"] = f"Bearer {MCP_SERVER_TOKEN}"
+            if isinstance(extra, dict):
+                headers.update({str(k): str(v) for k, v in extra.items()})
     except Exception:
-        logger.exception("mcp_hosted_failed")
-        # Fallback sans MCP
+        headers = None
+
+    try:
+        async with MCPServerStreamableHttp(
+            name="inventory_mcp",
+            params={
+                "url": MCP_SERVER_URL,
+                **({"headers": headers} if headers else {}),
+                "timeout": 20,
+            },
+            cache_tools_list=True,
+        ) as server:
+            agent = Agent(
+                name="Site Assistant",
+                instructions=SYSTEM_INSTRUCTIONS,
+                model="gpt-5",
+                model_settings=ModelSettings(
+                    reasoning=Reasoning(effort="high"),
+                    verbosity="medium",
+                ),
+                mcp_servers=[server],
+            )
+            return (await Runner.run(agent, prompt)).final_output or ""
+    except Exception:
+        logger.exception("mcp_stream_failed")
         agent2 = make_agent()
         return (await Runner.run(agent2, prompt)).final_output or ""
 
