@@ -3,6 +3,7 @@ import json
 import httpx
 import asyncio
 import logging
+from uuid import uuid4
 from flask import Flask, request, jsonify, send_from_directory
 from supabase import create_client
 from typing import Dict, Optional
@@ -26,6 +27,8 @@ if not _chat_tokens_raw:
 CHAT_AGENT_API_TOKENS = {token.strip() for token in _chat_tokens_raw.split(",") if token.strip()}
 if not CHAT_AGENT_API_TOKENS:
     raise RuntimeError("CHAT_AGENT_API_TOKEN (or CHAT_AGENT_API_TOKENS) must contain at least one token")
+CHAT_AGENT_MODEL = os.getenv("CHAT_AGENT_MODEL", "gpt-5")
+CHAT_AGENT_PERSIST = os.getenv("CHAT_AGENT_PERSIST", "true").strip().lower() == "true"
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -93,11 +96,15 @@ Exemples de raisonnement expert
 def ensure_chat(chat_id: str | None) -> str:
     if chat_id:
         return chat_id
+    if not CHAT_AGENT_PERSIST:
+        return str(uuid4())
     res = supabase.table("chats").insert({"title": "New chat"}).execute()
     return res.data[0]["id"]
 
 
 def save_message(chat_id: str, role: str, content: str):
+    if not CHAT_AGENT_PERSIST:
+        return
     supabase.table("messages").insert(
         {"chat_id": chat_id, "role": role, "content": content}
     ).execute()
@@ -108,7 +115,7 @@ def make_agent() -> Agent:
     return Agent(
         name="Site Assistant",
         instructions=SYSTEM_INSTRUCTIONS,
-        model="gpt-5",
+        model=CHAT_AGENT_MODEL,
         model_settings=ModelSettings(
             reasoning=Reasoning(effort="high"),  # reasoning high
             verbosity="medium",                   # verbosity medium
@@ -137,7 +144,7 @@ async def run_with_mcp(prompt: str) -> str:
             agent = Agent(
                 name="Site Assistant",
                 instructions=SYSTEM_INSTRUCTIONS,
-                model="gpt-5",
+                model=CHAT_AGENT_MODEL,
                 model_settings=ModelSettings(
                     reasoning=Reasoning(effort="high"),
                     verbosity="medium",
