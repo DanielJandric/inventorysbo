@@ -60,18 +60,39 @@ function createSupabaseClient(headers) {
   });
 }
 
+function categorySynonyms(inputCategory) {
+  if (!inputCategory) return null;
+  const c = String(inputCategory).toLowerCase();
+  // Vehicles / cars synonyms (fr/en)
+  const cars = ['voiture', 'voitures', 'car', 'cars', 'automobile', 'automobiles', 'vehicle', 'vehicles', 'véhicule', 'véhicules', 'vehicule', 'vehicules'];
+  if (cars.includes(c)) {
+    return ['Voitures','Voiture','Cars','Car','Automobile','Automobiles','Vehicle','Vehicles','Véhicule','Véhicules','Vehicule','Vehicules'];
+  }
+  // Boats / yachts synonyms (fr/en)
+  const boats = ['bateau','bateaux','boat','boats','yacht','yachts'];
+  if (boats.includes(c)) {
+    return ['Bateaux','Bateau','Boat','Boats','Yacht','Yachts'];
+  }
+  return null;
+}
+
 async function handleItemsSearch(ctx, input) {
   const page = Number(input.page || 1) || 1;
   // Fenêtrer serré pour éviter des réponses trop volumineuses
   const page_size = Math.min(Math.max(Number(input.page_size || 25) || 25, 1), 50);
   const from = (page - 1) * page_size;
   const to = from + page_size - 1;
-  const fields = (typeof input.fields === 'string' && input.fields.trim())
-    ? input.fields
-    : 'id,name,category,construction_year,current_value,sale_status';
+  const fields = (typeof input.fields === 'string' && input.fields.trim()) ? input.fields : '*';
   let q = ctx.supabase.from('items').select(fields, { count: 'exact' });
   const f = (input.filters && typeof input.filters === 'object') ? input.filters : {};
-  if (f.category) q = q.eq('category', f.category);
+  if (Array.isArray(f.category_in) && f.category_in.length) {
+    q = q.in('category', f.category_in);
+  } else if (f.category_like) {
+    q = q.ilike('category', `%${f.category_like}%`);
+  } else if (f.category) {
+    const syn = categorySynonyms(f.category);
+    if (syn && syn.length) q = q.in('category', syn); else q = q.eq('category', f.category);
+  }
   if (f.status) q = q.eq('status', f.status);
   if (f.sale_status) q = q.eq('sale_status', f.sale_status);
   if (String(f.exclude_sold || 'false') === 'true') q = q.neq('sale_status', 'sold');
