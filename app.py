@@ -6128,7 +6128,8 @@ def chatbot():
         force_sync = str(request.args.get("force_sync") or data.get("force_sync") or "0").lower() in {"1", "true", "on", "yes"}
 
         # Par défaut, aiguiller le chat vers le worker Celery pour éviter les timeouts web
-        USE_ASYNC = False  # Désactivé temporairement - problème de reasoning_effort
+        # Activer le mode asynchrone via Celery si ASYNC_CHAT=1 (par défaut 1)
+        USE_ASYNC = (os.getenv('ASYNC_CHAT', '1') == '1')
         ALWAYS_LLM = (os.getenv('ALWAYS_LLM', '1') == '1')
         FULL_CONTEXT_MODE = (os.getenv('FULL_CONTEXT_MODE', '0') == '1')
 
@@ -6165,7 +6166,7 @@ def chatbot():
                 "job_id": job.id,
                 "poll_url": url_for("chat_task_status", job_id=job.id, _external=True),
                 "stream_url": url_for("stream_chat_task", task_id=job.id, _external=True),
-            })
+            }), 202
 
         session_id = (data.get("session_id") or request.headers.get("X-Session-Id") or str(uuid.uuid4())).strip()
         history_client = data.get("history", [])
