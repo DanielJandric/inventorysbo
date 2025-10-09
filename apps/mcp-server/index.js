@@ -310,11 +310,14 @@ async function handleMessagesAdd(ctx, input) {
 async function handleSchemaTables(ctx, input) {
   const resp = await ctx.supabase.rpc('http_get_tables');
   if (resp.error) {
-    // Fallback simple en interrogeant pg_catalog si rpc absent
-    const sql = `select table_name from information_schema.tables where table_schema = 'public' order by table_name`;
-    const { data, error } = await ctx.supabase.rpc('exec_sql', { q: sql });
-    if (error) throw error;
-    return { tables: data || [] };
+    // Fallback pragmatique sans dépendance à des RPC custom: liste connue des tables
+    // utilisées par le MCP (suffisant pour l'outillage)
+    const known = [
+      'items','trades','market_analyses','real_estate_listings',
+      'banking_asset_classes_major','banking_asset_classes_minor','banking_asset_class_summary',
+      'chats','messages'
+    ];
+    return { tables: known };
   }
   return { tables: resp.data || [] };
 }
