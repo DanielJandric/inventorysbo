@@ -81,6 +81,9 @@ from snb_routes import snb_bp
 # Load environment variables from .env file
 load_dotenv()
 
+AGENT_CHAT_URL = os.getenv("AGENT_CHAT_URL")
+AGENT_CHAT_TOKEN = os.getenv("AGENT_CHAT_TOKEN") or os.getenv("CHAT_AGENT_API_TOKEN")
+
 # Import configuration locale
 try:
     import config
@@ -6127,12 +6130,26 @@ def chatbot():
         # Proxy synchrone vers le nouvel agent si force_sync explicitement demandé
         try:
             use_agent = (os.getenv('USE_AGENT', '1') == '1')
-            agent_url = os.getenv('AGENT_CHAT_URL')
+            agent_url = AGENT_CHAT_URL or os.getenv('AGENT_CHAT_URL')
             if use_agent and agent_url:
-                # Timeouts bornés pour ne pas dépasser le timeout gunicorn web
-                r = requests.post(agent_url, json={"message": query}, timeout=(5, 45))
+                payload_agent = {"message": query}
+                chat_identifier = data.get("chat_id") or data.get("session_id")
+                if chat_identifier:
+                    payload_agent["chat_id"] = chat_identifier
+                headers_agent = {"Content-Type": "application/json"}
+                token = AGENT_CHAT_TOKEN
+                if token:
+                    headers_agent["Authorization"] = f"Bearer {token}"
+                try:
+                    connect_timeout = float(os.getenv("AGENT_CHAT_CONNECT_TIMEOUT", "5"))
+                except ValueError:
+                    connect_timeout = 5.0
+                try:
+                    read_timeout = float(os.getenv("AGENT_CHAT_TIMEOUT", "45"))
+                except ValueError:
+                    read_timeout = 45.0
+                r = requests.post(agent_url, json=payload_agent, headers=headers_agent, timeout=(connect_timeout, read_timeout))
                 r.raise_for_status()
-                # Tolérant: si pas JSON, tente un texte brut
                 agent_resp = {}
                 if r.content:
                     try:
@@ -6145,6 +6162,8 @@ def chatbot():
                     out = {"reply": reply_text, "metadata": {"mode": "agent"}}
                     if isinstance(agent_resp, dict) and agent_resp.get("chat_id"):
                         out["chat_id"] = agent_resp["chat_id"]
+                    elif chat_identifier:
+                        out["chat_id"] = chat_identifier
                     return jsonify(out)
         except Exception as _agent_err:
             logger.warning(f"Agent proxy failed: {_agent_err}")

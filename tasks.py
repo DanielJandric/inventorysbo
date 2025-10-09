@@ -4,11 +4,59 @@ import json
 import re
 import uuid
 import requests
-from typing import Optional, Any, Dict, List
+from typing import Optional, Any, Dict, List, Tuple
 from gpt5_compat import from_responses_simple, extract_output_text
 from celery_app import celery
 import subprocess
 import sys
+
+
+def _call_chat_agent(
+    message: str,
+    chat_identifier: Optional[str] = None,
+    payload_extra: Optional[Dict[str, Any]] = None,
+) -> Tuple[str, Dict[str, Any]]:
+    agent_url = os.getenv("AGENT_CHAT_URL")
+    if not agent_url:
+        return "", {}
+    headers = {"Content-Type": "application/json"}
+    token = os.getenv("AGENT_CHAT_TOKEN") or os.getenv("CHAT_AGENT_API_TOKEN")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    payload: Dict[str, Any] = {"message": message}
+    if chat_identifier:
+        payload["chat_id"] = chat_identifier
+    if payload_extra:
+        payload.update(payload_extra)
+    try:
+        connect_timeout = float(os.getenv("AGENT_CHAT_CONNECT_TIMEOUT", "5"))
+    except ValueError:
+        connect_timeout = 5.0
+    try:
+        read_timeout = float(os.getenv("AGENT_CHAT_TIMEOUT", "45"))
+    except ValueError:
+        read_timeout = 45.0
+    resp = requests.post(
+        agent_url,
+        json=payload,
+        headers=headers,
+        timeout=(connect_timeout, read_timeout),
+    )
+    resp.raise_for_status()
+    if not resp.content:
+        return "", {}
+    try:
+        body = resp.json()
+    except ValueError:
+        body = {"output": resp.text}
+    reply_text = (
+        body.get("output")
+        or body.get("reply")
+        or body.get("answer")
+        or body.get("message")
+        or ""
+    ).strip()
+    return reply_text, body
 @celery.task(bind=True)
 def chat_v2_task(self, payload: dict):
     """
@@ -102,11 +150,29 @@ def chat_v2_task(self, payload: dict):
         self.update_state(state="PROGRESS", meta={"step": steps[3], "pct": 100})
         return {"ok": True, "answer": fb}
 
-    # Fallback court via web v2
+    # Tentative via agent hote
     self.update_state(state="PROGRESS", meta={"step": steps[2], "pct": 80})
+    agent_reply = ""
+    agent_body: Dict[str, Any] = {}
+    try:
+        agent_reply, agent_body = _call_chat_agent(
+            msg,
+            data.get("chat_id") or data.get("session_id"),
+            payload_extra={"history": data.get("history") or []},
+        )
+    except requests.exceptions.RequestException as agent_exc:
+        agent_body = {"error": str(agent_exc)}
+        agent_reply = ""
+    except Exception:
+        agent_body = {}
+        agent_reply = ""
+    if agent_reply:
+        self.update_state(state="PROGRESS", meta={"step": steps[3], "pct": 100})
+        return {"ok": True, "answer": agent_reply, "agent": agent_body}
+
+    # Fallback court via web v2
     try:
         url = base.rstrip("/") + "/api/chatbot?force_sync=1"
-        # Timeout plus large sur worker pour questions complexes
         timeout_s = int(os.getenv("CHATBOT_API_TIMEOUT", "45"))
         r = requests.post(url, headers={"Content-Type": "application/json"}, data=json.dumps(data), timeout=timeout_s)
         if r.status_code == 200:
@@ -117,13 +183,11 @@ def chat_v2_task(self, payload: dict):
         else:
             reply = ""
         if not reply:
-            # Dernier filet de sécurité
-            reply = _fast_or_none(msg, base) or _direct_ai_or_none(msg) or "Réessayez dans un instant."
+            reply = _fast_or_none(msg, base) or _direct_ai_or_none(msg) or "Reessayez dans un instant."
         self.update_state(state="PROGRESS", meta={"step": steps[3], "pct": 100})
         return {"ok": True, "answer": reply}
     except requests.exceptions.RequestException as e:
-        # Ne jamais planter: tenter IA directe, sinon réponse courte
-        fb_msg = _fast_or_none(msg, base) or _direct_ai_or_none(msg) or "Réponse indisponible pour l'instant. Réessayez dans un instant."
+        fb_msg = _fast_or_none(msg, base) or _direct_ai_or_none(msg) or "Reponse indisponible pour l'instant. Reessayez dans un instant."
         return {"ok": True, "answer": fb_msg, "warning": str(e)}
 
 
@@ -317,6 +381,30 @@ def chat_task(self, payload: dict):
 
     # Déléguer au web en mode synchrone (force_sync=1) pour éviter imports complexes
     self.update_state(state="PROGRESS", meta={"step": steps[2], "pct": 55})
+    agent_reply = ""
+    agent_body: Dict[str, Any] = {}
+    try:
+        agent_reply, agent_body = _call_chat_agent(
+            msg,
+            data.get("chat_id") or session_id,
+            payload_extra={"history": conversation_history, "session_id": session_id},
+        )
+    except requests.exceptions.RequestException as agent_exc:
+        agent_body = {"error": str(agent_exc)}
+        agent_reply = ""
+    except Exception:
+        agent_body = {}
+        agent_reply = ""
+    if agent_reply:
+        result["events"].extend([
+            {"step": steps[1], "ok": True},
+            {"step": steps[2], "ok": True},
+            {"step": steps[3], "ok": True},
+            {"step": steps[4], "ok": True},
+        ])
+        self.update_state(state="PROGRESS", meta={"step": steps[4], "pct": 100})
+        return {"ok": True, "answer": agent_reply, "meta": result, "agent": agent_body}
+
     try:
         url = base.rstrip("/") + "/api/chatbot?force_sync=1"
         timeout_s = int(os.getenv("CHATBOT_API_TIMEOUT", "60"))
@@ -327,7 +415,6 @@ def chat_task(self, payload: dict):
             body = resp.json()
             reply = body.get("reply") or body.get("answer") or body.get("message") or ""
             if not reply:
-                # Retry once
                 time.sleep(0.5)
                 resp2 = requests.post(url, headers=headers, data=json.dumps(data), timeout=timeout_s)
                 if resp2.status_code == 200:
