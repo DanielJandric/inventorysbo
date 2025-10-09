@@ -726,7 +726,7 @@ function isDisallowedTool(resolvedName) {
 
 function buildToolList(intent) {
   const descriptions = {
-    'items.search': 'Rechercher des items avec filtres et pagination.',
+    'items.search': 'Rechercher (filters, page, fields=*)',
     'items.get': 'Récupérer un item par id.',
     'items.similar': 'Trouver des items similaires par texte.',
     'items.update_status': "Mettre à jour le statut d'un item.",
@@ -750,7 +750,7 @@ function buildToolList(intent) {
     'messages.list': 'Lister les messages d’un chat (ordre chronologique).',
     'messages.add': 'Ajouter un message (chat_id, role, content).',
     'schema.tables': 'Lister les tables (public).',
-    'schema.columns': 'Lister les colonnes pour une table donnée.',
+    'schema.columns': 'Colonnes d’une table (ex: table=items)',
     'db.query': 'Requête générique (table whitelist), select/filters/order/limit.',
     'db.select': 'Sélection générique (toutes tables publiques): table, columns, filters, order, limit.',
     'db.insert': 'Insertion générique: table, records[].',
@@ -760,10 +760,10 @@ function buildToolList(intent) {
   };
   // Filtre de base: outilage le plus utile (≤ 15)
   const preferred = new Set([
-    'items.search','items.get','items.summary','items.top_by_value','items.count_two_seat_strict','items.flagship_vessel','items.create',
+    'items.search','items.get','items.summary','items.top_by_value','items.create',
     'trades.list','trades.record','trades.close',
     'market.analyses.search','market.analyses.get',
-    'realestate.listings.search','vessels.list',
+    'realestate.listings.search',
     'schema.tables','schema.columns'
   ]);
   const names = Object.keys(registry).filter(n => preferred.has(n)).slice(0, 15);
