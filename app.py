@@ -1921,18 +1921,25 @@ Ce rapport a été généré automatiquement par votre système de gestion
             headlines_html = ''
             try:
                 if headlines_list:
-                    bg_colors = ['rgba(59,130,246,0.14)','rgba(16,185,129,0.14)','rgba(245,158,11,0.15)','rgba(147,51,234,0.14)']
+                    bg_colors = ['#e8f0fe','#e6fbf3','#fff3e0','#f3e8ff']
                     borders = ['#3b82f6','#10b981','#f59e0b','#9333ea']
-                    items = []
+                    rows = []
                     for i, h in enumerate(headlines_list[:4]):
                         bg = bg_colors[i % len(bg_colors)]
                         bd = borders[i % len(borders)]
-                        items.append(
-                            f'<li style=\"margin:6px 0;padding:8px 10px;border-left:4px solid {bd};background:{bg};border-radius:8px;\">📌 '
-                            f'<span class=\"badge\" style=\"background:{bd};\">TOP</span>'
-                            f'{html.escape(str(h))}</li>'
+                        rows.append(
+                            '<tr>'
+                            f'<td style=\"padding:8px 12px;border-left:4px solid {bd};background:{bg};font-size:16px;font-weight:700;\">'
+                            f'📌 <span style=\"display:inline-block;padding:2px 8px;border-radius:999px;background:{bd};color:#fff;font-size:11px;font-weight:800;\">TOP</span> '
+                            f'{html.escape(str(h))}'
+                            '</td>'
+                            '</tr>'
                         )
-                    headlines_html = '<div class=\"headlines\"><ul>' + '\n'.join(items) + '</ul></div>'
+                    headlines_html = (
+                        '<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"margin-top:12px;\">' +
+                        ''.join(rows) +
+                        '</table>'
+                    )
             except Exception:
                 headlines_html = ''
 
@@ -2054,28 +2061,25 @@ Ce rapport a été généré automatiquement par votre système de gestion
             <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
             <title>Rapport de Marché - {report_date}</title>
             <style>
-                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; background: #f5f5f5; margin: 0; padding: 0; }}
+                body {{ font-family: Arial, sans-serif; color: #333; background: #f5f5f5; margin: 0; padding: 0; font-size: 16px; line-height: 1.7; }}
                 .container {{ max-width: 100%; margin: 0 auto; background: #fff; box-shadow: none; border-radius: 0; overflow: hidden; }}
-                .header {{ background: linear-gradient(135deg,#1e3a8a,#3b82f6); color:#fff; padding: 24px; text-align:center; }}
+                .header {{ background: linear-gradient(135deg,#1e3a8a,#3b82f6); color:#fff; padding: 16px 12px; text-align:center; }}
                 .header h1 {{ margin: 0; font-size: 24px; }}
                 .header .subtitle {{ margin-top: 6px; opacity:.9; }}
                 /* Bandeau gros titres */
                 .headlines {{ margin-top: 12px; display: block; }}
-                .headlines ul {{ list-style: none; margin: 8px 0 0 0; padding: 0; }}
-                .headlines li {{ font-size: 15px; font-weight: 700; margin: 6px 0; }}
-                .headlines li span.badge {{ display:inline-block; padding:2px 8px; margin-right:8px; border-radius:999px; font-size:11px; font-weight:800; background:rgba(0,0,0,0.28); color:#fff; }}
-                .section {{ padding: 24px; border-top: 1px solid #eef2f7; }}
+                .section {{ padding: 16px 12px; border-top: 1px solid #eef2f7; }}
                 .section h3 {{ margin: 0 0 12px 0; color: #1e3a8a; font-size: 18px; }}
                 .exec {{ background:#0f172a; color:#fff; }}
                 .exec h3 {{ color:#fbbf24; }}
                 .exec li {{ border-bottom: 1px solid rgba(255,255,255,.12); padding: 8px 0; }}
                 /* Variations de sections */
-                .card {{ border-radius: 12px; padding: 15px; }}
+                .card {{ border-radius: 12px; padding: 12px; }}
                 .insights {{ background:#e0f2fe; border-left:4px solid #0284c7; }}
                 .risks {{ background:#fee2e2; border-left:4px solid #ef4444; }}
                 .opportunities {{ background:#dcfce7; border-left:4px solid #22c55e; }}
                 ul {{ margin: 0; padding-left: 20px; }}
-                .footer {{ background:#f8fafc; padding: 20px; text-align:center; font-size:12px; color:#64748b; }}
+                .footer {{ background:#f8fafc; padding: 12px 10px; text-align:center; font-size:12px; color:#64748b; }}
                 .grid {{ display:grid; grid-template-columns:1fr; gap:14px; }}
                 @media (min-width: 640px) {{ .grid-2 {{ grid-template-columns: 1fr 1fr; }} }}
             </style>

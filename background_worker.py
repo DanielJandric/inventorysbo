@@ -955,22 +955,29 @@ class MarketAnalysisWorker:
         except Exception:
             preheader_text = ''
 
-        # HTML des gros titres avec variations de couleurs (4 max)
+        # HTML des gros titres (4 max) en tableau inline-compatible (clients iPhone)
         headlines_html = ''
         try:
             if headlines_list:
-                bg_colors = ['rgba(59,130,246,0.14)','rgba(16,185,129,0.14)','rgba(245,158,11,0.15)','rgba(147,51,234,0.14)']
+                bg_colors = ['#e8f0fe','#e6fbf3','#fff3e0','#f3e8ff']
                 borders = ['#3b82f6','#10b981','#f59e0b','#9333ea']
-                items = []
+                rows = []
                 for i, h in enumerate(headlines_list[:4]):
                     bg = bg_colors[i % len(bg_colors)]
                     bd = borders[i % len(borders)]
-                    items.append(
-                        f'<li style="margin:6px 0;padding:8px 10px;border-left:4px solid {bd};background:{bg};border-radius:8px;">📌 '
-                        f'<span class="badge" style="background:{bd};">TOP</span>'
-                        f'{html.escape(str(h))}</li>'
+                    rows.append(
+                        '<tr>'
+                        f'<td style="padding:8px 12px;border-left:4px solid {bd};background:{bg};border-radius:0;font-size:16px;font-weight:700;">'
+                        f'📌 <span style="display:inline-block;padding:2px 8px;border-radius:999px;background:{bd};color:#fff;font-size:11px;font-weight:800;">TOP</span> '
+                        f'{html.escape(str(h))}'
+                        '</td>'
+                        '</tr>'
                     )
-                headlines_html = '<div class="headlines"><ul>' + chr(10).join(items) + '</ul></div>'
+                headlines_html = (
+                    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:12px;">'
+                    + ''.join(rows) +
+                    '</table>'
+                )
         except Exception:
             headlines_html = ''
 
@@ -989,7 +996,8 @@ class MarketAnalysisWorker:
                     padding: 0; 
                     background-color: #f0f2f5; 
                     color: #1a1a1a;
-                    line-height: 1.6;
+                    font-size: 16px;
+                    line-height: 1.7;
                 }}
                 
                 /* Container principal */
@@ -1004,12 +1012,12 @@ class MarketAnalysisWorker:
                 .header {{ 
                     background: linear-gradient(135deg, #0f172a 0%, #1d4ed8 40%, #60a5fa 100%);
                     color: #ffffff;
-                    padding: 24px 16px;
+                    padding: 16px 12px;
                     text-align: center;
                 }}
                 .header h1 {{ 
                     margin: 0; 
-                    font-size: 22px; 
+                    font-size: 24px; 
                     letter-spacing: 1px;
                     text-transform: uppercase;
                     font-weight: 800;
@@ -1023,7 +1031,7 @@ class MarketAnalysisWorker:
 
                 /* Bandeau gros titres */
                 .headlines {{
-                    margin-top: 14px;
+                    margin-top: 10px;
                     display: block;
                 }}
                 .headlines ul {{
@@ -1052,7 +1060,7 @@ class MarketAnalysisWorker:
                 .executive-summary {{ 
                     background: #0f172a;
                     color: white;
-                    padding: 20px 15px;
+                    padding: 16px 12px;
                     margin: 0;
                 }}
                 .executive-summary h2 {{ 
@@ -1078,7 +1086,7 @@ class MarketAnalysisWorker:
                 
                 /* Sections avec séparateurs visuels */
                 .section {{ 
-                    padding: 20px 15px;
+                    padding: 16px 12px;
                     border-bottom: 8px solid #f0f2f5;
                 }}
                 .section:last-child {{ border-bottom: none; }}
@@ -1122,13 +1130,13 @@ class MarketAnalysisWorker:
                 .economic-grid {{
                     display: grid;
                     grid-template-columns: 1fr 1fr;
-                    gap: 10px;
-                    margin-top: 15px;
+                    gap: 8px;
+                    margin-top: 12px;
                 }}
                 .economic-card {{
                     background: #f8fafc;
                     border-radius: 8px;
-                    padding: 12px;
+                    padding: 10px;
                     border-left: 3px solid #3b82f6;
                 }}
                 .economic-card h4 {{
@@ -1178,7 +1186,7 @@ class MarketAnalysisWorker:
                 /* Footer */
                 .footer {{ 
                     background: #f8fafc;
-                    padding: 20px 15px;
+                    padding: 12px 10px;
                     text-align: center;
                     font-size: 12px;
                     color: #64748b;
@@ -1203,7 +1211,7 @@ class MarketAnalysisWorker:
                 <div class="header" style="{header_style}color:#ffffff;padding:24px 16px;text-align:center;">
                     <h1 style="margin:0;font-size:22px;letter-spacing:1px;text-transform:uppercase;font-weight:800;color:#ffffff;">{header_title}</h1>
                     {('' if not market_pulse.get('subtitle') else f'<div style="margin-top:8px;font-size:14px;color:rgba(255,255,255,0.95);font-weight:600;">{html.escape(str(market_pulse.get("subtitle"))[:180])}</div>')}
-                    {('' if not market_pulse.get('verdict_trinity') else '<div style="margin-top:10px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">' + chr(10).join([f'<span style="background:rgba(0,0,0,0.25);padding:6px 10px;border-radius:999px;font-size:12px;font-weight:700;">{html.escape(str(v))}</span>' for v in (market_pulse.get('verdict_trinity') or [])]) + '</div>')}
+                    {('' if not market_pulse.get('verdict_trinity') else '<table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin-top:10px;"><tr>' + ''.join([f'<td style="padding:4px 5px;">\n<span style="display:inline-block;background:rgba(0,0,0,0.25);padding:6px 10px;border-radius:999px;font-size:12px;font-weight:700;color:#fff;">{html.escape(str(v))}</span>\n</td>' for v in (market_pulse.get('verdict_trinity') or [])]) + '</tr></table>')}
                     {('' if not market_pulse.get('key_metric') else f'<div style="margin-top:8px;font-size:13px;color:rgba(255,255,255,0.9);">{html.escape(str((market_pulse.get("key_metric") or {}).get("name", "")))}: <strong>{html.escape(str((market_pulse.get("key_metric") or {}).get("value", "")))}</strong> ({html.escape(str((market_pulse.get("key_metric") or {}).get("change", "")))}) — {html.escape(str((market_pulse.get("key_metric") or {}).get("significance", "")))}</div>')}
                     {headlines_html}
                     <div class="date" style="margin-top:6px;font-size:13px;font-weight:500;color:rgba(255,255,255,0.92);">Généré le {ts_str}</div>
