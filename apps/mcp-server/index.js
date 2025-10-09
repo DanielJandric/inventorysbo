@@ -624,6 +624,44 @@ const server = http.createServer(async (req, res) => {
     try {
       const body = await parseJsonBody(req);
       console.log('[mcp] body', JSON.stringify(body).slice(0, 500));
+      // Minimal JSON-RPC support for Cursor MCP client
+      if (body && body.jsonrpc === '2.0' && typeof body.method === 'string') {
+        const rpcId = body.id ?? null;
+        const methodName = String(body.method);
+        const params = (body.params && typeof body.params === 'object') ? body.params : {};
+        if (methodName === 'initialize') {
+          const result = {
+            capabilities: { tools: true, prompts: true, resources: true, logging: false },
+            protocolVersion: '2025-06-18',
+            serverInfo: { name: 'inventory_mcp', version: '1.0.0' },
+          };
+          const latency = Date.now() - start;
+          return sendJson(res, 200, { jsonrpc: '2.0', id: rpcId, result, meta: { latencyMs: latency } });
+        }
+        if (methodName === 'tools/list') {
+          const tools = buildToolList();
+          const latency = Date.now() - start;
+          return sendJson(res, 200, { jsonrpc: '2.0', id: rpcId, result: { tools }, meta: { latencyMs: latency } });
+        }
+        if (methodName === 'tools/call') {
+          const toolName = params.name || params.tool || params.method;
+          const args = params.arguments || params.args || params.params || {};
+          if (!toolName || typeof toolName !== 'string') {
+            return sendJson(res, 400, { jsonrpc: '2.0', id: rpcId, error: { code: -32602, message: 'Missing tool name' } });
+          }
+          const handler = registry[toolName];
+          if (!handler) {
+            return sendJson(res, 404, { jsonrpc: '2.0', id: rpcId, error: { code: -32601, message: `Unknown tool: ${toolName}` } });
+          }
+          const supabase = createSupabaseClient(req.headers);
+          const out = await handler({ supabase, headers: req.headers }, args);
+          const latency = Date.now() - start;
+          // Wrap as simple content response (compatible with many clients)
+          return sendJson(res, 200, { jsonrpc: '2.0', id: rpcId, result: { content: [{ type: 'text', text: JSON.stringify(out) }] }, meta: { latencyMs: latency } });
+        }
+        // Unknown JSON-RPC method
+        return sendJson(res, 404, { jsonrpc: '2.0', id: rpcId, error: { code: -32601, message: `Unknown method: ${methodName}` } });
+      }
       if (!body || typeof body !== 'object') {
         return sendJson(res, 400, { ok: false, error: 'Invalid JSON body' });
       }
