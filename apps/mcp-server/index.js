@@ -62,10 +62,14 @@ function createSupabaseClient(headers) {
 
 async function handleItemsSearch(ctx, input) {
   const page = Number(input.page || 1) || 1;
-  const page_size = Math.min(Math.max(Number(input.page_size || 50) || 50, 1), 200);
+  // Fenêtrer serré pour éviter des réponses trop volumineuses
+  const page_size = Math.min(Math.max(Number(input.page_size || 25) || 25, 1), 50);
   const from = (page - 1) * page_size;
   const to = from + page_size - 1;
-  let q = ctx.supabase.from('items').select('*', { count: 'exact' });
+  const fields = (typeof input.fields === 'string' && input.fields.trim())
+    ? input.fields
+    : 'id,name,category,construction_year,current_value,sale_status';
+  let q = ctx.supabase.from('items').select(fields, { count: 'exact' });
   const f = (input.filters && typeof input.filters === 'object') ? input.filters : {};
   if (f.category) q = q.eq('category', f.category);
   if (f.status) q = q.eq('status', f.status);
@@ -558,7 +562,7 @@ function resolveToolName(name) {
   return null;
 }
 
-function buildToolList() {
+function buildToolList(intent) {
   const descriptions = {
     'items.search': 'Rechercher des items avec filtres et pagination.',
     'items.get': 'Récupérer un item par id.',
@@ -589,7 +593,16 @@ function buildToolList() {
     'db.delete': 'Suppression générique: table, match{}, limit?',
     'exports.generate': 'Générer un export de données (csv/xlsx/pdf).',
   };
-  return Object.keys(registry).map((origName) => {
+  // Filtre de base: outilage le plus utile (≤ 15)
+  const preferred = new Set([
+    'items.search','items.get','items.summary','items.top_by_value','items.create',
+    'trades.list','trades.record','trades.close',
+    'market.analyses.search','market.analyses.get',
+    'realestate.listings.search',
+    'schema.tables','schema.columns','db.query','db.select'
+  ]);
+  const names = Object.keys(registry).filter(n => preferred.has(n)).slice(0, 15);
+  return names.map((origName) => {
     // Tools names must match ^[a-zA-Z0-9_-]+$ for Agents SDK
     const safeName = String(origName).replace(/[^A-Za-z0-9_-]/g, '-');
     const name = safeName.replace(/\.+/g, '-');

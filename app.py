@@ -6170,9 +6170,10 @@ def chatbot():
 
         session_id = (data.get("session_id") or request.headers.get("X-Session-Id") or str(uuid.uuid4())).strip()
         history_client = data.get("history", [])
-        history_persisted = conversation_memory.get_recent_messages(session_id, limit=12)
-        # Fusion: mémoire persistée + derniers messages du client (max 8)
-        conversation_history = (history_persisted or []) + (list(history_client[-8:]) if isinstance(history_client, list) else [])
+        history_persisted = conversation_memory.get_recent_messages(session_id, limit=10)
+        # Fenêtrer: garder uniquement les 10 derniers messages (persistés + client)
+        merged = (history_persisted or []) + (list(history_client[-6:]) if isinstance(history_client, list) else [])
+        conversation_history = merged[-10:]
         logger.info(f"🎯 Requête: '{query}' avec {len(conversation_history)} messages d'historique")
         
         # 0) Tentative de création d'objet AVANT tout calcul lourd
