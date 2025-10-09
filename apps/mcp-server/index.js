@@ -584,6 +584,10 @@ function resolveToolName(name) {
   return null;
 }
 
+function isDisallowedTool(resolvedName) {
+  return typeof resolvedName === 'string' && resolvedName.startsWith('db.');
+}
+
 function buildToolList(intent) {
   const descriptions = {
     'items.search': 'Rechercher des items avec filtres et pagination.',
@@ -621,7 +625,7 @@ function buildToolList(intent) {
     'trades.list','trades.record','trades.close',
     'market.analyses.search','market.analyses.get',
     'realestate.listings.search',
-    'schema.tables','schema.columns','db.query','db.select'
+    'schema.tables','schema.columns'
   ]);
   const names = Object.keys(registry).filter(n => preferred.has(n)).slice(0, 15);
   return names.map((origName) => {
@@ -704,6 +708,9 @@ const server = http.createServer(async (req, res) => {
           }
           const resolved = resolveToolName(toolName);
           const handler = resolved ? registry[resolved] : null;
+          if (isDisallowedTool(resolved)) {
+            return sendJson(res, 200, { jsonrpc: '2.0', id: rpcId, error: { code: -32601, message: `Tool not allowed: ${toolName}` } });
+          }
           if (!handler) {
             return sendJson(res, 200, { jsonrpc: '2.0', id: rpcId, error: { code: -32601, message: `Unknown tool: ${toolName}` } });
           }
