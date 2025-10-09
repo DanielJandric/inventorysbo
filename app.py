@@ -6160,7 +6160,7 @@ def chatbot():
                 "full_context": FULL_CONTEXT_MODE,
                 "metadata": {"source": "web_api"},
             }
-            job = chat_task.apply_async(args=[payload], queue="chat")
+            job = chat_task.apply_async(args=[payload], queue="celery")
             return jsonify({
                 "status": "queued",
                 "job_id": job.id,
