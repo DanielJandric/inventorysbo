@@ -583,7 +583,7 @@ function buildToolList() {
   return Object.keys(registry).map((name) => ({
     name,
     description: descriptions[name] || name,
-    input_schema: { type: 'object', additionalProperties: true },
+    inputSchema: { type: 'object', additionalProperties: true },
   }));
 }
 
