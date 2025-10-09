@@ -665,21 +665,26 @@ const server = http.createServer(async (req, res) => {
           const toolName = params.name || params.tool || params.method;
           const args = params.arguments || params.args || params.params || {};
           if (!toolName || typeof toolName !== 'string') {
-            return sendJson(res, 400, { jsonrpc: '2.0', id: rpcId, error: { code: -32602, message: 'Missing tool name' } });
+            return sendJson(res, 200, { jsonrpc: '2.0', id: rpcId, error: { code: -32602, message: 'Missing tool name' } });
           }
           const resolved = resolveToolName(toolName);
           const handler = resolved ? registry[resolved] : null;
           if (!handler) {
-            return sendJson(res, 404, { jsonrpc: '2.0', id: rpcId, error: { code: -32601, message: `Unknown tool: ${toolName}` } });
+            return sendJson(res, 200, { jsonrpc: '2.0', id: rpcId, error: { code: -32601, message: `Unknown tool: ${toolName}` } });
           }
-          const supabase = createSupabaseClient(req.headers);
-          const out = await handler({ supabase, headers: req.headers }, args);
-          const latency = Date.now() - start;
-          // Wrap as simple content response (compatible with many clients)
-          return sendJson(res, 200, { jsonrpc: '2.0', id: rpcId, result: { content: [{ type: 'text', text: JSON.stringify(out) }] }, meta: { latencyMs: latency } });
+          try {
+            const supabase = createSupabaseClient(req.headers);
+            const out = await handler({ supabase, headers: req.headers }, args);
+            const latency = Date.now() - start;
+            // Wrap as simple content response (compatible with many clients)
+            return sendJson(res, 200, { jsonrpc: '2.0', id: rpcId, result: { content: [{ type: 'text', text: JSON.stringify(out) }] }, meta: { latencyMs: latency } });
+          } catch (e) {
+            const msg = (e && e.message) ? String(e.message) : 'Tool error';
+            return sendJson(res, 200, { jsonrpc: '2.0', id: rpcId, error: { code: -32000, message: msg } });
+          }
         }
         // Unknown JSON-RPC method
-        return sendJson(res, 404, { jsonrpc: '2.0', id: rpcId, error: { code: -32601, message: `Unknown method: ${methodName}` } });
+        return sendJson(res, 200, { jsonrpc: '2.0', id: rpcId, error: { code: -32601, message: `Unknown method: ${methodName}` } });
       }
       if (!body || typeof body !== 'object') {
         return sendJson(res, 400, { ok: false, error: 'Invalid JSON body' });
