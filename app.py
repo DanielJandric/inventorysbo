@@ -6108,30 +6108,11 @@ def chatbot():
         USE_ASYNC = (os.getenv('ASYNC_CHAT', '1') == '1')
         ALWAYS_LLM = (os.getenv('ALWAYS_LLM', '1') == '1')
         FULL_CONTEXT_MODE = (os.getenv('FULL_CONTEXT_MODE', '0') == '1')
-        if USE_ASYNC and not force_sync:
-            user_identifier = data.get("user_id") or request.headers.get("X-User-Id")
-            payload = {
-                "message": query,
-                "user_id": user_identifier,
-                "history": data.get("history") or [],
-                "session_id": data.get("session_id") or request.headers.get("X-Session-Id"),
-                "always_llm": ALWAYS_LLM,
-                "full_context": FULL_CONTEXT_MODE,
-                "metadata": {"source": "web_api"},
-            }
-            job = chat_task.apply_async(args=[payload], queue="celery")
-            return jsonify({
-                "status": "queued",
-                "job_id": job.id,
-                "poll_url": url_for("chat_task_status", job_id=job.id, _external=True),
-                "stream_url": url_for("stream_chat_task", task_id=job.id, _external=True),
-            }), 202
 
-        # Proxy synchrone vers le nouvel agent si force_sync explicitement demandé
-        try:
-            use_agent = (os.getenv('USE_AGENT', '1') == '1')
-            agent_url = AGENT_CHAT_URL or os.getenv('AGENT_CHAT_URL')
-            if use_agent and agent_url:
+        use_agent = (os.getenv('USE_AGENT', '1') == '1')
+        agent_url = AGENT_CHAT_URL or os.getenv('AGENT_CHAT_URL')
+        if use_agent and agent_url:
+            try:
                 payload_agent = {"message": query}
                 chat_identifier = data.get("chat_id") or data.get("session_id")
                 if chat_identifier:
@@ -6165,8 +6146,27 @@ def chatbot():
                     elif chat_identifier:
                         out["chat_id"] = chat_identifier
                     return jsonify(out)
-        except Exception as _agent_err:
-            logger.warning(f"Agent proxy failed: {_agent_err}")
+            except Exception as _agent_err:
+                logger.warning(f"Agent proxy failed: {_agent_err}")
+
+        if USE_ASYNC and not force_sync:
+            user_identifier = data.get("user_id") or request.headers.get("X-User-Id")
+            payload = {
+                "message": query,
+                "user_id": user_identifier,
+                "history": data.get("history") or [],
+                "session_id": data.get("session_id") or request.headers.get("X-Session-Id"),
+                "always_llm": ALWAYS_LLM,
+                "full_context": FULL_CONTEXT_MODE,
+                "metadata": {"source": "web_api"},
+            }
+            job = chat_task.apply_async(args=[payload], queue="celery")
+            return jsonify({
+                "status": "queued",
+                "job_id": job.id,
+                "poll_url": url_for("chat_task_status", job_id=job.id, _external=True),
+                "stream_url": url_for("stream_chat_task", task_id=job.id, _external=True),
+            }), 202
 
         # (force_sync==True) continue en mode synchrone ci-dessous
 
