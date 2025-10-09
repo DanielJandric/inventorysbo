@@ -549,6 +549,15 @@ const registry = {
   'exports.generate': handleExportsGenerate,
 };
 
+function resolveToolName(name) {
+  if (!name) return null;
+  const n = String(name);
+  if (registry[n]) return n;
+  const dotted = n.replace(/-/g, '.');
+  if (registry[dotted]) return dotted;
+  return null;
+}
+
 function buildToolList() {
   const descriptions = {
     'items.search': 'Rechercher des items avec filtres et pagination.',
@@ -655,7 +664,8 @@ const server = http.createServer(async (req, res) => {
           if (!toolName || typeof toolName !== 'string') {
             return sendJson(res, 400, { jsonrpc: '2.0', id: rpcId, error: { code: -32602, message: 'Missing tool name' } });
           }
-          const handler = registry[toolName];
+          const resolved = resolveToolName(toolName);
+          const handler = resolved ? registry[resolved] : null;
           if (!handler) {
             return sendJson(res, 404, { jsonrpc: '2.0', id: rpcId, error: { code: -32601, message: `Unknown tool: ${toolName}` } });
           }
@@ -677,7 +687,8 @@ const server = http.createServer(async (req, res) => {
   if (!toolName || typeof toolName !== 'string') {
         return sendJson(res, 400, { ok: false, error: 'Missing tool name' });
       }
-      const handler = registry[toolName];
+      const resolved = resolveToolName(toolName);
+      const handler = resolved ? registry[resolved] : null;
       if (!handler) {
         return sendJson(res, 404, { ok: false, error: `Unknown tool: ${toolName}` });
       }
