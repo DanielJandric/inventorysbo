@@ -1627,7 +1627,7 @@ BONVIN Collection - Gestion de portefeuille d'investissement
 Ce rapport a été généré automatiquement par votre système de gestion
         """
 
-    def _create_market_report_html_v2(self, report_date: str, report_time: str, report_content: Any, header_title: str = "📰 Rapport de Marché", header_style: str = "background-color:#1e3a8a;background:linear-gradient(135deg,#1e3a8a,#3b82f6);color:#ffffff;") -> str:
+    def _create_market_report_html_v2(self, report_date: str, report_time: str, report_content: Any, header_title: str = "📰 Rapport de Marché", header_style: str = "background-color:#1e3a8a;background:linear-gradient(135deg,#1e3a8a,#3b82f6);color:#ffffff;", suppress_price_sections: bool = False) -> str:
         """Version robuste du HTML: parse JSON si présent et rend Executive Summary et sections.
         Fallback vers rendu <pre> si non-structuré.
         """
@@ -1857,6 +1857,85 @@ Ce rapport a été généré automatiquement par votre système de gestion
                     return ''
             exec_dash_html = _render_exec_dash(structured.get('executive_dashboard') or parsed.get('executive_dashboard') or {})
 
+            # Market pulse et gros titres
+            market_pulse = {}
+            try:
+                mp = parsed.get('market_pulse')
+                if isinstance(mp, dict):
+                    market_pulse = mp
+                else:
+                    sd_mp = (structured.get('market_pulse') if isinstance(structured, dict) else None)
+                    if isinstance(sd_mp, dict):
+                        market_pulse = sd_mp
+            except Exception:
+                market_pulse = {}
+            # Titre prioritaire depuis le LLM si fourni
+            try:
+                mt = (market_pulse.get('main_title') if isinstance(market_pulse, dict) else None)
+                if isinstance(mt, str) and mt.strip():
+                    header_title = mt.strip()
+            except Exception:
+                pass
+            # Gros titres listés
+            headlines_list = []
+            try:
+                raw_hl = (
+                    parsed.get('headlines') or
+                    parsed.get('top_headlines') or
+                    (market_pulse.get('headlines') if isinstance(market_pulse, dict) else None) or
+                    (structured.get('headlines') if isinstance(structured, dict) else None)
+                )
+                if isinstance(raw_hl, list):
+                    headlines_list = [str(x).strip() for x in raw_hl if str(x).strip()]
+                elif isinstance(raw_hl, str) and raw_hl.strip():
+                    tmp = raw_hl.replace('\r','\n')
+                    for bullet in ['\n- ', '\n• ', '\n* ']:
+                        tmp = tmp.replace(bullet, '\n')
+                    headlines_list = [p.strip(' -•*\t') for p in tmp.split('\n') if p.strip()]
+            except Exception:
+                headlines_list = []
+            # Fallback vers executive_summary / key_points / summary si vide
+            if not headlines_list:
+                if executive_summary:
+                    headlines_list = executive_summary[:5]
+                elif key_points:
+                    headlines_list = key_points[:5]
+                elif summary_text:
+                    try:
+                        sents = [s.strip() for s in summary_text.split('.') if s.strip()]
+                        headlines_list = [s + '.' for s in sents[:4]]
+                    except Exception:
+                        headlines_list = []
+
+            # Préheader (aperçu boîte de réception)
+            preheader_text = ''
+            try:
+                if headlines_list:
+                    preheader_text = ' • '.join([str(h) for h in headlines_list[:3]])
+                elif summary_text:
+                    preheader_text = str(summary_text).replace('\n',' ').strip()[:140]
+            except Exception:
+                preheader_text = ''
+
+            # HTML des gros titres avec variations (4 max)
+            headlines_html = ''
+            try:
+                if headlines_list:
+                    bg_colors = ['rgba(59,130,246,0.14)','rgba(16,185,129,0.14)','rgba(245,158,11,0.15)','rgba(147,51,234,0.14)']
+                    borders = ['#3b82f6','#10b981','#f59e0b','#9333ea']
+                    items = []
+                    for i, h in enumerate(headlines_list[:4]):
+                        bg = bg_colors[i % len(bg_colors)]
+                        bd = borders[i % len(borders)]
+                        items.append(
+                            f'<li style=\"margin:6px 0;padding:8px 10px;border-left:4px solid {bd};background:{bg};border-radius:8px;\">📌 '
+                            f'<span class=\"badge\" style=\"background:{bd};\">TOP</span>'
+                            f'{html.escape(str(h))}</li>'
+                        )
+                    headlines_html = '<div class=\"headlines\"><ul>' + '\n'.join(items) + '</ul></div>'
+            except Exception:
+                headlines_html = ''
+
             # Meta / quant / risk / actionable (light renderers)
             def _render_meta(meta):
                 try:
@@ -1975,16 +2054,26 @@ Ce rapport a été généré automatiquement par votre système de gestion
             <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
             <title>Rapport de Marché - {report_date}</title>
             <style>
-                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; background: #f5f5f5; margin: 0; padding: 20px; }}
-                .container {{ max-width: 760px; margin: 0 auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,.08); overflow: hidden; }}
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; background: #f5f5f5; margin: 0; padding: 0; }}
+                .container {{ max-width: 100%; margin: 0 auto; background: #fff; box-shadow: none; border-radius: 0; overflow: hidden; }}
                 .header {{ background: linear-gradient(135deg,#1e3a8a,#3b82f6); color:#fff; padding: 24px; text-align:center; }}
                 .header h1 {{ margin: 0; font-size: 24px; }}
                 .header .subtitle {{ margin-top: 6px; opacity:.9; }}
+                /* Bandeau gros titres */
+                .headlines {{ margin-top: 12px; display: block; }}
+                .headlines ul {{ list-style: none; margin: 8px 0 0 0; padding: 0; }}
+                .headlines li {{ font-size: 15px; font-weight: 700; margin: 6px 0; }}
+                .headlines li span.badge {{ display:inline-block; padding:2px 8px; margin-right:8px; border-radius:999px; font-size:11px; font-weight:800; background:rgba(0,0,0,0.28); color:#fff; }}
                 .section {{ padding: 24px; border-top: 1px solid #eef2f7; }}
                 .section h3 {{ margin: 0 0 12px 0; color: #1e3a8a; font-size: 18px; }}
                 .exec {{ background:#0f172a; color:#fff; }}
                 .exec h3 {{ color:#fbbf24; }}
                 .exec li {{ border-bottom: 1px solid rgba(255,255,255,.12); padding: 8px 0; }}
+                /* Variations de sections */
+                .card {{ border-radius: 12px; padding: 15px; }}
+                .insights {{ background:#e0f2fe; border-left:4px solid #0284c7; }}
+                .risks {{ background:#fee2e2; border-left:4px solid #ef4444; }}
+                .opportunities {{ background:#dcfce7; border-left:4px solid #22c55e; }}
                 ul {{ margin: 0; padding-left: 20px; }}
                 .footer {{ background:#f8fafc; padding: 20px; text-align:center; font-size:12px; color:#64748b; }}
                 .grid {{ display:grid; grid-template-columns:1fr; gap:14px; }}
@@ -1992,10 +2081,12 @@ Ce rapport a été généré automatiquement par votre système de gestion
             </style>
         </head>
         <body>
+            <div style=\"display:none;max-height:0;overflow:hidden;mso-hide:all;opacity:0;\">{html.escape(preheader_text)}</div>
             <div class=\"container\"> 
                 <div class=\"header\" style=\"{header_style}padding:24px;text-align:center;\">
                     <h1 style=\"margin:0;font-size:24px;color:#ffffff;\">{header_title}</h1>
                     <div class=\"subtitle\" style=\"margin-top:6px;opacity:.9;color:#ffffff;\">{report_date} • {report_time} • Généré le {timestamp}</div>
+                    {headlines_html}
                 </div>
 
                 <div class=\"section exec\">
@@ -2011,11 +2102,11 @@ Ce rapport a été généré automatiquement par votre système de gestion
                 </div>
 
                 <div class=\"section grid grid-2\">
-                    <div>
+                    <div class=\"card\">
                         <h3>🔑 Points clés</h3>
                         {'<ul>' + ''.join(f'<li>{p}</li>' for p in key_points) + '</ul>' if key_points else '<p>N/D</p>'}
                     </div>
-                    <div>
+                    <div class=\"card insights\">
                         <h3>💡 Insights</h3>
                         {'<ul>' + ''.join(f'<li>{p}</li>' for p in insights) + '</ul>' if insights else '<p>N/D</p>'}
                     </div>
@@ -2035,11 +2126,11 @@ Ce rapport a été généré automatiquement par votre système de gestion
                 {('<div class="section"><h3>✅ Synthèse Actionnable</h3>' + act_html + '</div>') if act_html else ''}
 
                 <div class=\"section grid grid-2\">
-                    <div>
+                    <div class=\"card risks\">
                         <h3>⚠️ Risques</h3>
                         {'<ul>' + ''.join(f'<li>{p}</li>' for p in risks) + '</ul>' if risks else '<p>N/D</p>'}
                     </div>
-                    <div>
+                    <div class=\"card opportunities\">
                         <h3>🚀 Opportunités</h3>
                         {'<ul>' + ''.join(f'<li>{p}</li>' for p in opportunities) + '</ul>' if opportunities else '<p>N/D</p>'}
                     </div>

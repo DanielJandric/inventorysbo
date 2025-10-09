@@ -912,6 +912,68 @@ class MarketAnalysisWorker:
         risks_list = _normalize_to_list(getattr(analysis, 'risks', None) or result.get('risks', []))
         opps_list = _normalize_to_list(getattr(analysis, 'opportunities', None) or result.get('opportunities', []))
 
+        # Extraire les gros titres pour le bandeau d'en-tête
+        headlines_list = []
+        try:
+            raw_hl = (
+                result.get('headlines') if isinstance(result, dict) else None
+            ) or (
+                (structured_data.get('headlines') if isinstance(structured_data, dict) else None)
+            ) or (
+                (market_pulse.get('headlines') if isinstance(market_pulse, dict) else None)
+            ) or (
+                result.get('top_headlines') if isinstance(result, dict) else None
+            )
+            if isinstance(raw_hl, list):
+                headlines_list = [str(x).strip() for x in raw_hl if str(x).strip()]
+            elif isinstance(raw_hl, str) and raw_hl.strip():
+                tmp = raw_hl.replace('\r','\n')
+                for bullet in ['\n- ', '\n• ', '\n* ']:
+                    tmp = tmp.replace(bullet, '\n')
+                headlines_list = [p.strip(' -•*\t') for p in tmp.split('\n') if p.strip()]
+        except Exception:
+            headlines_list = []
+        if not headlines_list:
+            if exec_summary:
+                headlines_list = exec_summary[:5]
+            elif key_points_list:
+                headlines_list = key_points_list[:5]
+            elif summary_text:
+                try:
+                    sentences = [s.strip() for s in summary_text.split('.') if s.strip()]
+                    headlines_list = [s + '.' for s in sentences[:4]]
+                except Exception:
+                    headlines_list = []
+
+        # Préheader (aperçu boîte de réception)
+        preheader_text = ''
+        try:
+            if headlines_list:
+                preheader_text = ' • '.join([str(h) for h in headlines_list[:3]])
+            elif summary_text:
+                preheader_text = str(summary_text).replace('\n',' ').strip()[:140]
+        except Exception:
+            preheader_text = ''
+
+        # HTML des gros titres avec variations de couleurs (4 max)
+        headlines_html = ''
+        try:
+            if headlines_list:
+                bg_colors = ['rgba(59,130,246,0.14)','rgba(16,185,129,0.14)','rgba(245,158,11,0.15)','rgba(147,51,234,0.14)']
+                borders = ['#3b82f6','#10b981','#f59e0b','#9333ea']
+                items = []
+                for i, h in enumerate(headlines_list[:4]):
+                    bg = bg_colors[i % len(bg_colors)]
+                    bd = borders[i % len(borders)]
+                    items.append(
+                        f'<li style="margin:6px 0;padding:8px 10px;border-left:4px solid {bd};background:{bg};border-radius:8px;">📌 '
+                        f'<span class="badge" style="background:{bd};">TOP</span>'
+                        f'{html.escape(str(h))}</li>'
+                    )
+                headlines_html = '<div class="headlines"><ul>' + chr(10).join(items) + '</ul></div>'
+        except Exception:
+            headlines_html = ''
+
         # Générer le HTML optimisé pour mobile (ordre: titre -> executive summary -> summary -> reste)
         html_content = f"""
         <!DOCTYPE html>
@@ -957,6 +1019,33 @@ class MarketAnalysisWorker:
                     font-size: 13px;
                     font-weight: 500;
                     color: rgba(255,255,255,0.92);
+                }}
+
+                /* Bandeau gros titres */
+                .headlines {{
+                    margin-top: 14px;
+                    display: block;
+                }}
+                .headlines ul {{
+                    list-style: none;
+                    margin: 8px 0 0 0;
+                    padding: 0;
+                }}
+                .headlines li {{
+                    font-size: 15px;
+                    font-weight: 700;
+                    margin: 6px 0;
+                }}
+                .headlines li span.badge {{
+                    display: inline-block;
+                    padding: 2px 8px;
+                    margin-right: 8px;
+                    border-radius: 999px;
+                    font-size: 11px;
+                    font-weight: 800;
+                    background: rgba(0,0,0,0.28);
+                    color: #fff;
+                    vertical-align: baseline;
                 }}
                 
                 /* Executive Summary */
@@ -1109,12 +1198,14 @@ class MarketAnalysisWorker:
             </style>
         </head>
         <body>
+            <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;opacity:0;">{html.escape(preheader_text)}</div>
             <div class="container">
                 <div class="header" style="{header_style}color:#ffffff;padding:24px 16px;text-align:center;">
                     <h1 style="margin:0;font-size:22px;letter-spacing:1px;text-transform:uppercase;font-weight:800;color:#ffffff;">{header_title}</h1>
                     {('' if not market_pulse.get('subtitle') else f'<div style="margin-top:8px;font-size:14px;color:rgba(255,255,255,0.95);font-weight:600;">{html.escape(str(market_pulse.get("subtitle"))[:180])}</div>')}
                     {('' if not market_pulse.get('verdict_trinity') else '<div style="margin-top:10px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">' + chr(10).join([f'<span style="background:rgba(0,0,0,0.25);padding:6px 10px;border-radius:999px;font-size:12px;font-weight:700;">{html.escape(str(v))}</span>' for v in (market_pulse.get('verdict_trinity') or [])]) + '</div>')}
                     {('' if not market_pulse.get('key_metric') else f'<div style="margin-top:8px;font-size:13px;color:rgba(255,255,255,0.9);">{html.escape(str((market_pulse.get("key_metric") or {}).get("name", "")))}: <strong>{html.escape(str((market_pulse.get("key_metric") or {}).get("value", "")))}</strong> ({html.escape(str((market_pulse.get("key_metric") or {}).get("change", "")))}) — {html.escape(str((market_pulse.get("key_metric") or {}).get("significance", "")))}</div>')}
+                    {headlines_html}
                     <div class="date" style="margin-top:6px;font-size:13px;font-weight:500;color:rgba(255,255,255,0.92);">Généré le {ts_str}</div>
                 </div>
                 
