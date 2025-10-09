@@ -593,11 +593,14 @@ function buildToolList() {
     // Tools names must match ^[a-zA-Z0-9_-]+$ for Agents SDK
     const safeName = String(origName).replace(/[^A-Za-z0-9_-]/g, '-');
     const name = safeName.replace(/\.+/g, '-');
-    return {
+    const tool = {
       name,
-    description: descriptions[name] || name,
-    inputSchema: { type: 'object', additionalProperties: true },
+      inputSchema: { type: 'object', additionalProperties: true },
     };
+    // Optionally attach a very short description to minimize token usage
+    const d = descriptions[origName] || '';
+    if (d && d.length <= 40) tool.description = d;
+    return tool;
   });
 }
 
