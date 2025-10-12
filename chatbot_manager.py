@@ -1,3 +1,4 @@
+import importlib.util
 import os
 import json
 from datetime import datetime
@@ -10,19 +11,48 @@ import requests
 class ChatbotManager:
     def __init__(self, api_base_url="http://127.0.0.1:5000"):
         # Lazy import to avoid hard dependency at init time
-        try:
-            from ai_engine import get_ai_engine  # type: ignore
-            self.ai_engine = get_ai_engine()
-        except Exception:
-            # Fallback: create a lightweight OpenAI client if possible
-            self.ai_engine = None
+        self.ai_engine = None
+        self.ai_error_message: str | None = None
+        ai_module_available = importlib.util.find_spec("ai_engine") is not None
+        api_key = os.getenv("OPENAI_API_KEY")
+
+        if ai_module_available:
+            try:
+                from ai_engine import get_ai_engine  # type: ignore
+
+                candidate = get_ai_engine()
+                if candidate and getattr(candidate, "openai_client", None):
+                    self.ai_engine = candidate
+                    self.ai_error_message = None
+                else:
+                    self.ai_error_message = (
+                        "Le module ai_engine est présent mais ne fournit pas d'attribut openai_client compatible."
+                    )
+                    self.ai_engine = None
+            except Exception as exc:
+                self.ai_error_message = f"Impossible d'initialiser ai_engine: {exc}"
+
+        if not self.ai_engine and api_key:
             try:
                 from openai import OpenAI  # type: ignore
-                api_key = os.getenv("OPENAI_API_KEY")
-                if api_key:
-                    self.ai_engine = SimpleNamespace(openai_client=OpenAI(api_key=api_key))
-            except Exception:
-                self.ai_engine = None
+
+                self.ai_engine = SimpleNamespace(openai_client=OpenAI(api_key=api_key))
+                self.ai_error_message = None
+            except Exception as exc:
+                self.ai_error_message = f"Impossible d'initialiser le client OpenAI: {exc}"
+
+        if not self.ai_engine:
+            if not self.ai_error_message:
+                if ai_module_available or api_key:
+                    self.ai_error_message = (
+                        "Configuration IA incomplète. Vérifiez le module ai_engine et la variable OPENAI_API_KEY."
+                    )
+                else:
+                    self.ai_error_message = (
+                        "IA non configurée. Installez le module ai_engine ou définissez la variable d'environnement OPENAI_API_KEY."
+                    )
+            # Ne pas lever ici pour permettre les fonctionnalités sans IA,
+            # les méthodes dépendantes de l'IA feront la vérification.
         # Prefer explicit API_BASE_URL, then APP_URL (public Render URL), then provided default
         base = os.getenv("API_BASE_URL") or os.getenv("APP_URL") or api_base_url
         # Ensure scheme
@@ -32,9 +62,19 @@ class ChatbotManager:
         # Configurable HTTP timeout
         self.request_timeout = int(os.getenv("CHATBOT_API_TIMEOUT", "60"))
 
+    def _ensure_ai_ready(self) -> None:
+        if not self.ai_engine or not getattr(self.ai_engine, "openai_client", None):
+            raise RuntimeError(self.ai_error_message or (
+                "IA non configurée. Installez le module ai_engine ou définissez la variable d'environnement OPENAI_API_KEY."
+            ))
+
     def extract_item(self, user_input: str) -> dict:
         """Public method: extract and normalize item fields from natural language."""
-        extracted = self._extract_item_data_with_ai(user_input) or {}
+        try:
+            extracted = self._extract_item_data_with_ai(user_input) or {}
+        except RuntimeError as exc:
+            return {"data": {}, "missing": ["name", "category"], "error": str(exc)}
+
         normalized = self._normalize_item_payload(extracted)
         missing = [k for k in ("name", "category") if k not in normalized]
         return {"data": normalized, "missing": missing}
@@ -43,7 +83,10 @@ class ChatbotManager:
         """Extract multiple items from a single natural language query.
         Returns: {"items": [payload, ...]} with normalized payloads.
         """
-        raw = self._extract_items_data_with_ai(user_input) or {}
+        try:
+            raw = self._extract_items_data_with_ai(user_input) or {}
+        except RuntimeError as exc:
+            return {"items": [], "error": str(exc)}
         items = raw.get("items") if isinstance(raw, dict) else None
         if not isinstance(items, list):
             # Fallback: try single extraction
@@ -67,7 +110,10 @@ class ChatbotManager:
         Parses user input to extract item details, confirms with the user,
         and creates the item via the API.
         """
-        extracted_data = self._extract_item_data_with_ai(user_input)
+        try:
+            extracted_data = self._extract_item_data_with_ai(user_input)
+        except RuntimeError as exc:
+            return {"success": False, "error": str(exc)}
         if not extracted_data:
             return {"success": False, "error": "Failed to extract item data from your request."}
 
@@ -111,8 +157,7 @@ class ChatbotManager:
         """
 
         try:
-            if not self.ai_engine or not getattr(self.ai_engine, 'openai_client', None):
-                raise ValueError("AI engine not configured.")
+            self._ensure_ai_ready()
 
             response = from_responses_simple(
                 client=self.ai_engine.openai_client,
@@ -123,6 +168,8 @@ class ChatbotManager:
             if extracted_json:
                 return json.loads(extracted_json)
             return None
+        except RuntimeError:
+            raise
         except Exception:
             return None
 
@@ -161,8 +208,7 @@ class ChatbotManager:
         """
 
         try:
-            if not self.ai_engine or not getattr(self.ai_engine, 'openai_client', None):
-                raise ValueError("AI engine not configured.")
+            self._ensure_ai_ready()
 
             response = from_responses_simple(
                 client=self.ai_engine.openai_client,
@@ -173,6 +219,8 @@ class ChatbotManager:
             if extracted_json:
                 return json.loads(extracted_json)
             return None
+        except RuntimeError:
+            raise
         except Exception:
             return None
 
